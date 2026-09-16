@@ -30,3 +30,6 @@ ios/Flutter/Flutter.podspec
 lib/api/local_config.dart
 .flutter-ci.log
 coverage/
+
+# Secrets dropped locally for Claude to read via the device bridge -- never commit
+.secrets/
