@@ -17,4 +17,9 @@ class Participant {
   final String name;
 
   const Participant({required this.id, required this.name});
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name};
+
+  factory Participant.fromJson(Map<String, dynamic> json) =>
+      Participant(id: json['id'] as String, name: json['name'] as String);
 }

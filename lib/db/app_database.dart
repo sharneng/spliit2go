@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../models/expense.dart';
+import '../models/group.dart';
 
 part 'app_database.g.dart';
 
@@ -39,11 +40,23 @@ class Expenses extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Last-synced group info, including participants -- needed offline for
+/// more than just display: the add-expense form needs the participant
+/// list to build an even split without a network round-trip. This table
+/// existed unused since the first scaffold; the bug that exposed the gap
+/// (add button staying disabled on a cold, offline start, because
+/// GroupScreen only ever got `_group` from a live fetchGroup() call that
+/// throws when offline) is what prompted actually wiring it up.
+///
+/// [participantsJson] is a JSON blob for the same reason paidForJson is
+/// on Expenses: drift has no native list-of-objects column, and this is
+/// only ever read back whole, never queried into.
 @DataClassName('GroupRow')
 class Groups extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
   TextColumn get currency => text()();
+  TextColumn get participantsJson => text().withDefault(const Constant('[]'))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -54,7 +67,19 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) => m.createAll(),
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            // Groups table gained participantsJson (see class doc) --
+            // needed to cache the group offline, not just expenses.
+            await m.addColumn(groups, groups.participantsJson);
+          }
+        },
+      );
 
   Future<List<ExpenseRow>> expensesForGroup(String groupId) {
     return (select(expenses)
@@ -100,6 +125,34 @@ class AppDatabase extends _$AppDatabase {
         isReimbursement: Value(e.isReimbursement),
         pending: Value(e.pending),
       );
+
+  /// Overwrites the cached group info (name, currency, participants).
+  /// Called after every successful fetchGroup(), same pattern as
+  /// replaceServerExpenses -- no merge logic, just last-fetch-wins.
+  Future<void> cacheGroup(Group g) {
+    return into(groups).insertOnConflictUpdate(GroupsCompanion.insert(
+      id: g.id,
+      name: g.name,
+      currency: g.currency,
+      participantsJson: Value(jsonEncode(g.participants.map((p) => p.toJson()).toList())),
+    ));
+  }
+
+  /// The last-cached group, or null if we've never successfully fetched
+  /// it (e.g. first-ever launch happens to be offline).
+  Future<Group?> cachedGroup(String groupId) async {
+    final row = await (select(groups)..where((g) => g.id.equals(groupId)))
+        .getSingleOrNull();
+    if (row == null) return null;
+    return Group(
+      id: row.id,
+      name: row.name,
+      currency: row.currency,
+      participants: (jsonDecode(row.participantsJson) as List)
+          .map((p) => Participant.fromJson(p as Map<String, dynamic>))
+          .toList(),
+    );
+  }
 
   Expense rowToExpense(ExpenseRow row) => Expense(
         id: row.id,

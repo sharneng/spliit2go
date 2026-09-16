@@ -22,6 +22,25 @@ extension SplitModeWire on SplitMode {
       };
 }
 
+/// Reads a participant reference that the server sends as a bare id
+/// string when *we* write it, but appears to send back as an expanded
+/// `{id, name, ...}` object on read endpoints (presumably so the webapp
+/// doesn't need a separate lookup to show names). Handles either shape
+/// rather than assuming one, since this is exactly the kind of upstream
+/// detail we deliberately don't want this client tightly bound to.
+String extractParticipantId(dynamic value) {
+  if (value is Map) return value['id'] as String;
+  return value as String;
+}
+
+/// Same leniency for category, in case it's ever returned as an expanded
+/// `{id, name}` object rather than a bare id the way fetchCategories'
+/// categories.list response and the create-expense payload use.
+int extractCategoryId(dynamic value) {
+  if (value is Map) return (value['id'] as num).round();
+  return (value as num).round();
+}
+
 /// One participant's share of an expense. For [SplitMode.evenly], [shares]
 /// is just a nonzero weight (1 per person is the common case); for
 /// [SplitMode.byAmount] it's the exact cents they owe.
@@ -33,7 +52,7 @@ class ExpenseShare {
   Map<String, dynamic> toJson() => {'participant': participantId, 'shares': shares};
 
   factory ExpenseShare.fromJson(Map<String, dynamic> json) => ExpenseShare(
-        participantId: json['participant'] as String,
+        participantId: extractParticipantId(json['participant']),
         shares: (json['shares'] as num).round(),
       );
 }

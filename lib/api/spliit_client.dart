@@ -99,13 +99,12 @@ class SpliitClient {
           groupId: groupId,
           title: m['title'] as String,
           amountCents: (m['amount'] as num).round(),
-          paidBy: (m['paidBy'] as Map<String, dynamic>)['id'] as String? ??
-              m['paidBy'] as String,
+          paidBy: extractParticipantId(m['paidBy']),
           paidFor: (m['paidFor'] as List? ?? [])
               .map((s) => ExpenseShare.fromJson(s as Map<String, dynamic>))
               .toList(),
           splitMode: SplitModeWire.fromWire(m['splitMode'] as String? ?? 'EVENLY'),
-          category: (m['category'] as num?)?.round() ?? 0,
+          category: m['category'] == null ? 0 : extractCategoryId(m['category']),
           notes: m['notes'] as String? ?? '',
           date: DateTime.parse(m['expenseDate'] as String),
           isReimbursement: m['isReimbursement'] as bool? ?? false,

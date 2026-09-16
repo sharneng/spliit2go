@@ -42,6 +42,7 @@ class _GroupScreenState extends State<GroupScreen> {
   @override
   void initState() {
     super.initState();
+    _loadGroupFromCache();
     _loadFromCache();
     _refresh();
     Connectivity().onConnectivityChanged.listen((results) {
@@ -49,6 +50,18 @@ class _GroupScreenState extends State<GroupScreen> {
         _syncThenRefresh();
       }
     });
+  }
+
+  /// Loads whatever group info (name, participants) was cached from the
+  /// last successful fetchGroup(), if any. This is what lets the add
+  /// button work on a cold, offline start -- without it, [_group] only
+  /// ever came from a live fetchGroup() in [_refresh], which throws when
+  /// offline and leaves it null (and the add button disabled) forever,
+  /// even though the expense list loads fine from its own cache.
+  Future<void> _loadGroupFromCache() async {
+    final cached = await widget.db.cachedGroup(widget.groupId);
+    if (!mounted || cached == null) return;
+    setState(() => _group = cached);
   }
 
   Future<void> _loadFromCache() async {
@@ -62,6 +75,7 @@ class _GroupScreenState extends State<GroupScreen> {
     try {
       final group = await widget.client.fetchGroup(widget.groupId);
       final fresh = await widget.client.fetchExpenses(widget.groupId);
+      await widget.db.cacheGroup(group);
       await widget.db.replaceServerExpenses(widget.groupId, fresh);
       if (!mounted) return;
       setState(() {
@@ -83,7 +97,14 @@ class _GroupScreenState extends State<GroupScreen> {
 
   Future<void> _syncThenRefresh() async {
     final synced = await widget.outbox.flush();
-    if (synced > 0) await _refresh();
+    // Reload from the local cache first, regardless of what happens next --
+    // the outbox already deleted any newly-synced rows from the local db,
+    // so this alone clears their "syncing..." badge even if the live
+    // refresh below fails (e.g. a transient server error unrelated to the
+    // sync itself). Without this, a refresh failure could leave a
+    // genuinely-synced expense stuck showing as pending.
+    if (synced > 0) await _loadFromCache();
+    await _refresh();
   }
 
   @override

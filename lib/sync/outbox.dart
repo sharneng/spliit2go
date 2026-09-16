@@ -41,7 +41,7 @@ class Outbox {
         // reconcile it here, just drop the local pending row -- the next
         // fetchExpenses()-backed refresh (triggered right after a
         // successful flush) picks it back up as a normal synced row.
-        await (_db.delete(_db.expenses)..whereSamePrimaryKey(row)).go();
+        await (_db.delete(_db.expenses)..where((tbl) => tbl.id.equals(row.id))).go();
         synced++;
       } catch (_) {
         // Left pending; next flush() (e.g. on the next connectivity
