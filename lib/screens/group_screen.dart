@@ -105,10 +105,18 @@ class _GroupScreenState extends State<GroupScreen> {
       });
       await _loadFromCache();
       await _resolveActiveUser();
-    } catch (e) {
+    } catch (e, st) {
       // Offline or the server's unreachable -- fine, we already loaded
       // whatever's cached. Only surface an error if we have nothing at
       // all to show.
+      //
+      // The on-screen message is deliberately just e.toString() (no
+      // stack trace -- too noisy for a phone screen), but the full
+      // trace goes to debugPrint so it shows up in `flutter run`'s
+      // terminal / `flutter logs`, since a bare exception message
+      // alone isn't enough to tell a real "we're offline" from a real
+      // parsing bug apart -- see github.com/sharneng/spliit2go/issues/14.
+      debugPrint('GroupScreen._refresh failed for group ${widget.groupId}: $e\n$st');
       if (_expenses.isEmpty) {
         setState(() => _error = e.toString());
       }

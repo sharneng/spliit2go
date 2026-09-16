@@ -39,6 +39,20 @@ void main() {
       expect(result?.groupId, 'abc123');
     });
 
+    // A literal reproduction of the URL from
+    // github.com/sharneng/spliit2go/issues/14's followup -- Kenneth
+    // suspected the group-id parsing itself was the root cause of both
+    // the wrong "$" currency and the type-cast crash on newly-joined
+    // groups. It isn't: this parses exactly as expected, same as the
+    // more general /expenses-suffix case above -- the group id comes
+    // out byte-for-byte what's in the URL, no truncation, no case
+    // folding, nothing dropped or mangled.
+    test("parses Kenneth's real Alaska group link, exactly", () {
+      final result = parseGroupUrl('https://spliit.app/groups/vXuLheivMWCzBkvqCDELI/expenses');
+      expect(result?.serverUrl, 'https://spliit.app');
+      expect(result?.groupId, 'vXuLheivMWCzBkvqCDELI');
+    });
+
     test('returns null for a bare group id with no /groups/ segment', () {
       expect(parseGroupUrl('RrYePXN2GBpSMW1EPjpjH'), isNull);
     });
