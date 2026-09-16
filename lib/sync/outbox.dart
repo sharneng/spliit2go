@@ -1,5 +1,3 @@
-import 'package:drift/drift.dart';
-
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
 
@@ -7,7 +5,8 @@ import '../db/app_database.dart';
 /// and *add* (never offline edit), there's no conflict resolution to do --
 /// see decisions/mobile-platform.md. This just replays queued creates
 /// against the server when asked to (call [flush] whenever connectivity
-/// changes to online, e.g. from a connectivity_plus listener).
+/// changes to online, e.g. from a connectivity_plus listener, and once at
+/// app start).
 class Outbox {
   final AppDatabase _db;
   final SpliitClient _api;
@@ -18,36 +17,38 @@ class Outbox {
   /// independently -- one failure (still offline, server rejected it,
   /// etc.) doesn't block the rest, and the row is simply left pending to
   /// retry on the next flush.
-  Future<void> flush() async {
-    final pending = await _db.pendingExpenses();
-    for (final local in pending) {
+  ///
+  /// Returns the number of rows successfully synced.
+  Future<int> flush() async {
+    final pendingRows = await _db.pendingExpenses();
+    var synced = 0;
+    for (final row in pendingRows) {
+      final local = _db.rowToExpense(row);
       try {
-        final created = await _api.createExpense(
+        await _api.createExpense(
           groupId: local.groupId,
           title: local.title,
           amountCents: local.amountCents,
           paidBy: local.paidBy,
+          paidFor: local.paidFor,
+          splitMode: local.splitMode,
+          category: local.category,
+          notes: local.notes,
           date: local.date,
+          isReimbursement: local.isReimbursement,
         );
-        await _db.transaction(() async {
-          await (_db.delete(_db.expenses)..whereSamePrimaryKey(local)).go();
-          await _db.into(_db.expenses).insert(
-                ExpensesCompanion.insert(
-                  id: created.id,
-                  groupId: created.groupId,
-                  title: created.title,
-                  amountCents: created.amountCents,
-                  paidBy: created.paidBy,
-                  date: created.date,
-                  pending: const Value(false),
-                ),
-              );
-        });
+        // The server assigns its own id; rather than trying to learn and
+        // reconcile it here, just drop the local pending row -- the next
+        // fetchExpenses()-backed refresh (triggered right after a
+        // successful flush) picks it back up as a normal synced row.
+        await (_db.delete(_db.expenses)..whereSamePrimaryKey(row)).go();
+        synced++;
       } catch (_) {
         // Left pending; next flush() (e.g. on the next connectivity
         // change) will retry it. TODO: cap retries / surface a
         // user-visible "couldn't sync" state after N failures.
       }
     }
+    return synced;
   }
 }

@@ -1,23 +1,30 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+import '../models/category.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
 
 /// Talks to a self-hosted (or spliit.app) instance's tRPC API as plain
 /// HTTP+JSON, deliberately *not* using generated/inferred types from the
-/// server. See decisions/mobile-platform.md in the project docs for why:
-/// short version, coupling this app's build to Spliit's live server types
-/// would stop the two from evolving independently.
+/// server -- see decisions/mobile-platform.md in the project docs for why.
 ///
-/// tRPC queries are GET requests with the input JSON-encoded in the
-/// `input` query param; mutations are POST with a JSON body. Both use the
-/// superjson wire format, which wraps the plain JSON payload with a `json`
-/// key plus a `meta` key describing any non-JSON-native types (Date,
-/// Decimal, etc.) -- see `_unwrapSuperjson` / `_wrapSuperjson` below.
+/// The request/response shapes here are ported from a Python client
+/// (splitwise2spliit's spliit_api.py) that was built and exercised
+/// end-to-end against a live instance for a Splitwise CSV import, so
+/// they're verified, not guessed:
+///
+/// - Every call, query or mutation, uses tRPC's *batch* wire format:
+///   `?batch=1` plus an `input` (GET) or JSON body (POST) shaped like
+///   `{"0": {"json": {...}}}`, and the response is always a JSON array,
+///   one entry per batched call -- `resp[0]['result']['data']['json']`
+///   even for a single call.
+/// - A payload field that must be typed as a JS Date (only expenseDate,
+///   here) needs a superjson `meta` entry alongside it, or the server
+///   parses it as a plain string.
+/// - `groups.expenses.list` paginates at roughly 10 per page; a full
+///   fetch has to follow `hasMore`/`nextCursor`.
 class SpliitClient {
-  /// TODO: point this at your instance, or load from lib/api/local_config.dart
-  /// (gitignored) instead of hardcoding it here.
   final String baseUrl;
   final http.Client _http;
 
@@ -26,94 +33,24 @@ class SpliitClient {
 
   Uri _trpcUri(String procedure, {Map<String, dynamic>? input}) {
     final path = '$baseUrl/api/trpc/$procedure';
-    if (input == null) return Uri.parse(path);
-    final encoded = Uri.encodeComponent(jsonEncode({'json': input}));
-    return Uri.parse('$path?input=$encoded');
+    if (input == null) return Uri.parse('$path?batch=1');
+    final batched = jsonEncode({'0': {'json': input}});
+    return Uri.parse('$path?batch=1&input=${Uri.encodeComponent(batched)}');
   }
 
-  /// Fetches a group's expenses. Maps the response into our own [Expense]
-  /// DTOs -- this is the one place that needs to change if Spliit's
-  /// `groups.expenses.list`-equivalent procedure or its response shape
-  /// changes upstream.
-  Future<List<Expense>> fetchExpenses(String groupId) async {
-    final uri = _trpcUri('groups.expenses.list', input: {'groupId': groupId});
-    final res = await _http.get(uri);
-    _checkOk(res);
-    final data = _unwrapSuperjson(jsonDecode(res.body));
-
-    // TODO: confirm actual field names against a live instance -- these
-    // are placeholders based on Spliit's public schema, not yet verified
-    // end-to-end. That verification is task (1) from the project plan:
-    // a standalone script exercising this client against a real instance.
-    return (data as List).map((raw) {
-      final m = raw as Map<String, dynamic>;
-      return Expense(
-        id: m['id'] as String,
-        groupId: groupId,
-        title: m['title'] as String,
-        amountCents: (m['amount'] as num).round(),
-        paidBy: m['paidBy'] as String,
-        date: DateTime.parse(m['expenseDate'] as String),
-        createdAt: m['createdAt'] != null
-            ? DateTime.parse(m['createdAt'] as String)
-            : null,
-      );
-    }).toList();
-  }
-
-  Future<Group> fetchGroup(String groupId) async {
-    final uri = _trpcUri('groups.get', input: {'groupId': groupId});
-    final res = await _http.get(uri);
-    _checkOk(res);
-    final m = _unwrapSuperjson(jsonDecode(res.body)) as Map<String, dynamic>;
-
-    return Group(
-      id: m['id'] as String,
-      name: m['name'] as String,
-      currency: m['currency'] as String,
-      participants: (m['participants'] as List)
-          .map((p) => Participant(
-                id: (p as Map<String, dynamic>)['id'] as String,
-                name: p['name'] as String,
-              ))
-          .toList(),
-    );
-  }
-
-  /// Creates an expense on the server. Called either immediately (online)
-  /// or later by the outbox once connectivity returns (see
-  /// lib/sync/outbox.dart) -- this method itself has no offline logic.
-  Future<Expense> createExpense({
-    required String groupId,
-    required String title,
-    required int amountCents,
-    required String paidBy,
-    required DateTime date,
-  }) async {
-    final uri = _trpcUri('groups.expenses.create');
-    final body = _wrapSuperjson({
-      'groupId': groupId,
-      'title': title,
-      'amount': amountCents,
-      'paidBy': paidBy,
-      'expenseDate': date.toIso8601String(),
-    });
-    final res = await _http.post(
-      uri,
-      headers: {'content-type': 'application/json'},
-      body: jsonEncode(body),
-    );
-    _checkOk(res);
-    final m = _unwrapSuperjson(jsonDecode(res.body)) as Map<String, dynamic>;
-
-    return Expense(
-      id: m['id'] as String,
-      groupId: groupId,
-      title: title,
-      amountCents: amountCents,
-      paidBy: paidBy,
-      date: date,
-    );
+  /// Unwraps a batched tRPC response: `[{"result":{"data":{"json": ...}}}]`
+  /// (or the non-superjson-wrapped `{"result":{"data": ...}}` for plain
+  /// JSON-safe payloads) -> the first call's actual data.
+  dynamic _unwrapBatch(dynamic decoded) {
+    final first = (decoded as List).first as Map<String, dynamic>;
+    if (first.containsKey('error')) {
+      throw SpliitApiException(200, jsonEncode(first['error']));
+    }
+    final data = (first['result'] as Map<String, dynamic>)['data'];
+    if (data is Map<String, dynamic> && data.containsKey('json')) {
+      return data['json'];
+    }
+    return data;
   }
 
   void _checkOk(http.Response res) {
@@ -122,20 +59,144 @@ class SpliitClient {
     }
   }
 
-  dynamic _unwrapSuperjson(dynamic decoded) {
-    if (decoded is Map<String, dynamic> && decoded.containsKey('result')) {
-      final result = decoded['result'] as Map<String, dynamic>;
-      final data = result['data'];
-      if (data is Map<String, dynamic> && data.containsKey('json')) {
-        return data['json'];
-      }
-      return data;
-    }
-    return decoded;
+  /// Fetches group details: name, currency, participants.
+  Future<Group> fetchGroup(String groupId) async {
+    final uri = _trpcUri('groups.get', input: {'groupId': groupId});
+    final res = await _http.get(uri);
+    _checkOk(res);
+    final data = _unwrapBatch(jsonDecode(res.body)) as Map<String, dynamic>;
+    final g = data['group'] as Map<String, dynamic>;
+
+    return Group(
+      id: g['id'] as String,
+      name: g['name'] as String,
+      currency: g['currency'] as String,
+      participants: (g['participants'] as List)
+          .map((p) => Participant(
+                id: (p as Map<String, dynamic>)['id'] as String,
+                name: p['name'] as String,
+              ))
+          .toList(),
+    );
   }
 
-  Map<String, dynamic> _wrapSuperjson(Map<String, dynamic> input) {
-    return {'json': input};
+  /// Fetches every expense in the group, following pagination.
+  Future<List<Expense>> fetchExpenses(String groupId) async {
+    final all = <Expense>[];
+    String? cursor;
+    while (true) {
+      final query = <String, dynamic>{'groupId': groupId};
+      if (cursor != null) query['cursor'] = cursor;
+      final uri = _trpcUri('groups.expenses.list', input: query);
+      final res = await _http.get(uri);
+      _checkOk(res);
+      final data = _unwrapBatch(jsonDecode(res.body)) as Map<String, dynamic>;
+
+      for (final raw in (data['expenses'] as List)) {
+        final m = raw as Map<String, dynamic>;
+        all.add(Expense(
+          id: m['id'] as String,
+          groupId: groupId,
+          title: m['title'] as String,
+          amountCents: (m['amount'] as num).round(),
+          paidBy: (m['paidBy'] as Map<String, dynamic>)['id'] as String? ??
+              m['paidBy'] as String,
+          paidFor: (m['paidFor'] as List? ?? [])
+              .map((s) => ExpenseShare.fromJson(s as Map<String, dynamic>))
+              .toList(),
+          splitMode: SplitModeWire.fromWire(m['splitMode'] as String? ?? 'EVENLY'),
+          category: (m['category'] as num?)?.round() ?? 0,
+          notes: m['notes'] as String? ?? '',
+          date: DateTime.parse(m['expenseDate'] as String),
+          isReimbursement: m['isReimbursement'] as bool? ?? false,
+        ));
+      }
+
+      if (data['hasMore'] != true) break;
+      cursor = data['nextCursor'] as String;
+    }
+    return all;
+  }
+
+  Future<Map<int, String>> fetchCategories() async {
+    final uri = _trpcUri('categories.list');
+    final res = await _http.get(uri);
+    _checkOk(res);
+    final data = _unwrapBatch(jsonDecode(res.body)) as Map<String, dynamic>;
+    return {
+      for (final c in (data['categories'] as List))
+        (c as Map<String, dynamic>)['id'] as int: c['name'] as String,
+    };
+  }
+
+  /// Creates an expense (or, with [isReimbursement], a settlement payment)
+  /// on the server. Called either immediately (online) or later by the
+  /// outbox once connectivity returns (see lib/sync/outbox.dart) -- this
+  /// method itself has no offline logic.
+  ///
+  /// [amountCents] and each [paidFor] share are in cents. For
+  /// [SplitMode.evenly], shares is just a nonzero weight (1 per person is
+  /// the common case); for [SplitMode.byAmount] it's the exact cents owed.
+  Future<String> createExpense({
+    required String groupId,
+    required String title,
+    required int amountCents,
+    required String paidBy,
+    required List<ExpenseShare> paidFor,
+    SplitMode splitMode = SplitMode.evenly,
+    int category = 0,
+    String notes = '',
+    DateTime? date,
+    bool isReimbursement = false,
+  }) async {
+    final expenseDate = (date ?? DateTime.now().toUtc());
+    // Matches the Python client's formatting: millisecond precision, 'Z'
+    // suffix, regardless of the platform's default ISO-8601 rendering.
+    final ms = expenseDate.millisecondsSinceEpoch % 1000;
+    final formattedDate =
+        '${expenseDate.toUtc().toIso8601String().split('.').first}.${ms.toString().padLeft(3, '0')}Z';
+
+    final expenseFormValues = {
+      'expenseDate': formattedDate,
+      'title': title,
+      'category': category,
+      'amount': amountCents,
+      'paidBy': paidBy,
+      'paidFor': paidFor.map((s) => s.toJson()).toList(),
+      'splitMode': splitMode.wireValue,
+      'saveDefaultSplittingOptions': false,
+      'isReimbursement': isReimbursement,
+      'documents': [],
+      'notes': notes,
+    };
+
+    final uri = Uri.parse('$baseUrl/api/trpc/groups.expenses.create?batch=1');
+    final body = {
+      '0': {
+        'json': {
+          'groupId': groupId,
+          'expenseFormValues': expenseFormValues,
+          'participantId': 'None',
+        },
+        'meta': {
+          'values': {
+            'expenseFormValues.expenseDate': ['Date']
+          }
+        },
+      }
+    };
+    final res = await _http.post(
+      uri,
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    _checkOk(res);
+    final data = _unwrapBatch(jsonDecode(res.body));
+    // groups.expenses.create's success payload shape varies by Spliit
+    // version; this app only needs to know the write succeeded; the local
+    // (client-generated) id already assigned to the pending row stands in
+    // for the server id until the next full fetchExpenses() reconciles it.
+    return data is Map<String, dynamic> ? (data['expenseId'] as String? ?? '') : '';
   }
 }
 

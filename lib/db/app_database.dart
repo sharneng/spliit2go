@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'package:drift/drift.dart';
+
+import '../models/expense.dart';
 
 part 'app_database.g.dart';
 
@@ -8,19 +11,35 @@ part 'app_database.g.dart';
 /// responsible for POSTing pending rows and flipping the flag once the
 /// server confirms. There's no other state and no merge logic -- reads
 /// simply overwrite non-pending rows on each successful fetch.
+///
+/// [paidForJson] stores the List<ExpenseShare> as JSON text -- drift has
+/// no native list-of-objects column type, and this data is only ever
+/// read back to replay a create or render one expense's split, never
+/// queried on, so a plain JSON blob is simpler than a join table.
+///
+/// Named explicitly via @DataClassName because drift's default row-class
+/// name for a table called "Expenses" is "Expense" -- which would collide
+/// with our own Expense DTO (models/expense.dart) imported in this file.
+@DataClassName('ExpenseRow')
 class Expenses extends Table {
   TextColumn get id => text()();
   TextColumn get groupId => text()();
   TextColumn get title => text()();
   IntColumn get amountCents => integer()();
   TextColumn get paidBy => text()();
+  TextColumn get paidForJson => text()();
+  TextColumn get splitMode => text().withDefault(const Constant('EVENLY'))();
+  IntColumn get category => integer().withDefault(const Constant(0))();
+  TextColumn get notes => text().withDefault(const Constant(''))();
   DateTimeColumn get date => dateTime()();
+  BoolColumn get isReimbursement => boolean().withDefault(const Constant(false))();
   BoolColumn get pending => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
 }
 
+@DataClassName('GroupRow')
 class Groups extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
@@ -37,26 +56,65 @@ class AppDatabase extends _$AppDatabase {
   @override
   int get schemaVersion => 1;
 
-  Future<List<Expense>> expensesForGroup(String groupId) {
-    return (select(expenses)..where((e) => e.groupId.equals(groupId))).get();
+  Future<List<ExpenseRow>> expensesForGroup(String groupId) {
+    return (select(expenses)
+          ..where((e) => e.groupId.equals(groupId))
+          ..orderBy([(e) => OrderingTerm.desc(e.date)]))
+        .get();
   }
 
-  Future<List<Expense>> pendingExpenses() {
+  Future<List<ExpenseRow>> pendingExpenses() {
     return (select(expenses)..where((e) => e.pending.equals(true))).get();
   }
 
   /// Overwrites the cached (non-pending) rows for a group with a fresh
   /// fetch from the server. Pending rows are left untouched -- they're
   /// only cleared by the outbox once the server confirms them.
-  Future<void> replaceServerExpenses(
-    String groupId,
-    List<ExpensesCompanion> fresh,
-  ) async {
+  Future<void> replaceServerExpenses(String groupId, List<Expense> fresh) async {
     await transaction(() async {
       await (delete(expenses)
             ..where((e) => e.groupId.equals(groupId) & e.pending.equals(false)))
           .go();
-      await batch((b) => b.insertAll(expenses, fresh));
+      await batch((b) => b.insertAll(expenses, fresh.map(toCompanion).toList()));
     });
   }
+
+  /// Inserts a locally-created expense as pending, to be replayed by the
+  /// outbox. [localId] should be a locally-generated unique id (a uuid) --
+  /// it's replaced with the server's real id once synced.
+  Future<void> insertPending(Expense e) {
+    return into(expenses).insert(toCompanion(e));
+  }
+
+  ExpensesCompanion toCompanion(Expense e) => ExpensesCompanion.insert(
+        id: e.id,
+        groupId: e.groupId,
+        title: e.title,
+        amountCents: e.amountCents,
+        paidBy: e.paidBy,
+        paidForJson: jsonEncode(e.paidFor.map((s) => s.toJson()).toList()),
+        splitMode: Value(e.splitMode.wireValue),
+        category: Value(e.category),
+        notes: Value(e.notes),
+        date: e.date,
+        isReimbursement: Value(e.isReimbursement),
+        pending: Value(e.pending),
+      );
+
+  Expense rowToExpense(ExpenseRow row) => Expense(
+        id: row.id,
+        groupId: row.groupId,
+        title: row.title,
+        amountCents: row.amountCents,
+        paidBy: row.paidBy,
+        paidFor: (jsonDecode(row.paidForJson) as List)
+            .map((s) => ExpenseShare.fromJson(s as Map<String, dynamic>))
+            .toList(),
+        splitMode: SplitModeWire.fromWire(row.splitMode),
+        category: row.category,
+        notes: row.notes,
+        date: row.date,
+        isReimbursement: row.isReimbursement,
+        pending: row.pending,
+      );
 }
