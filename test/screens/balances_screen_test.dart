@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -66,11 +68,61 @@ void main() {
   testWidgets('marking a settlement as paid clears it once synced', (tester) async {
     final db = await dbWithEvenExpense();
     addTearDown(db.close);
+    // Outbox.flush() deletes a synced pending row outright and expects
+    // the caller to re-fetch afterward to bring it back as confirmed --
+    // see the comment in balances_screen.dart's _markAsPaid. So this
+    // mock has to behave like a real server would after the settlement:
+    // the create succeeds, and the *next* expenses.list already
+    // includes it (the original groceries expense plus Bea's payment
+    // to Alex), or the balance math would have nothing to recompute
+    // from and the test would just be asserting a no-op.
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient(
-        (req) async => http.Response('[{"result":{"data":{"json":{}}}}]', 200),
-      ),
+      httpClient: MockClient((req) async {
+        if (req.url.toString().contains('groups.expenses.list')) {
+          return http.Response(
+            jsonEncode([
+              {
+                'result': {
+                  'data': {
+                    'json': {
+                      'expenses': [
+                        {
+                          'id': 'e1',
+                          'title': 'Groceries',
+                          'amount': 9000,
+                          'paidBy': 'alex',
+                          'paidFor': [
+                            {'participant': 'alex', 'shares': 1},
+                            {'participant': 'bea', 'shares': 1},
+                            {'participant': 'cid', 'shares': 1},
+                          ],
+                          'expenseDate': '2026-09-16T00:00:00.000Z',
+                        },
+                        {
+                          'id': 'settle-1',
+                          'title': 'Reimbursement',
+                          'amount': 3000,
+                          'paidBy': 'bea',
+                          'paidFor': [
+                            {'participant': 'alex', 'shares': 1},
+                          ],
+                          'isReimbursement': true,
+                          'expenseDate': '2026-09-16T00:00:00.000Z',
+                        },
+                      ],
+                      'hasMore': false,
+                    },
+                  },
+                },
+              },
+            ]),
+            200,
+          );
+        }
+        // groups.expenses.create
+        return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+      }),
     );
     final outbox = Outbox(db, client);
 

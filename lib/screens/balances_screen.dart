@@ -87,10 +87,27 @@ class _BalancesScreenState extends State<BalancesScreen> {
     );
     await widget.db.insertPending(expense);
     // Best-effort immediate sync, same pattern as adding a regular
-    // expense -- if we're offline this just leaves it pending for the
-    // outbox to pick up later, which is fine since the local balance
-    // recompute below already reflects it either way.
-    await widget.outbox.flush();
+    // expense -- if we're offline this just leaves it pending, which is
+    // fine since the local balance recompute below still counts pending
+    // rows. But note what Outbox.flush() does on *success*: it deletes
+    // the local pending row outright and relies on the caller doing a
+    // live re-fetch afterward to bring it back as a normal synced row
+    // (see outbox.dart) -- GroupScreen does this via _syncThenRefresh,
+    // and this screen needs the same follow-up, or a successfully-synced
+    // settlement would vanish from the balance math entirely instead of
+    // clearing the debt it was meant to clear.
+    final synced = await widget.outbox.flush();
+    if (synced > 0) {
+      try {
+        final fresh = await widget.client.fetchExpenses(widget.group.id);
+        await widget.db.replaceServerExpenses(widget.group.id, fresh);
+      } catch (_) {
+        // Synced but the follow-up refresh failed -- rare (would need
+        // the server to accept the write yet the very next request to
+        // fail), and nothing to do about it here; the next visit to
+        // GroupScreen's own refresh will reconcile it.
+      }
+    }
     if (!mounted) return;
     setState(() => _settlingKey = null);
     await _load();
