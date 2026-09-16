@@ -45,11 +45,21 @@ class _GroupScreenState extends State<GroupScreen> {
     _loadGroupFromCache();
     _loadFromCache();
     _refresh();
-    Connectivity().onConnectivityChanged.listen((results) {
-      if (!results.contains(ConnectivityResult.none)) {
-        _syncThenRefresh();
-      }
-    });
+    // Guarded: connectivity_plus's platform channel isn't set up in every
+    // environment (widget tests being the immediate reason this got
+    // added, but a misconfigured platform is a real possibility too).
+    // Losing this listener only means sync falls back to pull-to-refresh
+    // and the right-after-adding trigger, rather than crashing the screen.
+    try {
+      Connectivity().onConnectivityChanged.listen(
+        (results) {
+          if (!results.contains(ConnectivityResult.none)) {
+            _syncThenRefresh();
+          }
+        },
+        onError: (_) {},
+      );
+    } catch (_) {}
   }
 
   /// Loads whatever group info (name, participants) was cached from the

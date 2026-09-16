@@ -1,5 +1,7 @@
 # spliit2go
 
+[![CI](https://github.com/sharneng/spliit2go/actions/workflows/ci.yml/badge.svg)](https://github.com/sharneng/spliit2go/actions/workflows/ci.yml)
+
 An unofficial, offline-capable mobile client for [Spliit](https://github.com/spliit-app/spliit), the open-source Splitwise alternative. Built with Flutter, Android first, with iOS to follow from the same codebase.
 
 ## Why
@@ -22,16 +24,25 @@ Full reasoning for these choices is written up in the project's `decisions/mobil
 
 ## Status
 
-Not yet buildable in this environment (the platform folders still need generating — see `SETUP.md`), but the app logic is in place end to end for a first pass:
+Working end to end as of 2026-09-16: builds, runs on a physical Android device, and has been tested live against a real Spliit instance — online add/view, offline add with automatic sync on reconnect, and a cold start while offline all confirmed working. See `decisions/mobile-platform.md` in the project docs for the full testing writeup, including the bugs that first pass found and fixed.
 
 - `SpliitClient` — fetch group/participants, fetch (paginated) expenses, fetch categories, create an expense or settlement.
-- `AppDatabase` (drift) — local cache of a group's expenses, with a `pending` flag for offline-created ones.
+- `AppDatabase` (drift) — local cache of a group's expenses *and* group/participants, with a `pending` flag for offline-created expenses.
 - `Outbox` — replays pending expenses against the server once connectivity returns.
 - Screens — first-run server/group settings, a group's expense list (offline-first: cache shown immediately, live fetch in the background, pull-to-refresh), and an add-expense form (evenly split among all participants; writes locally first, syncs opportunistically).
 
+### Tests
+
+`test/` covers the core logic without needing a device or a live server: `SpliitClient` response parsing (including both participant-reference shapes Spliit's API actually returns, per the regression noted below), `AppDatabase`'s group/expense caching, `Outbox` sync behavior, and a widget test for the add-button-stays-disabled-offline bug specifically. Run locally with:
+
+```
+flutter test --coverage
+```
+
+CI (`.github/workflows/ci.yml`) runs `flutter analyze` and this test suite on every push and PR, and uploads the coverage report as a build artifact.
+
 Known gaps, in rough priority order:
 
-- **Not yet run against a live server or the Flutter SDK** — the field/procedure names are verified via the splitwise2spliit Python client, but this Dart port hasn't itself made a real request yet. First thing to do once `flutter run` is possible.
 - Balances ("who owes whom") aren't fetched or shown yet, and offline balance display needs to account for pending expenses (see `decisions/mobile-platform.md`).
 - Add-expense only supports an even split across every participant — no per-person amounts, no excluding someone from a split, no settlements from the UI (the API layer supports all of these; the form doesn't expose them yet).
 - Single group only — no group list/switcher.

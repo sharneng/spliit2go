@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # app_database.g.dart (and any other *.g.dart) is gitignored -- it's
+      # generated, not committed -- so nothing here compiles without this
+      # step. This alone would have caught the whereSamePrimaryKey mistake
+      # and both Value() wrapping mistakes from 2026-09-16, all of which
+      # were plain compile errors that never needed a device to find.
+      - name: Generate drift code
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run tests with coverage
+        run: flutter test --coverage
+
+      - name: Coverage summary
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y lcov
+          lcov --summary coverage/lcov.info
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/lcov.info
