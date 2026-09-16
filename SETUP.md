@@ -58,3 +58,13 @@ From this directory:
 git remote add origin git@github.com:<your-username>/spliit2go.git
 git push -u origin main
 ```
+
+## Optional: local CI on every commit
+
+`.githooks/post-commit` runs `flutter analyze` and `flutter test --coverage` in the background after each commit (doesn't block `git commit`; output overwrites `.flutter-ci.log` at the repo root each time). Enable it once per clone:
+
+```
+git config core.hooksPath .githooks
+```
+
+Since it runs in the background, give it a few seconds to a minute after committing before checking `.flutter-ci.log`. To disable, `git config --unset core.hooksPath`.
