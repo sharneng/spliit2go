@@ -147,4 +147,26 @@ void main() {
     expect(await db.pendingExpenses(), isEmpty);
     expect(find.textContaining('must add up to 100'), findsOneWidget);
   });
+  testWidgets('defaults "Paid by" to the saved active user, when they\'re in this group',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await pumpScreen(tester, db, initialPaidBy: 'bea');
+
+    final dropdown =
+        tester.widget<DropdownButtonFormField<String>>(find.byType(DropdownButtonFormField<String>));
+    expect(dropdown.initialValue, 'bea');
+  });
+
+  testWidgets('falls back to the first participant when there\'s no saved active user',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await pumpScreen(tester, db);
+
+    final dropdown =
+        tester.widget<DropdownButtonFormField<String>>(find.byType(DropdownButtonFormField<String>));
+    expect(dropdown.initialValue, 'alex');
+  });
+
 }

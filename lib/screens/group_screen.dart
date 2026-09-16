@@ -5,6 +5,7 @@ import '../api/spliit_client.dart';
 import '../db/app_database.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
+import '../services/settings_service.dart';
 import '../sync/outbox.dart';
 import 'add_expense_screen.dart';
 import 'balances_screen.dart';
@@ -35,10 +36,13 @@ class GroupScreen extends StatefulWidget {
 }
 
 class _GroupScreenState extends State<GroupScreen> {
+  final _settings = SettingsService();
+
   Group? _group;
   List<Expense> _expenses = [];
   bool _loading = true;
   String? _error;
+  String? _activeUserId;
 
   @override
   void initState() {
@@ -46,6 +50,9 @@ class _GroupScreenState extends State<GroupScreen> {
     _loadGroupFromCache();
     _loadFromCache();
     _refresh();
+    _settings.activeUserId().then((id) {
+      if (mounted) setState(() => _activeUserId = id);
+    });
     // Guarded: connectivity_plus's platform channel isn't set up in every
     // environment (widget tests being the immediate reason this got
     // added, but a misconfigured platform is a real possibility too).
@@ -124,6 +131,11 @@ class _GroupScreenState extends State<GroupScreen> {
       appBar: AppBar(
         title: Text(_group?.name ?? 'spliit2go'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.person_outline),
+            tooltip: 'Active user',
+            onPressed: _group == null ? null : _pickActiveUser,
+          ),
           IconButton(
             icon: const Icon(Icons.account_balance_wallet_outlined),
             tooltip: 'Balances',
@@ -205,6 +217,7 @@ class _GroupScreenState extends State<GroupScreen> {
           db: widget.db,
           outbox: widget.outbox,
           group: _group!,
+          initialPaidBy: _activeUserId,
         ),
       ),
     );
@@ -212,5 +225,54 @@ class _GroupScreenState extends State<GroupScreen> {
       await _loadFromCache();
       _syncThenRefresh();
     }
+  }
+
+  /// Which participant "you" are on this device -- purely local (see
+  /// SettingsService.activeUserId), used only to default "Paid by" on
+  /// add-expense. Mirrors the web app's own per-device setting; there's
+  /// no account system to tie it to anything more meaningful than "the
+  /// last person picked on this phone".
+  // showDialog returns null both when the dialog is dismissed without a
+  // choice (tap outside, back button) *and* if "None" popped a literal
+  // null -- those need to mean different things (dismiss = no change,
+  // "None" = explicitly clear it), so "None" pops this sentinel instead
+  // and null is only ever "dismissed, do nothing".
+  static const _noneSentinel = '';
+
+  Future<void> _pickActiveUser() async {
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Active user'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(context).pop(_noneSentinel),
+            child: Row(
+              children: [
+                if (_activeUserId == null) const Icon(Icons.check, size: 18),
+                if (_activeUserId == null) const SizedBox(width: 8),
+                const Text('None'),
+              ],
+            ),
+          ),
+          for (final p in _group!.participants)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop(p.id),
+              child: Row(
+                children: [
+                  if (_activeUserId == p.id) const Icon(Icons.check, size: 18),
+                  if (_activeUserId == p.id) const SizedBox(width: 8),
+                  Text(p.name),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+    if (selected == null) return; // dismissed without choosing
+    final newId = selected == _noneSentinel ? null : selected;
+    if (newId == _activeUserId) return;
+    await _settings.setActiveUserId(newId);
+    if (mounted) setState(() => _activeUserId = newId);
   }
 }

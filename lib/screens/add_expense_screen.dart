@@ -5,6 +5,7 @@ import '../api/spliit_client.dart';
 import '../db/app_database.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
+import '../services/active_user.dart';
 import '../sync/outbox.dart';
 
 /// Adds an expense, online or offline. Always writes to the local db
@@ -22,6 +23,11 @@ class AddExpenseScreen extends StatefulWidget {
   final AppDatabase db;
   final Outbox outbox;
   final Group group;
+  /// This device's saved "active user" (see SettingsService), if any --
+  /// used to default "Paid by" via [resolveDefaultPaidBy]. Passed in
+  /// rather than loaded here so this screen doesn't need
+  /// SharedPreferences of its own to test.
+  final String? initialPaidBy;
 
   const AddExpenseScreen({
     super.key,
@@ -29,6 +35,7 @@ class AddExpenseScreen extends StatefulWidget {
     required this.db,
     required this.outbox,
     required this.group,
+    this.initialPaidBy,
   });
 
   @override
@@ -59,9 +66,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.group.participants.isNotEmpty) {
-      _paidBy = widget.group.participants.first.id;
-    }
+    _paidBy = resolveDefaultPaidBy(
+      activeUserId: widget.initialPaidBy,
+      participants: widget.group.participants,
+    );
   }
 
   @override
