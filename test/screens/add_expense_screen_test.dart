@@ -210,7 +210,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Groceries'), findsOneWidget); // in the Category dropdown
+    // Categories loaded successfully (would still show just 'General' if
+    // the fetch had failed) -- open the picker and confirm it's there.
     await tester.ensureVisible(find.widgetWithText(DropdownButtonFormField<int>, 'General'));
     await tester.tap(find.widgetWithText(DropdownButtonFormField<int>, 'General'));
     await tester.pumpAndSettle();
