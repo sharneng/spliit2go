@@ -1,6 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
@@ -173,6 +174,51 @@ void main() {
     final dropdown =
         tester.widget<DropdownButtonFormField<String>>(find.byType(DropdownButtonFormField<String>));
     expect(dropdown.initialValue, 'alex');
+  });
+
+  testWidgets('loads categories from the server and includes the picked one when saving',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async {
+        expect(req.url.toString(), contains('categories.list'));
+        return http.Response(
+          '[{"result":{"data":{"json":{"categories":'
+          '[{"id":0,"name":"General"},{"id":16,"name":"Groceries"}]}}}}]',
+          200,
+        );
+      }),
+    );
+    final outbox = Outbox(db, client);
+
+    await tester.pumpWidget(MaterialApp(
+      home: AddExpenseScreen(client: client, db: db, outbox: outbox, group: group),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Groceries'), findsOneWidget); // in the Category dropdown
+    await tester.tap(find.widgetWithText(DropdownButtonFormField<int>, 'General'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Groceries').last);
+    await tester.pumpAndSettle();
+
+    await fillCommonFields(tester, amount: '12');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    final pending = await db.pendingExpenses();
+    expect(db.rowToExpense(pending.single).category, 16);
+  });
+
+  testWidgets('falls back to General only when categories.list is unreachable',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await pumpScreen(tester, db); // pumpScreen's client always throws (offline)
+
+    expect(find.widgetWithText(DropdownButtonFormField<int>, 'General'), findsOneWidget);
   });
 
 }

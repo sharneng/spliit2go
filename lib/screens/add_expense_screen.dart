@@ -50,6 +50,12 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   bool _saving = false;
   String? _splitError;
 
+  // Falls back to just "General" (Spliit's own default, id 0) until/unless
+  // a live categories.list succeeds -- offline or a slow first load
+  // shouldn't block adding an expense on having a full category list.
+  Map<int, String> _categories = const {0: 'General'};
+  int _category = 0;
+
   SplitMode _splitMode = SplitMode.evenly;
   late final Map<String, bool> _includedInSplit = {
     for (final p in widget.group.participants) p.id: true,
@@ -70,6 +76,21 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       activeUserId: widget.initialPaidBy,
       participants: widget.group.participants,
     );
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final cats = await widget.client.fetchCategories();
+      if (!mounted || cats.isEmpty) return;
+      setState(() {
+        _categories = cats;
+        if (!_categories.containsKey(_category)) _category = _categories.keys.first;
+      });
+    } catch (_) {
+      // Offline or the server's unreachable -- keep the General-only
+      // fallback so the form still works without connectivity.
+    }
   }
 
   @override
@@ -110,6 +131,15 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   if (parsed == null || parsed <= 0) return 'Enter a valid amount';
                   return null;
                 },
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                initialValue: _categories.containsKey(_category) ? _category : null,
+                decoration: const InputDecoration(labelText: 'Category'),
+                items: _categories.entries
+                    .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                    .toList(),
+                onChanged: (v) => setState(() => _category = v ?? 0),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
@@ -278,6 +308,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       paidBy: _paidBy!,
       paidFor: paidFor,
       splitMode: _splitMode,
+      category: _category,
       date: DateTime.now(),
       pending: true,
     );
