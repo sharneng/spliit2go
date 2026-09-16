@@ -28,10 +28,17 @@ extension SplitModeWire on SplitMode {
 /// doesn't need a separate lookup to show names). Handles either shape
 /// rather than assuming one, since this is exactly the kind of upstream
 /// detail we deliberately don't want this client tightly bound to.
+///
+/// Also tolerates the id itself (bare, or nested in the object) coming
+/// back as a number rather than a string -- see
+/// github.com/sharneng/spliit2go/issues/14, where a bare `as String`
+/// cast on a server-sent id threw and crashed the whole group screen.
 String extractParticipantId(dynamic value) {
-  if (value is Map) return value['id'] as String;
-  return value as String;
+  if (value is Map) return _idToString(value['id']);
+  return _idToString(value);
 }
+
+String _idToString(dynamic id) => id is String ? id : id.toString();
 
 /// Same leniency for category, in case it's ever returned as an expanded
 /// `{id, name}` object rather than a bare id the way fetchCategories'

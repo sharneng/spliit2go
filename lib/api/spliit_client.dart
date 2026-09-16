@@ -23,6 +23,35 @@ import '../models/group.dart';
 ///   parses it as a plain string.
 /// - `groups.expenses.list` paginates at roughly 10 per page; a full
 ///   fetch has to follow `hasMore`/`nextCursor`.
+/// - Id-shaped fields (group id, participant id, expense id, the
+///   pagination cursor) are read leniently -- coerced to a string via
+///   [_asId] rather than assumed to already be one. A self-hosted
+///   instance running against an older/different Prisma schema for
+///   these fields can plausibly send a numeric id where spliit.app
+///   sends a cuid string; a bare `as String` cast on that throws
+///   `type 'int' is not a subtype of type 'String' in type cast` and
+///   takes down the whole group screen (github.com/sharneng/spliit2go/issues/14).
+///   Same leniency for `expenseDate` via [_asDateTime], in case a
+///   server ever sends an epoch-millis number instead of the ISO
+///   string superjson normally produces.
+/// Coerces an id-shaped field to a String. Every id in this API is
+/// meant to be a string (a Prisma cuid, in spliit.app's own schema),
+/// but a self-hosted instance on a different schema/version could
+/// plausibly send a numeric one instead -- see the class doc comment
+/// and github.com/sharneng/spliit2go/issues/14. Accepting either shape
+/// here means an unexpected numeric id becomes a usable (if unusual)
+/// string id instead of crashing the whole screen.
+String _asId(dynamic value) => value is String ? value : value.toString();
+
+/// Coerces an expense date field to a [DateTime]. Normally an ISO 8601
+/// string (superjson's wire format for a JS `Date` when meta isn't
+/// consulted -- see the class doc comment), but tolerates a raw
+/// epoch-millis number too, in case a server ever sends one.
+DateTime _asDateTime(dynamic value) {
+  if (value is num) return DateTime.fromMillisecondsSinceEpoch(value.round());
+  return DateTime.parse(value as String);
+}
+
 class SpliitClient {
   final String baseUrl;
   final http.Client _http;
@@ -67,12 +96,12 @@ class SpliitClient {
     final g = data['group'] as Map<String, dynamic>;
 
     return Group(
-      id: g['id'] as String,
+      id: _asId(g['id']),
       name: g['name'] as String,
       currency: g['currency'] as String,
       participants: (g['participants'] as List)
           .map((p) => Participant(
-                id: (p as Map<String, dynamic>)['id'] as String,
+                id: _asId((p as Map<String, dynamic>)['id']),
                 name: p['name'] as String,
               ))
           .toList(),
@@ -94,7 +123,7 @@ class SpliitClient {
       for (final raw in (data['expenses'] as List)) {
         final m = raw as Map<String, dynamic>;
         all.add(Expense(
-          id: m['id'] as String,
+          id: _asId(m['id']),
           groupId: groupId,
           title: m['title'] as String,
           amountCents: (m['amount'] as num).round(),
@@ -105,13 +134,13 @@ class SpliitClient {
           splitMode: SplitModeWire.fromWire(m['splitMode'] as String? ?? 'EVENLY'),
           category: m['category'] == null ? 0 : extractCategoryId(m['category']),
           notes: m['notes'] as String? ?? '',
-          date: DateTime.parse(m['expenseDate'] as String),
+          date: _asDateTime(m['expenseDate']),
           isReimbursement: m['isReimbursement'] as bool? ?? false,
         ));
       }
 
       if (data['hasMore'] != true) break;
-      cursor = data['nextCursor'] as String;
+      cursor = _asId(data['nextCursor']);
     }
     return all;
   }

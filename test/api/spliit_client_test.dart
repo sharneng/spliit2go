@@ -39,6 +39,42 @@ void main() {
       expect(group.participants, hasLength(2));
       expect(group.participants.map((p) => p.name), containsAll(['Ken', 'Jenny']));
     });
+
+    // Regression test for github.com/sharneng/spliit2go/issues/14: a
+    // live self-hosted server sent numeric ids where spliit.app sends
+    // cuid strings, and the original bare `as String` casts on
+    // group/participant id threw "type 'int' is not a subtype of type
+    // 'String' in type cast", crashing the whole group screen.
+    test('tolerates numeric group and participant ids', () async {
+      final body = jsonEncode([
+        {
+          'result': {
+            'data': {
+              'json': {
+                'group': {
+                  'id': 42,
+                  'name': 'Banff Trip',
+                  'currency': '\$',
+                  'participants': [
+                    {'id': 1, 'name': 'Ken'},
+                    {'id': 2, 'name': 'Jenny'},
+                  ],
+                },
+              },
+            },
+          },
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+
+      final group = await client.fetchGroup('42');
+
+      expect(group.id, '42');
+      expect(group.participants.map((p) => p.id), ['1', '2']);
+    });
   });
 
   group('SpliitClient.fetchExpenses', () {
@@ -172,6 +208,80 @@ void main() {
 
       expect(callCount, 2);
       expect(expenses.map((e) => e.id), ['e1', 'e2']);
+    });
+
+    // Same regression as fetchGroup above, for the fields fetchExpenses
+    // reads: expense id, a bare-id paidBy, and the pagination cursor.
+    test('tolerates a numeric expense id, paidBy id, and cursor', () async {
+      final body = jsonEncode([
+        {
+          'result': {
+            'data': {
+              'json': {
+                'expenses': [
+                  {
+                    'id': 99,
+                    'title': 'Coffee',
+                    'amount': 500,
+                    'paidBy': 1,
+                    'paidFor': [
+                      {'participant': 1, 'shares': 1},
+                    ],
+                    'expenseDate': '2026-09-16T00:00:00.000Z',
+                  },
+                ],
+                'hasMore': false,
+              },
+            },
+          },
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+
+      final expenses = await client.fetchExpenses('g1');
+
+      expect(expenses.single.id, '99');
+      expect(expenses.single.paidBy, '1');
+    });
+
+    // expenseDate as an epoch-millis number (some server configurations
+    // send this instead of an ISO string) shouldn't crash DateTime
+    // parsing either.
+    test('tolerates expenseDate as epoch millis instead of an ISO string', () async {
+      final body = jsonEncode([
+        {
+          'result': {
+            'data': {
+              'json': {
+                'expenses': [
+                  {
+                    'id': 'e1',
+                    'title': 'Coffee',
+                    'amount': 500,
+                    'paidBy': 'p1',
+                    'paidFor': [
+                      {'participant': 'p1', 'shares': 1},
+                    ],
+                    'expenseDate': 1757980800000,
+                  },
+                ],
+                'hasMore': false,
+              },
+            },
+          },
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+
+      final expenses = await client.fetchExpenses('g1');
+
+      expect(expenses.single.date, DateTime.fromMillisecondsSinceEpoch(1757980800000));
     });
   });
 
