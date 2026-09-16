@@ -196,6 +196,61 @@ class SpliitClient {
     // for the server id until the next full fetchExpenses() reconciles it.
     return data is Map<String, dynamic> ? (data['expenseId'] as String? ?? '') : '';
   }
+
+  /// Applies a full group-settings edit -- name, currency, and the
+  /// complete participant list -- in one `groups.update` mutation.
+  /// Spliit has no per-field or per-participant update endpoint; the web
+  /// app's own settings form edits everything together, and this
+  /// mirrors that shape.
+  ///
+  /// Ported from splitwise2spliit's spliit_api.py (`add_participant`),
+  /// which was verified end-to-end against a live server and documents
+  /// the server's actual `updateGroup()` behavior: a submitted
+  /// participant with an [Participant.id] is matched against an
+  /// existing row and updated -- a client-made-up id that matches
+  /// nothing is a silent no-op, not an error; one with an *empty* id is
+  /// created and assigned a real id by the server; and, per that same
+  /// source (not independently re-verified here), one that existed
+  /// before but is missing from this call is deleted. So callers must
+  /// always pass the *complete* desired participant list: existing
+  /// participants with their real ids, new ones with `id: ''`, and
+  /// removed ones simply left out.
+  ///
+  /// Like [createExpense], this only confirms the request didn't come
+  /// back with an embedded tRPC error -- the success payload shape
+  /// isn't relied on. Callers that need the real ids the server assigns
+  /// to newly-created participants should follow up with [fetchGroup].
+  Future<void> updateGroup({
+    required String groupId,
+    required String name,
+    required String currency,
+    required List<Participant> participants,
+  }) async {
+    final groupFormValues = {
+      'name': name,
+      'currency': currency,
+      'participants': participants
+          .map((p) => p.id.isEmpty ? {'name': p.name} : {'id': p.id, 'name': p.name})
+          .toList(),
+    };
+
+    final uri = Uri.parse('$baseUrl/api/trpc/groups.update?batch=1');
+    final body = {
+      '0': {
+        'json': {
+          'groupId': groupId,
+          'groupFormValues': groupFormValues,
+        },
+      }
+    };
+    final res = await _http.post(
+      uri,
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    _checkOk(res);
+    _unwrapBatch(jsonDecode(res.body)); // throws SpliitApiException on an embedded error
+  }
 }
 
 class SpliitApiException implements Exception {

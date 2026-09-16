@@ -9,6 +9,7 @@ import '../services/settings_service.dart';
 import '../sync/outbox.dart';
 import 'add_expense_screen.dart';
 import 'balances_screen.dart';
+import 'group_settings_screen.dart';
 
 /// The main (and, for now, only) screen: a group's expenses, offline-first.
 ///
@@ -141,6 +142,11 @@ class _GroupScreenState extends State<GroupScreen> {
             tooltip: 'Balances',
             onPressed: _group == null ? null : _openBalances,
           ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Group settings',
+            onPressed: _group == null ? null : _openGroupSettings,
+          ),
         ],
       ),
       body: RefreshIndicator(
@@ -207,6 +213,26 @@ class _GroupScreenState extends State<GroupScreen> {
     // (possibly still-pending) expense -- reflect it in this screen's
     // list too once we're back.
     await _loadFromCache();
+  }
+
+  /// Opens group settings (rename, currency, participants). Unlike the
+  /// balances screen, GroupSettingsScreen returns the fresh [Group]
+  /// straight from Navigator.pop on a successful save (or null if
+  /// nothing changed / the user backed out), so this can just adopt it
+  /// directly instead of re-reading the cache.
+  Future<void> _openGroupSettings() async {
+    final updated = await Navigator.of(context).push<Group>(
+      MaterialPageRoute(
+        builder: (_) => GroupSettingsScreen(
+          client: widget.client,
+          db: widget.db,
+          group: _group!,
+        ),
+      ),
+    );
+    if (updated != null && mounted) {
+      setState(() => _group = updated);
+    }
   }
 
   Future<void> _openAddExpense() async {

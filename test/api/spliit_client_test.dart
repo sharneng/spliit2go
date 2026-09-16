@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:spliit2go/api/spliit_client.dart';
+import 'package:spliit2go/models/group.dart';
 
 void main() {
   group('SpliitClient.fetchGroup', () {
@@ -171,6 +172,65 @@ void main() {
 
       expect(callCount, 2);
       expect(expenses.map((e) => e.id), ['e1', 'e2']);
+    });
+  });
+
+  group('SpliitClient.updateGroup', () {
+    test('sends existing participants with their id and new ones without', () async {
+      http.Request? captured;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          captured = req;
+          return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+        }),
+      );
+
+      await client.updateGroup(
+        groupId: 'g1',
+        name: 'Banff Trip 2',
+        currency: '€',
+        participants: const [
+          Participant(id: 'p1', name: 'Ken'),
+          Participant(id: '', name: 'New Person'),
+        ],
+      );
+
+      expect(captured, isNotNull);
+      expect(captured!.url.toString(), contains('groups.update'));
+      final sent = jsonDecode(captured!.body) as Map<String, dynamic>;
+      final formValues =
+          (sent['0'] as Map<String, dynamic>)['json']['groupFormValues'] as Map<String, dynamic>;
+      expect(formValues['name'], 'Banff Trip 2');
+      expect(formValues['currency'], '€');
+      expect(formValues['participants'], [
+        {'id': 'p1', 'name': 'Ken'},
+        {'name': 'New Person'},
+      ]);
+    });
+
+    test('throws on an embedded tRPC error', () async {
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(
+              jsonEncode([
+                {
+                  'error': {'message': 'group not found'},
+                },
+              ]),
+              200,
+            )),
+      );
+
+      expect(
+        () => client.updateGroup(
+          groupId: 'missing',
+          name: 'x',
+          currency: '\$',
+          participants: const [Participant(id: 'p1', name: 'Ken')],
+        ),
+        throwsA(isA<SpliitApiException>()),
+      );
     });
   });
 }
