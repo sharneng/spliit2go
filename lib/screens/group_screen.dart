@@ -7,6 +7,7 @@ import '../models/expense.dart';
 import '../models/group.dart';
 import '../sync/outbox.dart';
 import 'add_expense_screen.dart';
+import 'balances_screen.dart';
 
 /// The main (and, for now, only) screen: a group's expenses, offline-first.
 ///
@@ -120,7 +121,16 @@ class _GroupScreenState extends State<GroupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_group?.name ?? 'spliit2go')),
+      appBar: AppBar(
+        title: Text(_group?.name ?? 'spliit2go'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.account_balance_wallet_outlined),
+            tooltip: 'Balances',
+            onPressed: _group == null ? null : _openBalances,
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: _body(),
@@ -168,6 +178,23 @@ class _GroupScreenState extends State<GroupScreen> {
         );
       },
     );
+  }
+
+  Future<void> _openBalances() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BalancesScreen(
+          client: widget.client,
+          db: widget.db,
+          outbox: widget.outbox,
+          group: _group!,
+        ),
+      ),
+    );
+    // A settlement marked as paid on the balances screen is a new
+    // (possibly still-pending) expense -- reflect it in this screen's
+    // list too once we're back.
+    await _loadFromCache();
   }
 
   Future<void> _openAddExpense() async {
