@@ -6,11 +6,15 @@ import '../sync/outbox.dart';
 import 'group_screen.dart';
 import 'join_group_screen.dart';
 
-/// Every group this device has joined -- the home screen once there's
-/// more than one (and the launch screen whenever there's no
-/// most-recently-opened group to jump straight into), reachable any
-/// time via the switcher icon on GroupScreen's AppBar. See
-/// decisions/multi-group-design.md.
+/// Every group this device has joined -- the app's true root (see
+/// main.dart#_Root), always reachable via GroupScreen's normal back
+/// arrow, rather than something GroupScreen pushes you into. "Launch
+/// straight into the last-used group" (decisions/multi-group-design.md,
+/// decision 3) is done by _Root pushing that group's GroupScreen on top
+/// of this screen right after it mounts -- not by skipping this screen
+/// -- specifically so there's always a real group to back out *to*, even
+/// right after a fresh install or after leaving the group you were just
+/// viewing (github.com/sharneng/spliit2go/issues/12).
 ///
 /// Each row builds its own SpliitClient/Outbox from that group's own
 /// cached server URL when opened -- multi-group support means the

@@ -25,13 +25,19 @@ class Spliit2GoApp extends StatelessWidget {
   }
 }
 
-/// Decides what to show on launch: straight into the most-recently-
-/// opened group (decisions/multi-group-design.md, decision 3) if
-/// there's one, or the group list otherwise -- after a one-time
-/// migration that folds a legacy single-group install's SettingsService
-/// values into the new AppDatabase-backed joined-groups list. Owns the
-/// AppDatabase instance (the one long-lived object every screen
-/// shares) -- there's no DI framework, just one screen graph.
+/// Always shows GroupListScreen as the app's true root -- see
+/// decisions/multi-group-design.md's revision after
+/// github.com/sharneng/spliit2go/issues/12: GroupScreen is a detail view
+/// *below* the list, not the other way around, so it's reached by
+/// pushing onto the list (giving it a normal, always-valid back arrow
+/// back to it) rather than the list sometimes being what you back out
+/// of. "Launch straight into the last-used group" (decision 3) is done
+/// as an automatic push right after the list mounts, once there's a
+/// one-time migration (folding a legacy single-group install's
+/// SettingsService values into the new AppDatabase-backed joined-groups
+/// list) out of the way. Owns the AppDatabase instance (the one
+/// long-lived object every screen shares) -- there's no DI framework,
+/// just one screen graph.
 class _Root extends StatefulWidget {
   const _Root();
 
@@ -43,7 +49,6 @@ class _RootState extends State<_Root> {
   final _db = AppDatabase(openConnection());
 
   bool _checked = false;
-  GroupRow? _lastGroup;
 
   @override
   void initState() {
@@ -55,10 +60,30 @@ class _RootState extends State<_Root> {
     await _migrateLegacySingleGroup();
     final last = await _db.mostRecentlyOpenedGroup();
     if (!mounted) return;
-    setState(() {
-      _lastGroup = last;
-      _checked = true;
-    });
+    setState(() => _checked = true);
+    // Deferred to a post-frame callback: GroupListScreen (this build's
+    // `home`) has to actually exist and be mounted, with a Navigator
+    // above it, before anything can be pushed onto it.
+    if (last != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openGroup(last);
+      });
+    }
+  }
+
+  /// Pushes [row] as a GroupScreen on top of the (always-present)
+  /// GroupListScreen -- the launch fast path above, and shared by
+  /// GroupListScreen's own row taps rather than duplicating this.
+  Future<void> _openGroup(GroupRow row) async {
+    await _db.recordGroupOpened(row.id, serverUrl: row.serverUrl);
+    if (!mounted) return;
+    final client = SpliitClient(baseUrl: row.serverUrl);
+    final outbox = Outbox(_db, client);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GroupScreen(client: client, db: _db, outbox: outbox, groupId: row.id),
+      ),
+    );
   }
 
   /// One-time migration for an install that predates multi-group
@@ -110,12 +135,6 @@ class _RootState extends State<_Root> {
     if (!_checked) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    final lastGroup = _lastGroup;
-    if (lastGroup == null) {
-      return GroupListScreen(db: _db);
-    }
-    final client = SpliitClient(baseUrl: lastGroup.serverUrl);
-    final outbox = Outbox(_db, client);
-    return GroupScreen(client: client, db: _db, outbox: outbox, groupId: lastGroup.id);
+    return GroupListScreen(db: _db);
   }
 }

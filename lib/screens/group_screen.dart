@@ -10,10 +10,12 @@ import '../services/settings_service.dart';
 import '../sync/outbox.dart';
 import 'add_expense_screen.dart';
 import 'balances_screen.dart';
-import 'group_list_screen.dart';
 import 'group_settings_screen.dart';
 
-/// The main (and, for now, only) screen: a group's expenses, offline-first.
+/// A single group's expenses, offline-first -- reached by pushing on top
+/// of GroupListScreen (the app's actual root; see main.dart and
+/// decisions/multi-group-design.md), which is what gives this screen a
+/// normal, always-valid back arrow back to the list.
 ///
 /// On load, shows whatever's cached locally immediately, then tries a live
 /// fetch in the background and replaces the cache on success. Pending
@@ -132,11 +134,6 @@ class _GroupScreenState extends State<GroupScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_group?.name ?? 'spliit2go'),
-        leading: IconButton(
-          icon: const Icon(Icons.apps),
-          tooltip: 'Switch group',
-          onPressed: _openGroupList,
-        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.person_outline),
@@ -201,16 +198,6 @@ class _GroupScreenState extends State<GroupScreen> {
           ),
         );
       },
-    );
-  }
-
-  /// Reachable any time (not just when nothing's loaded yet) so switching
-  /// groups doesn't depend on this one having loaded successfully --
-  /// useful offline too, e.g. this group failed to load but another
-  /// cached one is fine.
-  Future<void> _openGroupList() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => GroupListScreen(db: widget.db)),
     );
   }
 
