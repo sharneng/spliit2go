@@ -9,7 +9,11 @@
 # Output overwrites .flutter-ci.log (gitignored) at the repo root each run.
 # Stop it with `kill %1` (or Ctrl-C if run in the foreground) or by closing
 # the tab.
-set -eu
+#
+# Deliberately NOT `set -e`: flutter analyze/test exit non-zero on any
+# lint warning or failing test, which is exactly the case we need to
+# capture in the log rather than let kill this loop.
+set -u
 
 REPO_ROOT="$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
@@ -28,7 +32,7 @@ while true; do
   if [ -n "$cur" ] && [ "$cur" != "$last" ]; then
     last="$cur"
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) -- new commit $cur, running local CI..."
-    {
+    (
       echo "=== spliit2go local CI: $(date -u +%Y-%m-%dT%H:%M:%SZ) commit $cur ($(git log -1 --format=%s)) ==="
       echo "--- flutter analyze ---"
       flutter analyze
@@ -43,7 +47,7 @@ while true; do
         lcov --summary coverage/lcov.info
       fi
       echo "=== done: $(date -u +%Y-%m-%dT%H:%M:%SZ) -- analyze:$analyze_status test:$test_status ==="
-    } > "$LOG" 2>&1
+    ) > "$LOG" 2>&1
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) -- done, see $LOG"
   fi
   sleep 5
