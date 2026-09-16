@@ -4,8 +4,9 @@
 # (exit codes + coverage summary) lands in .flutter-ci.log at repo root,
 # overwritten each run. Enabled via `git config core.hooksPath .githooks`
 # (see SETUP.md) -- this only affects your own local clone.
-(
-  cd "$(git rev-parse --show-toplevel)" || exit 1
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+nohup sh -c '
+  cd "'"$REPO_ROOT"'" || exit 1
   LOG=".flutter-ci.log"
   {
     echo "=== spliit2go local CI: $(date -u +%Y-%m-%dT%H:%M:%SZ) commit $(git rev-parse HEAD) ($(git log -1 --format=%s)) ==="
@@ -23,5 +24,5 @@
     fi
     echo "=== done: $(date -u +%Y-%m-%dT%H:%M:%SZ) -- analyze:$analyze_status test:$test_status ==="
   } > "$LOG" 2>&1
-) &
-disown
+' > /dev/null 2>&1 < /dev/null &
+exit 0
