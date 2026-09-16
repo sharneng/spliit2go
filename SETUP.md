@@ -59,12 +59,16 @@ git remote add origin git@github.com:<your-username>/spliit2go.git
 git push -u origin main
 ```
 
-## Optional: local CI on every commit
+## Optional: local CI watcher
 
-`.githooks/post-commit` runs `flutter analyze` and `flutter test --coverage` in the background after each commit (doesn't block `git commit`; output overwrites `.flutter-ci.log` at the repo root each time). Enable it once per clone:
+`scripts/watch-and-test.sh` polls this repo's `HEAD` every 5 seconds and runs `flutter analyze` + `flutter test --coverage` whenever it changes -- regardless of who made the commit (you, from this Terminal, or Claude, via the device bridge on a connected folder). This is what lets Claude commit changes on your behalf and have the actual build/test run with your real Flutter install, without you manually kicking anything off.
+
+Start it once in a Terminal tab (where `flutter doctor` already works) and leave it running while you're working on this project:
 
 ```
-git config core.hooksPath .githooks
+./scripts/watch-and-test.sh &
 ```
 
-Since it runs in the background, give it a few seconds to a minute after committing before checking `.flutter-ci.log`. To disable, `git config --unset core.hooksPath`.
+Output overwrites `.flutter-ci.log` (gitignored) at the repo root on every run. Stop it with `kill %1` (or Ctrl-C if run in the foreground) or by closing the tab.
+
+(An earlier version of this used a `.githooks/post-commit` hook instead. That only fired for commits made from this same Terminal, so it couldn't see commits made through the device bridge -- the watcher above replaces it.)
