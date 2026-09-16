@@ -59,16 +59,21 @@ git remote add origin git@github.com:<your-username>/spliit2go.git
 git push -u origin main
 ```
 
-## Optional: local CI watcher
+## Optional: local CI on every commit
 
-`scripts/watch-and-test.sh` polls this repo's `HEAD` every 5 seconds and runs `flutter analyze` + `flutter test --coverage` whenever it changes -- regardless of who made the commit (you, from this Terminal, or Claude, via the device bridge on a connected folder). This is what lets Claude commit changes on your behalf and have the actual build/test run with your real Flutter install, without you manually kicking anything off.
+`.githooks/post-commit` `touch`es `build/trigger` after every commit -- cheap enough to run from any shell that made the commit, yours or Claude's (via the device bridge on a connected folder), without needing Flutter itself in that shell. A Terminal watching that file with [fswatch](https://github.com/emcrisostomo/fswatch) (`brew install fswatch`) then runs the real build/test with your actual Flutter install. This is what lets Claude commit changes on your behalf and have them actually get built and tested, without you manually kicking anything off or relaying output back.
 
-Start it once in a Terminal tab (where `flutter doctor` already works) and leave it running while you're working on this project:
+One-time setup per clone:
 
 ```
-./scripts/watch-and-test.sh &
+git config core.hooksPath .githooks
+mkdir -p build && touch build/trigger   # fswatch needs the path to exist first
 ```
 
-Output overwrites `.flutter-ci.log` (gitignored) at the repo root on every run. Stop it with `kill %1` (or Ctrl-C if run in the foreground) or by closing the tab.
+Then, in a Terminal tab (where `flutter doctor` already works), leave this running while you're working on this project:
 
-(An earlier version of this used a `.githooks/post-commit` hook instead. That only fired for commits made from this same Terminal, so it couldn't see commits made through the device bridge -- the watcher above replaces it.)
+```
+fswatch -o build/trigger | while read; do scripts/run_test; done
+```
+
+Each trigger runs `flutter analyze` + `flutter test --coverage` once and overwrites `.flutter-ci.log` (gitignored) at the repo root. Stop the loop with Ctrl-C or by closing the tab. `scripts/run_test` can also be run by hand any time.

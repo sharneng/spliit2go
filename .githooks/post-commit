@@ -1,0 +1,8 @@
+#!/bin/sh
+# Fires an fswatch-driven test run (see SETUP.md): touching this file is
+# cheap and needs no Flutter, so it's safe to run from any shell that
+# made the commit -- yours, or Claude's via the device bridge -- unlike
+# an earlier version of this hook that tried to run flutter itself here.
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+mkdir -p "$REPO_ROOT/build"
+touch "$REPO_ROOT/build/trigger"
