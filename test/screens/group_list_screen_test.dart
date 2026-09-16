@@ -1,0 +1,145 @@
+import 'package:drift/native.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:spliit2go/api/spliit_client.dart';
+import 'package:spliit2go/db/app_database.dart';
+import 'package:spliit2go/models/group.dart';
+import 'package:spliit2go/screens/group_list_screen.dart';
+
+void main() {
+  // Opening a group navigates into GroupScreen, whose
+  // _resolveActiveUser awaits SharedPreferences -- see
+  // join_group_screen_test.dart for why this is needed.
+  SharedPreferences.setMockInitialValues({});
+
+  SpliitClient offlineClient() => SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => throw Exception('offline')),
+      );
+
+  testWidgets('shows an empty state with a join button when nothing is joined', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    await tester.pumpWidget(MaterialApp(
+      home: GroupListScreen(db: db, clientFactory: (_) => offlineClient()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No groups yet.'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Join a group'), findsOneWidget);
+  });
+
+  testWidgets('lists joined groups most-recently-opened first', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.cacheGroup(const Group(id: 'gA', name: 'Banff Trip', currency: '\$', participants: []));
+    await db.cacheGroup(const Group(id: 'gB', name: 'Tokyo Trip', currency: '¥', participants: []));
+    // Explicit, distinct timestamps -- drift's DateTime storage is
+    // second-granularity, so two real DateTime.now() calls made
+    // back-to-back here could otherwise tie and make this flaky.
+    await db.recordGroupOpened('gA',
+        serverUrl: 'https://example.test', at: DateTime.utc(2026, 9, 16, 10, 0, 0));
+    await db.recordGroupOpened('gB',
+        serverUrl: 'https://example.test', at: DateTime.utc(2026, 9, 16, 10, 0, 1));
+
+    await tester.pumpWidget(MaterialApp(
+      home: GroupListScreen(db: db, clientFactory: (_) => offlineClient()),
+    ));
+    await tester.pumpAndSettle();
+
+    final tiles = find.byType(ListTile);
+    expect(tiles, findsNWidgets(2));
+    expect(
+      tester.widget<ListTile>(tiles.at(0)).title,
+      isA<Text>().having((t) => t.data, 'text', 'Tokyo Trip'),
+    );
+    expect(
+      tester.widget<ListTile>(tiles.at(1)).title,
+      isA<Text>().having((t) => t.data, 'text', 'Banff Trip'),
+    );
+  });
+
+  testWidgets('a cached-but-never-opened group does not show in the list', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.cacheGroup(const Group(id: 'gA', name: 'Banff Trip', currency: '\$', participants: []));
+
+    await tester.pumpWidget(MaterialApp(
+      home: GroupListScreen(db: db, clientFactory: (_) => offlineClient()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No groups yet.'), findsOneWidget);
+  });
+
+  testWidgets('tapping a group opens it and records the visit', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.cacheGroup(const Group(id: 'gA', name: 'Banff Trip', currency: '\$', participants: []));
+    await db.recordGroupOpened('gA', serverUrl: 'https://example.test');
+    final before = (await db.groupRow('gA'))!.lastOpenedAt!;
+
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async => throw Exception('offline')),
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: GroupListScreen(db: db, clientFactory: (_) => client),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Banff Trip'));
+    await tester.pumpAndSettle();
+
+    // Landed on GroupScreen (offline, but the group was already cached).
+    expect(find.text('Banff Trip'), findsWidgets);
+    final after = (await db.groupRow('gA'))!.lastOpenedAt!;
+    expect(after.isAfter(before) || after.isAtSameMomentAs(before), isTrue);
+  });
+
+  testWidgets('leaving a group via dismiss removes it after confirmation', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.cacheGroup(const Group(id: 'gA', name: 'Banff Trip', currency: '\$', participants: []));
+    await db.recordGroupOpened('gA', serverUrl: 'https://example.test');
+
+    await tester.pumpWidget(MaterialApp(
+      home: GroupListScreen(db: db, clientFactory: (_) => offlineClient()),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.text('Banff Trip'), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Leave group?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Leave'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No groups yet.'), findsOneWidget);
+    expect(await db.groupRow('gA'), isNull);
+  });
+
+  testWidgets('cancelling the leave confirmation keeps the group', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.cacheGroup(const Group(id: 'gA', name: 'Banff Trip', currency: '\$', participants: []));
+    await db.recordGroupOpened('gA', serverUrl: 'https://example.test');
+
+    await tester.pumpWidget(MaterialApp(
+      home: GroupListScreen(db: db, clientFactory: (_) => offlineClient()),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.text('Banff Trip'), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Banff Trip'), findsOneWidget);
+    expect(await db.groupRow('gA'), isNotNull);
+  });
+}

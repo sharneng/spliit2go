@@ -5,10 +5,12 @@ import '../api/spliit_client.dart';
 import '../db/app_database.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
+import '../services/active_user.dart';
 import '../services/settings_service.dart';
 import '../sync/outbox.dart';
 import 'add_expense_screen.dart';
 import 'balances_screen.dart';
+import 'group_list_screen.dart';
 import 'group_settings_screen.dart';
 
 /// The main (and, for now, only) screen: a group's expenses, offline-first.
@@ -51,9 +53,6 @@ class _GroupScreenState extends State<GroupScreen> {
     _loadGroupFromCache();
     _loadFromCache();
     _refresh();
-    _settings.activeUserId().then((id) {
-      if (mounted) setState(() => _activeUserId = id);
-    });
     // Guarded: connectivity_plus's platform channel isn't set up in every
     // environment (widget tests being the immediate reason this got
     // added, but a misconfigured platform is a real possibility too).
@@ -81,6 +80,7 @@ class _GroupScreenState extends State<GroupScreen> {
     final cached = await widget.db.cachedGroup(widget.groupId);
     if (!mounted || cached == null) return;
     setState(() => _group = cached);
+    await _resolveActiveUser();
   }
 
   Future<void> _loadFromCache() async {
@@ -102,6 +102,7 @@ class _GroupScreenState extends State<GroupScreen> {
         _error = null;
       });
       await _loadFromCache();
+      await _resolveActiveUser();
     } catch (e) {
       // Offline or the server's unreachable -- fine, we already loaded
       // whatever's cached. Only surface an error if we have nothing at
@@ -131,6 +132,11 @@ class _GroupScreenState extends State<GroupScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_group?.name ?? 'spliit2go'),
+        leading: IconButton(
+          icon: const Icon(Icons.apps),
+          tooltip: 'Switch group',
+          onPressed: _openGroupList,
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.person_outline),
@@ -198,6 +204,16 @@ class _GroupScreenState extends State<GroupScreen> {
     );
   }
 
+  /// Reachable any time (not just when nothing's loaded yet) so switching
+  /// groups doesn't depend on this one having loaded successfully --
+  /// useful offline too, e.g. this group failed to load but another
+  /// cached one is fine.
+  Future<void> _openGroupList() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => GroupListScreen(db: widget.db)),
+    );
+  }
+
   Future<void> _openBalances() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -253,11 +269,40 @@ class _GroupScreenState extends State<GroupScreen> {
     }
   }
 
-  /// Which participant "you" are on this device -- purely local (see
-  /// SettingsService.activeUserId), used only to default "Paid by" on
-  /// add-expense. Mirrors the web app's own per-device setting; there's
-  /// no account system to tie it to anything more meaningful than "the
-  /// last person picked on this phone".
+  /// Resolves who "you" are in *this* group -- see resolveActiveParticipant
+  /// and decisions/multi-group-design.md, decision 2. Called after every
+  /// successful cache load and live refresh (participants can change,
+  /// and this group's own stored choice or the device's default name
+  /// might newly apply). Never prompts on its own: an unresolved result
+  /// just leaves [_activeUserId] null, same as "nothing set yet" always
+  /// meant -- resolveDefaultPaidBy in add-expense already falls back to
+  /// the first participant, and the person icon still lets you pick
+  /// explicitly.
+  Future<void> _resolveActiveUser() async {
+    if (_group == null) return;
+    final row = await widget.db.groupRow(widget.groupId);
+    final defaultName = await _settings.defaultActiveUserName();
+    final resolution = resolveActiveParticipant(
+      storedActiveParticipantId: row?.activeParticipantId,
+      defaultActiveUserName: defaultName,
+      participants: _group!.participants,
+    );
+    switch (resolution) {
+      case ActiveParticipantAlreadySet(:final participantId):
+        if (mounted) setState(() => _activeUserId = participantId);
+      case ActiveParticipantAutoMatched(:final participantId):
+        await widget.db.setActiveParticipant(widget.groupId, participantId);
+        if (mounted) setState(() => _activeUserId = participantId);
+      case ActiveParticipantNeedsPrompt():
+        break;
+    }
+  }
+
+  /// Which participant "you" are on this device, for *this* group --
+  /// see [_resolveActiveUser] above. Mirrors the web app's own
+  /// per-device setting; there's no account system to tie it to
+  /// anything more meaningful than "the last person picked for this
+  /// group, on this phone".
   // showDialog returns null both when the dialog is dismissed without a
   // choice (tap outside, back button) *and* if "None" popped a literal
   // null -- those need to mean different things (dismiss = no change,
@@ -298,7 +343,7 @@ class _GroupScreenState extends State<GroupScreen> {
     if (selected == null) return; // dismissed without choosing
     final newId = selected == _noneSentinel ? null : selected;
     if (newId == _activeUserId) return;
-    await _settings.setActiveUserId(newId);
+    await widget.db.setActiveParticipant(widget.groupId, newId);
     if (mounted) setState(() => _activeUserId = newId);
   }
 }

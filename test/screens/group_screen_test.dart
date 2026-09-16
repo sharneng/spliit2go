@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/models/group.dart';
@@ -9,6 +10,11 @@ import 'package:spliit2go/screens/group_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
 
 void main() {
+  // GroupScreen's _resolveActiveUser awaits
+  // SettingsService.defaultActiveUserName() -> SharedPreferences.
+  // getInstance(); without this it hangs forever in a widget test.
+  SharedPreferences.setMockInitialValues({});
+
   // Every request throws, simulating no connectivity -- matches what a
   // real network failure looks like to SpliitClient's callers.
   SpliitClient offlineClient() => SpliitClient(

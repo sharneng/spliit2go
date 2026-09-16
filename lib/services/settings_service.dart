@@ -1,43 +1,48 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Which server and group this install of the app is pointed at. There's
-/// no multi-group UI yet (see README status) -- one server + one group,
-/// changeable from the settings screen.
+/// Device-wide settings, plus read-only access to the single
+/// server/group/active-user values this app used to store before
+/// multi-group support (backlog #4, see decisions/multi-group-design.md)
+/// -- kept only so main.dart's one-time startup migration can read them
+/// and fold them into the new AppDatabase-backed joined-groups list.
+/// Nothing writes the legacy keys anymore; a fresh install simply never
+/// has them, and the migration is a no-op for it.
 class SettingsService {
   static const _keyServerUrl = 'server_url';
   static const _keyGroupId = 'group_id';
   static const _keyActiveUserId = 'active_user_id';
+  static const _keyDefaultActiveUserName = 'default_active_user_name';
 
-  Future<String?> serverUrl() async =>
+  /// Legacy single-group server URL -- see class doc. Read-only; only
+  /// main.dart's startup migration reads this.
+  Future<String?> legacyServerUrl() async =>
       (await SharedPreferences.getInstance()).getString(_keyServerUrl);
 
-  Future<String?> groupId() async =>
+  /// Legacy single-group id -- see class doc.
+  Future<String?> legacyGroupId() async =>
       (await SharedPreferences.getInstance()).getString(_keyGroupId);
 
-  Future<void> save({required String serverUrl, required String groupId}) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyServerUrl, serverUrl);
-    await prefs.setString(_keyGroupId, groupId);
-  }
-
-  Future<bool> isConfigured() async =>
-      (await serverUrl()) != null && (await groupId()) != null;
-
-  /// Which participant this device defaults "Paid by" to -- purely a
-  /// local convenience (mirrors the web app's own per-device "Active
-  /// user" setting), never synced to the server. Resolving it against a
-  /// group's actual participants (it may be stale, or unset) is
-  /// [resolveDefaultPaidBy] in lib/services/active_user.dart, kept
-  /// separate so that logic is testable without SharedPreferences.
-  Future<String?> activeUserId() async =>
+  /// Legacy single global active-user id -- see class doc. Superseded by
+  /// AppDatabase's per-group `activeParticipantId` plus
+  /// [defaultActiveUserName] below.
+  Future<String?> legacyActiveUserId() async =>
       (await SharedPreferences.getInstance()).getString(_keyActiveUserId);
 
-  Future<void> setActiveUserId(String? id) async {
+  /// The device-wide preferred display name used to auto-match a newly
+  /// opened or joined group's active participant without prompting --
+  /// see [resolveActiveParticipant] in lib/services/active_user.dart and
+  /// decisions/multi-group-design.md, decision 2. Never synced to the
+  /// server; purely a local convenience, same as the per-group choice it
+  /// helps seed.
+  Future<String?> defaultActiveUserName() async =>
+      (await SharedPreferences.getInstance()).getString(_keyDefaultActiveUserName);
+
+  Future<void> setDefaultActiveUserName(String? name) async {
     final prefs = await SharedPreferences.getInstance();
-    if (id == null) {
-      await prefs.remove(_keyActiveUserId);
+    if (name == null) {
+      await prefs.remove(_keyDefaultActiveUserName);
     } else {
-      await prefs.setString(_keyActiveUserId, id);
+      await prefs.setString(_keyDefaultActiveUserName, name);
     }
   }
 }

@@ -105,4 +105,101 @@ void main() {
       expect(all.map((r) => r.id), ['server-2']);
     });
   });
+
+  group('multi-group support', () {
+    const groupA = Group(id: 'gA', name: 'Banff Trip', currency: '\$', participants: []);
+    const groupB = Group(id: 'gB', name: 'Tokyo Trip', currency: '¥', participants: []);
+
+    test('recordGroupOpened sets serverUrl and lastOpenedAt without touching cached fields', () async {
+      await db.cacheGroup(groupA);
+      await db.recordGroupOpened('gA', serverUrl: 'https://spliit.app');
+
+      final row = await db.groupRow('gA');
+      expect(row!.serverUrl, 'https://spliit.app');
+      expect(row.lastOpenedAt, isNotNull);
+      expect(row.name, 'Banff Trip'); // untouched
+    });
+
+    test('allJoinedGroups excludes a cached-but-never-opened row', () async {
+      await db.cacheGroup(groupA); // cached, but recordGroupOpened never called
+      await db.cacheGroup(groupB);
+      await db.recordGroupOpened('gB', serverUrl: 'https://spliit.app');
+
+      final joined = await db.allJoinedGroups();
+      expect(joined.map((r) => r.id), ['gB']);
+    });
+
+    // recordGroupOpened's `at` param sidesteps drift's second-granularity
+    // DateTime storage -- two real DateTime.now() calls made back-to-back
+    // in a test can otherwise tie and make ordering flaky. See its doc.
+    final t1 = DateTime.utc(2026, 9, 16, 10, 0, 0);
+    final t2 = DateTime.utc(2026, 9, 16, 10, 0, 1);
+    final t3 = DateTime.utc(2026, 9, 16, 10, 0, 2);
+
+    test('allJoinedGroups orders most-recently-opened first', () async {
+      await db.cacheGroup(groupA);
+      await db.cacheGroup(groupB);
+      await db.recordGroupOpened('gA', serverUrl: 'https://spliit.app', at: t1);
+      await db.recordGroupOpened('gB', serverUrl: 'https://spliit.app', at: t2);
+      // Re-opening gA should move it back to the front.
+      await db.recordGroupOpened('gA', serverUrl: 'https://spliit.app', at: t3);
+
+      final joined = await db.allJoinedGroups();
+      expect(joined.map((r) => r.id), ['gA', 'gB']);
+    });
+
+    test('mostRecentlyOpenedGroup returns null when nothing has ever been opened', () async {
+      expect(await db.mostRecentlyOpenedGroup(), isNull);
+    });
+
+    test('mostRecentlyOpenedGroup returns the last-opened row', () async {
+      await db.cacheGroup(groupA);
+      await db.cacheGroup(groupB);
+      await db.recordGroupOpened('gA', serverUrl: 'https://spliit.app', at: t1);
+      await db.recordGroupOpened('gB', serverUrl: 'https://spliit.app', at: t2);
+
+      expect((await db.mostRecentlyOpenedGroup())!.id, 'gB');
+    });
+
+    test('setActiveParticipant then groupRow round-trips it, including clearing with null', () async {
+      await db.cacheGroup(groupA);
+      await db.setActiveParticipant('gA', 'p1');
+      expect((await db.groupRow('gA'))!.activeParticipantId, 'p1');
+
+      await db.setActiveParticipant('gA', null);
+      expect((await db.groupRow('gA'))!.activeParticipantId, isNull);
+    });
+
+    test('leaveGroup removes the group and its expenses', () async {
+      await db.cacheGroup(groupA);
+      await db.recordGroupOpened('gA', serverUrl: 'https://spliit.app');
+      await db.insertPending(Expense(
+        id: 'e1',
+        groupId: 'gA',
+        title: 'Coffee',
+        amountCents: 500,
+        paidBy: 'p1',
+        paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+        date: DateTime.utc(2026, 9, 16),
+        pending: true,
+      ));
+
+      await db.leaveGroup('gA');
+
+      expect(await db.groupRow('gA'), isNull);
+      expect(await db.expensesForGroup('gA'), isEmpty);
+    });
+
+    test('leaveGroup only removes the named group, not others', () async {
+      await db.cacheGroup(groupA);
+      await db.cacheGroup(groupB);
+      await db.recordGroupOpened('gA', serverUrl: 'https://spliit.app');
+      await db.recordGroupOpened('gB', serverUrl: 'https://spliit.app');
+
+      await db.leaveGroup('gA');
+
+      expect(await db.groupRow('gA'), isNull);
+      expect(await db.groupRow('gB'), isNotNull);
+    });
+  });
 }
