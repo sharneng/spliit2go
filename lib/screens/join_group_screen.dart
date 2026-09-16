@@ -3,16 +3,21 @@ import 'package:flutter/material.dart';
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
 import '../services/active_user.dart';
+import '../services/group_url.dart';
 import '../services/settings_service.dart';
 
-/// Joins a group: enter a server URL and group id (same convention as
-/// the splitwise2spliit import script -- group id is the last path
-/// segment of the group's URL, e.g.
-/// spliit.app/groups/RrYePXN2GBpSMW1EPjpjH -> RrYePXN2GBpSMW1EPjpjH),
-/// fetch it live to confirm it's real, cache it, and record it as
-/// opened. Used both for the very first group on a fresh install and
-/// for adding another from GroupListScreen's "+" -- see
-/// decisions/multi-group-design.md.
+/// Joins a group: paste the group's full URL (the same one you'd get
+/// from the webapp's address bar or a share sheet, e.g.
+/// spliit.app/groups/RrYePXN2GBpSMW1EPjpjH), fetch it live to confirm
+/// it's real, cache it, and record it as opened. Used both for the
+/// very first group on a fresh install and for adding another from
+/// GroupListScreen's "+" -- see decisions/multi-group-design.md.
+///
+/// Used to ask for server URL and group id as two separate fields the
+/// user had to split a URL to fill in themselves; now a single field
+/// parsed by [parseGroupUrl], matching how both the iOS app and the
+/// webapp already handle this -- see
+/// github.com/sharneng/spliit2go/issues/13.
 ///
 /// Requires connectivity: joining means confirming a real group exists
 /// and caching its actual data, not just remembering an id someone
@@ -25,7 +30,7 @@ class JoinGroupScreen extends StatefulWidget {
   /// inject a client backed by http's MockClient regardless of what URL
   /// was typed -- this screen doesn't take a pre-built [SpliitClient]
   /// the way every other screen does, since the whole point here is
-  /// that the server URL is whatever the user just typed, not something
+  /// that the server URL is whatever the user just pasted, not something
   /// known ahead of time.
   final SpliitClient Function(String serverUrl) clientFactory;
 
@@ -38,8 +43,7 @@ class JoinGroupScreen extends StatefulWidget {
 
 class _JoinGroupScreenState extends State<JoinGroupScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _serverController = TextEditingController(text: 'https://spliit.app');
-  final _groupController = TextEditingController();
+  final _urlController = TextEditingController();
   final _settings = SettingsService();
 
   bool _joining = false;
@@ -47,15 +51,20 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
 
   @override
   void dispose() {
-    _serverController.dispose();
-    _groupController.dispose();
+    _urlController.dispose();
     super.dispose();
   }
 
   Future<void> _join() async {
     if (!_formKey.currentState!.validate()) return;
-    final serverUrl = _serverController.text.trim();
-    final groupId = _groupController.text.trim();
+    final parsed = parseGroupUrl(_urlController.text);
+    if (parsed == null) {
+      setState(() => _error = 'That doesn\'t look like a group URL -- it should look like '
+          'https://spliit.app/groups/xxxxxxxxxxxxxxxxxxxxx');
+      return;
+    }
+    final serverUrl = parsed.serverUrl;
+    final groupId = parsed.groupId;
 
     setState(() {
       _joining = true;
@@ -106,18 +115,13 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
                 const SizedBox(height: 12),
               ],
               TextFormField(
-                controller: _serverController,
-                decoration: const InputDecoration(labelText: 'Server URL'),
-                validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _groupController,
+                controller: _urlController,
                 decoration: const InputDecoration(
-                  labelText: 'Group ID',
-                  helperText: 'Last segment of the group URL',
+                  labelText: 'Group URL',
+                  helperText: 'Paste the group\'s URL, e.g. https://spliit.app/groups/xxxxx',
                 ),
-                validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                keyboardType: TextInputType.url,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
               const SizedBox(height: 24),
               FilledButton(
@@ -137,3 +141,4 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
     );
   }
 }
+

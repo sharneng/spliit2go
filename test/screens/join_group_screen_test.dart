@@ -38,7 +38,8 @@ void main() {
         },
       ]);
 
-  Future<String?> pushAndJoin(WidgetTester tester, AppDatabase db, SpliitClient client) async {
+  Future<String?> pushAndJoin(WidgetTester tester, AppDatabase db, SpliitClient client,
+      {String url = 'https://example.test/groups/g1'}) async {
     String? popped;
     await tester.pumpWidget(MaterialApp(
       home: Builder(
@@ -56,8 +57,7 @@ void main() {
     ));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextFormField, 'Server URL'), 'https://example.test');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Group ID'), 'g1');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Group URL'), url);
     await tester.tap(find.text('Join'));
     await tester.pumpAndSettle();
     return popped;
@@ -119,7 +119,7 @@ void main() {
     expect(await db.cachedGroup('g1'), isNull);
   });
 
-  testWidgets('blank fields are rejected by form validation before any request', (tester) async {
+  testWidgets('a blank field is rejected by form validation before any request', (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     var requested = false;
@@ -135,11 +135,31 @@ void main() {
       home: JoinGroupScreen(db: db, clientFactory: (_) => client),
     ));
     await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextFormField, 'Server URL'), '');
     await tester.tap(find.text('Join'));
     await tester.pumpAndSettle();
 
     expect(find.text('Required'), findsWidgets);
     expect(requested, isFalse);
+  });
+
+  testWidgets('a URL that has no /groups/ segment is rejected before any request',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    var requested = false;
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async {
+        requested = true;
+        return http.Response(groupResponse(), 200);
+      }),
+    );
+
+    final poppedGroupId =
+        await pushAndJoin(tester, db, client, url: 'https://example.test/not-a-group-url');
+
+    expect(poppedGroupId, isNull);
+    expect(requested, isFalse);
+    expect(find.textContaining("doesn't look like a group URL"), findsOneWidget);
   });
 }
