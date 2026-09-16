@@ -52,6 +52,7 @@ void main() {
     await pumpScreen(tester, db);
 
     await fillCommonFields(tester, amount: '90');
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
@@ -69,8 +70,10 @@ void main() {
     await pumpScreen(tester, db);
 
     await fillCommonFields(tester, amount: '90');
+    await tester.ensureVisible(find.widgetWithText(CheckboxListTile, 'Cid'));
     await tester.tap(find.widgetWithText(CheckboxListTile, 'Cid'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
@@ -86,8 +89,10 @@ void main() {
     await pumpScreen(tester, db);
 
     await fillCommonFields(tester, amount: '90');
+    await tester.ensureVisible(find.widgetWithText(DropdownButtonFormField<SplitMode>, 'Evenly'));
     await tester.tap(find.widgetWithText(DropdownButtonFormField<SplitMode>, 'Evenly'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Unevenly – By amount').last);
     await tester.tap(find.text('Unevenly – By amount').last);
     await tester.pumpAndSettle();
 
@@ -97,6 +102,7 @@ void main() {
     await tester.enterText(amountFields.at(3), '30');
     await tester.enterText(amountFields.at(4), '20'); // 30+30+20 = 80, not 90
 
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
@@ -111,8 +117,10 @@ void main() {
     await pumpScreen(tester, db);
 
     await fillCommonFields(tester, amount: '90');
+    await tester.ensureVisible(find.widgetWithText(DropdownButtonFormField<SplitMode>, 'Evenly'));
     await tester.tap(find.widgetWithText(DropdownButtonFormField<SplitMode>, 'Evenly'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Unevenly – By amount').last);
     await tester.tap(find.text('Unevenly – By amount').last);
     await tester.pumpAndSettle();
 
@@ -121,6 +129,7 @@ void main() {
     await tester.enterText(amountFields.at(3), '30');
     await tester.enterText(amountFields.at(4), '10');
 
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
@@ -138,8 +147,10 @@ void main() {
     await pumpScreen(tester, db);
 
     await fillCommonFields(tester, amount: '90');
+    await tester.ensureVisible(find.widgetWithText(DropdownButtonFormField<SplitMode>, 'Evenly'));
     await tester.tap(find.widgetWithText(DropdownButtonFormField<SplitMode>, 'Evenly'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Unevenly – By percentage').last);
     await tester.tap(find.text('Unevenly – By percentage').last);
     await tester.pumpAndSettle();
 
@@ -148,6 +159,7 @@ void main() {
     await tester.enterText(amountFields.at(3), '30');
     await tester.enterText(amountFields.at(4), '10'); // sums to 90, not 100
 
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
@@ -199,12 +211,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Groceries'), findsOneWidget); // in the Category dropdown
+    await tester.ensureVisible(find.widgetWithText(DropdownButtonFormField<int>, 'General'));
     await tester.tap(find.widgetWithText(DropdownButtonFormField<int>, 'General'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Groceries').last);
     await tester.tap(find.text('Groceries').last);
     await tester.pumpAndSettle();
 
     await fillCommonFields(tester, amount: '12');
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
