@@ -21,14 +21,20 @@ void main() {
     ],
   );
 
-  Future<void> pumpScreen(WidgetTester tester, AppDatabase db) async {
+  Future<void> pumpScreen(WidgetTester tester, AppDatabase db, {String? initialPaidBy}) async {
     final client = SpliitClient(
       baseUrl: 'https://example.test',
       httpClient: MockClient((req) async => throw Exception('offline')),
     );
     final outbox = Outbox(db, client);
     await tester.pumpWidget(MaterialApp(
-      home: AddExpenseScreen(client: client, db: db, outbox: outbox, group: group),
+      home: AddExpenseScreen(
+        client: client,
+        db: db,
+        outbox: outbox,
+        group: group,
+        initialPaidBy: initialPaidBy,
+      ),
     ));
     await tester.pumpAndSettle();
   }
