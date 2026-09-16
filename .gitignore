@@ -29,3 +29,4 @@ ios/Flutter/Flutter.podspec
 # Local config (device-specific Spliit instance URL, etc.)
 lib/api/local_config.dart
 .flutter-ci.log
+coverage/
