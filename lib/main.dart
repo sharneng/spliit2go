@@ -21,6 +21,23 @@ class Spliit2GoApp extends StatelessWidget {
       title: 'spliit2go',
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.teal),
       home: const _Root(),
+      // Issue #24: modern Android (edge-to-edge is mandatory starting
+      // with API 35, and Flutter's default template doesn't opt out of
+      // it) draws the app behind the status bar *and* the bottom
+      // gesture/nav bar. Scaffold only insets its AppBar for that
+      // automatically -- plain body content (a form's Save button at
+      // the bottom of a ListView, a bottom sheet's last row) is left to
+      // sit right behind the system bars and gets visually clipped or
+      // made untappable, which is exactly what was reported ("save
+      // button under bottom nav bar").
+      //
+      // Wrapping the whole app in one SafeArea here -- rather than
+      // adding it to every individual screen -- insets every route's
+      // content uniformly, including screens added later. A descendant
+      // SafeArea (e.g. the currency/category picker bottom sheets)
+      // still works correctly nested inside this one: SafeArea consumes
+      // the padding it applies, so there's no double-inset.
+      builder: (context, child) => SafeArea(child: child!),
     );
   }
 }
