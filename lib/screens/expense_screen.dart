@@ -4,10 +4,12 @@ import 'package:uuid/uuid.dart';
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
 import '../models/category.dart';
+import '../models/currency.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
 import '../services/active_user.dart';
 import '../sync/outbox.dart';
+import '../widgets/currency_picker.dart';
 
 /// Adds -- or, given [existingExpense], edits -- an expense. An expense
 /// with [Expense.isReimbursement] set is a settlement/"paid back"
@@ -108,6 +110,16 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   bool _saveDefaultSplittingOptions = false;
   RecurrenceRule _recurrenceRule = RecurrenceRule.none;
   bool _paidInOtherCurrency = false;
+  String? _originalCurrencyError;
+
+  /// Whether [widget.group] has a real ISO currency code (as opposed to
+  /// a free-typed custom symbol with no code) -- exactly the condition
+  /// the web app's expense-form.tsx uses to decide whether the
+  /// original-currency field is a picker at all, since there's no
+  /// exchange rate to convert against for a currency Spliit doesn't
+  /// recognize.
+  bool get _hasGroupCurrencyCode =>
+      widget.group.currencyCode != null && widget.group.currencyCode!.isNotEmpty;
 
   // Falls back to just "General" (Spliit's own default, id 0) until/unless
   // a live categories.list succeeds -- offline or a slow first load
@@ -291,6 +303,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ),
               if (_paidInOtherCurrency) ...[
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: TextFormField(
@@ -307,16 +320,29 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     ),
                     const SizedBox(width: 12),
                     SizedBox(
-                      width: 100,
-                      child: TextFormField(
-                        controller: _originalCurrencyController,
-                        decoration: const InputDecoration(labelText: 'Currency'),
-                        textCapitalization: TextCapitalization.characters,
-                        validator: (v) {
-                          if (!_paidInOtherCurrency) return null;
-                          return (v == null || v.trim().isEmpty) ? 'Required' : null;
-                        },
-                      ),
+                      width: 160,
+                      child: _hasGroupCurrencyCode
+                          ? InkWell(
+                              onTap: _pickOriginalCurrency,
+                              child: InputDecorator(
+                                decoration: InputDecoration(
+                                  labelText: 'Currency',
+                                  errorText: _originalCurrencyError,
+                                ),
+                                child: Text(
+                                  _originalCurrencyController.text.isEmpty
+                                      ? 'Select'
+                                      : currencyByCode(_originalCurrencyController.text).toString(),
+                                ),
+                              ),
+                            )
+                          : InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'Currency',
+                                helperText: 'Conversion unavailable',
+                              ),
+                              child: Text(widget.group.currency),
+                            ),
                     ),
                   ],
                 ),
@@ -450,6 +476,24 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     if (picked != null) setState(() => _category = picked.id);
   }
 
+  /// Opens the shared currency picker (issue #23) for "paid in a
+  /// different currency" -- no Custom option here, since converting
+  /// against a currency with no ISO code isn't possible (see
+  /// [_hasGroupCurrencyCode], which gates this field being shown at
+  /// all).
+  Future<void> _pickOriginalCurrency() async {
+    final picked = await pickCurrency(
+      context,
+      currencies: supportedCurrencies,
+      selectedCode: _originalCurrencyController.text,
+    );
+    if (picked == null) return;
+    setState(() {
+      _originalCurrencyController.text = picked.code;
+      _originalCurrencyError = null;
+    });
+  }
+
   String _formatDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
@@ -566,8 +610,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     setState(() {
       _splitError = null;
       _saveError = null;
+      _originalCurrencyError = null;
     });
     if (!_formKey.currentState!.validate()) return;
+    if (_paidInOtherCurrency &&
+        _hasGroupCurrencyCode &&
+        _originalCurrencyController.text.trim().isEmpty) {
+      setState(() => _originalCurrencyError = 'Required');
+      return;
+    }
 
     final amountCents = (double.parse(_amountController.text) * 100).round();
     final paidFor = _buildPaidFor(amountCents);
@@ -579,7 +630,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     if (_paidInOtherCurrency) {
       final originalAmount = double.parse(_originalAmountController.text.trim());
       originalAmountCents = (originalAmount * 100).round();
-      originalCurrency = _originalCurrencyController.text.trim().toUpperCase();
+      // No code to send when the group's own currency has none to
+      // convert against (see _hasGroupCurrencyCode) -- the field is
+      // disabled in that case, so there's nothing the user picked.
+      final code = _originalCurrencyController.text.trim().toUpperCase();
+      originalCurrency = code.isEmpty ? null : code;
       // groupAmount = originalAmount * conversionRate (Spliit's own
       // convention -- see src/lib/currency-conversion.ts upstream).
       conversionRate = amountCents / originalAmountCents;

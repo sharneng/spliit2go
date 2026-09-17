@@ -134,6 +134,64 @@ void main() {
       expect(group.id, '42');
       expect(group.participants.map((p) => p.id), ['1', '2']);
     });
+
+    test('parses information and currencyCode when present (issue #23)', () async {
+      final body = jsonEncode([
+        {
+          'result': {
+            'data': {
+              'json': {
+                'group': {
+                  'id': 'g1',
+                  'name': 'Banff Trip',
+                  'information': 'Split hotel evenly.',
+                  'currency': '\$',
+                  'currencyCode': 'USD',
+                  'participants': <Map<String, dynamic>>[],
+                },
+              },
+            },
+          },
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+
+      final group = await client.fetchGroup('g1');
+
+      expect(group.information, 'Split hotel evenly.');
+      expect(group.currencyCode, 'USD');
+    });
+
+    test('information and currencyCode are null when the server omits them', () async {
+      final body = jsonEncode([
+        {
+          'result': {
+            'data': {
+              'json': {
+                'group': {
+                  'id': 'g1',
+                  'name': 'Banff Trip',
+                  'currency': '\$',
+                  'participants': <Map<String, dynamic>>[],
+                },
+              },
+            },
+          },
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+
+      final group = await client.fetchGroup('g1');
+
+      expect(group.information, isNull);
+      expect(group.currencyCode, isNull);
+    });
   });
 
   group('SpliitClient.fetchExpenses', () {
@@ -847,6 +905,58 @@ void main() {
         {'id': 'p1', 'name': 'Ken'},
         {'name': 'New Person'},
       ]);
+    });
+
+    test('sends information and currencyCode (issue #23)', () async {
+      http.Request? captured;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          captured = req;
+          return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+        }),
+      );
+
+      await client.updateGroup(
+        groupId: 'g1',
+        name: 'Banff Trip',
+        information: 'Split hotel evenly.',
+        currency: '\$',
+        currencyCode: 'USD',
+        participants: const [Participant(id: 'p1', name: 'Ken')],
+      );
+
+      final sent = jsonDecode(captured!.body) as Map<String, dynamic>;
+      final formValues =
+          (sent['0'] as Map<String, dynamic>)['json']['groupFormValues'] as Map<String, dynamic>;
+      expect(formValues['information'], 'Split hotel evenly.');
+      expect(formValues['currencyCode'], 'USD');
+    });
+
+    test('sends empty-string information/currencyCode when omitted, not null', () async {
+      // The server's groupFormSchema wants '' (not a JSON null) for "no
+      // code" -- z.union([z.string().length(3)..., z.literal('')]).
+      http.Request? captured;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          captured = req;
+          return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+        }),
+      );
+
+      await client.updateGroup(
+        groupId: 'g1',
+        name: 'Banff Trip',
+        currency: '\$',
+        participants: const [Participant(id: 'p1', name: 'Ken')],
+      );
+
+      final sent = jsonDecode(captured!.body) as Map<String, dynamic>;
+      final formValues =
+          (sent['0'] as Map<String, dynamic>)['json']['groupFormValues'] as Map<String, dynamic>;
+      expect(formValues['information'], '');
+      expect(formValues['currencyCode'], '');
     });
 
     test('throws on an embedded tRPC error', () async {

@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
+import '../models/currency.dart';
 import '../models/group.dart';
+import '../widgets/currency_picker.dart';
 
-/// Group settings: rename the group, change its currency, and add,
-/// rename, or remove participants -- mirrors the web app's
-/// Information/Settings tab.
+/// Group settings: rename the group, add or change its notes, change its
+/// currency, and add, rename, or remove participants -- mirrors the web
+/// app's Information/Settings tab.
 ///
 /// Spliit has no per-field or per-participant endpoint (see
 /// [SpliitClient.updateGroup]), so this screen edits everything
@@ -48,7 +50,21 @@ class _ParticipantRow {
 
 class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   late final _nameController = TextEditingController(text: widget.group.name);
-  late final _currencyController = TextEditingController(text: widget.group.currency);
+  late final _informationController =
+      TextEditingController(text: widget.group.information ?? '');
+
+  /// The picked currency. A group whose [Group.currencyCode] isn't one
+  /// of Spliit's known codes -- including every group that predates
+  /// issue #23 -- comes in as [Currency.custom], same as the web app's
+  /// own group-form.tsx: it's the *code* that decides "known currency",
+  /// not whether [Group.currency]'s symbol happens to match one.
+  late Currency _selectedCurrency = currencyByCode(widget.group.currencyCode);
+
+  /// Only used -- and only shown -- while [_selectedCurrency] is
+  /// [Currency.custom]. Seeded from the group's current symbol so
+  /// editing a custom-currency group doesn't blank it out.
+  late final _customSymbolController = TextEditingController(text: widget.group.currency);
+
   late final List<_ParticipantRow> _participants = [
     for (final p in widget.group.participants) _ParticipantRow(id: p.id, name: p.name),
   ];
@@ -59,7 +75,8 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _currencyController.dispose();
+    _informationController.dispose();
+    _customSymbolController.dispose();
     for (final p in _participants) {
       p.controller.dispose();
     }
@@ -76,17 +93,35 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     });
   }
 
+  Future<void> _pickCurrency() async {
+    final picked = await pickCurrency(
+      context,
+      currencies: [Currency.custom, ...supportedCurrencies],
+      selectedCode: _selectedCurrency.code,
+    );
+    if (picked == null) return;
+    setState(() {
+      _selectedCurrency = picked;
+      // Mirrors the web app's onValueChange handler in group-form.tsx:
+      // picking a real currency fills the symbol field for you; picking
+      // Custom leaves whatever the user already typed alone.
+      if (picked.code.isNotEmpty) _customSymbolController.text = picked.symbol;
+    });
+  }
+
   Future<void> _save() async {
     final name = _nameController.text.trim();
-    final currency = _currencyController.text.trim();
+    final information = _informationController.text.trim();
+    final isCustom = _selectedCurrency.code.isEmpty;
+    final currencySymbol = isCustom ? _customSymbolController.text.trim() : _selectedCurrency.symbol;
     final names = [for (final p in _participants) p.controller.text.trim()];
 
     if (name.isEmpty) {
       setState(() => _error = 'Group name is required.');
       return;
     }
-    if (currency.isEmpty) {
-      setState(() => _error = 'Currency is required.');
+    if (isCustom && currencySymbol.isEmpty) {
+      setState(() => _error = 'Enter at least one character.');
       return;
     }
     if (names.isEmpty) {
@@ -106,7 +141,9 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
       await widget.client.updateGroup(
         groupId: widget.group.id,
         name: name,
-        currency: currency,
+        information: information,
+        currency: currencySymbol,
+        currencyCode: isCustom ? null : _selectedCurrency.code,
         participants: [
           for (var i = 0; i < _participants.length; i++)
             Participant(id: _participants[i].id, name: names[i]),
@@ -126,6 +163,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isCustom = _selectedCurrency.code.isEmpty;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Group settings'),
@@ -158,11 +196,47 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
             decoration: const InputDecoration(labelText: 'Group name'),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _currencyController,
-            decoration: const InputDecoration(labelText: 'Currency'),
+          InkWell(
+            onTap: _pickCurrency,
+            child: InputDecorator(
+              decoration: const InputDecoration(labelText: 'Main currency'),
+              child: Row(
+                children: [
+                  if (_selectedCurrency.flagEmoji.isNotEmpty) ...[
+                    Text(_selectedCurrency.flagEmoji, style: const TextStyle(fontSize: 18)),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(child: Text(_selectedCurrency.toString())),
+                  const Icon(Icons.arrow_drop_down),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 24),
+          if (isCustom) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _customSymbolController,
+              decoration: const InputDecoration(
+                labelText: 'Currency symbol',
+                hintText: '\$, €, £...',
+                helperText: "We'll use it to display amounts.",
+              ),
+              maxLength: 5,
+            ),
+          ],
+          const SizedBox(height: 12),
+          TextField(
+            controller: _informationController,
+            decoration: const InputDecoration(
+              labelText: 'Group information',
+              hintText: 'What information is relevant to group participants?',
+              alignLabelWithHint: true,
+            ),
+            minLines: 2,
+            maxLines: 6,
+            maxLength: 10000,
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
               const Text('Participants', style: TextStyle(fontWeight: FontWeight.bold)),

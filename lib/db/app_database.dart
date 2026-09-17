@@ -68,6 +68,14 @@ class Groups extends Table {
   TextColumn get currency => text()();
   TextColumn get participantsJson => text().withDefault(const Constant('[]'))();
 
+  /// Group information/notes (issue #23) -- null/empty for a group with
+  /// none set.
+  TextColumn get information => text().nullable()();
+
+  /// ISO currency code backing [currency], or null for a custom
+  /// currency with no real code -- see Group.currencyCode's doc comment.
+  TextColumn get currencyCode => text().nullable()();
+
   /// Which server this group lives on -- multi-group support (backlog
   /// #4, see decisions/multi-group-design.md) means server URL is
   /// per-group, not the single app-wide value it used to be. Empty for
@@ -98,7 +106,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -122,6 +130,12 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(expenses, expenses.originalAmountCents);
             await m.addColumn(expenses, expenses.originalCurrency);
             await m.addColumn(expenses, expenses.conversionRate);
+          }
+          if (from < 5) {
+            // Complete-group-settings-screen fields (issue #23) -- see
+            // class doc on each column.
+            await m.addColumn(groups, groups.information);
+            await m.addColumn(groups, groups.currencyCode);
           }
         },
       );
@@ -183,6 +197,8 @@ class AppDatabase extends _$AppDatabase {
       id: g.id,
       name: g.name,
       currency: g.currency,
+      information: Value(g.information),
+      currencyCode: Value(g.currencyCode),
       participantsJson: Value(jsonEncode(g.participants.map((p) => p.toJson()).toList())),
     ));
   }
@@ -196,7 +212,9 @@ class AppDatabase extends _$AppDatabase {
     return Group(
       id: row.id,
       name: row.name,
+      information: row.information,
       currency: row.currency,
+      currencyCode: row.currencyCode,
       participants: (jsonDecode(row.participantsJson) as List)
           .map((p) => Participant.fromJson(p as Map<String, dynamic>))
           .toList(),

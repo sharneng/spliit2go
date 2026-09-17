@@ -494,4 +494,76 @@ void main() {
       expect(find.text('Edit expense'), findsOneWidget);
       expect(await db.pendingExpenses(), isEmpty);
     });
+
+  // A group with no currencyCode (the module-level `group` fixture, and
+  // every group that predates issue #23) can't offer currency-picker
+  // conversion -- there's no code to look up an exchange rate with.
+  const groupWithCurrencyCode = Group(
+    id: 'g2',
+    name: 'Tokyo Trip',
+    currency: '\$',
+    currencyCode: 'USD',
+    participants: [
+      Participant(id: 'alex', name: 'Alex'),
+      Participant(id: 'bea', name: 'Bea'),
+    ],
+  );
+
+  testWidgets(
+      "paid-in-a-different-currency shows a disabled field when the group's currency has no code",
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await pumpScreen(tester, db); // module-level `group` has no currencyCode
+
+    await tester.ensureVisible(find.widgetWithText(CheckboxListTile, 'Paid in a different currency'));
+    await tester.tap(find.widgetWithText(CheckboxListTile, 'Paid in a different currency'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Conversion unavailable'), findsOneWidget);
+    // Nothing to tap -- picking a currency needs a real code to convert
+    // against, which this group doesn't have.
+    expect(find.widgetWithText(InputDecorator, 'Select'), findsNothing);
+  });
+
+  testWidgets('picking an original currency from the picker saves its code (issue #23)',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async => throw Exception('offline')),
+    );
+    final outbox = Outbox(db, client);
+
+    await tester.pumpWidget(MaterialApp(
+      home: ExpenseScreen(client: client, db: db, outbox: outbox, group: groupWithCurrencyCode),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Dinner');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Amount'), '50');
+
+    await tester.ensureVisible(find.widgetWithText(CheckboxListTile, 'Paid in a different currency'));
+    await tester.tap(find.widgetWithText(CheckboxListTile, 'Paid in a different currency'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Original amount'), '5000');
+    await tester.tap(find.widgetWithText(InputDecorator, 'Select'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Search currency...'), 'Yen');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Japanese Yen (JPY)'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(InputDecorator, 'Japanese Yen (JPY)'), findsOneWidget);
+
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    final pending = await db.pendingExpenses();
+    expect(pending, hasLength(1));
+    expect(pending.single.originalCurrency, 'JPY');
+  });
 }

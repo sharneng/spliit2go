@@ -36,6 +36,35 @@ void main() {
       expect(cached.participants.map((p) => p.name), containsAll(['Ken', 'Jenny']));
     });
 
+    test('cacheGroup then cachedGroup round-trips information and currencyCode (issue #23)',
+        () async {
+      const group = Group(
+        id: 'g1',
+        name: 'Banff Trip',
+        information: 'Split hotel evenly, flights separately.',
+        currency: '\$',
+        currencyCode: 'USD',
+        participants: [Participant(id: 'p1', name: 'Ken')],
+      );
+
+      await db.cacheGroup(group);
+      final cached = await db.cachedGroup('g1');
+
+      expect(cached!.information, 'Split hotel evenly, flights separately.');
+      expect(cached.currencyCode, 'USD');
+    });
+
+    test('information and currencyCode are null when never set (custom currency, no notes)',
+        () async {
+      const group = Group(id: 'g1', name: 'Banff Trip', currency: '\$', participants: []);
+
+      await db.cacheGroup(group);
+      final cached = await db.cachedGroup('g1');
+
+      expect(cached!.information, isNull);
+      expect(cached.currencyCode, isNull);
+    });
+
     // Regression test: this is exactly the state a cold, offline first
     // launch was in before Groups was actually wired up on 2026-09-16 --
     // fetchGroup() throws offline, and nothing else ever populated the

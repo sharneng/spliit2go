@@ -97,7 +97,7 @@ class SpliitClient {
     }
   }
 
-  /// Fetches group details: name, currency, participants.
+  /// Fetches group details: name, information, currency, participants.
   Future<Group> fetchGroup(String groupId) async {
     final uri = _trpcUri('groups.get', input: {'groupId': groupId});
     final res = await _http.get(uri);
@@ -108,7 +108,9 @@ class SpliitClient {
     return Group(
       id: _asId(g['id']),
       name: g['name'] as String,
+      information: g['information'] as String?,
       currency: g['currency'] as String,
+      currencyCode: g['currencyCode'] as String?,
       participants: (g['participants'] as List)
           .map((p) => Participant(
                 id: _asId((p as Map<String, dynamic>)['id']),
@@ -424,11 +426,13 @@ class SpliitClient {
     return data is Map<String, dynamic> ? (data['expenseId'] as String? ?? expenseId) : expenseId;
   }
 
-  /// Applies a full group-settings edit -- name, currency, and the
-  /// complete participant list -- in one `groups.update` mutation.
-  /// Spliit has no per-field or per-participant update endpoint; the web
-  /// app's own settings form edits everything together, and this
-  /// mirrors that shape.
+  /// Applies a full group-settings edit -- name, information, currency
+  /// (both the display [currency] symbol and, when it's one of Spliit's
+  /// 34 known currencies, its [currencyCode] -- see
+  /// models/currency.dart), and the complete participant list -- in one
+  /// `groups.update` mutation. Spliit has no per-field or
+  /// per-participant update endpoint; the web app's own settings form
+  /// edits everything together, and this mirrors that shape.
   ///
   /// Ported from splitwise2spliit's spliit_api.py (`add_participant`),
   /// which was verified end-to-end against a live server and documents
@@ -450,12 +454,19 @@ class SpliitClient {
   Future<void> updateGroup({
     required String groupId,
     required String name,
+    String? information,
     required String currency,
+    String? currencyCode,
     required List<Participant> participants,
   }) async {
     final groupFormValues = {
       'name': name,
+      'information': information ?? '',
       'currency': currency,
+      // The server's groupFormSchema wants a 3-letter code or '' (not
+      // null) for "no code" -- see z.union([z.string().length(3)...,
+      // z.literal('')]) in schemas.ts.
+      'currencyCode': currencyCode ?? '',
       'participants': participants
           .map((p) => p.id.isEmpty ? {'name': p.name} : {'id': p.id, 'name': p.name})
           .toList(),
