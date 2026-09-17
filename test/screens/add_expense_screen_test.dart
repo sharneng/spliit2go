@@ -166,6 +166,39 @@ void main() {
     expect(await db.pendingExpenses(), isEmpty);
     expect(find.textContaining('must add up to 100'), findsOneWidget);
   });
+
+  // Regression test for issue #18: the server expects shares to sum to
+  // 10000 (basis points), not the 100 the UI takes from the user.
+  testWidgets('by-percentage split sends shares as basis points (issue #18)',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await pumpScreen(tester, db);
+
+    await fillCommonFields(tester, amount: '90');
+    await tester.ensureVisible(find.widgetWithText(DropdownButtonFormField<SplitMode>, 'Evenly'));
+    await tester.tap(find.widgetWithText(DropdownButtonFormField<SplitMode>, 'Evenly'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Unevenly – By percentage').last);
+    await tester.tap(find.text('Unevenly – By percentage').last);
+    await tester.pumpAndSettle();
+
+    final amountFields = find.byType(TextFormField);
+    await tester.enterText(amountFields.at(2), '50');
+    await tester.enterText(amountFields.at(3), '30');
+    await tester.enterText(amountFields.at(4), '20'); // sums to 100
+
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    final pending = await db.pendingExpenses();
+    final expense = db.rowToExpense(pending.single);
+    expect(expense.splitMode, SplitMode.byPercentage);
+    final byId = {for (final s in expense.paidFor) s.participantId: s.shares};
+    expect(byId, {'alex': 5000, 'bea': 3000, 'cid': 2000});
+  });
+
   testWidgets('defaults "Paid by" to the saved active user, when they\'re in this group',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
@@ -287,6 +320,51 @@ void main() {
       final cidTile =
           tester.widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, 'Cid'));
       expect(cidTile.value, isFalse);
+    });
+
+    // Regression test for issue #18's edit-mode side: a byPercentage
+    // expense's shares are basis points on the wire (5000 = 50%) --
+    // prefilling the per-participant text field with the raw wire value
+    // would show "5000" instead of "50".
+    testWidgets("prefills a byPercentage expense's shares as whole percent, not basis points",
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => throw Exception('offline')),
+      );
+      final outbox = Outbox(db, client);
+      final percentageExpense = Expense(
+        id: 'e2',
+        groupId: 'g1',
+        title: 'Rent',
+        amountCents: 100000,
+        paidBy: 'bea',
+        paidFor: const [
+          ExpenseShare(participantId: 'alex', shares: 5000),
+          ExpenseShare(participantId: 'bea', shares: 3000),
+          ExpenseShare(participantId: 'cid', shares: 2000),
+        ],
+        splitMode: SplitMode.byPercentage,
+        date: DateTime.utc(2026, 9, 10),
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: AddExpenseScreen(
+          client: client,
+          db: db,
+          outbox: outbox,
+          group: group,
+          existingExpense: percentageExpense,
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('50'), findsOneWidget);
+      expect(find.text('30'), findsOneWidget);
+      expect(find.text('20'), findsOneWidget);
+      expect(find.text('5000'), findsNothing);
     });
 
     testWidgets('saving calls SpliitClient.updateExpense, not createExpense/insertPending',
