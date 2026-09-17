@@ -237,8 +237,7 @@ void main() {
     expect(find.widgetWithText(DropdownButtonFormField<int>, 'General'), findsOneWidget);
   });
 
-  group('edit mode (issue #17)', () {
-    final existing = Expense(
+  final existingExpenseForEdit = Expense(
       id: 'e1',
       groupId: 'g1',
       title: 'Groceries',
@@ -271,7 +270,7 @@ void main() {
           db: db,
           outbox: outbox,
           group: group,
-          existingExpense: existing,
+          existingExpense: existingExpenseForEdit,
         ),
       ));
       await tester.pumpAndSettle();
@@ -310,7 +309,7 @@ void main() {
           db: db,
           outbox: outbox,
           group: group,
-          existingExpense: existing,
+          existingExpense: existingExpenseForEdit,
         ),
       ));
       await tester.pumpAndSettle();
@@ -343,7 +342,7 @@ void main() {
           db: db,
           outbox: outbox,
           group: group,
-          existingExpense: existing,
+          existingExpense: existingExpenseForEdit,
         ),
       ));
       await tester.pumpAndSettle();
@@ -357,5 +356,4 @@ void main() {
       expect(find.text('Edit expense'), findsOneWidget);
       expect(await db.pendingExpenses(), isEmpty);
     });
-  });
 }

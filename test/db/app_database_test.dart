@@ -121,6 +121,7 @@ void main() {
         originalAmountCents: 9000,
         originalCurrency: 'EUR',
         conversionRate: 1.111,
+        pending: true,
       );
 
       await db.insertPending(e);
