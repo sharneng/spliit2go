@@ -7,6 +7,7 @@ import 'screens/group_list_screen.dart';
 import 'screens/group_screen.dart';
 import 'services/settings_service.dart';
 import 'sync/outbox.dart';
+import 'theme.dart';
 
 void main() {
   runApp(const Spliit2GoApp());
@@ -19,7 +20,20 @@ class Spliit2GoApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'spliit2go',
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.teal),
+      // Issue #25: MaterialApp's own default `themeMode` is already
+      // ThemeMode.system -- the app was never actually opted into
+      // "always light," that setting simply had nothing to switch to.
+      // Without a `darkTheme`, MaterialApp falls back to `theme` even
+      // when the system is in dark mode (see WidgetsApp's theme
+      // resolution: it's `darkTheme ?? theme`, never a synthesized dark
+      // variant of `theme`), so this was silently always-light
+      // regardless of the device setting. [spliit2goDarkTheme] (see
+      // theme.dart) is the whole fix; `themeMode: system` is written
+      // out explicitly below only so that intent doesn't rely on a
+      // reader already knowing MaterialApp's default.
+      theme: spliit2goLightTheme,
+      darkTheme: spliit2goDarkTheme,
+      themeMode: ThemeMode.system,
       home: const _Root(),
       // Issue #24: modern Android (edge-to-edge is mandatory starting
       // with API 35, and Flutter's default template doesn't opt out of
