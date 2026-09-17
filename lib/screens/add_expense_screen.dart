@@ -8,16 +8,36 @@ import '../models/group.dart';
 import '../services/active_user.dart';
 import '../sync/outbox.dart';
 
-/// Adds an expense, online or offline. Always writes to the local db
-/// first as a [pending] row -- so the UI updates instantly and the same
-/// code path works with or without connectivity -- then tries an
-/// immediate sync; if that fails (offline, or the request errors) the row
-/// just stays pending for the outbox to pick up later.
+/// Adds -- or, given [existingExpense], edits -- an expense.
+///
+/// Adding works online or offline: it always writes to the local db first
+/// as a [pending] row -- so the UI updates instantly and the same code
+/// path works with or without connectivity -- then tries an immediate
+/// sync; if that fails (offline, or the request errors) the row just
+/// stays pending for the outbox to pick up later.
+///
+/// Editing (issue #17) is **online-only** -- there's no offline-edit
+/// queueing path (see decisions/mobile-platform.md's view+add-only
+/// offline scope) -- and saves straight to the server via
+/// [SpliitClient.updateExpense]. IMPORTANT: Spliit's server has no
+/// conflict-prevention for edits at all (see that method's doc comment)
+/// -- the only mitigation this app makes is that callers should fetch the
+/// expense fresh (via [SpliitClient.fetchExpense]) immediately before
+/// opening this screen in edit mode, to keep the editing window as short
+/// as possible. This screen itself doesn't re-fetch; it trusts whatever
+/// [existingExpense] it's given.
 ///
 /// Supports all four of Spliit's split modes (evenly / by shares / by
 /// percentage / by amount) plus excluding participants from "paid for",
 /// matching the web app's "Advanced splitting options" -- see
 /// decisions/feature-backlog.md for how this was scoped.
+///
+/// Field set matches Spliit's own add/edit expense form (issue #16):
+/// title, amount, category, paid by, paid for/split mode, date, "paid
+/// in" a different currency, reimbursement flag, save-as-default-split,
+/// recurrence, and notes. "Attach documents" is the one field
+/// deliberately not implemented -- see the note next to
+/// [_documentsPlaceholder] below for why.
 class AddExpenseScreen extends StatefulWidget {
   final SpliitClient client;
   final AppDatabase db;
@@ -26,8 +46,14 @@ class AddExpenseScreen extends StatefulWidget {
   /// This device's saved "active user" (see SettingsService), if any --
   /// used to default "Paid by" via [resolveDefaultPaidBy]. Passed in
   /// rather than loaded here so this screen doesn't need
-  /// SharedPreferences of its own to test.
+  /// SharedPreferences of its own to test. Ignored when [existingExpense]
+  /// is set -- edit mode prefills "Paid by" from the expense itself.
   final String? initialPaidBy;
+
+  /// When set, this screen edits [existingExpense] in place instead of
+  /// creating a new one -- see the class doc comment for edit mode's
+  /// online-only, no-conflict-prevention caveats.
+  final Expense? existingExpense;
 
   const AddExpenseScreen({
     super.key,
@@ -36,7 +62,10 @@ class AddExpenseScreen extends StatefulWidget {
     required this.outbox,
     required this.group,
     this.initialPaidBy,
+    this.existingExpense,
   });
+
+  bool get isEditing => existingExpense != null;
 
   @override
   State<AddExpenseScreen> createState() => _AddExpenseScreenState();
@@ -46,9 +75,19 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _amountController = TextEditingController();
+  final _notesController = TextEditingController();
+  final _originalAmountController = TextEditingController();
+  final _originalCurrencyController = TextEditingController();
   String? _paidBy;
   bool _saving = false;
   String? _splitError;
+  String? _saveError;
+
+  DateTime _date = DateTime.now();
+  bool _isReimbursement = false;
+  bool _saveDefaultSplittingOptions = false;
+  RecurrenceRule _recurrenceRule = RecurrenceRule.none;
+  bool _paidInOtherCurrency = false;
 
   // Falls back to just "General" (Spliit's own default, id 0) until/unless
   // a live categories.list succeeds -- offline or a slow first load
@@ -72,11 +111,58 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   @override
   void initState() {
     super.initState();
-    _paidBy = resolveDefaultPaidBy(
-      activeUserId: widget.initialPaidBy,
-      participants: widget.group.participants,
-    );
+    final existing = widget.existingExpense;
+    if (existing != null) {
+      _prefillFrom(existing);
+    } else {
+      _paidBy = resolveDefaultPaidBy(
+        activeUserId: widget.initialPaidBy,
+        participants: widget.group.participants,
+      );
+    }
     _loadCategories();
+  }
+
+  /// Fills every control from [e] -- edit mode's starting point. Runs
+  /// once, in [initState]; this screen doesn't re-sync with a changing
+  /// [existingExpense] afterwards.
+  void _prefillFrom(Expense e) {
+    _titleController.text = e.title;
+    _amountController.text = (e.amountCents / 100).toStringAsFixed(2);
+    _notesController.text = e.notes;
+    _paidBy = e.paidBy;
+    _category = e.category;
+    _date = e.date;
+    _isReimbursement = e.isReimbursement;
+    _recurrenceRule = e.recurrenceRule;
+    _splitMode = e.splitMode;
+
+    for (final p in widget.group.participants) {
+      _includedInSplit[p.id] = false;
+    }
+    for (final share in e.paidFor) {
+      _includedInSplit[share.participantId] = true;
+      final controller = _splitControllers[share.participantId];
+      if (controller == null) continue;
+      controller.text = switch (e.splitMode) {
+        SplitMode.byAmount => (share.shares / 100).toStringAsFixed(2),
+        _ => share.shares.toString(),
+      };
+    }
+
+    if (e.originalAmountCents != null && e.originalCurrency != null) {
+      _paidInOtherCurrency = true;
+      _originalAmountController.text = (e.originalAmountCents! / 100).toStringAsFixed(2);
+      _originalCurrencyController.text = e.originalCurrency!;
+    }
+
+    // Make sure the category dropdown always has an entry for whatever
+    // this expense is actually filed under, even before (or if)
+    // _loadCategories' live fetch ever succeeds -- a DropdownButtonFormField
+    // whose initialValue isn't among its items throws.
+    if (!_categories.containsKey(_category)) {
+      _categories = {..._categories, _category: 'Category $_category'};
+    }
   }
 
   Future<void> _loadCategories() async {
@@ -84,12 +170,15 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       final cats = await widget.client.fetchCategories();
       if (!mounted || cats.isEmpty) return;
       setState(() {
-        _categories = cats;
-        if (!_categories.containsKey(_category)) _category = _categories.keys.first;
+        _categories = {...cats};
+        if (!_categories.containsKey(_category)) {
+          _categories = {..._categories, _category: 'Category $_category'};
+        }
       });
     } catch (_) {
       // Offline or the server's unreachable -- keep the General-only
-      // fallback so the form still works without connectivity.
+      // fallback (plus whatever category id an edited expense already
+      // has, added above) so the form still works without connectivity.
     }
   }
 
@@ -98,6 +187,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     for (final c in _splitControllers.values) {
       c.dispose();
     }
+    _notesController.dispose();
+    _originalAmountController.dispose();
+    _originalCurrencyController.dispose();
     super.dispose();
   }
 
@@ -107,7 +199,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Add expense')),
+      appBar: AppBar(title: Text(widget.isEditing ? 'Edit expense' : 'Add expense')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Form(
@@ -133,6 +225,14 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 },
               ),
               const SizedBox(height: 12),
+              InkWell(
+                onTap: _pickDate,
+                child: InputDecorator(
+                  decoration: const InputDecoration(labelText: 'Date'),
+                  child: Text(_formatDate(_date)),
+                ),
+              ),
+              const SizedBox(height: 12),
               DropdownButtonFormField<int>(
                 initialValue: _categories.containsKey(_category) ? _category : null,
                 decoration: const InputDecoration(labelText: 'Category'),
@@ -150,6 +250,74 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     .toList(),
                 onChanged: (v) => setState(() => _paidBy = v),
                 validator: (v) => v == null ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                value: _paidInOtherCurrency,
+                onChanged: (v) => setState(() => _paidInOtherCurrency = v ?? false),
+                title: const Text('Paid in a different currency'),
+                subtitle: Text('Group currency: ${widget.group.currency}'),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+              ),
+              if (_paidInOtherCurrency) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _originalAmountController,
+                        decoration: const InputDecoration(labelText: 'Original amount'),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        validator: (v) {
+                          if (!_paidInOtherCurrency) return null;
+                          final parsed = double.tryParse(v ?? '');
+                          if (parsed == null || parsed <= 0) return 'Enter a valid amount';
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 100,
+                      child: TextFormField(
+                        controller: _originalCurrencyController,
+                        decoration: const InputDecoration(labelText: 'Currency'),
+                        textCapitalization: TextCapitalization.characters,
+                        validator: (v) {
+                          if (!_paidInOtherCurrency) return null;
+                          return (v == null || v.trim().isEmpty) ? 'Required' : null;
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+              ],
+              CheckboxListTile(
+                value: _isReimbursement,
+                onChanged: (v) => setState(() => _isReimbursement = v ?? false),
+                title: const Text('This is a reimbursement'),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+              ),
+              CheckboxListTile(
+                value: _saveDefaultSplittingOptions,
+                onChanged: (v) => setState(() => _saveDefaultSplittingOptions = v ?? false),
+                title: const Text('Save as default splitting options'),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<RecurrenceRule>(
+                initialValue: _recurrenceRule,
+                decoration: const InputDecoration(labelText: 'Repeat'),
+                items: const [
+                  DropdownMenuItem(value: RecurrenceRule.none, child: Text('Does not repeat')),
+                  DropdownMenuItem(value: RecurrenceRule.daily, child: Text('Daily')),
+                  DropdownMenuItem(value: RecurrenceRule.weekly, child: Text('Weekly')),
+                  DropdownMenuItem(value: RecurrenceRule.monthly, child: Text('Monthly')),
+                ],
+                onChanged: (v) => setState(() => _recurrenceRule = v ?? RecurrenceRule.none),
               ),
               const SizedBox(height: 24),
               Text('Paid for', style: Theme.of(context).textTheme.titleMedium),
@@ -179,7 +347,20 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   child: Text(_splitError!,
                       style: TextStyle(color: Theme.of(context).colorScheme.error)),
                 ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _notesController,
+                decoration: const InputDecoration(labelText: 'Notes'),
+                maxLines: 3,
+                maxLength: 5000, // matches Spliit's EXPENSE_NOTES_MAX
+              ),
+              _documentsPlaceholder(context),
+              if (_saveError != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(_saveError!,
+                      style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                ),
               FilledButton(
                 onPressed: _saving ? null : _save,
                 child: Text(_saving ? 'Saving…' : 'Save'),
@@ -190,6 +371,45 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       ),
     );
   }
+
+  /// "Attach documents" is the one field from issue #16 deliberately not
+  /// implemented here. Spliit's own upload flow needs a presigned-S3
+  /// upload (next-s3-upload, capped at 5MB/file) -- a substantial, separate
+  /// subsystem this app has no offline-queueing story for yet (what
+  /// happens to a picked file if it's attached while offline and the
+  /// outbox tries to replay the create later?). Shown as a disabled row
+  /// rather than silently omitted, so it reads as "not yet supported"
+  /// instead of looking like an oversight.
+  Widget _documentsPlaceholder(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(Icons.attach_file, color: Theme.of(context).disabledColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Attach documents – not yet supported in this app',
+              style: TextStyle(color: Theme.of(context).disabledColor),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) setState(() => _date = picked);
+  }
+
+  String _formatDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   Widget _paidForRow(Participant p) {
     final included = _includedInSplit[p.id] ?? false;
@@ -225,6 +445,12 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   /// (and sets [_splitError]) if the entered per-participant values don't
   /// add up. Evenly needs no per-participant input at all -- every
   /// included participant just gets an equal weight.
+  ///
+  /// Note (tracked separately, not fixed here): for [SplitMode.byPercentage]
+  /// Spliit's server actually expects shares to sum to 10000 (percentage x
+  /// 100), not 100 -- see the byPercentage wire-format issue filed
+  /// alongside this change. Left as-is here to keep this change scoped to
+  /// #16/#17.
   List<ExpenseShare>? _buildPaidFor(int amountCents) {
     final included = _includedParticipants;
     if (included.isEmpty) {
@@ -291,15 +517,56 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   }
 
   Future<void> _save() async {
-    setState(() => _splitError = null);
+    setState(() {
+      _splitError = null;
+      _saveError = null;
+    });
     if (!_formKey.currentState!.validate()) return;
 
     final amountCents = (double.parse(_amountController.text) * 100).round();
     final paidFor = _buildPaidFor(amountCents);
     if (paidFor == null) return;
 
+    int? originalAmountCents;
+    String? originalCurrency;
+    double? conversionRate;
+    if (_paidInOtherCurrency) {
+      final originalAmount = double.parse(_originalAmountController.text.trim());
+      originalAmountCents = (originalAmount * 100).round();
+      originalCurrency = _originalCurrencyController.text.trim().toUpperCase();
+      // groupAmount = originalAmount * conversionRate (Spliit's own
+      // convention -- see src/lib/currency-conversion.ts upstream).
+      conversionRate = amountCents / originalAmountCents;
+    }
+
     setState(() => _saving = true);
 
+    if (widget.isEditing) {
+      await _saveEdit(
+        amountCents: amountCents,
+        paidFor: paidFor,
+        originalAmountCents: originalAmountCents,
+        originalCurrency: originalCurrency,
+        conversionRate: conversionRate,
+      );
+    } else {
+      await _saveNew(
+        amountCents: amountCents,
+        paidFor: paidFor,
+        originalAmountCents: originalAmountCents,
+        originalCurrency: originalCurrency,
+        conversionRate: conversionRate,
+      );
+    }
+  }
+
+  Future<void> _saveNew({
+    required int amountCents,
+    required List<ExpenseShare> paidFor,
+    int? originalAmountCents,
+    String? originalCurrency,
+    double? conversionRate,
+  }) async {
     final expense = Expense(
       id: const Uuid().v4(),
       groupId: widget.group.id,
@@ -309,7 +576,13 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       paidFor: paidFor,
       splitMode: _splitMode,
       category: _category,
-      date: DateTime.now(),
+      notes: _notesController.text.trim(),
+      date: _date,
+      isReimbursement: _isReimbursement,
+      recurrenceRule: _recurrenceRule,
+      originalAmountCents: originalAmountCents,
+      originalCurrency: originalCurrency,
+      conversionRate: conversionRate,
       pending: true,
     );
 
@@ -319,5 +592,46 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     await widget.db.insertPending(expense);
 
     if (mounted) Navigator.of(context).pop(true);
+  }
+
+  /// Online-only (see class doc comment): no local pending row, no
+  /// outbox -- just a direct [SpliitClient.updateExpense] call. On
+  /// failure (most commonly: offline), stays on the form with an error
+  /// rather than silently queuing anything, since there's no queueing
+  /// path for edits.
+  Future<void> _saveEdit({
+    required int amountCents,
+    required List<ExpenseShare> paidFor,
+    int? originalAmountCents,
+    String? originalCurrency,
+    double? conversionRate,
+  }) async {
+    try {
+      await widget.client.updateExpense(
+        groupId: widget.group.id,
+        expenseId: widget.existingExpense!.id,
+        title: _titleController.text.trim(),
+        amountCents: amountCents,
+        paidBy: _paidBy!,
+        paidFor: paidFor,
+        splitMode: _splitMode,
+        category: _category,
+        notes: _notesController.text.trim(),
+        date: _date,
+        isReimbursement: _isReimbursement,
+        recurrenceRule: _recurrenceRule,
+        saveDefaultSplittingOptions: _saveDefaultSplittingOptions,
+        originalAmountCents: originalAmountCents,
+        originalCurrency: originalCurrency,
+        conversionRate: conversionRate,
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _saveError = "Couldn't save: needs a connection to edit an expense ($e)";
+      });
+    }
   }
 }

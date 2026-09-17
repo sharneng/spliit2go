@@ -210,6 +210,11 @@ class _GroupScreenState extends State<GroupScreen> {
                 const Text('syncing…', style: TextStyle(fontSize: 11)),
             ],
           ),
+          // Pending (offline-added, not-yet-synced) rows have no server
+          // id to fetch or edit yet -- and no connectivity story for
+          // editing an in-flight create -- so editing is only offered
+          // once an expense has actually synced.
+          onTap: e.pending ? null : () => _openEditExpense(e),
         );
       },
     );
@@ -266,6 +271,46 @@ class _GroupScreenState extends State<GroupScreen> {
     );
     if (added == true) {
       await _loadFromCache();
+      _syncThenRefresh();
+    }
+  }
+
+  /// Opens the edit flow for [e] (issue #17) -- online-only, matching
+  /// AddExpenseScreen's edit mode (see its class doc comment for why:
+  /// Spliit's server has no conflict-prevention for edits at all).
+  ///
+  /// Fetches the expense fresh via [SpliitClient.fetchExpense] first,
+  /// rather than editing the possibly-stale locally cached [e] directly --
+  /// the smallest mitigation available for that missing server-side
+  /// protection is keeping the window between "what's shown" and "what's
+  /// on the server" as short as possible. If that fetch fails (most
+  /// commonly: offline), editing is refused with an explicit message
+  /// instead of silently falling back to the stale cached copy.
+  Future<void> _openEditExpense(Expense e) async {
+    late final Expense fresh;
+    try {
+      fresh = await widget.client.fetchExpense(groupId: widget.groupId, expenseId: e.id);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Editing an expense needs a connection.')),
+      );
+      return;
+    }
+    if (!mounted) return;
+
+    final edited = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => AddExpenseScreen(
+          client: widget.client,
+          db: widget.db,
+          outbox: widget.outbox,
+          group: _group!,
+          existingExpense: fresh,
+        ),
+      ),
+    );
+    if (edited == true) {
       _syncThenRefresh();
     }
   }

@@ -34,6 +34,16 @@ class Expenses extends Table {
   TextColumn get notes => text().withDefault(const Constant(''))();
   DateTimeColumn get date => dateTime()();
   BoolColumn get isReimbursement => boolean().withDefault(const Constant(false))();
+  TextColumn get recurrenceRule => text().withDefault(const Constant('NONE'))();
+
+  /// Set together only when the expense was entered in a currency other
+  /// than the group's ("Paid in") -- see the field docs on models/expense
+  /// Expense for the exact semantics. All null for a plain expense
+  /// entered directly in the group's currency.
+  IntColumn get originalAmountCents => integer().nullable()();
+  TextColumn get originalCurrency => text().nullable()();
+  RealColumn get conversionRate => real().nullable()();
+
   BoolColumn get pending => boolean().withDefault(const Constant(false))();
 
   @override
@@ -88,7 +98,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -104,6 +114,14 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(groups, groups.serverUrl);
             await m.addColumn(groups, groups.activeParticipantId);
             await m.addColumn(groups, groups.lastOpenedAt);
+          }
+          if (from < 4) {
+            // Complete-add-expense-screen fields (issue #16) -- see class
+            // doc on each column.
+            await m.addColumn(expenses, expenses.recurrenceRule);
+            await m.addColumn(expenses, expenses.originalAmountCents);
+            await m.addColumn(expenses, expenses.originalCurrency);
+            await m.addColumn(expenses, expenses.conversionRate);
           }
         },
       );
@@ -150,6 +168,10 @@ class AppDatabase extends _$AppDatabase {
         notes: Value(e.notes),
         date: e.date,
         isReimbursement: Value(e.isReimbursement),
+        recurrenceRule: Value(e.recurrenceRule.wireValue),
+        originalAmountCents: Value(e.originalAmountCents),
+        originalCurrency: Value(e.originalCurrency),
+        conversionRate: Value(e.conversionRate),
         pending: Value(e.pending),
       );
 
@@ -274,6 +296,10 @@ class AppDatabase extends _$AppDatabase {
         notes: row.notes,
         date: row.date,
         isReimbursement: row.isReimbursement,
+        recurrenceRule: RecurrenceRuleWire.fromWire(row.recurrenceRule),
+        originalAmountCents: row.originalAmountCents,
+        originalCurrency: row.originalCurrency,
+        conversionRate: row.conversionRate,
         pending: row.pending,
       );
 }

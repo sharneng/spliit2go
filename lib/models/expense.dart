@@ -22,6 +22,27 @@ extension SplitModeWire on SplitMode {
       };
 }
 
+/// How often this expense recurs, mirrored from Spliit's `RecurrenceRule`
+/// Prisma enum -- no special client-side logic beyond passing the value
+/// through, the server owns the actual recurrence scheduling.
+enum RecurrenceRule { none, daily, weekly, monthly }
+
+extension RecurrenceRuleWire on RecurrenceRule {
+  String get wireValue => switch (this) {
+        RecurrenceRule.none => 'NONE',
+        RecurrenceRule.daily => 'DAILY',
+        RecurrenceRule.weekly => 'WEEKLY',
+        RecurrenceRule.monthly => 'MONTHLY',
+      };
+
+  static RecurrenceRule fromWire(String value) => switch (value) {
+        'DAILY' => RecurrenceRule.daily,
+        'WEEKLY' => RecurrenceRule.weekly,
+        'MONTHLY' => RecurrenceRule.monthly,
+        _ => RecurrenceRule.none,
+      };
+}
+
 /// Reads a participant reference that the server sends as a bare id
 /// string when *we* write it, but appears to send back as an expanded
 /// `{id, name, ...}` object on read endpoints (presumably so the webapp
@@ -78,6 +99,19 @@ class Expense {
   final String notes;
   final DateTime date;
   final bool isReimbursement;
+  final RecurrenceRule recurrenceRule;
+
+  /// Set together to record that this expense was entered in a currency
+  /// other than the group's ("Paid in" on the webapp/iOS). [amountCents]
+  /// above is always in the *group's* currency -- these three describe
+  /// the original entry, mirroring Spliit's own `Expense.originalCurrency`
+  /// / `originalAmount` columns. `conversionRate` follows Spliit's
+  /// convention: `amountCents = originalAmountCents * conversionRate`
+  /// (see src/lib/currency-conversion.ts upstream). All null together
+  /// when the expense was simply entered in the group's own currency.
+  final int? originalAmountCents;
+  final String? originalCurrency;
+  final double? conversionRate;
 
   /// True if this expense was created locally while offline and hasn't
   /// been confirmed by the server yet. Never true for anything read back
@@ -96,6 +130,10 @@ class Expense {
     this.notes = '',
     required this.date,
     this.isReimbursement = false,
+    this.recurrenceRule = RecurrenceRule.none,
+    this.originalAmountCents,
+    this.originalCurrency,
+    this.conversionRate,
     this.pending = false,
   });
 }

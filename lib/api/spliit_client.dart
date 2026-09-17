@@ -55,6 +55,12 @@ DateTime _asDateTime(dynamic value) {
   return DateTime.parse(value as String);
 }
 
+/// Coerces `conversionRate` to a [double]. Spliit stores it as a Prisma
+/// `Decimal`, which can come back over the wire as a plain number or (via
+/// superjson/decimal.js) as a numeric string -- tolerate either rather
+/// than assume one.
+double _asDouble(dynamic value) => value is num ? value.toDouble() : double.parse(value as String);
+
 class SpliitClient {
   final String baseUrl;
   final http.Client _http;
@@ -148,6 +154,10 @@ class SpliitClient {
           notes: m['notes'] as String? ?? '',
           date: dateOnlyFromUtcMidnight(_asDateTime(m['expenseDate'])),
           isReimbursement: m['isReimbursement'] as bool? ?? false,
+          recurrenceRule: RecurrenceRuleWire.fromWire(m['recurrenceRule'] as String? ?? 'NONE'),
+          originalAmountCents: (m['originalAmount'] as num?)?.round(),
+          originalCurrency: m['originalCurrency'] as String?,
+          conversionRate: m['conversionRate'] == null ? null : _asDouble(m['conversionRate']),
         ));
       }
 
@@ -155,6 +165,39 @@ class SpliitClient {
       cursor = data['nextCursor'];
     }
     return all;
+  }
+
+  /// Fetches a single expense fresh from the server, bypassing the local
+  /// cache entirely. Used right before opening the edit screen (issue
+  /// #17) to minimize the window between what's shown and what's on the
+  /// server -- the server itself has no conflict-prevention (see
+  /// updateExpense's doc comment), so this fetch-immediately-before-edit
+  /// is the only mitigation available on the client side.
+  Future<Expense> fetchExpense({required String groupId, required String expenseId}) async {
+    final uri = _trpcUri('groups.expenses.get', input: {'groupId': groupId, 'expenseId': expenseId});
+    final res = await _http.get(uri);
+    _checkOk(res);
+    final data = _unwrapBatch(jsonDecode(res.body)) as Map<String, dynamic>;
+    final m = data['expense'] as Map<String, dynamic>;
+    return Expense(
+      id: _asId(m['id']),
+      groupId: groupId,
+      title: m['title'] as String,
+      amountCents: (m['amount'] as num).round(),
+      paidBy: extractParticipantId(m['paidBy']),
+      paidFor: (m['paidFor'] as List? ?? [])
+          .map((s) => ExpenseShare.fromJson(s as Map<String, dynamic>))
+          .toList(),
+      splitMode: SplitModeWire.fromWire(m['splitMode'] as String? ?? 'EVENLY'),
+      category: m['category'] == null ? 0 : extractCategoryId(m['category']),
+      notes: m['notes'] as String? ?? '',
+      date: dateOnlyFromUtcMidnight(_asDateTime(m['expenseDate'])),
+      isReimbursement: m['isReimbursement'] as bool? ?? false,
+      recurrenceRule: RecurrenceRuleWire.fromWire(m['recurrenceRule'] as String? ?? 'NONE'),
+      originalAmountCents: (m['originalAmount'] as num?)?.round(),
+      originalCurrency: m['originalCurrency'] as String?,
+      conversionRate: m['conversionRate'] == null ? null : _asDouble(m['conversionRate']),
+    );
   }
 
   Future<Map<int, String>> fetchCategories() async {
@@ -168,14 +211,72 @@ class SpliitClient {
     };
   }
 
-  /// Creates an expense (or, with [isReimbursement], a settlement payment)
-  /// on the server. Called either immediately (online) or later by the
-  /// outbox once connectivity returns (see lib/sync/outbox.dart) -- this
-  /// method itself has no offline logic.
+  /// Builds the `expenseFormValues` payload shared by
+  /// `groups.expenses.create` and `groups.expenses.update` -- the two
+  /// mutations take an identical form shape (verified against
+  /// src/lib/schemas.ts' expenseFormSchema upstream), so both
+  /// [createExpense] and [updateExpense] go through this one place
+  /// rather than duplicating the field list.
   ///
   /// [amountCents] and each [paidFor] share are in cents. For
   /// [SplitMode.evenly], shares is just a nonzero weight (1 per person is
   /// the common case); for [SplitMode.byAmount] it's the exact cents owed.
+  ///
+  /// [originalAmountCents]/[originalCurrency]/[conversionRate] are the
+  /// "Paid in" fields -- all three null together for an expense entered
+  /// directly in the group's own currency. `saveDefaultSplittingOptions`
+  /// is a form-only action flag on Spliit's side (there's no persisted
+  /// column for it on the Expense model) -- it's still sent on every
+  /// call, just never round-tripped back into our own [Expense] model.
+  /// "Attach documents" is deliberately not exposed here yet -- it needs
+  /// Spliit's presigned-S3-upload flow (next-s3-upload), a substantial
+  /// separate subsystem this app has no offline-queueing story for yet;
+  /// `documents` is always sent empty.
+  Map<String, dynamic> _expenseFormValues({
+    required String title,
+    required int amountCents,
+    required String paidBy,
+    required List<ExpenseShare> paidFor,
+    required SplitMode splitMode,
+    required int category,
+    required String notes,
+    required DateTime date,
+    required bool isReimbursement,
+    required RecurrenceRule recurrenceRule,
+    required bool saveDefaultSplittingOptions,
+    int? originalAmountCents,
+    String? originalCurrency,
+    double? conversionRate,
+  }) {
+    // date-only, not a timestamp -- see date_only.dart's doc comment.
+    // dateOnlyToUtcMidnight() always lands on an exact UTC midnight, so
+    // toIso8601String() already comes out as e.g.
+    // "2026-09-16T00:00:00.000Z" with no extra formatting needed.
+    final formattedDate = dateOnlyToUtcMidnight(date).toIso8601String();
+
+    return {
+      'expenseDate': formattedDate,
+      'title': title,
+      'category': category,
+      'amount': amountCents,
+      'paidBy': paidBy,
+      'paidFor': paidFor.map((s) => s.toJson()).toList(),
+      'splitMode': splitMode.wireValue,
+      'saveDefaultSplittingOptions': saveDefaultSplittingOptions,
+      'isReimbursement': isReimbursement,
+      'documents': [],
+      'notes': notes,
+      'recurrenceRule': recurrenceRule.wireValue,
+      if (originalAmountCents != null) 'originalAmount': originalAmountCents,
+      if (originalCurrency != null) 'originalCurrency': originalCurrency,
+      if (conversionRate != null) 'conversionRate': conversionRate,
+    };
+  }
+
+  /// Creates an expense (or, with [isReimbursement], a settlement payment)
+  /// on the server. Called either immediately (online) or later by the
+  /// outbox once connectivity returns (see lib/sync/outbox.dart) -- this
+  /// method itself has no offline logic.
   Future<String> createExpense({
     required String groupId,
     required String title,
@@ -187,26 +288,28 @@ class SpliitClient {
     String notes = '',
     DateTime? date,
     bool isReimbursement = false,
+    RecurrenceRule recurrenceRule = RecurrenceRule.none,
+    bool saveDefaultSplittingOptions = false,
+    int? originalAmountCents,
+    String? originalCurrency,
+    double? conversionRate,
   }) async {
-    // date-only, not a timestamp -- see date_only.dart's doc comment.
-    // dateOnlyToUtcMidnight() always lands on an exact UTC midnight, so
-    // toIso8601String() already comes out as e.g.
-    // "2026-09-16T00:00:00.000Z" with no extra formatting needed.
-    final formattedDate = dateOnlyToUtcMidnight(date ?? DateTime.now()).toIso8601String();
-
-    final expenseFormValues = {
-      'expenseDate': formattedDate,
-      'title': title,
-      'category': category,
-      'amount': amountCents,
-      'paidBy': paidBy,
-      'paidFor': paidFor.map((s) => s.toJson()).toList(),
-      'splitMode': splitMode.wireValue,
-      'saveDefaultSplittingOptions': false,
-      'isReimbursement': isReimbursement,
-      'documents': [],
-      'notes': notes,
-    };
+    final expenseFormValues = _expenseFormValues(
+      title: title,
+      amountCents: amountCents,
+      paidBy: paidBy,
+      paidFor: paidFor,
+      splitMode: splitMode,
+      category: category,
+      notes: notes,
+      date: date ?? DateTime.now(),
+      isReimbursement: isReimbursement,
+      recurrenceRule: recurrenceRule,
+      saveDefaultSplittingOptions: saveDefaultSplittingOptions,
+      originalAmountCents: originalAmountCents,
+      originalCurrency: originalCurrency,
+      conversionRate: conversionRate,
+    );
 
     final uri = Uri.parse('$baseUrl/api/trpc/groups.expenses.create?batch=1');
     final body = {
@@ -235,6 +338,86 @@ class SpliitClient {
     // (client-generated) id already assigned to the pending row stands in
     // for the server id until the next full fetchExpenses() reconciles it.
     return data is Map<String, dynamic> ? (data['expenseId'] as String? ?? '') : '';
+  }
+
+  /// Updates an existing expense on the server (issue #17). Online-only
+  /// by design -- unlike [createExpense], there's no offline queueing
+  /// path for edits (see decisions/mobile-platform.md on the app's
+  /// view+add-only offline scope).
+  ///
+  /// IMPORTANT, per explicit ask on issue #17: Spliit's server has **no
+  /// optimistic-concurrency or conflict-prevention mechanism** for
+  /// expense edits. Verified directly against upstream source -- the
+  /// `Expense` Prisma model has no `updatedAt`/version column at all, and
+  /// `groups.expenses.update`'s input schema (groupId, expenseId,
+  /// expenseFormValues, participantId?) carries no last-modified/version
+  /// parameter either. The write is genuinely last-write-wins server
+  /// side: if two people edit the same expense around the same time, the
+  /// second `updateExpense` call simply overwrites the first with no
+  /// error and no warning from the server. The only mitigation available
+  /// on this client is minimizing the staleness window -- callers should
+  /// fetch the expense fresh with [fetchExpense] immediately before
+  /// showing the edit form, rather than editing a possibly-stale locally
+  /// cached copy -- not a real guarantee.
+  Future<String> updateExpense({
+    required String groupId,
+    required String expenseId,
+    required String title,
+    required int amountCents,
+    required String paidBy,
+    required List<ExpenseShare> paidFor,
+    SplitMode splitMode = SplitMode.evenly,
+    int category = 0,
+    String notes = '',
+    DateTime? date,
+    bool isReimbursement = false,
+    RecurrenceRule recurrenceRule = RecurrenceRule.none,
+    bool saveDefaultSplittingOptions = false,
+    int? originalAmountCents,
+    String? originalCurrency,
+    double? conversionRate,
+  }) async {
+    final expenseFormValues = _expenseFormValues(
+      title: title,
+      amountCents: amountCents,
+      paidBy: paidBy,
+      paidFor: paidFor,
+      splitMode: splitMode,
+      category: category,
+      notes: notes,
+      date: date ?? DateTime.now(),
+      isReimbursement: isReimbursement,
+      recurrenceRule: recurrenceRule,
+      saveDefaultSplittingOptions: saveDefaultSplittingOptions,
+      originalAmountCents: originalAmountCents,
+      originalCurrency: originalCurrency,
+      conversionRate: conversionRate,
+    );
+
+    final uri = Uri.parse('$baseUrl/api/trpc/groups.expenses.update?batch=1');
+    final body = {
+      '0': {
+        'json': {
+          'groupId': groupId,
+          'expenseId': expenseId,
+          'expenseFormValues': expenseFormValues,
+          'participantId': 'None',
+        },
+        'meta': {
+          'values': {
+            'expenseFormValues.expenseDate': ['Date']
+          }
+        },
+      }
+    };
+    final res = await _http.post(
+      uri,
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    _checkOk(res);
+    final data = _unwrapBatch(jsonDecode(res.body));
+    return data is Map<String, dynamic> ? (data['expenseId'] as String? ?? expenseId) : expenseId;
   }
 
   /// Applies a full group-settings edit -- name, currency, and the

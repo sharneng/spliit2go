@@ -36,6 +36,10 @@ class Outbox {
           notes: local.notes,
           date: local.date,
           isReimbursement: local.isReimbursement,
+          recurrenceRule: local.recurrenceRule,
+          originalAmountCents: local.originalAmountCents,
+          originalCurrency: local.originalCurrency,
+          conversionRate: local.conversionRate,
         );
         // The server assigns its own id; rather than trying to learn and
         // reconcile it here, just drop the local pending row -- the next
