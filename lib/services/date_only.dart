@@ -29,6 +29,7 @@
 /// correct) or a date-only value like this one (where it isn't) before
 /// writing the parsing code, the same way this one was checked against
 /// the actual Prisma schema rather than assumed.
+library;
 
 /// Reads a date-only value received from the server: takes the UTC
 /// year/month/day off [utcMidnight] and rebuilds a *local* [DateTime]
