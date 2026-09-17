@@ -64,7 +64,11 @@ void main() {
         title: 'Museum tickets',
         amountCents: 5000,
         paidBy: 'bea',
-        category: 9,
+        // A different category from e1/e2 -- otherwise, with only one
+        // category in play, its total would coincidentally equal the
+        // group total (17000 = $170.00), making that text finder
+        // ambiguous below.
+        category: 4,
         paidFor: const [
           ExpenseShare(participantId: 'alex', shares: 1),
           ExpenseShare(participantId: 'bea', shares: 1),
