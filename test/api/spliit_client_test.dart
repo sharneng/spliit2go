@@ -4,10 +4,68 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:spliit2go/api/spliit_client.dart';
+import 'package:spliit2go/models/category.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 
 void main() {
+  group('SpliitClient.fetchCategories', () {
+    test('parses categories with their grouping', () async {
+      final body = jsonEncode([
+        {
+          'result': {
+            'data': {
+              'json': {
+                'categories': [
+                  {'id': 0, 'name': 'General', 'grouping': 'Uncategorized'},
+                  {'id': 9, 'name': 'Groceries', 'grouping': 'Food and Drink'},
+                ],
+              },
+            },
+          },
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+
+      final categories = await client.fetchCategories();
+
+      expect(categories, hasLength(2));
+      expect(categories[0], isA<Category>());
+      expect(categories[1].name, 'Groceries');
+      expect(categories[1].grouping, 'Food and Drink');
+    });
+
+    // A server that predates the grouping column, or omits it for some
+    // other reason, still gets a usable category list rather than a
+    // parse failure.
+    test('defaults grouping to Other when the server omits it', () async {
+      final body = jsonEncode([
+        {
+          'result': {
+            'data': {
+              'json': {
+                'categories': [
+                  {'id': 0, 'name': 'General'},
+                ],
+              },
+            },
+          },
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+
+      final categories = await client.fetchCategories();
+
+      expect(categories.single.grouping, 'Other');
+    });
+  });
+
   group('SpliitClient.fetchGroup', () {
     test('parses a group with participants', () async {
       final body = jsonEncode([

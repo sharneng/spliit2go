@@ -221,6 +221,16 @@ void main() {
     expect(dropdown.initialValue, 'alex');
   });
 
+  // The mock server's category list used by the picker tests below --
+  // two groupings, matching Spliit's real shape (categories.list returns
+  // {id, name, grouping}), so grouping and cross-group search can both be
+  // exercised.
+  String categoriesResponseBody() => '[{"result":{"data":{"json":{"categories":'
+      '[{"id":0,"name":"General","grouping":"Uncategorized"},'
+      '{"id":9,"name":"Groceries","grouping":"Food and Drink"},'
+      '{"id":8,"name":"Dining Out","grouping":"Food and Drink"},'
+      '{"id":20,"name":"Gas/Fuel","grouping":"Transportation"}]}}}}]';
+
   testWidgets('loads categories from the server and selecting one updates the field',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
@@ -229,11 +239,7 @@ void main() {
       baseUrl: 'https://example.test',
       httpClient: MockClient((req) async {
         expect(req.url.toString(), contains('categories.list'));
-        return http.Response(
-          '[{"result":{"data":{"json":{"categories":'
-          '[{"id":0,"name":"General"},{"id":16,"name":"Groceries"}]}}}}]',
-          200,
-        );
+        return http.Response(categoriesResponseBody(), 200);
       }),
     );
     final outbox = Outbox(db, client);
@@ -245,20 +251,17 @@ void main() {
 
     // Categories loaded successfully (would still show just 'General' if
     // the fetch had failed) -- open the picker, confirm it's there, and
-    // pick it. Checking the field's value directly (rather than saving
-    // and reading the persisted expense back) sidesteps needing a full
-    // save-flow round trip through a form this test isn't otherwise
-    // exercising.
-    await tester.ensureVisible(find.widgetWithText(DropdownButtonFormField<int>, 'General'));
-    await tester.tap(find.widgetWithText(DropdownButtonFormField<int>, 'General'));
+    // pick a category. Checking the field's displayed value directly
+    // (rather than saving and reading the persisted expense back)
+    // sidesteps needing a full save-flow round trip through a form this
+    // test isn't otherwise exercising.
+    await tester.ensureVisible(find.widgetWithText(InputDecorator, 'General'));
+    await tester.tap(find.widgetWithText(InputDecorator, 'General'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Groceries').last);
-    await tester.tap(find.text('Groceries').last);
+    await tester.tap(find.text('Groceries'));
     await tester.pumpAndSettle();
 
-    final dropdown = tester
-        .widget<DropdownButtonFormField<int>>(find.byType(DropdownButtonFormField<int>));
-    expect(dropdown.initialValue, 16);
+    expect(find.widgetWithText(InputDecorator, 'Groceries'), findsOneWidget);
   });
 
   testWidgets('falls back to General only when categories.list is unreachable',
@@ -267,7 +270,66 @@ void main() {
     addTearDown(db.close);
     await pumpScreen(tester, db); // pumpScreen's client always throws (offline)
 
-    expect(find.widgetWithText(DropdownButtonFormField<int>, 'General'), findsOneWidget);
+    expect(find.widgetWithText(InputDecorator, 'General'), findsOneWidget);
+  });
+
+  group('category picker (issue #19)', () {
+    testWidgets('groups categories under their grouping header', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(categoriesResponseBody(), 200)),
+      );
+      final outbox = Outbox(db, client);
+
+      await tester.pumpWidget(MaterialApp(
+        home: ExpenseScreen(client: client, db: db, outbox: outbox, group: group),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.widgetWithText(InputDecorator, 'General'));
+      await tester.tap(find.widgetWithText(InputDecorator, 'General'));
+      await tester.pumpAndSettle();
+
+      // Grouping headers are shown, and "Groceries"/"Dining Out" both
+      // appear once each under "Food and Drink" -- not flattened into
+      // one long undifferentiated list.
+      expect(find.text('Food and Drink'), findsOneWidget);
+      expect(find.text('Transportation'), findsOneWidget);
+      expect(find.text('Groceries'), findsOneWidget);
+      expect(find.text('Dining Out'), findsOneWidget);
+      expect(find.text('Gas/Fuel'), findsOneWidget);
+    });
+
+    testWidgets('type-ahead search narrows the list to matching categories', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(categoriesResponseBody(), 200)),
+      );
+      final outbox = Outbox(db, client);
+
+      await tester.pumpWidget(MaterialApp(
+        home: ExpenseScreen(client: client, db: db, outbox: outbox, group: group),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.widgetWithText(InputDecorator, 'General'));
+      await tester.tap(find.widgetWithText(InputDecorator, 'General'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.widgetWithText(TextField, 'Search categories'), 'gas');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Gas/Fuel'), findsOneWidget);
+      expect(find.text('Groceries'), findsNothing);
+      expect(find.text('Dining Out'), findsNothing);
+      // A grouping with no matches under the current query is hidden
+      // entirely, not shown as an empty section.
+      expect(find.text('Food and Drink'), findsNothing);
+    });
   });
 
   final existingExpenseForEdit = Expense(

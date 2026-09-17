@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+import '../models/category.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
 import '../services/date_only.dart';
@@ -200,15 +201,18 @@ class SpliitClient {
     );
   }
 
-  Future<Map<int, String>> fetchCategories() async {
+  /// Fetches the full category list, in the server's own order (already
+  /// grouped -- same [Category.grouping] entries are adjacent), including
+  /// each category's [Category.grouping] for the grouped/searchable
+  /// picker added in issue #19.
+  Future<List<Category>> fetchCategories() async {
     final uri = _trpcUri('categories.list');
     final res = await _http.get(uri);
     _checkOk(res);
     final data = _unwrapBatch(jsonDecode(res.body)) as Map<String, dynamic>;
-    return {
-      for (final c in (data['categories'] as List))
-        (c as Map<String, dynamic>)['id'] as int: c['name'] as String,
-    };
+    return (data['categories'] as List)
+        .map((c) => Category.fromJson(c as Map<String, dynamic>))
+        .toList();
   }
 
   /// Builds the `expenseFormValues` payload shared by

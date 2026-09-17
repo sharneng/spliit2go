@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
+import '../models/category.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
 import '../services/active_user.dart';
@@ -99,8 +100,19 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   // Falls back to just "General" (Spliit's own default, id 0) until/unless
   // a live categories.list succeeds -- offline or a slow first load
   // shouldn't block adding an expense on having a full category list.
-  Map<int, String> _categories = const {0: 'General'};
+  List<Category> _categories = const [
+    Category(id: 0, name: 'General', grouping: 'Uncategorized'),
+  ];
   int _category = 0;
+
+  /// The currently-selected category, falling back to a synthesized
+  /// placeholder if [_category] isn't (yet, or ever) in [_categories] --
+  /// keeps the picker's "current selection" display never crashing on a
+  /// category id this device hasn't fetched a name for.
+  Category get _selectedCategory => _categories.firstWhere(
+        (c) => c.id == _category,
+        orElse: () => Category(id: _category, name: 'Category $_category', grouping: 'Other'),
+      );
 
   SplitMode _splitMode = SplitMode.evenly;
   late final Map<String, bool> _includedInSplit = {
@@ -166,29 +178,20 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _originalCurrencyController.text = e.originalCurrency!;
     }
 
-    // Make sure the category dropdown always has an entry for whatever
-    // this expense is actually filed under, even before (or if)
-    // _loadCategories' live fetch ever succeeds -- a DropdownButtonFormField
-    // whose initialValue isn't among its items throws.
-    if (!_categories.containsKey(_category)) {
-      _categories = {..._categories, _category: 'Category $_category'};
-    }
+    // No pre-population needed here for a category id this device
+    // hasn't fetched a name for yet -- [_selectedCategory] synthesizes a
+    // placeholder display on demand rather than requiring one to be
+    // seeded into [_categories] up front.
   }
 
   Future<void> _loadCategories() async {
     try {
       final cats = await widget.client.fetchCategories();
       if (!mounted || cats.isEmpty) return;
-      setState(() {
-        _categories = {...cats};
-        if (!_categories.containsKey(_category)) {
-          _categories = {..._categories, _category: 'Category $_category'};
-        }
-      });
+      setState(() => _categories = cats);
     } catch (_) {
       // Offline or the server's unreachable -- keep the General-only
-      // fallback (plus whatever category id an edited expense already
-      // has, added above) so the form still works without connectivity.
+      // fallback so the form still works without connectivity.
     }
   }
 
@@ -243,13 +246,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<int>(
-                initialValue: _categories.containsKey(_category) ? _category : null,
-                decoration: const InputDecoration(labelText: 'Category'),
-                items: _categories.entries
-                    .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
-                    .toList(),
-                onChanged: (v) => setState(() => _category = v ?? 0),
+              InkWell(
+                onTap: _pickCategory,
+                child: InputDecorator(
+                  decoration: const InputDecoration(labelText: 'Category'),
+                  child: Text(_selectedCategory.name),
+                ),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
@@ -416,6 +418,19 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       lastDate: DateTime(2100),
     );
     if (picked != null) setState(() => _date = picked);
+  }
+
+  /// Opens the category picker (issue #19): grouped by
+  /// [Category.grouping] (matching how the server's own list is already
+  /// laid out) and filterable by a type-ahead search field, rather than
+  /// one long flat dropdown of 40+ categories.
+  Future<void> _pickCategory() async {
+    final picked = await showModalBottomSheet<Category>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _CategoryPicker(categories: _categories, selectedId: _category),
+    );
+    if (picked != null) setState(() => _category = picked.id);
   }
 
   String _formatDate(DateTime d) =>
@@ -647,5 +662,105 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         _saveError = "Couldn't save: needs a connection to edit an expense ($e)";
       });
     }
+  }
+}
+
+/// The category picker's contents (issue #19): a search field followed by
+/// a scrollable, grouped list. Filtering narrows to categories whose name
+/// contains the query (case-insensitive); a group with no matches under
+/// the current query is hidden entirely rather than shown with an empty
+/// section.
+class _CategoryPicker extends StatefulWidget {
+  final List<Category> categories;
+  final int selectedId;
+
+  const _CategoryPicker({required this.categories, required this.selectedId});
+
+  @override
+  State<_CategoryPicker> createState() => _CategoryPickerState();
+}
+
+class _CategoryPickerState extends State<_CategoryPicker> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// Groups [categories] by [Category.grouping], preserving the order
+  /// groupings first appear in -- the server's own list is already laid
+  /// out with each grouping's categories adjacent, so this doesn't need
+  /// to re-sort, just fold consecutive runs into sections.
+  List<MapEntry<String, List<Category>>> _grouped(List<Category> categories) {
+    final groups = <String, List<Category>>{};
+    for (final c in categories) {
+      (groups[c.grouping] ??= []).add(c);
+    }
+    return groups.entries.toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _query.trim().toLowerCase();
+    final filtered = query.isEmpty
+        ? widget.categories
+        : widget.categories.where((c) => c.name.toLowerCase().contains(query)).toList();
+    final sections = _grouped(filtered);
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.75,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Search categories',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                  onChanged: (v) => setState(() => _query = v),
+                ),
+              ),
+              Expanded(
+                child: sections.isEmpty
+                    ? const Center(child: Text('No matching categories'))
+                    : ListView(
+                        children: [
+                          for (final section in sections) ...[
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                              child: Text(
+                                section.key,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelLarge
+                                    ?.copyWith(color: Theme.of(context).colorScheme.primary),
+                              ),
+                            ),
+                            for (final c in section.value)
+                              ListTile(
+                                title: Text(c.name),
+                                trailing: c.id == widget.selectedId
+                                    ? const Icon(Icons.check)
+                                    : null,
+                                onTap: () => Navigator.of(context).pop(c),
+                              ),
+                          ],
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
