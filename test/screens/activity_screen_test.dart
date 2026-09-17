@@ -29,6 +29,17 @@ void main() {
 
   Future<AppDatabase> newDb() async => AppDatabase(NativeDatabase.memory());
 
+  // Built from DateTime.now() rather than a fixed calendar date, so the
+  // Today/Yesterday grouping this test asserts on doesn't go stale the
+  // day after it's written.
+  final now = DateTime.now();
+  String isoToday(int hour) =>
+      DateTime(now.year, now.month, now.day, hour).toUtc().toIso8601String();
+  String isoYesterday(int hour) => DateTime(now.year, now.month, now.day, hour)
+      .subtract(const Duration(days: 1))
+      .toUtc()
+      .toIso8601String();
+
   String pageBody({
     required List<Map<String, dynamic>> activities,
     required bool hasMore,
@@ -100,7 +111,7 @@ void main() {
             activities: [
               {
                 'id': 'a1',
-                'time': '2026-09-16T12:00:00.000Z',
+                'time': isoToday(12),
                 'activityType': 'CREATE_EXPENSE',
                 'participantId': 'alex',
                 'expenseId': 'e1',
@@ -109,7 +120,7 @@ void main() {
               },
               {
                 'id': 'a2',
-                'time': '2026-09-16T09:00:00.000Z',
+                'time': isoToday(9),
                 'activityType': 'UPDATE_GROUP',
                 'participantId': null,
                 'expenseId': null,
@@ -150,7 +161,7 @@ void main() {
             activities: [
               {
                 'id': 'a1',
-                'time': '2026-09-16T12:00:00.000Z',
+                'time': isoToday(12),
                 'activityType': 'DELETE_EXPENSE',
                 'participantId': 'alex',
                 'expenseId': 'e1',
@@ -191,7 +202,7 @@ void main() {
               activities: [
                 {
                   'id': 'a1',
-                  'time': '2026-09-16T12:00:00.000Z',
+                  'time': isoToday(12),
                   'activityType': 'UPDATE_GROUP',
                   'participantId': null,
                   'expenseId': null,
@@ -209,7 +220,7 @@ void main() {
             activities: [
               {
                 'id': 'a2',
-                'time': '2026-09-15T12:00:00.000Z',
+                'time': isoYesterday(12),
                 'activityType': 'UPDATE_GROUP',
                 'participantId': null,
                 'expenseId': null,
@@ -253,7 +264,7 @@ void main() {
               activities: [
                 {
                   'id': 'a1',
-                  'time': '2026-09-16T12:00:00.000Z',
+                  'time': isoToday(12),
                   'activityType': 'CREATE_EXPENSE',
                   'participantId': 'alex',
                   'expenseId': 'e1',
