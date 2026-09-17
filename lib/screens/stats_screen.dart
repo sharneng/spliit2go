@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
 import '../models/category.dart';
-import '../models/expense.dart';
 import '../models/group.dart';
 import '../services/stats_calculator.dart';
 import '../sync/outbox.dart';

@@ -162,7 +162,7 @@ int? activeUserPaidCents(String? participantId, List<Expense> expenses) {
   if (participantId == null) return null;
   return expenses
       .where((e) => !e.isReimbursement && e.paidBy == participantId)
-      .fold(0, (sum, e) => sum + e.amountCents);
+      .fold<int>(0, (sum, e) => sum + e.amountCents);
 }
 
 /// [participantId]'s total share of the group's non-reimbursement
