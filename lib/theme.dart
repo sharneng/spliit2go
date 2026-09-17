@@ -33,6 +33,18 @@ ThemeData get spliit2goDarkTheme => ThemeData(
 /// correct across both [spliit2goLightTheme] and [spliit2goDarkTheme]
 /// and if that background ever changes.
 ///
+/// Note: on a device targeting Android API 35+ (this app's default,
+/// since Flutter's own build config doesn't override targetSdk),
+/// `systemNavigationBarColor`/`systemNavigationBarContrastEnforced`
+/// below are effectively no-ops -- `Window.setNavigationBarColor` is
+/// documented as doing nothing once an app targets API 35, since
+/// edge-to-edge (an always-transparent system nav bar) stops being
+/// optional at that point. They're kept here anyway for whatever
+/// pre-35 devices this app still runs on; the fix that actually matters
+/// on a current device is main.dart's Container backdrop, which paints
+/// Flutter-side content behind the now-unconditionally-transparent bar
+/// instead of trying to recolor the bar itself.
+///
 /// The status bar fields here mostly just document intent -- every
 /// screen in this app has an `AppBar`, and `AppBar` sets its own nested
 /// `AnnotatedRegion` for the status bar that wins over this ancestor

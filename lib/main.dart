@@ -61,21 +61,52 @@ class Spliit2GoApp extends StatelessWidget {
       // still works correctly nested inside this one: SafeArea consumes
       // the padding it applies, so there's no double-inset there.
       //
-      // Also confirmed on-device: without an explicit
-      // AnnotatedRegion<SystemUiOverlayStyle>, the bottom gesture/nav
-      // bar itself (not the app content SafeArea insets away from) was
-      // rendering as a solid near-black bar instead of blending with
-      // the app -- see spliit2goSystemUiOverlayStyle's doc comment.
+      // The nav bar itself still showed up deep black regardless of
+      // theme even after setting systemNavigationBarColor via
+      // AnnotatedRegion<SystemUiOverlayStyle> -- confirmed on-device.
+      // The reason: starting with apps that target API 35,
+      // Window.setNavigationBarColor (what that overlay style call
+      // turns into) is a documented no-op -- edge-to-edge means the
+      // system nav bar is *always* transparent now, and it's the app's
+      // own job to paint content behind it, not ask the system to tint
+      // it. What was actually showing through as "deep black" was the
+      // plain Android window background (styles.xml's LaunchTheme),
+      // because SafeArea's Padding stops our Scaffold from painting
+      // into that strip at all -- there was nothing Flutter-side there
+      // to show through the now-transparent bar. The fix is this
+      // Container: a full-bleed backdrop in the *current* theme's own
+      // scaffoldBackgroundColor, painted underneath the SafeArea-inset
+      // content, so the strip behind the bar shows our theme's color
+      // instead of the native window background. This is the standard
+      // fix for this exact class of bug on API 35+; keeping
+      // spliit2goSystemUiOverlayStyle's color/contrast fields too is
+      // just belt-and-suspenders for whatever pre-35 devices are still
+      // out there, where Window.setNavigationBarColor still works.
+      //
       // Theme.of(context) here resolves to whichever of
       // theme/darkTheme MaterialApp picked for the current system
-      // brightness, so this stays correct across light and dark mode
-      // (issue #25) without needing its own brightness plumbing.
-      builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
-        value: spliit2goSystemUiOverlayStyle(Theme.of(context)),
-        child: SafeArea(top: false, child: child!),
-      ),
+      // brightness, so both the backdrop and the overlay style stay
+      // correct across light and dark mode (issue #25) without needing
+      // their own brightness plumbing.
+      builder: spliit2goAppBuilder,
     );
   }
+}
+
+/// The `MaterialApp.builder` above, pulled out as a top-level function
+/// so its behavior (the Container backdrop + AnnotatedRegion, both
+/// explained in the doc comment above) is unit-testable directly with a
+/// throwaway `home`, without booting the real app's `_Root` and its
+/// live AppDatabase/sqlite connection.
+Widget spliit2goAppBuilder(BuildContext context, Widget? child) {
+  final theme = Theme.of(context);
+  return AnnotatedRegion<SystemUiOverlayStyle>(
+    value: spliit2goSystemUiOverlayStyle(theme),
+    child: Container(
+      color: theme.scaffoldBackgroundColor,
+      child: SafeArea(top: false, child: child!),
+    ),
+  );
 }
 
 /// Always shows GroupListScreen as the app's true root -- see
