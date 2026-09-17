@@ -63,6 +63,17 @@ class ExpenseScreen extends StatefulWidget {
   /// online-only, no-conflict-prevention caveats.
   final Expense? existingExpense;
 
+  /// A starting draft for a brand-new expense (ignored when
+  /// [existingExpense] is set) -- every field is pre-filled from it, but
+  /// saving still creates a new expense with a fresh id via the normal
+  /// add path (local pending row + outbox), unlike [existingExpense]'s
+  /// online-only update. Used by balances_screen.dart's "mark as paid"
+  /// (issue #22) to open this screen pre-filled with the suggested
+  /// settlement's amount/payer/payee/title rather than recording it
+  /// directly, so the amount can be edited for a partial payment --
+  /// matching the web/iOS apps' own settle-up flow.
+  final Expense? initialDraft;
+
   const ExpenseScreen({
     super.key,
     required this.client,
@@ -71,6 +82,7 @@ class ExpenseScreen extends StatefulWidget {
     required this.group,
     this.initialPaidBy,
     this.existingExpense,
+    this.initialDraft,
   });
 
   bool get isEditing => existingExpense != null;
@@ -131,8 +143,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   void initState() {
     super.initState();
     final existing = widget.existingExpense;
+    final draft = widget.initialDraft;
     if (existing != null) {
       _prefillFrom(existing);
+    } else if (draft != null) {
+      // Pre-fills the same way edit mode does -- draft mode only differs
+      // in _save() (new id, normal add path), not in what's shown.
+      _prefillFrom(draft);
     } else {
       _paidBy = resolveDefaultPaidBy(
         activeUserId: widget.initialPaidBy,

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
@@ -8,16 +7,21 @@ import '../models/expense.dart';
 import '../models/group.dart';
 import '../services/balance_calculator.dart';
 import '../sync/outbox.dart';
+import 'expense_screen.dart';
 
 /// Who-owes-whom for the group, plus one-tap "mark as paid" for the
 /// suggested settlements -- mirrors the web app's Balances tab.
 ///
 /// Balances are computed entirely from the local cache (see
 /// balance_calculator.dart), so this works offline and already reflects
-/// any not-yet-synced pending expenses. Marking a settlement as paid
-/// writes a pending reimbursement expense locally first, same as adding
-/// any other expense (see ExpenseScreen) -- it queues for the outbox
-/// if there's no connectivity right now, rather than requiring one.
+/// any not-yet-synced pending expenses. "Mark as paid" opens ExpenseScreen
+/// pre-filled with the suggested settlement (amount, "this is a
+/// reimbursement" checked, payer/payee, a "<payer> paid <payee>" title)
+/// rather than recording it directly (issue #22) -- matching the web/iOS
+/// apps' own settle-up flow, and letting the amount be edited down for a
+/// partial payment. From there it's a completely normal add: a pending
+/// expense written locally first, queued for the outbox if there's no
+/// connectivity right now.
 class BalancesScreen extends StatefulWidget {
   final SpliitClient client;
   final AppDatabase db;
@@ -70,22 +74,40 @@ class _BalancesScreenState extends State<BalancesScreen> {
 
   String _money(int cents) => '\$${(cents.abs() / 100).toStringAsFixed(2)}';
 
-  Future<void> _markAsPaid(Settlement s) async {
+  /// Opens ExpenseScreen pre-filled with [s], rather than recording it
+  /// directly, so the user can see/edit the amount (a partial payment)
+  /// and everything else before it's actually saved -- see the class doc
+  /// comment and issue #22.
+  Future<void> _openSettleUp(Settlement s) async {
     final key = '${s.fromId}->${s.toId}';
-    setState(() => _settlingKey = key);
-    final expense = Expense(
-      id: const Uuid().v4(),
+    final draft = Expense(
+      // Discarded -- ExpenseScreen's _saveNew always mints its own fresh
+      // id on save, this is never read.
+      id: '',
       groupId: widget.group.id,
-      title: 'Reimbursement',
+      title: '${_name(s.fromId)} paid ${_name(s.toId)}',
       amountCents: s.amountCents,
       paidBy: s.fromId,
       paidFor: [ExpenseShare(participantId: s.toId, shares: 1)],
       splitMode: SplitMode.evenly,
       date: DateTime.now(),
       isReimbursement: true,
-      pending: true,
     );
-    await widget.db.insertPending(expense);
+
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ExpenseScreen(
+          client: widget.client,
+          db: widget.db,
+          outbox: widget.outbox,
+          group: widget.group,
+          initialDraft: draft,
+        ),
+      ),
+    );
+    if (saved != true) return;
+
+    setState(() => _settlingKey = key);
     // Best-effort immediate sync, same pattern as adding a regular
     // expense -- if we're offline this just leaves it pending, which is
     // fine since the local balance recompute below still counts pending
@@ -160,7 +182,7 @@ class _BalancesScreenState extends State<BalancesScreen> {
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               )
                             : TextButton(
-                                onPressed: () => _markAsPaid(s),
+                                onPressed: () => _openSettleUp(s),
                                 child: Text('Mark as paid  ${_money(s.amountCents)}'),
                               ),
                       ),

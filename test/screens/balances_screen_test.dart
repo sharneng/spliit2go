@@ -131,12 +131,54 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    // "Mark as paid" opens ExpenseScreen pre-filled with the
+    // settlement (issue #22) rather than recording it directly.
     await tester.tap(find.textContaining('Mark as paid').first);
     await tester.pumpAndSettle();
 
-    // Bea<->Alex is now settled (synced and removed from the pending
-    // outbox), so only Cid should still owe Alex.
+    expect(find.text('Add expense'), findsOneWidget);
+    expect(find.text('Bea paid Alex'), findsOneWidget);
+    expect(find.text('30.00'), findsOneWidget);
+    final reimbursementTile = tester.widget<CheckboxListTile>(
+        find.widgetWithText(CheckboxListTile, 'This is a reimbursement'));
+    expect(reimbursementTile.value, isTrue);
+
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    // Back on the balances screen -- Bea<->Alex is now settled (synced
+    // and removed from the pending outbox), so only Cid should still owe
+    // Alex.
     expect(find.text('Bea owes Alex'), findsNothing);
     expect(find.text('Cid owes Alex'), findsOneWidget);
+  });
+
+  testWidgets('the settlement amount can be edited before saving (partial payment)',
+      (tester) async {
+    final db = await dbWithEvenExpense();
+    addTearDown(db.close);
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async => throw Exception('offline')),
+    );
+    final outbox = Outbox(db, client);
+
+    await tester.pumpWidget(MaterialApp(
+      home: BalancesScreen(client: client, db: db, outbox: outbox, group: group),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.textContaining('Mark as paid').first);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, '30.00'), '10.00');
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    // A partial $10 payment leaves $20 of the original $30 still owed --
+    // Bea should still show up as owing Alex, just a smaller amount.
+    expect(find.textContaining('owes Alex'), findsWidgets);
   });
 }
