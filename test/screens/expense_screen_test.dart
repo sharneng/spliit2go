@@ -7,7 +7,7 @@ import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
-import 'package:spliit2go/screens/add_expense_screen.dart';
+import 'package:spliit2go/screens/expense_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
 
 void main() {
@@ -29,7 +29,7 @@ void main() {
     );
     final outbox = Outbox(db, client);
     await tester.pumpWidget(MaterialApp(
-      home: AddExpenseScreen(
+      home: ExpenseScreen(
         client: client,
         db: db,
         outbox: outbox,
@@ -239,7 +239,7 @@ void main() {
     final outbox = Outbox(db, client);
 
     await tester.pumpWidget(MaterialApp(
-      home: AddExpenseScreen(client: client, db: db, outbox: outbox, group: group),
+      home: ExpenseScreen(client: client, db: db, outbox: outbox, group: group),
     ));
     await tester.pumpAndSettle();
 
@@ -298,7 +298,7 @@ void main() {
       final outbox = Outbox(db, client);
 
       await tester.pumpWidget(MaterialApp(
-        home: AddExpenseScreen(
+        home: ExpenseScreen(
           client: client,
           db: db,
           outbox: outbox,
@@ -351,7 +351,7 @@ void main() {
       );
 
       await tester.pumpWidget(MaterialApp(
-        home: AddExpenseScreen(
+        home: ExpenseScreen(
           client: client,
           db: db,
           outbox: outbox,
@@ -382,7 +382,7 @@ void main() {
       final outbox = Outbox(db, client);
 
       await tester.pumpWidget(MaterialApp(
-        home: AddExpenseScreen(
+        home: ExpenseScreen(
           client: client,
           db: db,
           outbox: outbox,
@@ -415,7 +415,7 @@ void main() {
       final outbox = Outbox(db, client);
 
       await tester.pumpWidget(MaterialApp(
-        home: AddExpenseScreen(
+        home: ExpenseScreen(
           client: client,
           db: db,
           outbox: outbox,

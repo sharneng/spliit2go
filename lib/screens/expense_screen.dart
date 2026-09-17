@@ -8,7 +8,14 @@ import '../models/group.dart';
 import '../services/active_user.dart';
 import '../sync/outbox.dart';
 
-/// Adds -- or, given [existingExpense], edits -- an expense.
+/// Adds -- or, given [existingExpense], edits -- an expense. An expense
+/// with [Expense.isReimbursement] set is a settlement/"paid back"
+/// entry -- same fields, same screen, no special-casing needed here.
+/// (balances_screen.dart's own "mark as paid" writes a pending
+/// reimbursement expense directly rather than opening this screen, but
+/// it's still this same [Expense] shape -- see that file's doc comment.)
+/// Renamed from AddExpenseScreen/add_expense_screen.dart (issue #21) once
+/// "add expense screen" stopped describing what this actually covers.
 ///
 /// Adding works online or offline: it always writes to the local db first
 /// as a [pending] row -- so the UI updates instantly and the same code
@@ -38,7 +45,7 @@ import '../sync/outbox.dart';
 /// recurrence, and notes. "Attach documents" is the one field
 /// deliberately not implemented -- see the note next to
 /// [_documentsPlaceholder] below for why.
-class AddExpenseScreen extends StatefulWidget {
+class ExpenseScreen extends StatefulWidget {
   final SpliitClient client;
   final AppDatabase db;
   final Outbox outbox;
@@ -55,7 +62,7 @@ class AddExpenseScreen extends StatefulWidget {
   /// online-only, no-conflict-prevention caveats.
   final Expense? existingExpense;
 
-  const AddExpenseScreen({
+  const ExpenseScreen({
     super.key,
     required this.client,
     required this.db,
@@ -68,10 +75,10 @@ class AddExpenseScreen extends StatefulWidget {
   bool get isEditing => existingExpense != null;
 
   @override
-  State<AddExpenseScreen> createState() => _AddExpenseScreenState();
+  State<ExpenseScreen> createState() => _ExpenseScreenState();
 }
 
-class _AddExpenseScreenState extends State<AddExpenseScreen> {
+class _ExpenseScreenState extends State<ExpenseScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _amountController = TextEditingController();

@@ -8,7 +8,7 @@ import '../models/group.dart';
 import '../services/active_user.dart';
 import '../services/settings_service.dart';
 import '../sync/outbox.dart';
-import 'add_expense_screen.dart';
+import 'expense_screen.dart';
 import 'balances_screen.dart';
 import 'group_settings_screen.dart';
 
@@ -260,7 +260,7 @@ class _GroupScreenState extends State<GroupScreen> {
   Future<void> _openAddExpense() async {
     final added = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => AddExpenseScreen(
+        builder: (_) => ExpenseScreen(
           client: widget.client,
           db: widget.db,
           outbox: widget.outbox,
@@ -276,7 +276,7 @@ class _GroupScreenState extends State<GroupScreen> {
   }
 
   /// Opens the edit flow for [e] (issue #17) -- online-only, matching
-  /// AddExpenseScreen's edit mode (see its class doc comment for why:
+  /// ExpenseScreen's edit mode (see its class doc comment for why:
   /// Spliit's server has no conflict-prevention for edits at all).
   ///
   /// Fetches the expense fresh via [SpliitClient.fetchExpense] first,
@@ -301,7 +301,7 @@ class _GroupScreenState extends State<GroupScreen> {
 
     final edited = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => AddExpenseScreen(
+        builder: (_) => ExpenseScreen(
           client: widget.client,
           db: widget.db,
           outbox: widget.outbox,

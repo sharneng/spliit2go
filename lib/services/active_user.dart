@@ -6,9 +6,9 @@ import '../models/group.dart';
 /// participant otherwise (a stale preference from a different group, or
 /// none set yet, shouldn't block adding an expense).
 ///
-/// Pulled out as a pure function, rather than inline in AddExpenseScreen,
+/// Pulled out as a pure function, rather than inline in ExpenseScreen,
 /// specifically so it's testable without touching SharedPreferences at
-/// all -- AddExpenseScreen takes the resolved id as a constructor param
+/// all -- ExpenseScreen takes the resolved id as a constructor param
 /// instead of loading the preference itself.
 String? resolveDefaultPaidBy({
   required String? activeUserId,

@@ -16,7 +16,7 @@ import '../sync/outbox.dart';
 /// balance_calculator.dart), so this works offline and already reflects
 /// any not-yet-synced pending expenses. Marking a settlement as paid
 /// writes a pending reimbursement expense locally first, same as adding
-/// any other expense (see AddExpenseScreen) -- it queues for the outbox
+/// any other expense (see ExpenseScreen) -- it queues for the outbox
 /// if there's no connectivity right now, rather than requiring one.
 class BalancesScreen extends StatefulWidget {
   final SpliitClient client;
