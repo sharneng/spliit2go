@@ -104,6 +104,45 @@ void main() {
       final all = await db.expensesForGroup('g1');
       expect(all.map((r) => r.id), ['server-2']);
     });
+
+    // Issue #16: the new columns (recurrenceRule, originalAmountCents,
+    // originalCurrency, conversionRate) round-trip through toCompanion/
+    // rowToExpense just like every pre-existing field.
+    test('round-trips recurrenceRule and original-currency fields', () async {
+      final e = Expense(
+        id: 'e1',
+        groupId: 'g1',
+        title: 'Hotel',
+        amountCents: 10000,
+        paidBy: 'p1',
+        paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+        date: DateTime.utc(2026, 9, 16),
+        recurrenceRule: RecurrenceRule.monthly,
+        originalAmountCents: 9000,
+        originalCurrency: 'EUR',
+        conversionRate: 1.111,
+      );
+
+      await db.insertPending(e);
+      final row = (await db.pendingExpenses()).single;
+      final roundTripped = db.rowToExpense(row);
+
+      expect(roundTripped.recurrenceRule, RecurrenceRule.monthly);
+      expect(roundTripped.originalAmountCents, 9000);
+      expect(roundTripped.originalCurrency, 'EUR');
+      expect(roundTripped.conversionRate, 1.111);
+    });
+
+    test('defaults recurrenceRule to none and original-currency fields to null', () async {
+      await db.insertPending(expense(id: 'e1', pending: true));
+      final row = (await db.pendingExpenses()).single;
+      final roundTripped = db.rowToExpense(row);
+
+      expect(roundTripped.recurrenceRule, RecurrenceRule.none);
+      expect(roundTripped.originalAmountCents, isNull);
+      expect(roundTripped.originalCurrency, isNull);
+      expect(roundTripped.conversionRate, isNull);
+    });
   });
 
   group('multi-group support', () {

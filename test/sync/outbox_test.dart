@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -81,5 +83,49 @@ void main() {
 
     expect(synced, 2);
     expect(await db.pendingExpenses(), isEmpty);
+  });
+
+  // Issue #16: the new Expense fields (recurrenceRule, originalAmountCents/
+  // originalCurrency/conversionRate) must actually reach the server on
+  // replay, not just round-trip through the local db -- a bug here would
+  // silently drop them the moment an add happened offline.
+  test('flush() passes recurrenceRule and original-currency fields through to createExpense',
+      () async {
+    final pending = Expense(
+      id: 'local-1',
+      groupId: 'g1',
+      title: 'Hotel',
+      amountCents: 10000,
+      paidBy: 'p1',
+      paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+      date: DateTime.utc(2026, 9, 16),
+      recurrenceRule: RecurrenceRule.monthly,
+      originalAmountCents: 9000,
+      originalCurrency: 'EUR',
+      conversionRate: 1.111,
+      pending: true,
+    );
+    await db.insertPending(pending);
+
+    http.Request? captured;
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async {
+        captured = req;
+        return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+      }),
+    );
+    final outbox = Outbox(db, client);
+
+    await outbox.flush();
+
+    expect(captured, isNotNull);
+    final sent = jsonDecode(captured!.body) as Map<String, dynamic>;
+    final formValues =
+        (sent['0'] as Map<String, dynamic>)['json']['expenseFormValues'] as Map<String, dynamic>;
+    expect(formValues['recurrenceRule'], 'MONTHLY');
+    expect(formValues['originalAmount'], 9000);
+    expect(formValues['originalCurrency'], 'EUR');
+    expect(formValues['conversionRate'], 1.111);
   });
 }

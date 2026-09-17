@@ -1,10 +1,12 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
+import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/group_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
@@ -73,4 +75,114 @@ void main() {
       expect(fab.onPressed, isNull);
     },
   );
+
+  group('tap-to-edit (issue #17)', () {
+    const cachedGroup = Group(
+      id: 'g1',
+      name: 'Banff Trip',
+      currency: '\$',
+      participants: [Participant(id: 'p1', name: 'Ken')],
+    );
+
+    Expense syncedExpense() => Expense(
+          id: 'e1',
+          groupId: 'g1',
+          title: 'Coffee',
+          amountCents: 500,
+          paidBy: 'p1',
+          paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+          date: DateTime.utc(2026, 9, 16),
+        );
+
+    testWidgets('tapping a synced expense fetches it fresh and opens the edit screen',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.cacheGroup(cachedGroup);
+      await db.replaceServerExpenses('g1', [syncedExpense()]);
+
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          if (req.url.toString().contains('groups.expenses.get')) {
+            return http.Response(
+              '[{"result":{"data":{"json":{"expense":{'
+              '"id":"e1","title":"Coffee","amount":500,"paidBy":"p1",'
+              '"paidFor":[{"participant":"p1","shares":1}],"splitMode":"EVENLY",'
+              '"category":0,"notes":"","expenseDate":"2026-09-16T00:00:00.000Z",'
+              '"isReimbursement":false}}}}}]',
+              200,
+            );
+          }
+          throw Exception('offline'); // fetchGroup/fetchExpenses -- _refresh falls back to cache
+        }),
+      );
+      final outbox = Outbox(db, client);
+
+      await tester.pumpWidget(MaterialApp(
+        home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Coffee'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit expense'), findsOneWidget);
+    });
+
+    testWidgets('tapping a synced expense while offline shows an error, no navigation',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.cacheGroup(cachedGroup);
+      await db.replaceServerExpenses('g1', [syncedExpense()]);
+
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => throw Exception('offline')),
+      );
+      final outbox = Outbox(db, client);
+
+      await tester.pumpWidget(MaterialApp(
+        home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Coffee'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit expense'), findsNothing);
+      expect(find.textContaining('needs a connection'), findsOneWidget);
+    });
+
+    testWidgets('a still-pending (not yet synced) expense is not tappable', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.cacheGroup(cachedGroup);
+      await db.insertPending(Expense(
+        id: 'local-1',
+        groupId: 'g1',
+        title: 'Snacks',
+        amountCents: 300,
+        paidBy: 'p1',
+        paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+        date: DateTime.utc(2026, 9, 16),
+        pending: true,
+      ));
+
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => throw Exception('offline')),
+      );
+      final outbox = Outbox(db, client);
+
+      await tester.pumpWidget(MaterialApp(
+        home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
+      ));
+      await tester.pumpAndSettle();
+
+      final tile = tester.widget<ListTile>(find.widgetWithText(ListTile, 'Snacks'));
+      expect(tile.onTap, isNull);
+    });
+  });
 }

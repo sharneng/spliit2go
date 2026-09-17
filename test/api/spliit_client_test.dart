@@ -132,6 +132,141 @@ void main() {
       expect(expenses.first.paidFor.map((s) => s.participantId), ['p1', 'p2']);
     });
 
+    // Issue #16/#17: recurrenceRule, originalAmount/originalCurrency/
+    // conversionRate ("paid in a different currency") now round-trip too.
+    test('parses recurrenceRule and original-currency fields', () async {
+      final body = jsonEncode([
+        {
+          'result': {
+            'data': {
+              'json': {
+                'expenses': [
+                  {
+                    'id': 'e1',
+                    'title': 'Hotel',
+                    'amount': 10000,
+                    'paidBy': 'p1',
+                    'paidFor': [
+                      {'participant': 'p1', 'shares': 1},
+                    ],
+                    'splitMode': 'EVENLY',
+                    'category': 0,
+                    'notes': '',
+                    'expenseDate': '2026-09-16T00:00:00.000Z',
+                    'isReimbursement': false,
+                    'recurrenceRule': 'MONTHLY',
+                    'originalAmount': 9000,
+                    'originalCurrency': 'EUR',
+                    'conversionRate': 1.111,
+                  },
+                ],
+                'hasMore': false,
+              },
+            },
+          },
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+
+      final expenses = await client.fetchExpenses('g1');
+
+      expect(expenses.first.recurrenceRule, RecurrenceRule.monthly);
+      expect(expenses.first.originalAmountCents, 9000);
+      expect(expenses.first.originalCurrency, 'EUR');
+      expect(expenses.first.conversionRate, 1.111);
+    });
+
+    // conversionRate is a Prisma Decimal, which can come back over the
+    // wire as a numeric string rather than a plain number -- tolerate
+    // both rather than assume one.
+    test('tolerates conversionRate sent as a numeric string', () async {
+      final body = jsonEncode([
+        {
+          'result': {
+            'data': {
+              'json': {
+                'expenses': [
+                  {
+                    'id': 'e1',
+                    'title': 'Hotel',
+                    'amount': 10000,
+                    'paidBy': 'p1',
+                    'paidFor': [
+                      {'participant': 'p1', 'shares': 1},
+                    ],
+                    'splitMode': 'EVENLY',
+                    'category': 0,
+                    'notes': '',
+                    'expenseDate': '2026-09-16T00:00:00.000Z',
+                    'isReimbursement': false,
+                    'originalAmount': 9000,
+                    'originalCurrency': 'EUR',
+                    'conversionRate': '1.111',
+                  },
+                ],
+                'hasMore': false,
+              },
+            },
+          },
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+
+      final expenses = await client.fetchExpenses('g1');
+
+      expect(expenses.first.conversionRate, 1.111);
+    });
+
+    // Defaults for an expense that has none of the new fields at all --
+    // a server that predates them, or a plain expense in the group's own
+    // currency.
+    test('defaults recurrenceRule to none and original-currency fields to null', () async {
+      final body = jsonEncode([
+        {
+          'result': {
+            'data': {
+              'json': {
+                'expenses': [
+                  {
+                    'id': 'e1',
+                    'title': 'Coffee',
+                    'amount': 500,
+                    'paidBy': 'p1',
+                    'paidFor': [
+                      {'participant': 'p1', 'shares': 1},
+                    ],
+                    'splitMode': 'EVENLY',
+                    'category': 0,
+                    'notes': '',
+                    'expenseDate': '2026-09-16T00:00:00.000Z',
+                    'isReimbursement': false,
+                  },
+                ],
+                'hasMore': false,
+              },
+            },
+          },
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+
+      final expenses = await client.fetchExpenses('g1');
+
+      expect(expenses.first.recurrenceRule, RecurrenceRule.none);
+      expect(expenses.first.originalAmountCents, isNull);
+      expect(expenses.first.originalCurrency, isNull);
+      expect(expenses.first.conversionRate, isNull);
+    });
+
     // The client also has to tolerate the flatter shape -- a bare id
     // string -- since that's what we send on create, and nothing
     // guarantees every server version/endpoint expands it the same way.
@@ -384,6 +519,68 @@ void main() {
     });
   });
 
+  group('SpliitClient.fetchExpense', () {
+    test('fetches and parses a single expense by id', () async {
+      http.Request? captured;
+      final body = jsonEncode([
+        {
+          'result': {
+            'data': {
+              'json': {
+                'expense': {
+                  'id': 'e1',
+                  'title': 'Hotel',
+                  'amount': 10000,
+                  'paidBy': 'p1',
+                  'paidFor': [
+                    {'participant': 'p1', 'shares': 1},
+                  ],
+                  'splitMode': 'EVENLY',
+                  'category': 0,
+                  'notes': 'note',
+                  'expenseDate': '2026-09-16T00:00:00.000Z',
+                  'isReimbursement': false,
+                  'recurrenceRule': 'WEEKLY',
+                },
+              },
+            },
+          },
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          captured = req;
+          return http.Response(body, 200);
+        }),
+      );
+
+      final expense = await client.fetchExpense(groupId: 'g1', expenseId: 'e1');
+
+      expect(expense.id, 'e1');
+      expect(expense.title, 'Hotel');
+      expect(expense.recurrenceRule, RecurrenceRule.weekly);
+      expect(captured!.url.toString(), contains('groups.expenses.get'));
+    });
+
+    test('throws when the expense is not found', () async {
+      final body = jsonEncode([
+        {
+          'error': {'message': 'Expense not found', 'code': -32004},
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+
+      expect(
+        () => client.fetchExpense(groupId: 'g1', expenseId: 'missing'),
+        throwsA(isA<SpliitApiException>()),
+      );
+    });
+  });
+
   group('SpliitClient.createExpense', () {
     // Regression test for github.com/sharneng/spliit2go/issues/15: the
     // date this sends has to be UTC midnight of the *calendar* date
@@ -440,6 +637,123 @@ void main() {
       final formValues =
           (sent['0'] as Map<String, dynamic>)['json']['expenseFormValues'] as Map<String, dynamic>;
       expect(formValues['expenseDate'], endsWith('T00:00:00.000Z'));
+    });
+
+    // Issue #16: the new fields all reach the wire, and default to a
+    // shape a server with no "paid in" values on this expense expects
+    // (no originalAmount/originalCurrency/conversionRate keys at all,
+    // rather than sending explicit nulls).
+    test('sends recurrenceRule and omits original-currency fields when unset', () async {
+      http.Request? captured;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          captured = req;
+          return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+        }),
+      );
+
+      await client.createExpense(
+        groupId: 'g1',
+        title: 'Dinner',
+        amountCents: 1000,
+        paidBy: 'p1',
+        paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+        recurrenceRule: RecurrenceRule.weekly,
+      );
+
+      final sent = jsonDecode(captured!.body) as Map<String, dynamic>;
+      final formValues =
+          (sent['0'] as Map<String, dynamic>)['json']['expenseFormValues'] as Map<String, dynamic>;
+      expect(formValues['recurrenceRule'], 'WEEKLY');
+      expect(formValues.containsKey('originalAmount'), isFalse);
+      expect(formValues.containsKey('originalCurrency'), isFalse);
+      expect(formValues.containsKey('conversionRate'), isFalse);
+    });
+
+    test('sends original-currency fields when paid in a different currency', () async {
+      http.Request? captured;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          captured = req;
+          return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+        }),
+      );
+
+      await client.createExpense(
+        groupId: 'g1',
+        title: 'Hotel',
+        amountCents: 10000,
+        paidBy: 'p1',
+        paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+        originalAmountCents: 9000,
+        originalCurrency: 'EUR',
+        conversionRate: 1.111,
+      );
+
+      final sent = jsonDecode(captured!.body) as Map<String, dynamic>;
+      final formValues =
+          (sent['0'] as Map<String, dynamic>)['json']['expenseFormValues'] as Map<String, dynamic>;
+      expect(formValues['originalAmount'], 9000);
+      expect(formValues['originalCurrency'], 'EUR');
+      expect(formValues['conversionRate'], 1.111);
+    });
+  });
+
+  group('SpliitClient.updateExpense', () {
+    test('posts to groups.expenses.update with the expense id and form values', () async {
+      http.Request? captured;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          captured = req;
+          return http.Response('[{"result":{"data":{"json":{"expenseId":"e1"}}}}]', 200);
+        }),
+      );
+
+      final id = await client.updateExpense(
+        groupId: 'g1',
+        expenseId: 'e1',
+        title: 'Dinner (edited)',
+        amountCents: 1500,
+        paidBy: 'p1',
+        paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+      );
+
+      expect(id, 'e1');
+      expect(captured!.url.toString(), contains('groups.expenses.update'));
+      final sent = jsonDecode(captured!.body) as Map<String, dynamic>;
+      final json = (sent['0'] as Map<String, dynamic>)['json'] as Map<String, dynamic>;
+      expect(json['groupId'], 'g1');
+      expect(json['expenseId'], 'e1');
+      final formValues = json['expenseFormValues'] as Map<String, dynamic>;
+      expect(formValues['title'], 'Dinner (edited)');
+      expect(formValues['amount'], 1500);
+    });
+
+    test('throws on an embedded tRPC error', () async {
+      final body = jsonEncode([
+        {
+          'error': {'message': 'Expense not found', 'code': -32004},
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+
+      expect(
+        () => client.updateExpense(
+          groupId: 'g1',
+          expenseId: 'missing',
+          title: 'Dinner',
+          amountCents: 1000,
+          paidBy: 'p1',
+          paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+        ),
+        throwsA(isA<SpliitApiException>()),
+      );
     });
   });
 
