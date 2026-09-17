@@ -24,20 +24,28 @@ class Spliit2GoApp extends StatelessWidget {
       // Issue #24: modern Android (edge-to-edge is mandatory starting
       // with API 35, and Flutter's default template doesn't opt out of
       // it) draws the app behind the status bar *and* the bottom
-      // gesture/nav bar. Scaffold only insets its AppBar for that
-      // automatically -- plain body content (a form's Save button at
-      // the bottom of a ListView, a bottom sheet's last row) is left to
-      // sit right behind the system bars and gets visually clipped or
-      // made untappable, which is exactly what was reported ("save
-      // button under bottom nav bar").
+      // gesture/nav bar. Scaffold only insets its AppBar for the top
+      // status bar automatically (AppBar already extends its own color
+      // up behind the translucent status bar and lays its content below
+      // it) -- it does nothing for the bottom, so plain body content
+      // (a form's Save button at the bottom of a ListView, a bottom
+      // sheet's last row) was left sitting right behind the bottom
+      // gesture/nav bar, exactly the "save button under bottom nav bar"
+      // symptom reported.
       //
-      // Wrapping the whole app in one SafeArea here -- rather than
-      // adding it to every individual screen -- insets every route's
+      // top: false here is deliberate, not an oversight: an *unscoped*
+      // SafeArea insets from the top too, which double-insets below
+      // AppBar's own handling and leaves a blank gap the app's
+      // background color, not the AppBar's, shows through -- confirmed
+      // on a real device after the first version of this fix (see the
+      // issue). Bottom-only avoids that while still fixing the actual
+      // complaint. Wrapping the whole app once here, rather than adding
+      // it to every individual screen, insets every route's bottom
       // content uniformly, including screens added later. A descendant
       // SafeArea (e.g. the currency/category picker bottom sheets)
       // still works correctly nested inside this one: SafeArea consumes
-      // the padding it applies, so there's no double-inset.
-      builder: (context, child) => SafeArea(child: child!),
+      // the padding it applies, so there's no double-inset there.
+      builder: (context, child) => SafeArea(top: false, child: child!),
     );
   }
 }
