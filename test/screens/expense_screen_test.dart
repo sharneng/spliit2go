@@ -273,8 +273,7 @@ void main() {
     expect(find.widgetWithText(InputDecorator, 'General'), findsOneWidget);
   });
 
-  group('category picker (issue #19)', () {
-    testWidgets('groups categories under their grouping header', (tester) async {
+  testWidgets('category picker groups categories under their grouping header', (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       final client = SpliitClient(
@@ -302,7 +301,7 @@ void main() {
       expect(find.text('Gas/Fuel'), findsOneWidget);
     });
 
-    testWidgets('type-ahead search narrows the list to matching categories', (tester) async {
+  testWidgets('category picker type-ahead search narrows the list to matching categories', (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       final client = SpliitClient(
@@ -330,7 +329,6 @@ void main() {
       // entirely, not shown as an empty section.
       expect(find.text('Food and Drink'), findsNothing);
     });
-  });
 
   final existingExpenseForEdit = Expense(
       id: 'e1',
