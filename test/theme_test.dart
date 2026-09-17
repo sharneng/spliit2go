@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spliit2go/theme.dart';
 
@@ -32,5 +33,39 @@ void main() {
     // distinct scaffold backgrounds, not the same ThemeData used twice.
     expect(spliit2goLightTheme.scaffoldBackgroundColor,
         isNot(spliit2goDarkTheme.scaffoldBackgroundColor));
+  });
+
+  group('spliit2goSystemUiOverlayStyle', () {
+    test('matches the bottom nav bar to the theme\'s own background, not a fixed color', () {
+      final lightStyle = spliit2goSystemUiOverlayStyle(spliit2goLightTheme);
+      final darkStyle = spliit2goSystemUiOverlayStyle(spliit2goDarkTheme);
+
+      expect(lightStyle.systemNavigationBarColor, spliit2goLightTheme.scaffoldBackgroundColor);
+      expect(darkStyle.systemNavigationBarColor, spliit2goDarkTheme.scaffoldBackgroundColor);
+    });
+
+    test('disables the enforced-contrast scrim that renders as a deep black bar (issue #24)', () {
+      // This was the actual bug reported: Android 10+ paints a
+      // translucent black scrim over the nav bar "for legibility"
+      // unless an app explicitly opts out, which darkens whatever
+      // color it was given underneath it into something close to
+      // solid black.
+      expect(spliit2goSystemUiOverlayStyle(spliit2goLightTheme).systemNavigationBarContrastEnforced,
+          isFalse);
+      expect(spliit2goSystemUiOverlayStyle(spliit2goDarkTheme).systemNavigationBarContrastEnforced,
+          isFalse);
+    });
+
+    test('picks nav bar icon brightness for contrast against a light background', () {
+      final style = spliit2goSystemUiOverlayStyle(spliit2goLightTheme);
+      // Brightness.dark here means dark *icons* -- correct against
+      // spliit2goLightTheme's light scaffold background.
+      expect(style.systemNavigationBarIconBrightness, Brightness.dark);
+    });
+
+    test('picks nav bar icon brightness for contrast against a dark background', () {
+      final style = spliit2goSystemUiOverlayStyle(spliit2goDarkTheme);
+      expect(style.systemNavigationBarIconBrightness, Brightness.light);
+    });
   });
 }

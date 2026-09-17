@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'api/spliit_client.dart';
 import 'db/app_database.dart';
@@ -59,7 +60,20 @@ class Spliit2GoApp extends StatelessWidget {
       // SafeArea (e.g. the currency/category picker bottom sheets)
       // still works correctly nested inside this one: SafeArea consumes
       // the padding it applies, so there's no double-inset there.
-      builder: (context, child) => SafeArea(top: false, child: child!),
+      //
+      // Also confirmed on-device: without an explicit
+      // AnnotatedRegion<SystemUiOverlayStyle>, the bottom gesture/nav
+      // bar itself (not the app content SafeArea insets away from) was
+      // rendering as a solid near-black bar instead of blending with
+      // the app -- see spliit2goSystemUiOverlayStyle's doc comment.
+      // Theme.of(context) here resolves to whichever of
+      // theme/darkTheme MaterialApp picked for the current system
+      // brightness, so this stays correct across light and dark mode
+      // (issue #25) without needing its own brightness plumbing.
+      builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+        value: spliit2goSystemUiOverlayStyle(Theme.of(context)),
+        child: SafeArea(top: false, child: child!),
+      ),
     );
   }
 }

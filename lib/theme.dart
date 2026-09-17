@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// spliit2go's light theme -- Material 3, seeded from [Colors.teal].
 /// Paired with [spliit2goDarkTheme] below so the app actually has
@@ -20,3 +21,40 @@ ThemeData get spliit2goDarkTheme => ThemeData(
       colorSchemeSeed: Colors.teal,
       brightness: Brightness.dark,
     );
+
+/// The system status/navigation bar styling for the given [theme]'s
+/// current brightness -- issue #24 follow-up: without this, Android
+/// draws the bottom gesture/nav bar as an opaque near-black scrim (its
+/// "enforced contrast" background, meant for apps that never set a
+/// color at all) instead of blending with the app underneath it, the
+/// way most well-behaved edge-to-edge apps look. Matches the nav bar to
+/// [ThemeData.scaffoldBackgroundColor] -- what a screen's own content
+/// actually shows through to -- rather than a fixed color, so it stays
+/// correct across both [spliit2goLightTheme] and [spliit2goDarkTheme]
+/// and if that background ever changes.
+///
+/// The status bar fields here mostly just document intent -- every
+/// screen in this app has an `AppBar`, and `AppBar` sets its own nested
+/// `AnnotatedRegion` for the status bar that wins over this ancestor
+/// one (Flutter resolves each `SystemUiOverlayStyle` field from the
+/// nearest region that sets it, not the nearest region overall). They
+/// still matter as the fallback for the brief window before the first
+/// screen's `AppBar` mounts, and for any future screen that doesn't use
+/// one.
+SystemUiOverlayStyle spliit2goSystemUiOverlayStyle(ThemeData theme) {
+  final navBarIsLight =
+      ThemeData.estimateBrightnessForColor(theme.scaffoldBackgroundColor) == Brightness.light;
+  return SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: navBarIsLight ? Brightness.dark : Brightness.light,
+    statusBarBrightness: navBarIsLight ? Brightness.light : Brightness.dark,
+    systemNavigationBarColor: theme.scaffoldBackgroundColor,
+    systemNavigationBarIconBrightness: navBarIsLight ? Brightness.dark : Brightness.light,
+    systemNavigationBarDividerColor: Colors.transparent,
+    // Without this, Android 10+ paints a translucent scrim over
+    // whatever color we ask for "for legibility" -- which is exactly
+    // the deep-black look reported, since our chosen color gets
+    // darkened underneath it.
+    systemNavigationBarContrastEnforced: false,
+  );
+}
