@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+import '../models/activity.dart';
 import '../models/category.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
@@ -168,6 +169,50 @@ class SpliitClient {
       cursor = data['nextCursor'];
     }
     return all;
+  }
+
+  /// One page of a group's activity log (issue #26), newest first --
+  /// mirrors `groups.activities.list`'s own pagination shape exactly
+  /// (`cursor`/`limit` in, `activities`/`hasMore`/`nextCursor` out)
+  /// rather than following every page the way [fetchExpenses] does,
+  /// since this is a "load more" UI, not something cached for offline
+  /// use -- see activity_screen.dart.
+  Future<ActivityPage> fetchActivities({
+    required String groupId,
+    int cursor = 0,
+    int limit = 20,
+  }) async {
+    final uri = _trpcUri(
+      'groups.activities.list',
+      input: {'groupId': groupId, 'cursor': cursor, 'limit': limit},
+    );
+    final res = await _http.get(uri);
+    _checkOk(res);
+    final data = _unwrapBatch(jsonDecode(res.body)) as Map<String, dynamic>;
+
+    final activities = (data['activities'] as List).map((raw) {
+      final m = raw as Map<String, dynamic>;
+      final expenseId = m['expenseId'] == null ? null : _asId(m['expenseId']);
+      return Activity(
+        id: _asId(m['id']),
+        time: _asDateTime(m['time']),
+        activityType: ActivityType.fromWire(m['activityType'] as String),
+        participantId: m['participantId'] == null ? null : _asId(m['participantId']),
+        expenseId: expenseId,
+        data: m['data'] as String?,
+        // The server includes `expense` only when that expense still
+        // exists (see getActivities in spliit-app/spliit's lib/api.ts) --
+        // a present expenseId with no matching `expense` means it's
+        // since been deleted.
+        expenseExists: expenseId != null && m['expense'] != null,
+      );
+    }).toList();
+
+    return ActivityPage(
+      activities: activities,
+      hasMore: data['hasMore'] == true,
+      nextCursor: (data['nextCursor'] as num).round(),
+    );
   }
 
   /// Fetches a single expense fresh from the server, bypassing the local
@@ -489,6 +534,15 @@ class SpliitClient {
     _checkOk(res);
     _unwrapBatch(jsonDecode(res.body)); // throws SpliitApiException on an embedded error
   }
+}
+
+/// One page of [SpliitClient.fetchActivities].
+class ActivityPage {
+  final List<Activity> activities;
+  final bool hasMore;
+  final int nextCursor;
+
+  const ActivityPage({required this.activities, required this.hasMore, required this.nextCursor});
 }
 
 class SpliitApiException implements Exception {

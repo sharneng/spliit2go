@@ -9,6 +9,7 @@ import '../services/active_user.dart';
 import '../services/settings_service.dart';
 import '../sync/outbox.dart';
 import 'expense_screen.dart';
+import 'activity_screen.dart';
 import 'balances_screen.dart';
 import 'group_settings_screen.dart';
 
@@ -154,6 +155,11 @@ class _GroupScreenState extends State<GroupScreen> {
             onPressed: _group == null ? null : _openBalances,
           ),
           IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'Activity',
+            onPressed: _group == null ? null : _openActivity,
+          ),
+          IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Group settings',
             onPressed: _group == null ? null : _openGroupSettings,
@@ -242,6 +248,19 @@ class _GroupScreenState extends State<GroupScreen> {
   /// straight from Navigator.pop on a successful save (or null if
   /// nothing changed / the user backed out), so this can just adopt it
   /// directly instead of re-reading the cache.
+  Future<void> _openActivity() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ActivityScreen(
+          client: widget.client,
+          db: widget.db,
+          outbox: widget.outbox,
+          group: _group!,
+        ),
+      ),
+    );
+  }
+
   Future<void> _openGroupSettings() async {
     final updated = await Navigator.of(context).push<Group>(
       MaterialPageRoute(
