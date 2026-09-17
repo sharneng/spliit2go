@@ -76,6 +76,14 @@ void main() {
   }
 
   testWidgets('shows summary, totals, participant, and category sections', (tester) async {
+    // The Stats screen's ListView is taller than a default test
+    // viewport once summary + totals + participant + category sections
+    // are all populated, so widgets past the fold wouldn't otherwise be
+    // built -- size the viewport generously instead of scrolling.
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final db = await dbWithExpenses();
     addTearDown(db.close);
     final client = SpliitClient(
@@ -122,6 +130,10 @@ void main() {
   });
 
   testWidgets('falls back to an id-based category label when the fetch fails', (tester) async {
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final db = await dbWithExpenses();
     addTearDown(db.close);
     final client = SpliitClient(
