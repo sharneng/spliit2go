@@ -109,9 +109,18 @@ class SpliitClient {
   }
 
   /// Fetches every expense in the group, following pagination.
+  ///
+  /// `cursor` is passed through opaquely -- whatever type `nextCursor`
+  /// comes back as (a numeric offset on at least one real server; the
+  /// splitwise2spliit port this was based on assumed an opaque cuid
+  /// string cursor, which was wrong -- see
+  /// github.com/sharneng/spliit2go/issues/14) goes right back into the
+  /// next request unchanged, rather than being coerced to a String and
+  /// then rejected by the server with "expected number, received
+  /// string".
   Future<List<Expense>> fetchExpenses(String groupId) async {
     final all = <Expense>[];
-    String? cursor;
+    dynamic cursor;
     while (true) {
       final query = <String, dynamic>{'groupId': groupId};
       if (cursor != null) query['cursor'] = cursor;
@@ -140,7 +149,7 @@ class SpliitClient {
       }
 
       if (data['hasMore'] != true) break;
-      cursor = _asId(data['nextCursor']);
+      cursor = data['nextCursor'];
     }
     return all;
   }

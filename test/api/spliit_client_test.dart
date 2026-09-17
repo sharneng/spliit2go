@@ -210,6 +210,62 @@ void main() {
       expect(expenses.map((e) => e.id), ['e1', 'e2']);
     });
 
+    // Regression test for the *actual* root cause of
+    // github.com/sharneng/spliit2go/issues/14, confirmed from a real
+    // device's flutter log: groups.expenses.list's `cursor` input is a
+    // numeric offset on at least one real server, not the opaque cuid
+    // string this client's pagination was ported assuming. Sending it
+    // back stringified got a 400: "expected number, received string".
+    // The cursor now has to be passed through as whatever type the
+    // server sent it as -- this pins that down for a numeric cursor.
+    test('round-trips a numeric nextCursor as a JSON number, not a string',
+        () async {
+      http.Request? secondRequest;
+      var callCount = 0;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          callCount++;
+          final isFirstPage = callCount == 1;
+          if (!isFirstPage) secondRequest = req;
+          final body = jsonEncode([
+            {
+              'result': {
+                'data': {
+                  'json': {
+                    'expenses': [
+                      {
+                        'id': isFirstPage ? 'e1' : 'e2',
+                        'title': 'Item',
+                        'amount': 100,
+                        'paidBy': 'p1',
+                        'paidFor': [
+                          {'participant': 'p1', 'shares': 1},
+                        ],
+                        'expenseDate': '2026-09-16T00:00:00.000Z',
+                      },
+                    ],
+                    'hasMore': isFirstPage,
+                    if (isFirstPage) 'nextCursor': 10,
+                  },
+                },
+              },
+            },
+          ]);
+          return http.Response(body, 200);
+        }),
+      );
+
+      await client.fetchExpenses('g1');
+
+      expect(callCount, 2);
+      final inputParam = secondRequest!.url.queryParameters['input']!;
+      final decoded = jsonDecode(inputParam) as Map<String, dynamic>;
+      final cursor = (decoded['0'] as Map<String, dynamic>)['json']['cursor'];
+      expect(cursor, 10);
+      expect(cursor, isA<int>());
+    });
+
     // Same regression as fetchGroup above, for the fields fetchExpenses
     // reads: expense id, a bare-id paidBy, and the pagination cursor.
     test('tolerates a numeric expense id, paidBy id, and cursor', () async {
