@@ -1,6 +1,7 @@
 import '../models/balance.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
+import 'expense_shares.dart';
 
 /// Computes each participant's net balance from a group's expenses --
 /// client-side, deliberately, rather than calling a server endpoint for
@@ -22,23 +23,16 @@ List<Balance> computeBalances(List<Participant> participants, List<Expense> expe
 
   for (final e in expenses) {
     net[e.paidBy] = (net[e.paidBy] ?? 0) + e.amountCents;
-    if (e.paidFor.isEmpty) continue;
-
-    if (e.splitMode == SplitMode.byAmount) {
-      // Each share IS the exact cents that participant owes.
-      for (final s in e.paidFor) {
-        net[s.participantId] = (net[s.participantId] ?? 0) - s.shares;
-      }
-      continue;
-    }
-
+    // The exact per-participant apportionment (including the evenly-mode
+    // quirk noted below) lives in expense_shares.dart, shared with the
+    // stats tab's per-participant "share" figures (issue #27) so the two
+    // views can't drift apart on how a split is divided up.
+    //
     // byShares / byPercentage are "proportional weight" splits as far
     // as this math cares -- a percentage-mode share is proportional to
     // the whole regardless of what scale it's stored on (out of 100,
     // out of 10000, ...), since we only ever use it relative to the
-    // total.
-    //
-    // SplitMode.evenly is deliberately NOT treated as weighted by
+    // total. SplitMode.evenly is deliberately NOT treated as weighted by
     // ExpenseShare.shares, even though it's stored in the very same
     // field -- verified against a real group (github.com/sharneng/
     // spliit2go/issues/20) where the web app's own "Evenly" expenses
@@ -47,43 +41,18 @@ List<Balance> computeBalances(List<Participant> participants, List<Expense> expe
     // other web-app-internal bookkeeping) that the web app's own
     // balance math visibly ignores -- an evenly split expense there
     // paid out as a true equal share per included participant, not
-    // weighted by those numbers. Using [ExpenseShare.shares] for
-    // evenly here reproduced that exact (wrong) weighted result and
-    // was off by tens of dollars against the web/iOS balance for a
-    // real multi-expense group.
-    final weights = e.splitMode == SplitMode.evenly
-        ? List<int>.filled(e.paidFor.length, 1)
-        : e.paidFor.map((s) => s.shares).toList();
-    final totalShares = weights.fold<int>(0, (sum, w) => sum + w);
-    if (totalShares <= 0) continue;
-
-    // Largest-remainder rounding so the split always sums to exactly
-    // amountCents, rather than losing or gaining a cent to naive
-    // per-share rounding. Note: when a remainder has to be distributed
-    // among participants with an exactly-tied fractional share (a
-    // perfectly even split that isn't evenly divisible by amountCents,
-    // e.g. $1.00 split 3 ways), which participant(s) get the extra
-    // cent(s) here is decided by paidFor list order, which hasn't been
-    // verified to match the server's own tie-break -- expect balances
-    // to be exactly right in total but occasionally off by a cent or
-    // two per participant in that specific case.
-    final raw = List<double>.generate(
-        e.paidFor.length, (i) => e.amountCents * weights[i] / totalShares);
-    final floors = raw.map((r) => r.floor()).toList();
-    final distributed = floors.fold<int>(0, (a, b) => a + b);
-    final remainder = e.amountCents - distributed;
-
-    final byRemainder = List<int>.generate(raw.length, (i) => i)
-      ..sort((a, b) => (raw[b] - floors[b]).compareTo(raw[a] - floors[a]));
-
-    final owed = List<int>.from(floors);
-    for (var i = 0; i < remainder; i++) {
-      owed[byRemainder[i % byRemainder.length]] += 1;
-    }
-
-    for (var i = 0; i < e.paidFor.length; i++) {
-      final pid = e.paidFor[i].participantId;
-      net[pid] = (net[pid] ?? 0) - owed[i];
+    // weighted by those numbers.
+    //
+    // Note: when a remainder has to be distributed among participants
+    // with an exactly-tied fractional share (a perfectly even split
+    // that isn't evenly divisible by amountCents, e.g. \$1.00 split 3
+    // ways), which participant(s) get the extra cent(s) is decided by
+    // paidFor list order, which hasn't been verified to match the
+    // server's own tie-break -- expect balances to be exactly right in
+    // total but occasionally off by a cent or two per participant in
+    // that specific case.
+    for (final entry in expenseShareCents(e).entries) {
+      net[entry.key] = (net[entry.key] ?? 0) - entry.value;
     }
   }
 

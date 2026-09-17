@@ -12,6 +12,7 @@ import 'expense_screen.dart';
 import 'activity_screen.dart';
 import 'balances_screen.dart';
 import 'group_settings_screen.dart';
+import 'stats_screen.dart';
 
 /// A single group's expenses, offline-first -- reached by pushing on top
 /// of GroupListScreen (the app's actual root; see main.dart and
@@ -155,6 +156,11 @@ class _GroupScreenState extends State<GroupScreen> {
             onPressed: _group == null ? null : _openBalances,
           ),
           IconButton(
+            icon: const Icon(Icons.bar_chart_outlined),
+            tooltip: 'Stats',
+            onPressed: _group == null ? null : _openStats,
+          ),
+          IconButton(
             icon: const Icon(Icons.history),
             tooltip: 'Activity',
             onPressed: _group == null ? null : _openActivity,
@@ -248,6 +254,20 @@ class _GroupScreenState extends State<GroupScreen> {
   /// straight from Navigator.pop on a successful save (or null if
   /// nothing changed / the user backed out), so this can just adopt it
   /// directly instead of re-reading the cache.
+  Future<void> _openStats() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => StatsScreen(
+          client: widget.client,
+          db: widget.db,
+          outbox: widget.outbox,
+          group: _group!,
+          activeUserId: _activeUserId,
+        ),
+      ),
+    );
+  }
+
   Future<void> _openActivity() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
