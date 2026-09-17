@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:spliit2go/api/spliit_client.dart';
+import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 
 void main() {
@@ -210,6 +211,48 @@ void main() {
       expect(expenses.map((e) => e.id), ['e1', 'e2']);
     });
 
+    // Regression test for github.com/sharneng/spliit2go/issues/15:
+    // expenseDate is a date-only value (Postgres @db.Date, carried at
+    // UTC midnight -- see decisions/date-handling.md), not a real
+    // instant. Parsing it with a true timezone conversion rolls the
+    // date back a day west of UTC. This asserts the parsed date has
+    // the exact year/month/day the server sent, regardless of what
+    // timezone this test happens to run in.
+    test('parses expenseDate as the calendar date, not a timezone-shifted instant',
+        () async {
+      final body = jsonEncode([
+        {
+          'result': {
+            'data': {
+              'json': {
+                'expenses': [
+                  {
+                    'id': 'e1',
+                    'title': 'Coffee',
+                    'amount': 500,
+                    'paidBy': 'p1',
+                    'paidFor': [
+                      {'participant': 'p1', 'shares': 1},
+                    ],
+                    'expenseDate': '2026-09-13T00:00:00.000Z',
+                  },
+                ],
+                'hasMore': false,
+              },
+            },
+          },
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+
+      final expenses = await client.fetchExpenses('g1');
+
+      expect(expenses.single.date, DateTime(2026, 9, 13));
+    });
+
     // Regression test for the *actual* root cause of
     // github.com/sharneng/spliit2go/issues/14, confirmed from a real
     // device's flutter log: groups.expenses.list's `cursor` input is a
@@ -337,7 +380,66 @@ void main() {
 
       final expenses = await client.fetchExpenses('g1');
 
-      expect(expenses.single.date, DateTime.fromMillisecondsSinceEpoch(1757980800000));
+      expect(expenses.single.date, DateTime(2025, 9, 16));
+    });
+  });
+
+  group('SpliitClient.createExpense', () {
+    // Regression test for github.com/sharneng/spliit2go/issues/15: the
+    // date this sends has to be UTC midnight of the *calendar* date
+    // passed in, regardless of what time-of-day is on it -- see
+    // decisions/date-handling.md. The old code called .toUtc() on the
+    // real instant, which could roll an evening entry west of UTC onto
+    // the next day on the server. 11pm here would have failed the old
+    // implementation.
+    test('encodes the date as UTC midnight regardless of time-of-day', () async {
+      http.Request? captured;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          captured = req;
+          return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+        }),
+      );
+
+      await client.createExpense(
+        groupId: 'g1',
+        title: 'Dinner',
+        amountCents: 1000,
+        paidBy: 'p1',
+        paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+        date: DateTime(2026, 9, 16, 23, 0),
+      );
+
+      expect(captured, isNotNull);
+      final sent = jsonDecode(captured!.body) as Map<String, dynamic>;
+      final formValues =
+          (sent['0'] as Map<String, dynamic>)['json']['expenseFormValues'] as Map<String, dynamic>;
+      expect(formValues['expenseDate'], '2026-09-16T00:00:00.000Z');
+    });
+
+    test('defaults to today when no date is given, still at UTC midnight', () async {
+      http.Request? captured;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          captured = req;
+          return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+        }),
+      );
+
+      await client.createExpense(
+        groupId: 'g1',
+        title: 'Dinner',
+        amountCents: 1000,
+        paidBy: 'p1',
+        paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+      );
+
+      final sent = jsonDecode(captured!.body) as Map<String, dynamic>;
+      final formValues =
+          (sent['0'] as Map<String, dynamic>)['json']['expenseFormValues'] as Map<String, dynamic>;
+      expect(formValues['expenseDate'], endsWith('T00:00:00.000Z'));
     });
   });
 

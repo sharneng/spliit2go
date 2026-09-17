@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/expense.dart';
 import '../models/group.dart';
+import '../services/date_only.dart';
 
 /// Talks to a self-hosted (or spliit.app) instance's tRPC API as plain
 /// HTTP+JSON, deliberately *not* using generated/inferred types from the
@@ -48,7 +49,9 @@ String _asId(dynamic value) => value is String ? value : value.toString();
 /// consulted -- see the class doc comment), but tolerates a raw
 /// epoch-millis number too, in case a server ever sends one.
 DateTime _asDateTime(dynamic value) {
-  if (value is num) return DateTime.fromMillisecondsSinceEpoch(value.round());
+  if (value is num) {
+    return DateTime.fromMillisecondsSinceEpoch(value.round(), isUtc: true);
+  }
   return DateTime.parse(value as String);
 }
 
@@ -143,7 +146,7 @@ class SpliitClient {
           splitMode: SplitModeWire.fromWire(m['splitMode'] as String? ?? 'EVENLY'),
           category: m['category'] == null ? 0 : extractCategoryId(m['category']),
           notes: m['notes'] as String? ?? '',
-          date: _asDateTime(m['expenseDate']),
+          date: dateOnlyFromUtcMidnight(_asDateTime(m['expenseDate'])),
           isReimbursement: m['isReimbursement'] as bool? ?? false,
         ));
       }
@@ -185,12 +188,11 @@ class SpliitClient {
     DateTime? date,
     bool isReimbursement = false,
   }) async {
-    final expenseDate = (date ?? DateTime.now().toUtc());
-    // Matches the Python client's formatting: millisecond precision, 'Z'
-    // suffix, regardless of the platform's default ISO-8601 rendering.
-    final ms = expenseDate.millisecondsSinceEpoch % 1000;
-    final formattedDate =
-        '${expenseDate.toUtc().toIso8601String().split('.').first}.${ms.toString().padLeft(3, '0')}Z';
+    // date-only, not a timestamp -- see date_only.dart's doc comment.
+    // dateOnlyToUtcMidnight() always lands on an exact UTC midnight, so
+    // toIso8601String() already comes out as e.g.
+    // "2026-09-16T00:00:00.000Z" with no extra formatting needed.
+    final formattedDate = dateOnlyToUtcMidnight(date ?? DateTime.now()).toIso8601String();
 
     final expenseFormValues = {
       'expenseDate': formattedDate,

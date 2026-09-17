@@ -194,7 +194,13 @@ class _GroupScreenState extends State<GroupScreen> {
         final e = _expenses[i];
         return ListTile(
           title: Text(e.title),
-          subtitle: Text('${e.date.toLocal()}'.split(' ').first),
+          // e.date is already a date-only value (year/month/day of the
+          // calendar day the expense happened on, not a real instant --
+          // see lib/services/date_only.dart) -- no .toLocal() here,
+          // that would perform a real timezone conversion on a value
+          // that was never one, and roll the date back a day west of
+          // UTC. See decisions/date-handling.md.
+          subtitle: Text('${e.date}'.split(' ').first),
           trailing: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
