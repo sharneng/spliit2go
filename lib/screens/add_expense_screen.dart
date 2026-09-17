@@ -146,6 +146,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       if (controller == null) continue;
       controller.text = switch (e.splitMode) {
         SplitMode.byAmount => (share.shares / 100).toStringAsFixed(2),
+        // Basis points on the wire -> whole percent in the UI -- inverse
+        // of the x100 done in _buildPaidFor.
+        SplitMode.byPercentage => (share.shares / 100).round().toString(),
         _ => share.shares.toString(),
       };
     }
@@ -446,11 +449,13 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   /// add up. Evenly needs no per-participant input at all -- every
   /// included participant just gets an equal weight.
   ///
-  /// Note (tracked separately, not fixed here): for [SplitMode.byPercentage]
-  /// Spliit's server actually expects shares to sum to 10000 (percentage x
-  /// 100), not 100 -- see the byPercentage wire-format issue filed
-  /// alongside this change. Left as-is here to keep this change scoped to
-  /// #16/#17.
+  /// For [SplitMode.byPercentage], the UI takes/validates 0-100 whole
+  /// percentages (summing to 100) but the returned [ExpenseShare.shares]
+  /// are in basis points (percentage x 100, summing to 10000) -- that's
+  /// what Spliit's server actually expects on the wire (its
+  /// expenseFormSchema's percentageSum check), confirmed against a real
+  /// server's balance math going wrong when this app sent raw 0-100
+  /// values -- see github.com/sharneng/spliit2go/issues/18 and issue #20.
   List<ExpenseShare>? _buildPaidFor(int amountCents) {
     final included = _includedParticipants;
     if (included.isEmpty) {
@@ -485,7 +490,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           return null;
         }
         total += value;
-        shares.add(ExpenseShare(participantId: p.id, shares: value));
+        // Wire format is basis points (percentage x 100), not the raw
+        // 0-100 the user types -- see this method's doc comment.
+        shares.add(ExpenseShare(participantId: p.id, shares: value * 100));
       }
       if (total != 100) {
         setState(() => _splitError = 'Percentages must add up to 100 (currently $total)');

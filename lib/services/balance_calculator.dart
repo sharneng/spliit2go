@@ -32,18 +32,43 @@ List<Balance> computeBalances(List<Participant> participants, List<Expense> expe
       continue;
     }
 
-    // evenly / byShares / byPercentage are all "proportional weight"
-    // splits as far as this math cares -- evenly is just every weight
-    // equal, and a percentage-mode share is proportional to the whole
-    // regardless of what scale it's stored on (out of 100, out of
-    // 10000, ...), since we only ever use it relative to the total.
-    final totalShares = e.paidFor.fold<int>(0, (sum, s) => sum + s.shares);
+    // byShares / byPercentage are "proportional weight" splits as far
+    // as this math cares -- a percentage-mode share is proportional to
+    // the whole regardless of what scale it's stored on (out of 100,
+    // out of 10000, ...), since we only ever use it relative to the
+    // total.
+    //
+    // SplitMode.evenly is deliberately NOT treated as weighted by
+    // ExpenseShare.shares, even though it's stored in the very same
+    // field -- verified against a real group (github.com/sharneng/
+    // spliit2go/issues/20) where the web app's own "Evenly" expenses
+    // carried non-uniform shares values (e.g. 100/100/200, presumably
+    // left over from switching split modes in the web UI, or some
+    // other web-app-internal bookkeeping) that the web app's own
+    // balance math visibly ignores -- an evenly split expense there
+    // paid out as a true equal share per included participant, not
+    // weighted by those numbers. Using [ExpenseShare.shares] for
+    // evenly here reproduced that exact (wrong) weighted result and
+    // was off by tens of dollars against the web/iOS balance for a
+    // real multi-expense group.
+    final weights = e.splitMode == SplitMode.evenly
+        ? List<int>.filled(e.paidFor.length, 1)
+        : e.paidFor.map((s) => s.shares).toList();
+    final totalShares = weights.fold<int>(0, (sum, w) => sum + w);
     if (totalShares <= 0) continue;
 
     // Largest-remainder rounding so the split always sums to exactly
     // amountCents, rather than losing or gaining a cent to naive
-    // per-share rounding.
-    final raw = e.paidFor.map((s) => e.amountCents * s.shares / totalShares).toList();
+    // per-share rounding. Note: when a remainder has to be distributed
+    // among participants with an exactly-tied fractional share (a
+    // perfectly even split that isn't evenly divisible by amountCents,
+    // e.g. $1.00 split 3 ways), which participant(s) get the extra
+    // cent(s) here is decided by paidFor list order, which hasn't been
+    // verified to match the server's own tie-break -- expect balances
+    // to be exactly right in total but occasionally off by a cent or
+    // two per participant in that specific case.
+    final raw = List<double>.generate(
+        e.paidFor.length, (i) => e.amountCents * weights[i] / totalShares);
     final floors = raw.map((r) => r.floor()).toList();
     final distributed = floors.fold<int>(0, (a, b) => a + b);
     final remainder = e.amountCents - distributed;

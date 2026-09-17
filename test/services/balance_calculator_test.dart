@@ -46,6 +46,50 @@ void main() {
       expect(owedSum, 0);
     });
 
+    // Regression test for github.com/sharneng/spliit2go/issues/20: a
+    // real group had SplitMode.evenly expenses whose ExpenseShare.shares
+    // were non-uniform (e.g. 100/100/200, apparently left over from
+    // switching split modes in the web app's UI) -- treating those as
+    // real weights (the way byShares/byPercentage correctly do) split
+    // the expense unevenly and threw the computed balance off by tens of
+    // dollars against the web/iOS app's own (correctly equal-split)
+    // result for the same group. Evenly must split equally per included
+    // participant regardless of whatever's actually stored in shares.
+    test('evenly split ignores non-uniform shares values (issue #20)', () {
+      final expense = Expense(
+        id: 'e1',
+        groupId: 'g1',
+        title: 'test',
+        amountCents: 33400,
+        paidBy: 'alex',
+        paidFor: const [
+          ExpenseShare(participantId: 'bea', shares: 100),
+          ExpenseShare(participantId: 'alex', shares: 100),
+          ExpenseShare(participantId: 'cid', shares: 200),
+        ],
+        splitMode: SplitMode.evenly,
+        date: DateTime.utc(2026, 9, 16),
+      );
+
+      final balances = computeBalances(participants, [expense]);
+      final byId = {for (final b in balances) b.participantId: b.netCents};
+
+      // A true equal three-way split of $334.00 is ~$111.33 each
+      // (largest-remainder rounding settles the odd cent on whichever
+      // participant the tie-break lands on -- not asserted exactly
+      // here), NOT weighted 100/100/200, which would have put Cid at
+      // exactly double what Alex/Bea owed -- the actual bug reported in
+      // #20.
+      expect(byId['bea'], inInclusiveRange(-11134, -11133));
+      expect(byId['cid'], inInclusiveRange(-11134, -11133));
+      // The old (buggy) weighted math put Cid at roughly -16700 (double
+      // Bea's share) -- assert we're nowhere near that.
+      expect((byId['bea']! - byId['cid']!).abs(), lessThanOrEqualTo(1));
+      expect(byId['alex'], greaterThan(0));
+      final owedSum = balances.fold<int>(0, (sum, b) => sum + b.netCents);
+      expect(owedSum, 0);
+    });
+
     test('byAmount split uses each share as exact cents, not a proportion', () {
       final expense = Expense(
         id: 'e2',
