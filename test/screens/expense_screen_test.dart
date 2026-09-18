@@ -379,6 +379,14 @@ void main() {
       final cidTile =
           tester.widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, 'Cid'));
       expect(cidTile.value, isFalse);
+      // issue #35 probe: alex/bea WERE in the existing expense's paidFor
+      // -- should come up checked.
+      final alexTile =
+          tester.widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, 'Alex'));
+      expect(alexTile.value, isTrue, reason: 'Alex was in paidFor');
+      final beaTile =
+          tester.widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, 'Bea'));
+      expect(beaTile.value, isTrue, reason: 'Bea was in paidFor');
     });
 
     // Regression test for issue #18's edit-mode side: a byPercentage
