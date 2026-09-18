@@ -652,6 +652,13 @@ void main() {
 
       expect(await db.defaultSplitFor('g1'), isNotNull);
 
+      // Fully tear down the first screen's widget tree (and its
+      // now-history-less Navigator) before pumping a second MaterialApp
+      // -- otherwise Flutter's element reconciliation reuses the
+      // existing Navigator element instead of creating a fresh one, and
+      // rebuilding it after its only route was just popped crashes.
+      await tester.pumpWidget(const SizedBox());
+
       // Re-open the screen for a brand-new expense in the same group.
       await pumpScreen(tester, db);
 
