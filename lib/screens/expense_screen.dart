@@ -635,9 +635,22 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 // segments crammed into the row, the extra check icon
                 // pushed a label like "Percent" onto 3 lines (issue #32).
                 showSelectedIcon: false,
-                onSelectionChanged: (selection) => setState(() {
-                  _splitMode = selection.first;
-                }),
+                onSelectionChanged: (selection) {
+                  // Switching to Evenly removes every per-participant
+                  // number field from the tree (issue #36) -- if one of
+                  // them still had focus, Flutter has to send focus
+                  // *somewhere* when its element is disposed, and left
+                  // to its own traversal heuristics it jumped back to
+                  // whichever field had focus before that (Amount or
+                  // Title), which then auto-scrolled the form back up to
+                  // show it. Unfocusing first (rather than letting focus
+                  // land on the just-tapped SegmentedButton itself, or
+                  // relying on Flutter's fallback) means no field is
+                  // focused when the rebuild happens, so there's nothing
+                  // to scroll to.
+                  FocusScope.of(context).unfocus();
+                  setState(() => _splitMode = selection.first);
+                },
               ),
               const SizedBox(height: 4),
               for (final p in widget.group.participants) _paidForRow(p),

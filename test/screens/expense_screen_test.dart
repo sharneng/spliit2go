@@ -774,4 +774,35 @@ void main() {
     // 100 - (33.3 + 1 + 1, the other two rows' unchanged "1" default) = 64.7
     expect(find.textContaining('64.7% still to allocate'), findsOneWidget);
   });
+
+  // issue #36: switching to Evenly removes every per-participant number
+  // field from the tree. If one of them had focus, Flutter needs
+  // somewhere to send it -- left to its own traversal heuristics, it
+  // jumped back to a field like Amount or Title, auto-scrolling the form
+  // back up to show it. Unfocusing before the mode switch means nothing
+  // is focused afterward, so there's nothing to scroll to.
+  testWidgets(
+      'switching to Evenly while a "Paid for" field has focus clears focus '
+      'instead of jumping elsewhere', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await pumpScreen(tester, db);
+
+    await fillCommonFields(tester, amount: '90');
+    await selectSplitMode(tester, 'Shares');
+
+    final sharesField = find.byType(TextFormField).at(2);
+    await tester.tap(sharesField);
+    await tester.pumpAndSettle();
+    // A field being focused means it's connected to the platform text
+    // input system -- the standard way widget tests observe focus.
+    expect(tester.testTextInput.hasAnyClients, isTrue, reason: 'field should be focused');
+
+    await selectSplitMode(tester, 'Evenly');
+
+    // Nothing should have picked up focus in its place -- not the field
+    // itself (it's gone), and not Title/Amount either (the actual
+    // symptom reported in issue #36).
+    expect(tester.testTextInput.hasAnyClients, isFalse);
+  });
 }
