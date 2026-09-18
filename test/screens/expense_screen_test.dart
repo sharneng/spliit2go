@@ -28,6 +28,11 @@ void main() {
       httpClient: MockClient((req) async => throw Exception('offline')),
     );
     final outbox = Outbox(db, client);
+    // Mirrors real usage: this screen is only ever reached from
+    // GroupScreen, which has already cached the group by the time it's
+    // opened -- needed here so the remembered-default-split feature
+    // (issue #29) has a Groups row to write to/read from.
+    await db.cacheGroup(group);
     await tester.pumpWidget(MaterialApp(
       home: ExpenseScreen(
         client: client,
