@@ -379,8 +379,11 @@ void main() {
       final cidTile =
           tester.widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, 'Cid'));
       expect(cidTile.value, isFalse);
-      // issue #35 probe: alex/bea WERE in the existing expense's paidFor
-      // -- should come up checked.
+      // issue #35: alex/bea WERE in the existing expense's paidFor --
+      // should come up checked, not just Cid (excluded) coming up
+      // unchecked. This is the ExpenseScreen-level half of the
+      // regression; spliit_client_test.dart covers the SpliitClient
+      // parsing bug that actually caused it.
       final alexTile =
           tester.widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, 'Alex'));
       expect(alexTile.value, isTrue, reason: 'Alex was in paidFor');

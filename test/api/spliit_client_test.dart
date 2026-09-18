@@ -636,6 +636,14 @@ void main() {
   });
 
   group('SpliitClient.fetchExpense', () {
+    // The `groups.expenses.get` (singular) response shape is the raw
+    // Prisma row, not the same shape `groups.expenses.list` selects --
+    // `paidBy` comes back as a nested {id, name} object (a Prisma
+    // belongsTo `include`) and each `paidFor` row comes back with a flat
+    // `participantId` string column, not a `participant` key at all
+    // (confirmed against spliit-web's src/lib/api.ts `getExpense`). This
+    // fixture mirrors that real shape -- see issue #35's regression
+    // below for why that distinction matters.
     test('fetches and parses a single expense by id', () async {
       http.Request? captured;
       final body = jsonEncode([
@@ -647,9 +655,9 @@ void main() {
                   'id': 'e1',
                   'title': 'Hotel',
                   'amount': 10000,
-                  'paidBy': 'p1',
+                  'paidBy': {'id': 'p1', 'name': 'Alex'},
                   'paidFor': [
-                    {'participant': 'p1', 'shares': 1},
+                    {'participantId': 'p1', 'shares': 1},
                   ],
                   'splitMode': 'EVENLY',
                   'category': 0,
@@ -675,8 +683,53 @@ void main() {
 
       expect(expense.id, 'e1');
       expect(expense.title, 'Hotel');
+      expect(expense.paidBy, 'p1');
       expect(expense.recurrenceRule, RecurrenceRule.weekly);
       expect(captured!.url.toString(), contains('groups.expenses.get'));
+    });
+
+    // Regression test for issue #35: before the fix, a paidFor row shaped
+    // this way (the real `groups.expenses.get` shape -- see above) parsed
+    // to participantId "null" for every entry, since ExpenseShare.fromJson
+    // only ever looked at a `participant` key. That silently matched no
+    // real participant, so ExpenseScreen's edit mode came up with every
+    // "Paid for" checkbox unchecked no matter what the expense actually
+    // said.
+    test("parses paidFor's flat participantId column (issue #35)", () async {
+      final body = jsonEncode([
+        {
+          'result': {
+            'data': {
+              'json': {
+                'expense': {
+                  'id': 'e1',
+                  'title': 'Hotel',
+                  'amount': 10000,
+                  'paidBy': {'id': 'p1', 'name': 'Alex'},
+                  'paidFor': [
+                    {'participantId': 'p1', 'shares': 1},
+                    {'participantId': 'p2', 'shares': 1},
+                  ],
+                  'splitMode': 'EVENLY',
+                  'category': 0,
+                  'notes': '',
+                  'expenseDate': '2026-09-16T00:00:00.000Z',
+                  'isReimbursement': false,
+                  'recurrenceRule': 'NONE',
+                },
+              },
+            },
+          },
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+
+      final expense = await client.fetchExpense(groupId: 'g1', expenseId: 'e1');
+
+      expect(expense.paidFor.map((s) => s.participantId).toSet(), {'p1', 'p2'});
     });
 
     test('throws when the expense is not found', () async {

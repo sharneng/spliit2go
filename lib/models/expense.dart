@@ -79,8 +79,24 @@ class ExpenseShare {
 
   Map<String, dynamic> toJson() => {'participant': participantId, 'shares': shares};
 
+  /// Tolerates three different shapes for who a share belongs to,
+  /// because Spliit's own server doesn't send one consistent shape
+  /// (issue #35): `groups.expenses.list` (fetchExpenses) selects a
+  /// nested `participant: {id, name}` object; the create/update form
+  /// payload (and this class's own [toJson]) uses a bare `participant`
+  /// id string; but `groups.expenses.get` (fetchExpense, singular --
+  /// the one edit mode uses) does a plain Prisma `include: { paidFor:
+  /// true }` with no field selection, which returns the *raw join-table
+  /// row* instead: `{participantId: "...", shares: n}`, no `participant`
+  /// key at all (confirmed against spliit-web's src/lib/api.ts
+  /// `getExpense`/`getGroupExpenses`). Before this fix, parsing that
+  /// third shape via [extractParticipantId]`(json['participant'])` fed
+  /// `null` in and got back the *string* `"null"` (`null.toString()`
+  /// doesn't throw) -- which then matched no real participant, so every
+  /// "Paid for" checkbox in edit mode came up unchecked regardless of
+  /// the expense's actual split.
   factory ExpenseShare.fromJson(Map<String, dynamic> json) => ExpenseShare(
-        participantId: extractParticipantId(json['participant']),
+        participantId: extractParticipantId(json['participant'] ?? json['participantId']),
         shares: (json['shares'] as num).round(),
       );
 }
