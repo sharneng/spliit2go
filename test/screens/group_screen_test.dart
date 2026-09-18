@@ -8,7 +8,10 @@ import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
+import 'package:spliit2go/screens/activity_screen.dart';
+import 'package:spliit2go/screens/balances_screen.dart';
 import 'package:spliit2go/screens/group_screen.dart';
+import 'package:spliit2go/screens/stats_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
 import 'package:spliit2go/widgets/category_icon.dart';
 
@@ -231,5 +234,124 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  group('bottom-nav tabs (issue #38)', () {
+    const cachedGroup = Group(
+      id: 'g1',
+      name: 'Banff Trip',
+      currency: '\$',
+      participants: [Participant(id: 'p1', name: 'Ken')],
+    );
+
+    Future<void> pumpGroupScreen(WidgetTester tester, AppDatabase db) async {
+      await db.cacheGroup(cachedGroup);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => throw Exception('offline')),
+      );
+      final outbox = Outbox(db, client);
+      await tester.pumpWidget(MaterialApp(
+        home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('shows all four destinations in the bottom nav bar', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpGroupScreen(tester, db);
+
+      expect(find.byType(NavigationDestination), findsNWidgets(4));
+      expect(find.text('Expenses'), findsOneWidget);
+      expect(find.text('Balance'), findsOneWidget);
+      expect(find.text('Stats'), findsOneWidget);
+      expect(find.text('Activities'), findsOneWidget);
+    });
+
+    testWidgets('the add button and search icon only show on the Expenses tab', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpGroupScreen(tester, db);
+
+      expect(find.byType(FloatingActionButton), findsOneWidget);
+      expect(find.byIcon(Icons.search), findsOneWidget);
+
+      await tester.tap(find.text('Balance'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(FloatingActionButton), findsNothing);
+      expect(find.byIcon(Icons.search), findsNothing);
+    });
+
+    testWidgets('tapping Balance shows BalancesScreen embedded, without pushing a new route',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpGroupScreen(tester, db);
+
+      await tester.tap(find.text('Balance'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BalancesScreen), findsOneWidget);
+      // Embedded (not pushed): still just the one GroupScreen AppBar
+      // titled with the group's name, not a second "Balances" AppBar.
+      expect(find.text('Balances'), findsNothing);
+      expect(find.text('Banff Trip'), findsOneWidget);
+    });
+
+    testWidgets('tapping Stats shows StatsScreen embedded, without pushing a new route',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpGroupScreen(tester, db);
+
+      await tester.tap(find.text('Stats'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(StatsScreen), findsOneWidget);
+      expect(find.text('Banff Trip'), findsOneWidget);
+    });
+
+    testWidgets('tapping Activities shows ActivityScreen embedded, without pushing a new route',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpGroupScreen(tester, db);
+
+      await tester.tap(find.text('Activities'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ActivityScreen), findsOneWidget);
+      expect(find.text('Banff Trip'), findsOneWidget);
+    });
+
+    testWidgets('tapping the search icon on the Expenses tab shows the placeholder message',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpGroupScreen(tester, db);
+
+      await tester.tap(find.byIcon(Icons.search));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Search is coming soon (issue #39).'), findsOneWidget);
+    });
+
+    testWidgets('switching back to Expenses shows the expense list again', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpGroupScreen(tester, db);
+
+      await tester.tap(find.text('Stats'));
+      await tester.pumpAndSettle();
+      expect(find.byType(StatsScreen), findsOneWidget);
+
+      await tester.tap(find.text('Expenses'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(StatsScreen), findsNothing);
+      expect(find.byType(FloatingActionButton), findsOneWidget);
+    });
   });
 }

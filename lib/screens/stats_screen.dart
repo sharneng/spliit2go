@@ -32,6 +32,12 @@ class StatsScreen extends StatefulWidget {
   final Group group;
   final String? activeUserId;
 
+  /// See BalancesScreen's own doc comment on its identical field --
+  /// same reasoning (issue #38): true embeds just the content, with no
+  /// Scaffold/AppBar of its own, for use as one of GroupScreen's tab
+  /// bodies.
+  final bool embedded;
+
   const StatsScreen({
     super.key,
     required this.client,
@@ -39,6 +45,7 @@ class StatsScreen extends StatefulWidget {
     required this.outbox,
     required this.group,
     required this.activeUserId,
+    this.embedded = false,
   });
 
   @override
@@ -121,10 +128,9 @@ class _StatsScreenState extends State<StatsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Stats')),
-      body: _loading ? const Center(child: CircularProgressIndicator()) : _body(),
-    );
+    final body = _loading ? const Center(child: CircularProgressIndicator()) : _body();
+    if (widget.embedded) return body;
+    return Scaffold(appBar: AppBar(title: const Text('Stats')), body: body);
   }
 
   Widget _body() {

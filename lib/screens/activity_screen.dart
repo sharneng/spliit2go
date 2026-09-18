@@ -12,7 +12,7 @@ import 'expense_screen.dart';
 /// and when. Read-only and **online-only**: unlike expenses, activity
 /// entries aren't cached locally or queued offline, since there's
 /// nothing to add from this device -- it's purely a view of history the
-/// server already recorded. Reached from GroupScreen's AppBar.
+/// server already recorded. One of GroupScreen's four tabs (issue #38).
 ///
 /// Paginates via [SpliitClient.fetchActivities] the same way the web
 /// app's infinite-scroll list does (newest first, 20 per page), but as
@@ -25,12 +25,19 @@ class ActivityScreen extends StatefulWidget {
   final Outbox outbox;
   final Group group;
 
+  /// See BalancesScreen's own doc comment on its identical field --
+  /// same reasoning (issue #38): true embeds just the content, with no
+  /// Scaffold/AppBar of its own, for use as one of GroupScreen's tab
+  /// bodies.
+  final bool embedded;
+
   const ActivityScreen({
     super.key,
     required this.client,
     required this.db,
     required this.outbox,
     required this.group,
+    this.embedded = false,
   });
 
   @override
@@ -153,10 +160,9 @@ class _ActivityScreenState extends State<ActivityScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Activity')),
-      body: _body(),
-    );
+    final body = _body();
+    if (widget.embedded) return body;
+    return Scaffold(appBar: AppBar(title: const Text('Activity')), body: body);
   }
 
   Widget _body() {

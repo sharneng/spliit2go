@@ -53,6 +53,13 @@ class _GroupScreenState extends State<GroupScreen> {
   String? _error;
   String? _activeUserId;
 
+  // Which of the four bottom-nav tabs is showing (issue #38 -- replaces
+  // the old design where Balances/Stats/Activity were each a full
+  // pushed screen reached from an AppBar icon, which by the fourth icon
+  // left no room for the group's own name). 0 = Expenses, matching this
+  // screen's original default (and only) content.
+  int _tabIndex = 0;
+
   // Falls back to just "General" (Spliit's own default, id 0) until/unless
   // a live categories.list succeeds -- same fallback expense_screen.dart
   // uses, and for the same reason: offline or a slow first load shouldn't
@@ -182,25 +189,22 @@ class _GroupScreenState extends State<GroupScreen> {
       appBar: AppBar(
         title: Text(_group?.name ?? 'spliit2go'),
         actions: [
+          // Only on the Expenses tab -- there's nothing to search on the
+          // other three, same reasoning spliit-ios's own search tab
+          // uses (it only ever searches expenses). Just a placeholder
+          // for now (issue #38 explicitly deferred the real search
+          // feature to issue #39): tapping it says so rather than doing
+          // nothing with no feedback at all.
+          if (_tabIndex == 0)
+            IconButton(
+              icon: const Icon(Icons.search),
+              tooltip: 'Search',
+              onPressed: _group == null ? null : _searchPlaceholder,
+            ),
           IconButton(
             icon: const Icon(Icons.person_outline),
             tooltip: 'Active user',
             onPressed: _group == null ? null : _pickActiveUser,
-          ),
-          IconButton(
-            icon: const Icon(Icons.account_balance_wallet_outlined),
-            tooltip: 'Balances',
-            onPressed: _group == null ? null : _openBalances,
-          ),
-          IconButton(
-            icon: const Icon(Icons.bar_chart_outlined),
-            tooltip: 'Stats',
-            onPressed: _group == null ? null : _openStats,
-          ),
-          IconButton(
-            icon: const Icon(Icons.history),
-            tooltip: 'Activity',
-            onPressed: _group == null ? null : _openActivity,
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
@@ -209,14 +213,110 @@ class _GroupScreenState extends State<GroupScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        child: _body(),
+      body: _tabBody(),
+      // Adding an expense is only meaningful from the Expenses tab --
+      // matches spliit-ios's own toolbarContent, which shows its "Add
+      // expense" button only `if tab == .expenses`.
+      floatingActionButton: _tabIndex == 0
+          ? FloatingActionButton(
+              onPressed: _group == null ? null : _openAddExpense,
+              child: const Icon(Icons.add),
+            )
+          : null,
+      // Balances/Stats/Activity used to each be a full screen reached by
+      // pushing on top of this one from an AppBar icon (issue #38) --
+      // by the fourth icon, those buttons left no room for the group's
+      // own name in the title bar. Now they're tabs of this same
+      // screen, spliit-ios style (GroupDetailView.swift's own TabView:
+      // Expenses/Balances/Stats, plus a fourth tab -- Information there,
+      // Activities here, per what was actually asked for in this issue).
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tabIndex,
+        onDestinationSelected: (i) => setState(() => _tabIndex = i),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long),
+            label: 'Expenses',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.account_balance_wallet_outlined),
+            selectedIcon: Icon(Icons.account_balance_wallet),
+            label: 'Balance',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.bar_chart_outlined),
+            selectedIcon: Icon(Icons.bar_chart),
+            label: 'Stats',
+          ),
+          NavigationDestination(icon: Icon(Icons.history), label: 'Activities'),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _group == null ? null : _openAddExpense,
-        child: const Icon(Icons.add),
-      ),
+    );
+  }
+
+  /// This tab's content, resolved fresh on every switch rather than kept
+  /// alive offscreen (no IndexedStack) -- deliberately: it's what
+  /// Balances/Stats/Activity already did as pushed screens (each one's
+  /// own initState reloaded from the local cache on every visit), and
+  /// keeping that "always current when you look at it" behavior across
+  /// the push-to-tab conversion mattered more here than preserving
+  /// scroll position across tab switches. Each embedded screen is cheap
+  /// to rebuild -- everything it reads comes straight from the already-
+  /// local db cache, no network round-trip required just to redraw.
+  Widget _tabBody() {
+    if (_group == null) {
+      return _tabIndex == 0 ? RefreshIndicator(onRefresh: _refresh, child: _body()) : const SizedBox.shrink();
+    }
+    switch (_tabIndex) {
+      case 0:
+        return RefreshIndicator(onRefresh: _refresh, child: _body());
+      case 1:
+        return BalancesScreen(
+          key: ValueKey('balances-${_group!.id}'),
+          client: widget.client,
+          db: widget.db,
+          outbox: widget.outbox,
+          group: _group!,
+          embedded: true,
+          // A settlement marked as paid here is a new (possibly still-
+          // pending) expense -- the old push-based _openBalances used to
+          // pick this up simply by reloading once the push returned;
+          // embedded, there's no "returning" to hook, so BalancesScreen
+          // calls this explicitly once its own settle-up flow finishes.
+          onExpenseChanged: _loadFromCache,
+        );
+      case 2:
+        return StatsScreen(
+          key: ValueKey('stats-${_group!.id}'),
+          client: widget.client,
+          db: widget.db,
+          outbox: widget.outbox,
+          group: _group!,
+          activeUserId: _activeUserId,
+          embedded: true,
+        );
+      case 3:
+        return ActivityScreen(
+          key: ValueKey('activity-${_group!.id}'),
+          client: widget.client,
+          db: widget.db,
+          outbox: widget.outbox,
+          group: _group!,
+          embedded: true,
+        );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  /// Issue #38 explicitly scoped the real search feature to a separate
+  /// issue (#39) -- this button exists now so the affordance is in
+  /// place, but tapping it just says so instead of silently doing
+  /// nothing.
+  void _searchPlaceholder() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Search is coming soon (issue #39).')),
     );
   }
 
@@ -270,55 +370,11 @@ class _GroupScreenState extends State<GroupScreen> {
     );
   }
 
-  Future<void> _openBalances() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => BalancesScreen(
-          client: widget.client,
-          db: widget.db,
-          outbox: widget.outbox,
-          group: _group!,
-        ),
-      ),
-    );
-    // A settlement marked as paid on the balances screen is a new
-    // (possibly still-pending) expense -- reflect it in this screen's
-    // list too once we're back.
-    await _loadFromCache();
-  }
-
   /// Opens group settings (rename, currency, participants). Unlike the
   /// balances screen, GroupSettingsScreen returns the fresh [Group]
   /// straight from Navigator.pop on a successful save (or null if
   /// nothing changed / the user backed out), so this can just adopt it
   /// directly instead of re-reading the cache.
-  Future<void> _openStats() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => StatsScreen(
-          client: widget.client,
-          db: widget.db,
-          outbox: widget.outbox,
-          group: _group!,
-          activeUserId: _activeUserId,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openActivity() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ActivityScreen(
-          client: widget.client,
-          db: widget.db,
-          outbox: widget.outbox,
-          group: _group!,
-        ),
-      ),
-    );
-  }
-
   Future<void> _openGroupSettings() async {
     final updated = await Navigator.of(context).push<Group>(
       MaterialPageRoute(

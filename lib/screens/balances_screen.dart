@@ -28,12 +28,32 @@ class BalancesScreen extends StatefulWidget {
   final Outbox outbox;
   final Group group;
 
+  /// When true, renders just the balances content with no [Scaffold]/
+  /// [AppBar] of its own -- for embedding as a tab body inside
+  /// GroupScreen's own bottom-navigation Scaffold (issue #38), which
+  /// supplies the persistent title bar all four tabs now share. `false`
+  /// (the default) keeps this screen's original standalone
+  /// pushed-full-screen behavior, still used by anything that hasn't
+  /// been converted to a tab.
+  final bool embedded;
+
+  /// Notified after a settlement is recorded and this screen's own
+  /// local reload finishes -- lets GroupScreen refresh its own
+  /// (separately held) expense list, since a "mark as paid" settlement
+  /// is a new expense that GroupScreen's Expenses tab wouldn't
+  /// otherwise know about until its own next fetch. Only meaningful
+  /// when [embedded]; a standalone pushed screen instead relies on
+  /// GroupScreen reloading when the push returns.
+  final VoidCallback? onExpenseChanged;
+
   const BalancesScreen({
     super.key,
     required this.client,
     required this.db,
     required this.outbox,
     required this.group,
+    this.embedded = false,
+    this.onExpenseChanged,
   });
 
   @override
@@ -133,15 +153,14 @@ class _BalancesScreenState extends State<BalancesScreen> {
     if (!mounted) return;
     setState(() => _settlingKey = null);
     await _load();
+    widget.onExpenseChanged?.call();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Balances')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
+    final body = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
                 children: [
@@ -194,7 +213,8 @@ class _BalancesScreenState extends State<BalancesScreen> {
                     ),
                 ],
               ),
-            ),
-    );
+            );
+    if (widget.embedded) return body;
+    return Scaffold(appBar: AppBar(title: const Text('Balances')), body: body);
   }
 }
