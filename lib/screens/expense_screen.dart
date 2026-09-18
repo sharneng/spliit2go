@@ -726,7 +726,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   Widget _paidForRow(Participant p) {
     final included = _includedInSplit[p.id] ?? false;
-    final preview = included ? _livePreviewAmounts()?[p.id] : null;
+    final preview = included ? (_livePreviewAmounts()?[p.id]) : null;
     return Row(
       children: [
         Expanded(

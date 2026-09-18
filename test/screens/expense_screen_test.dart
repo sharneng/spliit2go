@@ -562,9 +562,11 @@ void main() {
   });
 
   // issue #29: "Paid for" UX rework (segmented control, select all/none,
-  // live preview, footer hint, remembered default split).
-  group('issue #29: "Paid for" UX rework', () {
-    testWidgets('"Select all"/"Select none" toggles every participant and flips its own label',
+  // live preview, footer hint, remembered default split). Not wrapped in
+  // its own group() -- this file's module-level `group` fixture (a
+  // Group instance) shadows the flutter_test group() function for the
+  // rest of main()'s body once declared, same as everywhere else here.
+  testWidgets('"Select all"/"Select none" toggles every participant and flips its own label',
         (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
@@ -656,5 +658,4 @@ void main() {
       expect(tester.widget<TextFormField>(reopenedFields.at(3)).controller!.text, '1');
       expect(tester.widget<TextFormField>(reopenedFields.at(4)).controller!.text, '1');
     });
-  });
 }
