@@ -248,7 +248,17 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         // to at most 2 decimal places with no trailing zeros so "150"
         // redisplays as "1.5", not "1.50" or "150".
         SplitMode.byShares || SplitMode.byPercentage => _trimTrailingZeros(share.shares / 100),
-        _ => share.shares.toString(),
+        // Evenly's per-participant "shares" is just an equal weight with
+        // no meaningful decimal value to carry over -- and, per
+        // spliit-web's own expense-form.tsx, it's stored on the wire as
+        // the literal integer 100 for every participant, not 1. Taking
+        // that raw value here (issue #34 follow-up) meant switching this
+        // *editing* expense from Evenly to Shares/Percentage showed "100"
+        // in every field instead of the "1" a brand-new expense starts
+        // with. Evenly's stored value isn't shown while still in Evenly
+        // mode, so there's nothing to prefill -- leave the controller at
+        // its constructor default ('1') instead.
+        SplitMode.evenly => '1',
       };
     }
 

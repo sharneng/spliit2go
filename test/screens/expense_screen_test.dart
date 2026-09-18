@@ -437,6 +437,53 @@ void main() {
       expect(find.text('5000'), findsNothing);
     });
 
+    // Regression test for issue #34's reopened follow-up: a real
+    // spliit-web-created Evenly expense stores shares:100 per participant
+    // on the wire (see expense-form.tsx upstream), not 1. Prefilling the
+    // per-participant field with that raw value meant switching *this*
+    // editing expense from Evenly to Shares showed "100" instead of the
+    // "1" a brand-new expense starts with.
+    testWidgets(
+        'switching an editing expense from Evenly to Shares defaults fields to 1, '
+        'not the raw wire shares:100', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => throw Exception('offline')),
+      );
+      final outbox = Outbox(db, client);
+      final evenlyExpense = Expense(
+        id: 'e3',
+        groupId: 'g1',
+        title: 'Dinner',
+        amountCents: 6000,
+        paidBy: 'bea',
+        paidFor: const [
+          ExpenseShare(participantId: 'alex', shares: 100),
+          ExpenseShare(participantId: 'bea', shares: 100),
+        ],
+        splitMode: SplitMode.evenly,
+        date: DateTime.utc(2026, 9, 10),
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: ExpenseScreen(
+          client: client,
+          db: db,
+          outbox: outbox,
+          group: group,
+          existingExpense: evenlyExpense,
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      await selectSplitMode(tester, 'Shares');
+
+      expect(find.text('100'), findsNothing);
+      expect(find.text('1'), findsNWidgets(2));
+    });
+
     testWidgets('saving calls SpliitClient.updateExpense, not createExpense/insertPending',
         (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
