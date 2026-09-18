@@ -681,8 +681,14 @@ void main() {
     await fillCommonFields(tester, amount: '90');
     await selectSplitMode(tester, 'Shares');
 
-    final field = tester.widget<TextFormField>(find.byType(TextFormField).at(2));
-    expect(field.textAlign, TextAlign.right);
+    // TextFormField doesn't expose textAlign as a public field itself --
+    // it's forwarded into the TextField it builds internally, so check
+    // that descendant instead.
+    final textField = tester.widget<TextField>(find.descendant(
+      of: find.byType(TextFormField).at(2),
+      matching: find.byType(TextField),
+    ));
+    expect(textField.textAlign, TextAlign.right);
   });
 
   // issue #34: Shares and Percentage should both accept a decimal point,
