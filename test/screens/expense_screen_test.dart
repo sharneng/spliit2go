@@ -670,4 +670,91 @@ void main() {
       expect(tester.widget<TextFormField>(reopenedFields.at(3)).controller!.text, '1');
       expect(tester.widget<TextFormField>(reopenedFields.at(4)).controller!.text, '1');
     });
+
+  // issue #33: the per-participant split value field should be
+  // right-aligned in every non-evenly mode.
+  testWidgets('the per-participant split value field is right-aligned', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await pumpScreen(tester, db);
+
+    await fillCommonFields(tester, amount: '90');
+    await selectSplitMode(tester, 'Shares');
+
+    final field = tester.widget<TextFormField>(find.byType(TextFormField).at(2));
+    expect(field.textAlign, TextAlign.right);
+  });
+
+  // issue #34: Shares and Percentage should both accept a decimal point,
+  // not just whole numbers -- and (see _buildPaidFor's doc comment) the
+  // wire value is the typed decimal x100, the same transform
+  // spliit-web's own form applies, so decimal precision survives the trip.
+  testWidgets('by-shares split accepts a decimal number of shares', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await pumpScreen(tester, db);
+
+    await fillCommonFields(tester, amount: '90');
+    await selectSplitMode(tester, 'Shares');
+
+    final splitFields = find.byType(TextFormField);
+    await tester.enterText(splitFields.at(2), '1.5'); // alex
+    await tester.enterText(splitFields.at(3), '1'); // bea
+    await tester.enterText(splitFields.at(4), '1'); // cid
+
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    final pending = await db.pendingExpenses();
+    expect(pending, hasLength(1));
+    final expense = db.rowToExpense(pending.single);
+    final byId = {for (final s in expense.paidFor) s.participantId: s.shares};
+    // 1.5 x100 = 150 -- the same x100 scale Percentage already used, now
+    // applied to Shares too so a fractional value survives on the wire.
+    expect(byId, {'alex': 150, 'bea': 100, 'cid': 100});
+  });
+
+  testWidgets('by-percentage split accepts decimal percentages that sum to exactly 100',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await pumpScreen(tester, db);
+
+    await fillCommonFields(tester, amount: '90');
+    await selectSplitMode(tester, 'Percent');
+
+    final splitFields = find.byType(TextFormField);
+    await tester.enterText(splitFields.at(2), '33.3');
+    await tester.enterText(splitFields.at(3), '33.3');
+    await tester.enterText(splitFields.at(4), '33.4'); // 33.3+33.3+33.4 = 100.0 exactly
+
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    final pending = await db.pendingExpenses();
+    expect(pending, hasLength(1));
+    final expense = db.rowToExpense(pending.single);
+    final byId = {for (final s in expense.paidFor) s.participantId: s.shares};
+    // Basis points: 3330 + 3330 + 3340 = 10000 exactly.
+    expect(byId, {'alex': 3330, 'bea': 3330, 'cid': 3340});
+  });
+
+  testWidgets('by-percentage footer reports a fractional "still to allocate" amount',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await pumpScreen(tester, db);
+
+    await fillCommonFields(tester, amount: '90');
+    await selectSplitMode(tester, 'Percent');
+
+    final splitFields = find.byType(TextFormField);
+    await tester.enterText(splitFields.at(2), '33.3');
+    await tester.pumpAndSettle();
+
+    // 100 - (33.3 + 1 + 1, the other two rows' unchanged "1" default) = 64.7
+    expect(find.textContaining('64.7% still to allocate'), findsOneWidget);
+  });
 }

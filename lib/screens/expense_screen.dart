@@ -210,8 +210,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         if (value == null) continue;
         _splitControllers[p.id]!.text = switch (split.splitMode) {
           // Inverse of the x100 done in _buildPaidFor -- same conversion
-          // _prefillFrom uses for an edited expense's percentage shares.
-          SplitMode.byPercentage => (value / 100).round().toString(),
+          // _prefillFrom uses for an edited expense's Shares/Percentage
+          // values (issue #34: both are x100-scaled on the wire, to
+          // allow decimal precision -- see _buildPaidFor's doc comment).
+          SplitMode.byShares || SplitMode.byPercentage => _trimTrailingZeros(value / 100),
           _ => value.toString(),
         };
       }
@@ -241,9 +243,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       if (controller == null) continue;
       controller.text = switch (e.splitMode) {
         SplitMode.byAmount => (share.shares / 100).toStringAsFixed(2),
-        // Basis points on the wire -> whole percent in the UI -- inverse
-        // of the x100 done in _buildPaidFor.
-        SplitMode.byPercentage => (share.shares / 100).round().toString(),
+        // Shares/Percentage are both x100 on the wire (issue #34) --
+        // inverse of the x100 done in _buildPaidFor, formatted back down
+        // to at most 2 decimal places with no trailing zeros so "150"
+        // redisplays as "1.5", not "1.50" or "150".
+        SplitMode.byShares || SplitMode.byPercentage => _trimTrailingZeros(share.shares / 100),
         _ => share.shares.toString(),
       };
     }
@@ -303,28 +307,51 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   /// The typed value for [p] in the current non-evenly split mode, or
-  /// null if it isn't currently a number -- shares/percent are whole
-  /// numbers, amount is a decimal dollar figure, matching [_buildPaidFor]'s
-  /// own parsing so the live footer/preview never disagree with what
-  /// Save would actually do.
-  num? _typedValue(Participant p) {
-    final text = _splitControllers[p.id]!.text.trim();
-    return _splitMode == SplitMode.byAmount ? double.tryParse(text) : int.tryParse(text);
+  /// null if it isn't currently a number -- every non-evenly mode takes
+  /// a decimal now (issue #34), matching [_buildPaidFor]'s own parsing
+  /// so the live footer/preview never disagree with what Save would
+  /// actually do.
+  double? _typedValue(Participant p) =>
+      double.tryParse(_splitControllers[p.id]!.text.trim());
+
+  /// Rounded basis points (percentage x 100) for [p]'s typed value --
+  /// the exact integer [_buildPaidFor] sends on the wire, and the same
+  /// thing spliit-web's own expenseFormSchema sums to validate a
+  /// BY_PERCENTAGE split (must total 10000). Validating in basis points
+  /// rather than summing raw decimals avoids floating-point drift (e.g.
+  /// three 33.33...s never quite summing to exactly 100.0).
+  int? _percentageBasisPoints(Participant p) {
+    final value = _typedValue(p);
+    return value == null ? null : (value * 100).round();
+  }
+
+  /// Formats a decimal to at most 2 places with no trailing zeros (or
+  /// trailing decimal point) -- e.g. 1.5 stays "1.5", 2.0 becomes "2",
+  /// 33.3 stays "33.3". Used to redisplay a Shares/Percentage wire value
+  /// (issue #34: both are x100-scaled to allow decimal precision -- see
+  /// [_buildPaidFor]) and in the footer's "still to allocate" hint.
+  String _trimTrailingZeros(double value) {
+    var text = value.toStringAsFixed(2);
+    if (text.contains('.')) {
+      text = text.replaceFirst(RegExp(r'0+$'), '');
+      text = text.replaceFirst(RegExp(r'\.$'), '');
+    }
+    return text;
   }
 
   /// How much of the total is still unaccounted for, in the field's own
   /// unit (percentage points, or dollars) -- null for Evenly/Shares,
   /// which have no "must sum to X" concept (issue #29 section 6 step 2).
   /// Positive means "still to allocate", negative means "over".
-  num? _unallocated() {
+  double? _unallocated() {
     if (_splitMode == SplitMode.byPercentage) {
-      var total = 0;
+      var totalBasisPoints = 0;
       for (final p in _includedParticipants) {
-        final v = _typedValue(p);
-        if (v == null) return null;
-        total += v.toInt();
+        final bp = _percentageBasisPoints(p);
+        if (bp == null) return null;
+        totalBasisPoints += bp;
       }
-      return 100 - total;
+      return (10000 - totalBasisPoints) / 100;
     }
     if (_splitMode == SplitMode.byAmount) {
       final amount = double.tryParse(_amountController.text.trim());
@@ -369,8 +396,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             .map((p) => ExpenseShare(participantId: p.id, shares: 1))
             .toList()
         : _includedParticipants
-            .map((p) =>
-                ExpenseShare(participantId: p.id, shares: _typedValue(p)!.round()))
+            .map((p) => ExpenseShare(
+                participantId: p.id, shares: (_typedValue(p)! * 100).round()))
             .toList();
     return shareCentsFor(amountCents: amountCents, splitMode: _splitMode, paidFor: paidFor);
   }
@@ -386,22 +413,25 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
     if (_splitMode == SplitMode.byShares) {
       for (final p in included) {
-        final value = int.tryParse(_splitControllers[p.id]!.text.trim());
+        final value = _typedValue(p);
         if (value == null || value <= 0) {
-          return '${p.name}: enter a whole number of shares';
+          return '${p.name}: enter a number of shares';
         }
       }
       return null;
     }
 
     if (_splitMode == SplitMode.byPercentage) {
-      var total = 0;
+      var totalBasisPoints = 0;
       for (final p in included) {
-        final value = int.tryParse(_splitControllers[p.id]!.text.trim());
-        if (value == null || value < 0) return '${p.name}: enter a percentage';
-        total += value;
+        final bp = _percentageBasisPoints(p);
+        if (bp == null || bp < 0) return '${p.name}: enter a percentage';
+        totalBasisPoints += bp;
       }
-      if (total != 100) return 'Percentages must add up to 100 (currently $total)';
+      if (totalBasisPoints != 10000) {
+        return 'Percentages must add up to 100 '
+            '(currently ${_trimTrailingZeros(totalBasisPoints / 100)})';
+      }
       return null;
     }
 
@@ -434,9 +464,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final over = unallocated < 0;
       final magnitude = unallocated.abs();
       if (_splitMode == SplitMode.byPercentage) {
-        return over
-            ? '${magnitude.toStringAsFixed(0)}% over 100%.'
-            : '${magnitude.toStringAsFixed(0)}% still to allocate.';
+        final formatted = _trimTrailingZeros(magnitude);
+        return over ? '$formatted% over 100%.' : '$formatted% still to allocate.';
       }
       return over
           ? '\$${magnitude.toStringAsFixed(2)} over the total.'
@@ -752,6 +781,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             child: TextFormField(
               controller: _splitControllers[p.id],
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              textAlign: TextAlign.right,
               // Recomputes the live preview/footer on every keystroke
               // (issue #29 section 6) instead of only validating at Save.
               onChanged: (_) => setState(() {}),
@@ -778,13 +808,21 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// Evenly needs no per-participant input at all -- every included
   /// participant just gets an equal weight.
   ///
-  /// For [SplitMode.byPercentage], the UI takes/validates 0-100 whole
-  /// percentages (summing to 100) but the returned [ExpenseShare.shares]
-  /// are in basis points (percentage x 100, summing to 10000) -- that's
-  /// what Spliit's server actually expects on the wire (its
-  /// expenseFormSchema's percentageSum check), confirmed against a real
-  /// server's balance math going wrong when this app sent raw 0-100
-  /// values -- see github.com/sharneng/spliit2go/issues/18 and issue #20.
+  /// [SplitMode.byShares] and [SplitMode.byPercentage] both take a
+  /// decimal now (issue #34) and both send [ExpenseShare.shares] as the
+  /// typed value x100, rounded -- e.g. "1.5" shares -> wire 150, "33.3"%
+  /// -> wire 3330. This isn't just an internal convenience: it's the
+  /// exact transform spliit-web's own expenseFormSchema applies to every
+  /// non-BY_AMOUNT split before submitting (confirmed against
+  /// src/lib/schemas.ts and expense-form.tsx upstream) -- the same x100
+  /// scaling this app already used for Percentage (see
+  /// github.com/sharneng/spliit2go/issues/18 and issue #20) turns out to
+  /// apply to Shares too, and is what makes decimal shares/percentages
+  /// representable on the wire at all (`shares` is stored as an
+  /// integer). [_prefillFrom]/[_loadDefaultSplit] divide back by 100 to
+  /// redisplay an existing value. For [SplitMode.byPercentage]
+  /// specifically, the basis points across all included participants
+  /// must sum to exactly 10000 -- see [_percentageBasisPoints].
   List<ExpenseShare>? _buildPaidFor(int amountCents) {
     if (_splitValidationError() != null) return null;
 
@@ -792,17 +830,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     return switch (_splitMode) {
       SplitMode.evenly =>
         included.map((p) => ExpenseShare(participantId: p.id, shares: 1)).toList(),
-      SplitMode.byShares => included
+      SplitMode.byShares || SplitMode.byPercentage => included
           .map((p) => ExpenseShare(
-              participantId: p.id,
-              shares: int.parse(_splitControllers[p.id]!.text.trim())))
-          .toList(),
-      // Wire format is basis points (percentage x 100), not the raw
-      // 0-100 the user types -- see this method's doc comment.
-      SplitMode.byPercentage => included
-          .map((p) => ExpenseShare(
-              participantId: p.id,
-              shares: int.parse(_splitControllers[p.id]!.text.trim()) * 100))
+              participantId: p.id, shares: (_typedValue(p)! * 100).round()))
           .toList(),
       SplitMode.byAmount => included
           .map((p) => ExpenseShare(
