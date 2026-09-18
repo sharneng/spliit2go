@@ -602,6 +602,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   ButtonSegment(value: SplitMode.byAmount, label: Text('Amount')),
                 ],
                 selected: {_splitMode},
+                // The selected segment is already highlighted -- with 4
+                // segments crammed into the row, the extra check icon
+                // pushed a label like "Percent" onto 3 lines (issue #32).
+                showSelectedIcon: false,
                 onSelectionChanged: (selection) => setState(() {
                   _splitMode = selection.first;
                 }),
