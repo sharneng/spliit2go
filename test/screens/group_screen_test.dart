@@ -10,6 +10,7 @@ import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/group_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
+import 'package:spliit2go/widgets/category_icon.dart';
 
 void main() {
   // GroupScreen's _resolveActiveUser awaits
@@ -184,5 +185,51 @@ void main() {
       final tile = tester.widget<ListTile>(find.widgetWithText(ListTile, 'Snacks'));
       expect(tile.onTap, isNull);
     });
+  });
+
+  // Regression coverage for issue #28: each expense row leads with its
+  // category's icon (a banknote here, since this synced expense has no
+  // category set and the offline test client never resolves a real
+  // categories.list -- see _categoryFor/_loadCategories in
+  // group_screen.dart).
+  testWidgets('an expense row shows a leading category icon', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.cacheGroup(const Group(
+      id: 'g1',
+      name: 'Banff Trip',
+      currency: '\$',
+      participants: [Participant(id: 'p1', name: 'Ken')],
+    ));
+    await db.replaceServerExpenses('g1', [
+      Expense(
+        id: 'e1',
+        groupId: 'g1',
+        title: 'Coffee',
+        amountCents: 500,
+        paidBy: 'p1',
+        paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+        date: DateTime.utc(2026, 9, 16),
+      ),
+    ]);
+
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async => throw Exception('offline')),
+    );
+    final outbox = Outbox(db, client);
+
+    await tester.pumpWidget(MaterialApp(
+      home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.widgetWithText(ListTile, 'Coffee'),
+        matching: find.byType(CategoryIconGlyph),
+      ),
+      findsOneWidget,
+    );
   });
 }

@@ -12,6 +12,7 @@ import '../services/active_user.dart';
 import '../services/expense_shares.dart';
 import '../sync/outbox.dart';
 import '../widgets/currency_picker.dart';
+import '../widgets/category_icon.dart';
 
 /// Adds -- or, given [existingExpense], edits -- an expense. An expense
 /// with [Expense.isReimbursement] set is a settlement/"paid back"
@@ -530,7 +531,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 onTap: _pickCategory,
                 child: InputDecorator(
                   decoration: const InputDecoration(labelText: 'Category'),
-                  child: Text(_selectedCategory.name),
+                  child: Row(
+                    children: [
+                      CategoryIconGlyph(category: _selectedCategory, size: 24),
+                      const SizedBox(width: 8),
+                      Text(_selectedCategory.name),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -1097,6 +1104,7 @@ class _CategoryPickerState extends State<_CategoryPicker> {
                             ),
                             for (final c in section.value)
                               ListTile(
+                                leading: CategoryIconGlyph(category: c, size: 28),
                                 title: Text(c.name),
                                 trailing: c.id == widget.selectedId
                                     ? const Icon(Icons.check)

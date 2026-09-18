@@ -3,11 +3,13 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
+import '../models/category.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
 import '../services/active_user.dart';
 import '../services/settings_service.dart';
 import '../sync/outbox.dart';
+import '../widgets/category_icon.dart';
 import 'expense_screen.dart';
 import 'activity_screen.dart';
 import 'balances_screen.dart';
@@ -51,12 +53,25 @@ class _GroupScreenState extends State<GroupScreen> {
   String? _error;
   String? _activeUserId;
 
+  // Falls back to just "General" (Spliit's own default, id 0) until/unless
+  // a live categories.list succeeds -- same fallback expense_screen.dart
+  // uses, and for the same reason: offline or a slow first load shouldn't
+  // block the expense list from rendering at all, just from resolving
+  // real category icons (issue #28) until the fetch completes. Every
+  // expense not in [_categories] yet shows the same fallback banknote
+  // glyph (see categoryIconData's own default) rather than a blank or
+  // crashing lookup.
+  List<Category> _categories = const [
+    Category(id: 0, name: 'General', grouping: 'Uncategorized'),
+  ];
+
   @override
   void initState() {
     super.initState();
     _loadGroupFromCache();
     _loadFromCache();
     _refresh();
+    _loadCategories();
     // Guarded: connectivity_plus's platform channel isn't set up in every
     // environment (widget tests being the immediate reason this got
     // added, but a misconfigured platform is a real possibility too).
@@ -92,6 +107,28 @@ class _GroupScreenState extends State<GroupScreen> {
     if (!mounted) return;
     setState(() => _expenses = rows.map(widget.db.rowToExpense).toList());
   }
+
+  Future<void> _loadCategories() async {
+    try {
+      final cats = await widget.client.fetchCategories();
+      if (!mounted || cats.isEmpty) return;
+      setState(() => _categories = cats);
+    } catch (_) {
+      // Offline or the server's unreachable -- keep the General-only
+      // fallback so the list still renders (with generic icons) without
+      // connectivity.
+    }
+  }
+
+  /// The [Category] behind an expense's [Expense.category] id, or a
+  /// synthesized placeholder if this device hasn't fetched a name for
+  /// it yet -- same on-demand-placeholder approach as expense_screen.dart's
+  /// own [_selectedCategory] getter, so an unresolved id still renders a
+  /// (generic) icon instead of crashing the list.
+  Category _categoryFor(int id) => _categories.firstWhere(
+        (c) => c.id == id,
+        orElse: () => Category(id: id, name: 'Category $id', grouping: 'Other'),
+      );
 
   Future<void> _refresh() async {
     setState(() => _loading = true);
@@ -205,6 +242,7 @@ class _GroupScreenState extends State<GroupScreen> {
       itemBuilder: (context, i) {
         final e = _expenses[i];
         return ListTile(
+          leading: CategoryIconGlyph(category: _categoryFor(e.category)),
           title: Text(e.title),
           // e.date is already a date-only value (year/month/day of the
           // calendar day the expense happened on, not a real instant --

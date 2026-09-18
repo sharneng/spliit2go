@@ -9,6 +9,7 @@ import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/expense_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
+import 'package:spliit2go/widgets/category_icon.dart';
 
 void main() {
   const group = Group(
@@ -828,6 +829,34 @@ void main() {
   // jumped back to a field like Amount or Title, auto-scrolling the form
   // back up to show it. Unfocusing before the mode switch means nothing
   // is focused afterward, so there's nothing to scroll to.
+  // Regression coverage for issue #28: the category field and its picker
+  // should each show the category's icon, matching how currency_picker.dart
+  // already shows the currency's flag on its own rows.
+  testWidgets('the category field shows a category icon', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await pumpScreen(tester, db);
+
+    // No live categories.list in this offline test setup, so the field
+    // starts on the built-in General fallback -- still enough to prove
+    // an icon renders next to it at all.
+    expect(find.byType(CategoryIconGlyph), findsOneWidget);
+  });
+
+  testWidgets('each row in the category picker shows its own icon', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await pumpScreen(tester, db);
+
+    await tester.ensureVisible(find.widgetWithText(InputDecorator, 'General'));
+    await tester.tap(find.widgetWithText(InputDecorator, 'General'));
+    await tester.pumpAndSettle();
+
+    // The field's own icon, plus one per row in the now-open picker
+    // (just "General" in this offline test setup).
+    expect(find.byType(CategoryIconGlyph), findsNWidgets(2));
+  });
+
   testWidgets(
       'switching to Evenly while a "Paid for" field has focus clears focus '
       'instead of jumping elsewhere', (tester) async {
