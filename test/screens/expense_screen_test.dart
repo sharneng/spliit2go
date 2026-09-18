@@ -792,6 +792,7 @@ void main() {
     await selectSplitMode(tester, 'Shares');
 
     final sharesField = find.byType(TextFormField).at(2);
+    await tester.ensureVisible(sharesField);
     await tester.tap(sharesField);
     await tester.pumpAndSettle();
     // A field being focused means it's connected to the platform text
