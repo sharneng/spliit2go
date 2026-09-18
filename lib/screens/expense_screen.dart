@@ -7,7 +7,9 @@ import '../models/category.dart';
 import '../models/currency.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
+import '../models/default_split.dart';
 import '../services/active_user.dart';
+import '../services/expense_shares.dart';
 import '../sync/outbox.dart';
 import '../widgets/currency_picker.dart';
 
@@ -102,8 +104,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   final _originalCurrencyController = TextEditingController();
   String? _paidBy;
   bool _saving = false;
-  String? _splitError;
   String? _saveError;
+
+  /// True once Save has been pressed at least once -- gates whether the
+  /// "Paid for" footer shows a blocking validation error or the running
+  /// "still to allocate" hint (issue #29, decisions/paid-for-split-ux-spec.md
+  /// section 6): a fresh form shouldn't greet the user with red text
+  /// before they've done anything.
+  bool _hasAttemptedSave = false;
 
   DateTime _date = DateTime.now();
   bool _isReimbursement = false;
@@ -148,7 +156,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   // regardless of _includedInSplit so toggling inclusion doesn't lose
   // what was typed.
   late final Map<String, TextEditingController> _splitControllers = {
-    for (final p in widget.group.participants) p.id: TextEditingController(),
+    // Every field starts at the literal text "1" -- not a computed even
+    // split, not blank -- matching spliit-ios's own default (issue #29
+    // section 5). Overwritten by _prefillFrom for edit/draft mode, or by
+    // _applyDefaultSplit for a brand-new expense with a remembered split.
+    for (final p in widget.group.participants) p.id: TextEditingController(text: '1'),
   };
 
   @override
@@ -167,8 +179,43 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         activeUserId: widget.initialPaidBy,
         participants: widget.group.participants,
       );
+      // Only for a plain brand-new expense -- not for edit (_prefillFrom
+      // above already set the real split) and not for a draft like
+      // balances_screen's "mark as paid" (its reimbursement split is the
+      // whole point of that flow and shouldn't be overridden by a
+      // remembered default -- isSplitWorthRemembering excludes
+      // reimbursements for the same reason on the write side).
+      _loadDefaultSplit();
     }
     _loadCategories();
+  }
+
+  /// Applies this group's remembered "Paid for" split (issue #29,
+  /// decisions/paid-for-split-ux-spec.md section 7), if one exists and
+  /// still applies to the group's current participants. Async because
+  /// reading it means a DB query -- same fire-and-forget-with-setState
+  /// pattern as [_loadCategories], so a slow read never blocks the form
+  /// from being usable in the meantime (it just starts as plain
+  /// "everyone, evenly" and switches over once the read completes).
+  Future<void> _loadDefaultSplit() async {
+    final split = await widget.db.defaultSplitFor(widget.group.id);
+    if (!mounted || split == null || !split.appliesTo(widget.group.participants)) return;
+    setState(() {
+      _splitMode = split.splitMode;
+      final shares = split.shares;
+      if (shares == null) return; // "everyone" (or Amount) -- defaults already reflect that.
+      for (final p in widget.group.participants) {
+        final value = shares[p.id];
+        _includedInSplit[p.id] = value != null;
+        if (value == null) continue;
+        _splitControllers[p.id]!.text = switch (split.splitMode) {
+          // Inverse of the x100 done in _buildPaidFor -- same conversion
+          // _prefillFrom uses for an edited expense's percentage shares.
+          SplitMode.byPercentage => (value / 100).round().toString(),
+          _ => value.toString(),
+        };
+      }
+    });
   }
 
   /// Fills every control from [e] -- edit mode's starting point. Runs
@@ -237,6 +284,171 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   List<Participant> get _includedParticipants =>
       widget.group.participants.where((p) => _includedInSplit[p.id] ?? false).toList();
+
+  bool get _allIncluded =>
+      widget.group.participants.every((p) => _includedInSplit[p.id] ?? false);
+
+  /// Flips every participant's included flag to the opposite of
+  /// [_allIncluded] -- "Select all"/"Select none" always offers the
+  /// complement of the current state (issue #29 section 2), and leaves
+  /// typed values untouched so re-including someone brings their number
+  /// back rather than resetting it.
+  void _toggleSelectAll() {
+    setState(() {
+      final target = !_allIncluded;
+      for (final p in widget.group.participants) {
+        _includedInSplit[p.id] = target;
+      }
+    });
+  }
+
+  /// The typed value for [p] in the current non-evenly split mode, or
+  /// null if it isn't currently a number -- shares/percent are whole
+  /// numbers, amount is a decimal dollar figure, matching [_buildPaidFor]'s
+  /// own parsing so the live footer/preview never disagree with what
+  /// Save would actually do.
+  num? _typedValue(Participant p) {
+    final text = _splitControllers[p.id]!.text.trim();
+    return _splitMode == SplitMode.byAmount ? double.tryParse(text) : int.tryParse(text);
+  }
+
+  /// How much of the total is still unaccounted for, in the field's own
+  /// unit (percentage points, or dollars) -- null for Evenly/Shares,
+  /// which have no "must sum to X" concept (issue #29 section 6 step 2).
+  /// Positive means "still to allocate", negative means "over".
+  num? _unallocated() {
+    if (_splitMode == SplitMode.byPercentage) {
+      var total = 0;
+      for (final p in _includedParticipants) {
+        final v = _typedValue(p);
+        if (v == null) return null;
+        total += v.toInt();
+      }
+      return 100 - total;
+    }
+    if (_splitMode == SplitMode.byAmount) {
+      final amount = double.tryParse(_amountController.text.trim());
+      if (amount == null) return null;
+      var total = 0.0;
+      for (final p in _includedParticipants) {
+        final v = _typedValue(p);
+        if (v == null) return null;
+        total += v;
+      }
+      return amount - total;
+    }
+    return null;
+  }
+
+  /// Ported from spliit-ios's `ExpenseFormDraft.showsShareAmounts` --
+  /// issue #29 section 4. Amount mode never shows a computed preview
+  /// (the typed field already *is* the amount); Percent only once the
+  /// typed percentages land exactly on 100.
+  bool get _showsLivePreview {
+    if (_isReimbursement || _splitMode == SplitMode.byAmount) return false;
+    if (_includedParticipants.isEmpty) return false;
+    if (_splitMode == SplitMode.evenly) return true;
+    for (final p in _includedParticipants) {
+      final v = _typedValue(p);
+      if (v == null || v <= 0) return false;
+    }
+    return _splitMode == SplitMode.byPercentage ? _unallocated() == 0 : true;
+  }
+
+  /// The live per-participant \$ amounts, computed with the same
+  /// apportionment [shareCentsFor] uses at Save time, but from whatever
+  /// is currently typed rather than a saved [Expense]. Null when
+  /// [_showsLivePreview] is false or the amount field isn't parseable yet.
+  Map<String, int>? _livePreviewAmounts() {
+    if (!_showsLivePreview) return null;
+    final amount = double.tryParse(_amountController.text.trim());
+    if (amount == null) return null;
+    final amountCents = (amount * 100).round();
+    final paidFor = _splitMode == SplitMode.evenly
+        ? _includedParticipants
+            .map((p) => ExpenseShare(participantId: p.id, shares: 1))
+            .toList()
+        : _includedParticipants
+            .map((p) =>
+                ExpenseShare(participantId: p.id, shares: _typedValue(p)!.round()))
+            .toList();
+    return shareCentsFor(amountCents: amountCents, splitMode: _splitMode, paidFor: paidFor);
+  }
+
+  /// Pure validation -- no setState, no side effects -- callable from
+  /// both the live footer (guarded by [_hasAttemptedSave], issue #29
+  /// section 6 step 1) and [_buildPaidFor] at Save time, so the two can
+  /// never disagree about what counts as a blocking problem.
+  String? _splitValidationError() {
+    final included = _includedParticipants;
+    if (included.isEmpty) return 'Select at least one participant';
+    if (_splitMode == SplitMode.evenly) return null;
+
+    if (_splitMode == SplitMode.byShares) {
+      for (final p in included) {
+        final value = int.tryParse(_splitControllers[p.id]!.text.trim());
+        if (value == null || value <= 0) {
+          return '${p.name}: enter a whole number of shares';
+        }
+      }
+      return null;
+    }
+
+    if (_splitMode == SplitMode.byPercentage) {
+      var total = 0;
+      for (final p in included) {
+        final value = int.tryParse(_splitControllers[p.id]!.text.trim());
+        if (value == null || value < 0) return '${p.name}: enter a percentage';
+        total += value;
+      }
+      if (total != 100) return 'Percentages must add up to 100 (currently $total)';
+      return null;
+    }
+
+    // byAmount
+    final amountCents = ((double.tryParse(_amountController.text.trim()) ?? 0) * 100).round();
+    var totalCents = 0;
+    for (final p in included) {
+      final value = double.tryParse(_splitControllers[p.id]!.text.trim());
+      if (value == null || value < 0) return '${p.name}: enter an amount';
+      totalCents += (value * 100).round();
+    }
+    if (totalCents != amountCents) {
+      final diff = ((amountCents - totalCents) / 100).toStringAsFixed(2);
+      return 'Amounts must add up to the total (off by \$$diff)';
+    }
+    return null;
+  }
+
+  /// The "Paid for" section's single footer line, in the priority order
+  /// from issue #29 section 6: an attempted-save blocking error first,
+  /// then a running "still to allocate"/"over" hint for Percent/Amount,
+  /// then the mode's static explanation.
+  String _paidForFooterText() {
+    if (_hasAttemptedSave) {
+      final error = _splitValidationError();
+      if (error != null) return error;
+    }
+    final unallocated = _unallocated();
+    if (unallocated != null && unallocated != 0) {
+      final over = unallocated < 0;
+      final magnitude = unallocated.abs();
+      if (_splitMode == SplitMode.byPercentage) {
+        return over
+            ? '${magnitude.toStringAsFixed(0)}% over 100%.'
+            : '${magnitude.toStringAsFixed(0)}% still to allocate.';
+      }
+      return over
+          ? '\$${magnitude.toStringAsFixed(2)} over the total.'
+          : '\$${magnitude.toStringAsFixed(2)} still to allocate.';
+    }
+    return switch (_splitMode) {
+      SplitMode.evenly => 'Everyone selected pays an equal part.',
+      SplitMode.byShares => 'Give anyone paying a larger part more shares.',
+      SplitMode.byPercentage => 'Percentages must add up to 100.',
+      SplitMode.byAmount => 'Amounts must add up to the expense total.',
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -355,13 +567,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 controlAffinity: ListTileControlAffinity.leading,
                 contentPadding: EdgeInsets.zero,
               ),
-              CheckboxListTile(
-                value: _saveDefaultSplittingOptions,
-                onChanged: (v) => setState(() => _saveDefaultSplittingOptions = v ?? false),
-                title: const Text('Save as default splitting options'),
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-              ),
               const SizedBox(height: 12),
               DropdownButtonFormField<RecurrenceRule>(
                 initialValue: _recurrenceRule,
@@ -375,33 +580,55 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 onChanged: (v) => setState(() => _recurrenceRule = v ?? RecurrenceRule.none),
               ),
               const SizedBox(height: 24),
-              Text('Paid for', style: Theme.of(context).textTheme.titleMedium),
-              for (final p in widget.group.participants) _paidForRow(p),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<SplitMode>(
-                initialValue: _splitMode,
-                decoration: const InputDecoration(labelText: 'Split mode'),
-                items: const [
-                  DropdownMenuItem(value: SplitMode.evenly, child: Text('Evenly')),
-                  DropdownMenuItem(
-                      value: SplitMode.byShares, child: Text('Unevenly – By shares')),
-                  DropdownMenuItem(
-                      value: SplitMode.byPercentage,
-                      child: Text('Unevenly – By percentage')),
-                  DropdownMenuItem(
-                      value: SplitMode.byAmount, child: Text('Unevenly – By amount')),
+              Row(
+                children: [
+                  Text('Paid for', style: Theme.of(context).textTheme.titleMedium),
+                  const Spacer(),
+                  // Always offers the opposite of the current state --
+                  // issue #29 section 2 (spliit-ios: "with everyone
+                  // already in the split, 'select all' has nothing left
+                  // to do").
+                  TextButton(
+                    onPressed: _toggleSelectAll,
+                    child: Text(_allIncluded ? 'Select none' : 'Select all'),
+                  ),
                 ],
-                onChanged: (v) => setState(() {
-                  _splitMode = v ?? SplitMode.evenly;
-                  _splitError = null;
+              ),
+              SegmentedButton<SplitMode>(
+                segments: const [
+                  ButtonSegment(value: SplitMode.evenly, label: Text('Evenly')),
+                  ButtonSegment(value: SplitMode.byShares, label: Text('Shares')),
+                  ButtonSegment(value: SplitMode.byPercentage, label: Text('Percent')),
+                  ButtonSegment(value: SplitMode.byAmount, label: Text('Amount')),
+                ],
+                selected: {_splitMode},
+                onSelectionChanged: (selection) => setState(() {
+                  _splitMode = selection.first;
                 }),
               ),
-              if (_splitError != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(_splitError!,
-                      style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              const SizedBox(height: 4),
+              for (final p in widget.group.participants) _paidForRow(p),
+              // Hidden for a reimbursement -- a settlement is a one-off,
+              // not representative of the group's normal expenses (issue
+              // #29 section 7).
+              if (!_isReimbursement)
+                CheckboxListTile(
+                  value: _saveDefaultSplittingOptions,
+                  onChanged: (v) =>
+                      setState(() => _saveDefaultSplittingOptions = v ?? false),
+                  title: const Text('Save as default split'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
                 ),
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 8),
+                child: Text(
+                  _paidForFooterText(),
+                  style: (_hasAttemptedSave && _splitValidationError() != null)
+                      ? TextStyle(color: Theme.of(context).colorScheme.error)
+                      : Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _notesController,
@@ -499,6 +726,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   Widget _paidForRow(Participant p) {
     final included = _includedInSplit[p.id] ?? false;
+    final preview = included ? _livePreviewAmounts()?[p.id] : null;
     return Row(
       children: [
         Expanded(
@@ -506,6 +734,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             value: included,
             onChanged: (v) => setState(() => _includedInSplit[p.id] = v ?? false),
             title: Text(p.name),
+            // The live \$ preview (issue #29 section 3/4) -- absent for
+            // Amount (the typed field already *is* the amount) and for
+            // anything that doesn't yet satisfy [_showsLivePreview].
+            subtitle: preview != null ? Text('\$${(preview / 100).toStringAsFixed(2)}') : null,
             controlAffinity: ListTileControlAffinity.leading,
             contentPadding: EdgeInsets.zero,
           ),
@@ -516,10 +748,17 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             child: TextFormField(
               controller: _splitControllers[p.id],
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              // Recomputes the live preview/footer on every keystroke
+              // (issue #29 section 6) instead of only validating at Save.
+              onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 isDense: true,
                 prefixText: _splitMode == SplitMode.byAmount ? '\$' : null,
-                suffixText: _splitMode == SplitMode.byPercentage ? '%' : null,
+                suffixText: switch (_splitMode) {
+                  SplitMode.byShares => 'shares',
+                  SplitMode.byPercentage => '%',
+                  _ => null,
+                },
               ),
             ),
           ),
@@ -528,9 +767,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   /// Builds the paidFor list for the current split mode, or returns null
-  /// (and sets [_splitError]) if the entered per-participant values don't
-  /// add up. Evenly needs no per-participant input at all -- every
-  /// included participant just gets an equal weight.
+  /// if [_splitValidationError] finds a problem -- the footer (via
+  /// [_paidForFooterText]) is what actually surfaces that message, gated
+  /// on [_hasAttemptedSave], so there's no separate error field to keep
+  /// in sync here.
+  /// Evenly needs no per-participant input at all -- every included
+  /// participant just gets an equal weight.
   ///
   /// For [SplitMode.byPercentage], the UI takes/validates 0-100 whole
   /// percentages (summing to 100) but the returned [ExpenseShare.shares]
@@ -540,75 +782,35 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// server's balance math going wrong when this app sent raw 0-100
   /// values -- see github.com/sharneng/spliit2go/issues/18 and issue #20.
   List<ExpenseShare>? _buildPaidFor(int amountCents) {
+    if (_splitValidationError() != null) return null;
+
     final included = _includedParticipants;
-    if (included.isEmpty) {
-      setState(() => _splitError = 'Select at least one participant');
-      return null;
-    }
-
-    if (_splitMode == SplitMode.evenly) {
-      return included.map((p) => ExpenseShare(participantId: p.id, shares: 1)).toList();
-    }
-
-    if (_splitMode == SplitMode.byShares) {
-      final shares = <ExpenseShare>[];
-      for (final p in included) {
-        final value = int.tryParse(_splitControllers[p.id]!.text.trim());
-        if (value == null || value <= 0) {
-          setState(() => _splitError = '${p.name}: enter a whole number of shares');
-          return null;
-        }
-        shares.add(ExpenseShare(participantId: p.id, shares: value));
-      }
-      return shares;
-    }
-
-    if (_splitMode == SplitMode.byPercentage) {
-      final shares = <ExpenseShare>[];
-      var total = 0;
-      for (final p in included) {
-        final value = int.tryParse(_splitControllers[p.id]!.text.trim());
-        if (value == null || value < 0) {
-          setState(() => _splitError = '${p.name}: enter a percentage');
-          return null;
-        }
-        total += value;
-        // Wire format is basis points (percentage x 100), not the raw
-        // 0-100 the user types -- see this method's doc comment.
-        shares.add(ExpenseShare(participantId: p.id, shares: value * 100));
-      }
-      if (total != 100) {
-        setState(() => _splitError = 'Percentages must add up to 100 (currently $total)');
-        return null;
-      }
-      return shares;
-    }
-
-    // byAmount
-    final shares = <ExpenseShare>[];
-    var totalCents = 0;
-    for (final p in included) {
-      final value = double.tryParse(_splitControllers[p.id]!.text.trim());
-      if (value == null || value < 0) {
-        setState(() => _splitError = '${p.name}: enter an amount');
-        return null;
-      }
-      final cents = (value * 100).round();
-      totalCents += cents;
-      shares.add(ExpenseShare(participantId: p.id, shares: cents));
-    }
-    if (totalCents != amountCents) {
-      final diff = ((amountCents - totalCents) / 100).toStringAsFixed(2);
-      setState(() =>
-          _splitError = 'Amounts must add up to the total (off by \$$diff)');
-      return null;
-    }
-    return shares;
+    return switch (_splitMode) {
+      SplitMode.evenly =>
+        included.map((p) => ExpenseShare(participantId: p.id, shares: 1)).toList(),
+      SplitMode.byShares => included
+          .map((p) => ExpenseShare(
+              participantId: p.id,
+              shares: int.parse(_splitControllers[p.id]!.text.trim())))
+          .toList(),
+      // Wire format is basis points (percentage x 100), not the raw
+      // 0-100 the user types -- see this method's doc comment.
+      SplitMode.byPercentage => included
+          .map((p) => ExpenseShare(
+              participantId: p.id,
+              shares: int.parse(_splitControllers[p.id]!.text.trim()) * 100))
+          .toList(),
+      SplitMode.byAmount => included
+          .map((p) => ExpenseShare(
+              participantId: p.id,
+              shares: (double.parse(_splitControllers[p.id]!.text.trim()) * 100).round()))
+          .toList(),
+    };
   }
 
   Future<void> _save() async {
     setState(() {
-      _splitError = null;
+      _hasAttemptedSave = true;
       _saveError = null;
       _originalCurrencyError = null;
     });
@@ -661,6 +863,23 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
   }
 
+  /// Only takes effect after a save actually *succeeds* -- a split
+  /// remembered from a save the server rejected would wrongly go on
+  /// prefilling future expenses (issue #29 section 7). No-op for a
+  /// reimbursement (the toggle is hidden for one, but this is the real
+  /// gate) or when the toggle wasn't checked.
+  Future<void> _rememberDefaultSplitIfRequested(List<ExpenseShare> paidFor) async {
+    if (!_saveDefaultSplittingOptions || _isReimbursement) return;
+    await widget.db.setDefaultSplit(
+      widget.group.id,
+      DefaultSplit.remembering(
+        splitMode: _splitMode,
+        paidFor: paidFor,
+        allParticipants: widget.group.participants,
+      ),
+    );
+  }
+
   Future<void> _saveNew({
     required int amountCents,
     required List<ExpenseShare> paidFor,
@@ -691,6 +910,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     // which is the entire point. The outbox (triggered by the caller
     // after this returns) is what attempts the real sync.
     await widget.db.insertPending(expense);
+    await _rememberDefaultSplitIfRequested(paidFor);
 
     if (mounted) Navigator.of(context).pop(true);
   }
@@ -726,6 +946,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         originalCurrency: originalCurrency,
         conversionRate: conversionRate,
       );
+      await _rememberDefaultSplitIfRequested(paidFor);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;

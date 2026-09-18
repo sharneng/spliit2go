@@ -20,24 +20,38 @@ import '../models/expense.dart';
 /// remainder.
 ///
 /// Returns an empty map for an expense with no [Expense.paidFor] entries.
-Map<String, int> expenseShareCents(Expense e) {
-  if (e.paidFor.isEmpty) return const {};
+Map<String, int> expenseShareCents(Expense e) => shareCentsFor(
+      amountCents: e.amountCents,
+      splitMode: e.splitMode,
+      paidFor: e.paidFor,
+    );
 
-  if (e.splitMode == SplitMode.byAmount) {
-    return {for (final s in e.paidFor) s.participantId: s.shares};
+/// The lower-level apportionment [expenseShareCents] delegates to --
+/// exposed on its own so a form still being typed into (issue #29's live
+/// per-participant \$ preview) can compute the same split from draft
+/// values without first having to assemble a full [Expense].
+Map<String, int> shareCentsFor({
+  required int amountCents,
+  required SplitMode splitMode,
+  required List<ExpenseShare> paidFor,
+}) {
+  if (paidFor.isEmpty) return const {};
+
+  if (splitMode == SplitMode.byAmount) {
+    return {for (final s in paidFor) s.participantId: s.shares};
   }
 
-  final weights = e.splitMode == SplitMode.evenly
-      ? List<int>.filled(e.paidFor.length, 1)
-      : e.paidFor.map((s) => s.shares).toList();
+  final weights = splitMode == SplitMode.evenly
+      ? List<int>.filled(paidFor.length, 1)
+      : paidFor.map((s) => s.shares).toList();
   final totalShares = weights.fold<int>(0, (sum, w) => sum + w);
   if (totalShares <= 0) return const {};
 
   final raw = List<double>.generate(
-      e.paidFor.length, (i) => e.amountCents * weights[i] / totalShares);
+      paidFor.length, (i) => amountCents * weights[i] / totalShares);
   final floors = raw.map((r) => r.floor()).toList();
   final distributed = floors.fold<int>(0, (a, b) => a + b);
-  final remainder = e.amountCents - distributed;
+  final remainder = amountCents - distributed;
 
   final byRemainder = List<int>.generate(raw.length, (i) => i)
     ..sort((a, b) => (raw[b] - floors[b]).compareTo(raw[a] - floors[a]));
@@ -48,6 +62,6 @@ Map<String, int> expenseShareCents(Expense e) {
   }
 
   return {
-    for (var i = 0; i < e.paidFor.length; i++) e.paidFor[i].participantId: owed[i],
+    for (var i = 0; i < paidFor.length; i++) paidFor[i].participantId: owed[i],
   };
 }

@@ -45,6 +45,20 @@ void main() {
     await tester.enterText(find.widgetWithText(TextFormField, 'Amount'), amount);
   }
 
+  // Taps the named segment of the "Paid for" section's SegmentedButton
+  // (issue #29's replacement for the old split-mode dropdown). Scoped to
+  // that widget specifically, since e.g. 'Amount' is ambiguous with the
+  // main Amount field's own label text.
+  Future<void> selectSplitMode(WidgetTester tester, String label) async {
+    final finder = find.descendant(
+      of: find.byType(SegmentedButton<SplitMode>),
+      matching: find.text(label),
+    );
+    await tester.ensureVisible(finder);
+    await tester.tap(finder);
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('evenly split (default): every participant included, no per-person input',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
@@ -89,12 +103,7 @@ void main() {
     await pumpScreen(tester, db);
 
     await fillCommonFields(tester, amount: '90');
-    await tester.ensureVisible(find.widgetWithText(DropdownButtonFormField<SplitMode>, 'Evenly'));
-    await tester.tap(find.widgetWithText(DropdownButtonFormField<SplitMode>, 'Evenly'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Unevenly – By amount').last);
-    await tester.tap(find.text('Unevenly – By amount').last);
-    await tester.pumpAndSettle();
+    await selectSplitMode(tester, 'Amount');
 
     final amountFields = find.byType(TextFormField);
     // Title, Amount, then one per participant (alex, bea, cid) in order.
@@ -117,12 +126,7 @@ void main() {
     await pumpScreen(tester, db);
 
     await fillCommonFields(tester, amount: '90');
-    await tester.ensureVisible(find.widgetWithText(DropdownButtonFormField<SplitMode>, 'Evenly'));
-    await tester.tap(find.widgetWithText(DropdownButtonFormField<SplitMode>, 'Evenly'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Unevenly – By amount').last);
-    await tester.tap(find.text('Unevenly – By amount').last);
-    await tester.pumpAndSettle();
+    await selectSplitMode(tester, 'Amount');
 
     final amountFields = find.byType(TextFormField);
     await tester.enterText(amountFields.at(2), '50');
@@ -147,12 +151,7 @@ void main() {
     await pumpScreen(tester, db);
 
     await fillCommonFields(tester, amount: '90');
-    await tester.ensureVisible(find.widgetWithText(DropdownButtonFormField<SplitMode>, 'Evenly'));
-    await tester.tap(find.widgetWithText(DropdownButtonFormField<SplitMode>, 'Evenly'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Unevenly – By percentage').last);
-    await tester.tap(find.text('Unevenly – By percentage').last);
-    await tester.pumpAndSettle();
+    await selectSplitMode(tester, 'Percent');
 
     final amountFields = find.byType(TextFormField);
     await tester.enterText(amountFields.at(2), '50');
@@ -176,12 +175,7 @@ void main() {
     await pumpScreen(tester, db);
 
     await fillCommonFields(tester, amount: '90');
-    await tester.ensureVisible(find.widgetWithText(DropdownButtonFormField<SplitMode>, 'Evenly'));
-    await tester.tap(find.widgetWithText(DropdownButtonFormField<SplitMode>, 'Evenly'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Unevenly – By percentage').last);
-    await tester.tap(find.text('Unevenly – By percentage').last);
-    await tester.pumpAndSettle();
+    await selectSplitMode(tester, 'Percent');
 
     final amountFields = find.byType(TextFormField);
     await tester.enterText(amountFields.at(2), '50');
@@ -565,5 +559,102 @@ void main() {
     final pending = await db.pendingExpenses();
     expect(pending, hasLength(1));
     expect(pending.single.originalCurrency, 'JPY');
+  });
+
+  // issue #29: "Paid for" UX rework (segmented control, select all/none,
+  // live preview, footer hint, remembered default split).
+  group('issue #29: "Paid for" UX rework', () {
+    testWidgets('"Select all"/"Select none" toggles every participant and flips its own label',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpScreen(tester, db);
+
+      // Everyone starts included -> the link offers the opposite.
+      expect(find.widgetWithText(TextButton, 'Select none'), findsOneWidget);
+
+      await tester.ensureVisible(find.widgetWithText(TextButton, 'Select none'));
+      await tester.tap(find.widgetWithText(TextButton, 'Select none'));
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, 'Alex')).value,
+          isFalse);
+      expect(tester.widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, 'Cid')).value,
+          isFalse);
+      expect(find.widgetWithText(TextButton, 'Select all'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Select all'));
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, 'Alex')).value,
+          isTrue);
+      expect(find.widgetWithText(TextButton, 'Select none'), findsOneWidget);
+    });
+
+    testWidgets('evenly split shows a live per-participant \$ preview once the amount is entered',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpScreen(tester, db);
+
+      await fillCommonFields(tester, amount: '90');
+      await tester.pumpAndSettle();
+
+      // \$90 evenly among 3 participants -> \$30.00 each.
+      expect(find.text('\$30.00'), findsNWidgets(3));
+    });
+
+    testWidgets('percent mode footer shows "still to allocate" before percentages sum to 100',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpScreen(tester, db);
+
+      await fillCommonFields(tester, amount: '90');
+      await selectSplitMode(tester, 'Percent');
+
+      final splitFields = find.byType(TextFormField);
+      await tester.enterText(splitFields.at(2), '50');
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('still to allocate'), findsOneWidget);
+      // Nothing was submitted yet -- this is the live hint, not the
+      // Save-attempt blocking error.
+      expect(find.textContaining('currently'), findsNothing);
+    });
+
+    testWidgets('a successful save with "Save as default split" checked is applied to the next '
+        'new expense in the same group', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpScreen(tester, db);
+
+      await fillCommonFields(tester, amount: '90');
+      await selectSplitMode(tester, 'Shares');
+
+      final splitFields = find.byType(TextFormField);
+      await tester.enterText(splitFields.at(2), '2'); // alex
+      await tester.enterText(splitFields.at(3), '1'); // bea
+      await tester.enterText(splitFields.at(4), '1'); // cid
+
+      await tester.ensureVisible(find.widgetWithText(CheckboxListTile, 'Save as default split'));
+      await tester.tap(find.widgetWithText(CheckboxListTile, 'Save as default split'));
+      await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect(await db.defaultSplitFor('g1'), isNotNull);
+
+      // Re-open the screen for a brand-new expense in the same group.
+      await pumpScreen(tester, db);
+
+      final segmented =
+          tester.widget<SegmentedButton<SplitMode>>(find.byType(SegmentedButton<SplitMode>));
+      expect(segmented.selected, {SplitMode.byShares});
+      final reopenedFields = find.byType(TextFormField);
+      expect(tester.widget<TextFormField>(reopenedFields.at(2)).controller!.text, '2');
+      expect(tester.widget<TextFormField>(reopenedFields.at(3)).controller!.text, '1');
+      expect(tester.widget<TextFormField>(reopenedFields.at(4)).controller!.text, '1');
+    });
   });
 }

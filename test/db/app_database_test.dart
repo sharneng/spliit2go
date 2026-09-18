@@ -1,6 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spliit2go/db/app_database.dart';
+import 'package:spliit2go/models/default_split.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 
@@ -269,6 +270,69 @@ void main() {
 
       expect(await db.groupRow('gA'), isNull);
       expect(await db.groupRow('gB'), isNotNull);
+    });
+  });
+
+  group('remembered default split (issue #29)', () {
+    const group = Group(
+      id: 'g1',
+      name: 'Banff Trip',
+      currency: '\$',
+      participants: [Participant(id: 'p1', name: 'Ken'), Participant(id: 'p2', name: 'Jenny')],
+    );
+
+    test('defaultSplitFor is null when nothing has ever been remembered', () async {
+      await db.cacheGroup(group);
+      expect(await db.defaultSplitFor('g1'), isNull);
+    });
+
+    test('setDefaultSplit then defaultSplitFor round-trips mode and shares', () async {
+      await db.cacheGroup(group);
+      await db.setDefaultSplit(
+        'g1',
+        const DefaultSplit(splitMode: SplitMode.byShares, shares: {'p1': 2, 'p2': 1}),
+      );
+
+      final split = await db.defaultSplitFor('g1');
+
+      expect(split, isNotNull);
+      expect(split!.splitMode, SplitMode.byShares);
+      expect(split.shares, {'p1': 2, 'p2': 1});
+    });
+
+    test('setDefaultSplit with null shares round-trips as evenly-covers-everyone', () async {
+      await db.cacheGroup(group);
+      await db.setDefaultSplit('g1', const DefaultSplit(splitMode: SplitMode.evenly));
+
+      final split = await db.defaultSplitFor('g1');
+
+      expect(split!.splitMode, SplitMode.evenly);
+      expect(split.shares, isNull);
+    });
+
+    test('setDefaultSplit(null) clears a previously remembered split', () async {
+      await db.cacheGroup(group);
+      await db.setDefaultSplit(
+        'g1',
+        const DefaultSplit(splitMode: SplitMode.byPercentage, shares: {'p1': 5000, 'p2': 5000}),
+      );
+
+      await db.setDefaultSplit('g1', null);
+
+      expect(await db.defaultSplitFor('g1'), isNull);
+    });
+
+    test('a remembered split is per-group', () async {
+      const groupB = Group(id: 'g2', name: 'Cabin', currency: '\$', participants: []);
+      await db.cacheGroup(group);
+      await db.cacheGroup(groupB);
+
+      await db.setDefaultSplit('g1', const DefaultSplit(splitMode: SplitMode.byShares, shares: {
+        'p1': 3,
+      }));
+
+      expect((await db.defaultSplitFor('g1'))!.splitMode, SplitMode.byShares);
+      expect(await db.defaultSplitFor('g2'), isNull);
     });
   });
 }

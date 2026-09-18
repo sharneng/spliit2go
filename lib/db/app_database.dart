@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:drift/drift.dart';
 
+import '../models/default_split.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
 
@@ -97,6 +98,24 @@ class Groups extends Table {
   /// for a legacy pre-multi-group row before the startup migration.
   DateTimeColumn get lastOpenedAt => dateTime().nullable()();
 
+  /// This device's remembered "Paid for" split for this group (issue
+  /// #29, decisions/paid-for-split-ux-spec.md) -- [DefaultSplit.splitMode]
+  /// as its wire value. Null means nothing's been remembered yet.
+  /// Deliberately a separate column from [defaultSplitSharesJson] rather
+  /// than one combined blob: the mode alone is meaningful (and often the
+  /// *only* thing worth keeping -- see [DefaultSplit.shares]'s doc
+  /// comment) even when there's no share map to go with it, and this
+  /// matches the flat-typed-column style the rest of this table already
+  /// uses rather than introducing a JSON-blob-of-everything convention.
+  TextColumn get defaultSplitMode => text().nullable()();
+
+  /// The remembered split's [DefaultSplit.shares] -- a JSON-encoded
+  /// `{participantId: shares}` map on the same wire scale
+  /// [ExpenseShare.shares] uses, or null (see that field's doc comment
+  /// for when and why). Same JSON-blob-for-a-map-we-never-query-into
+  /// pattern as [participantsJson]/[paidForJson].
+  TextColumn get defaultSplitSharesJson => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -106,7 +125,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -136,6 +155,12 @@ class AppDatabase extends _$AppDatabase {
             // class doc on each column.
             await m.addColumn(groups, groups.information);
             await m.addColumn(groups, groups.currencyCode);
+          }
+          if (from < 6) {
+            // Remembered "Paid for" split (issue #29) -- see class doc
+            // on each column.
+            await m.addColumn(groups, groups.defaultSplitMode);
+            await m.addColumn(groups, groups.defaultSplitSharesJson);
           }
         },
       );
@@ -286,6 +311,39 @@ class AppDatabase extends _$AppDatabase {
   Future<void> setActiveParticipant(String groupId, String? participantId) {
     return (update(groups)..where((g) => g.id.equals(groupId)))
         .write(GroupsCompanion(activeParticipantId: Value(participantId)));
+  }
+
+  /// Sets (or, with null, clears) this device's remembered "Paid for"
+  /// split for [groupId] (issue #29) -- see [DefaultSplit] and the
+  /// [Groups.defaultSplitMode]/[Groups.defaultSplitSharesJson] column
+  /// docs. Callers should only pass non-null after a save has actually
+  /// succeeded -- a split remembered from a save the server rejected
+  /// would go on prefilling expenses that never happened.
+  Future<void> setDefaultSplit(String groupId, DefaultSplit? split) {
+    return (update(groups)..where((g) => g.id.equals(groupId))).write(GroupsCompanion(
+      defaultSplitMode: Value(split?.splitMode.wireValue),
+      defaultSplitSharesJson:
+          Value(split?.shares == null ? null : jsonEncode(split!.shares)),
+    ));
+  }
+
+  /// This device's remembered "Paid for" split for [groupId], or null if
+  /// nothing's been remembered (including: the group has never been
+  /// cached at all). Doesn't check [DefaultSplit.appliesTo] against the
+  /// group's current participants -- that's the caller's job, since only
+  /// the caller has an up-to-date participant list to check against.
+  Future<DefaultSplit?> defaultSplitFor(String groupId) async {
+    final row = await groupRow(groupId);
+    final mode = row?.defaultSplitMode;
+    if (mode == null) return null;
+    final sharesJson = row!.defaultSplitSharesJson;
+    return DefaultSplit(
+      splitMode: SplitModeWire.fromWire(mode),
+      shares: sharesJson == null
+          ? null
+          : (jsonDecode(sharesJson) as Map<String, dynamic>)
+              .map((k, v) => MapEntry(k, (v as num).round())),
+    );
   }
 
   /// Removes a group and all its cached expenses from this device --
