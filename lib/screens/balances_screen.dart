@@ -8,6 +8,7 @@ import '../models/expense.dart';
 import '../models/group.dart';
 import '../services/balance_calculator.dart';
 import '../sync/outbox.dart';
+import '../utils/money.dart';
 import 'expense_screen.dart';
 
 /// Who-owes-whom for the group, plus one-tap "mark as paid" for the
@@ -71,8 +72,6 @@ class _BalancesScreenState extends State<BalancesScreen> {
     }
     return participantId;
   }
-
-  String _money(int cents) => '\$${(cents.abs() / 100).toStringAsFixed(2)}';
 
   /// Opens ExpenseScreen pre-filled with [s], rather than recording it
   /// directly, so the user can see/edit the amount (a partial payment)
@@ -172,7 +171,7 @@ class _BalancesScreenState extends State<BalancesScreen> {
                   ListTile(
                     title: Text(_name(b.participantId)),
                     trailing: Text(
-                      '${b.netCents < 0 ? '-' : ''}${_money(b.netCents)}',
+                      formatMoney(b.netCents, widget.group.currency),
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: b.netCents < 0
@@ -199,7 +198,8 @@ class _BalancesScreenState extends State<BalancesScreen> {
                             )
                           : TextButton(
                               onPressed: () => _openSettleUp(s),
-                              child: Text(context.l10n.balancesMarkAsPaid(_money(s.amountCents))),
+                              child: Text(context.l10n
+                                  .balancesMarkAsPaid(formatMoney(s.amountCents, widget.group.currency))),
                             ),
                      ),
                 ],

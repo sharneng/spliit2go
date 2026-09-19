@@ -154,7 +154,7 @@
       }
     }
   },
-  "expenseAmountMismatch": "Amounts must add up to the total (off by ${diff})",
+  "expenseAmountMismatch": "Amounts must add up to the total (off by {diff})",
   "@expenseAmountMismatch": {
     "placeholders": {
       "diff": {
@@ -178,7 +178,7 @@
       }
     }
   },
-  "expenseAmountOver": "${amount} over the total.",
+  "expenseAmountOver": "{amount} over the total.",
   "@expenseAmountOver": {
     "placeholders": {
       "amount": {
@@ -186,7 +186,7 @@
       }
     }
   },
-  "expenseAmountRemaining": "${amount} still to allocate.",
+  "expenseAmountRemaining": "{amount} still to allocate.",
   "@expenseAmountRemaining": {
     "placeholders": {
       "amount": {

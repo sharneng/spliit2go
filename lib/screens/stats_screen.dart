@@ -7,6 +7,7 @@ import '../models/category.dart';
 import '../models/group.dart';
 import '../services/stats_calculator.dart';
 import '../sync/outbox.dart';
+import '../utils/money.dart';
 
 /// A first pass at the web app's Stats tab (issue #27, split from #6
 /// alongside Activity -- see issue #26): summary totals, group/
@@ -80,11 +81,11 @@ class _StatsScreenState extends State<StatsScreen> {
     }
   }
 
-  String _money(int cents) {
-    final symbol = widget.group.currency;
-    final sign = cents < 0 ? '-' : '';
-    return '$sign$symbol${(cents.abs() / 100).toStringAsFixed(2)}';
-  }
+  // Delegates to the app-wide formatMoney helper (issue #50) -- kept as
+  // a thin wrapper (rather than replacing every call site below) purely
+  // to avoid a churny diff; it's still the same shared formatting logic
+  // everywhere.
+  String _money(int cents) => formatMoney(cents, widget.group.currency);
 
   String _categoryLabel(int categoryId) {
     final known = _categoryNames[categoryId];

@@ -12,6 +12,7 @@ import '../models/group.dart';
 import '../services/active_user.dart';
 import '../services/settings_service.dart';
 import '../sync/outbox.dart';
+import '../utils/money.dart';
 import '../widgets/category_icon.dart';
 import 'expense_screen.dart';
 import 'activity_screen.dart';
@@ -359,7 +360,7 @@ class _GroupScreenState extends State<GroupScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('\$${(e.amountCents / 100).toStringAsFixed(2)}'),
+              Text(formatMoney(e.amountCents, _group?.currency ?? '\$')),
               if (e.syncFailed)
                 Row(
                   mainAxisSize: MainAxisSize.min,

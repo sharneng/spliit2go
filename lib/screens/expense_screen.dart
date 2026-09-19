@@ -12,6 +12,7 @@ import '../l10n/context_l10n.dart';
 import '../services/active_user.dart';
 import '../services/expense_shares.dart';
 import '../sync/outbox.dart';
+import '../utils/money.dart';
 import '../utils/decimal_input.dart';
 import '../widgets/currency_picker.dart';
 import '../widgets/category_icon.dart';
@@ -395,7 +396,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     return _splitMode == SplitMode.byPercentage ? _unallocated() == 0 : true;
   }
 
-  /// The live per-participant \$ amounts, computed with the same
+  /// The live per-participant amounts, computed with the same
   /// apportionment [shareCentsFor] uses at Save time, but from whatever
   /// is currently typed rather than a saved [Expense]. Null when
   /// [_showsLivePreview] is false or the amount field isn't parseable yet.
@@ -457,7 +458,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       totalCents += (value * 100).round();
     }
     if (totalCents != amountCents) {
-      final diff = ((amountCents - totalCents) / 100).toStringAsFixed(2);
+      final diff = formatMoney((amountCents - totalCents).abs(), widget.group.currency);
       return context.l10n.expenseAmountMismatch(diff);
     }
     return null;
@@ -482,7 +483,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             ? context.l10n.expensePercentOver(formatted)
             : context.l10n.expensePercentRemaining(formatted);
       }
-      final formattedAmount = magnitude.toStringAsFixed(2);
+      final formattedAmount =
+          formatMoney((magnitude * 100).round(), widget.group.currency);
       return over
           ? context.l10n.expenseAmountOver(formattedAmount)
           : context.l10n.expenseAmountRemaining(formattedAmount);
@@ -516,8 +518,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _amountController,
-                decoration:
-                    InputDecoration(labelText: context.l10n.expenseAmountLabel, prefixText: '\$'),
+                decoration: InputDecoration(
+                    labelText: context.l10n.expenseAmountLabel, prefixText: widget.group.currency),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 onChanged: (_) => setState(() {}), // amount feeds the by-amount hint below
                 validator: (v) {
@@ -818,10 +820,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             value: included,
             onChanged: (v) => setState(() => _includedInSplit[p.id] = v ?? false),
             title: Text(p.name),
-            // The live \$ preview (issue #29 section 3/4) -- absent for
+            // The live per-participant amount preview (issue #29 section 3/4) -- absent for
             // Amount (the typed field already *is* the amount) and for
             // anything that doesn't yet satisfy [_showsLivePreview].
-            subtitle: preview != null ? Text('\$${(preview / 100).toStringAsFixed(2)}') : null,
+            subtitle:
+                preview != null ? Text(formatMoney(preview, widget.group.currency)) : null,
             controlAffinity: ListTileControlAffinity.leading,
             contentPadding: EdgeInsets.zero,
           ),
@@ -838,7 +841,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 isDense: true,
-                prefixText: _splitMode == SplitMode.byAmount ? '\$' : null,
+                prefixText: _splitMode == SplitMode.byAmount ? widget.group.currency : null,
                 suffixText: switch (_splitMode) {
                   SplitMode.byShares => 'shares',
                   SplitMode.byPercentage => '%',
