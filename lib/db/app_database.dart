@@ -203,6 +203,22 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  /// Same query as [expensesForGroup], as a live [Stream] instead of a
+  /// one-shot [Future] (issue #47) -- emits the current rows immediately
+  /// on subscribe, then again every time this group's Expenses rows
+  /// change (a live refresh's [replaceServerExpenses], a locally-added
+  /// [insertPending] row, [markSynced], [recordSyncFailure],
+  /// [retrySyncFailure], [deleteFailedExpense]...). Lets callers
+  /// (GroupScreen, BalancesScreen, StatsScreen) just subscribe once and
+  /// stay current, instead of imperatively re-querying after every
+  /// mutation.
+  Stream<List<ExpenseRow>> watchExpensesForGroup(String groupId) {
+    return (select(expenses)
+          ..where((e) => e.groupId.equals(groupId))
+          ..orderBy([(e) => OrderingTerm.desc(e.date)]))
+        .watch();
+  }
+
   Future<List<ExpenseRow>> pendingExpenses() {
     return (select(expenses)..where((e) => e.pending.equals(true))).get();
   }
@@ -385,6 +401,31 @@ class AppDatabase extends _$AppDatabase {
           .map((p) => Participant.fromJson(p as Map<String, dynamic>))
           .toList(),
     );
+  }
+
+  /// Same data as [cachedGroup], as a live [Stream] instead of a
+  /// one-shot [Future] (issue #47) -- emits the current cached group
+  /// (or null) immediately on subscribe, then again every time this
+  /// group's Groups row changes, e.g. [cacheGroup] after a live
+  /// [SpliitClient.fetchGroup] refresh, or a settings-screen save.
+  /// Lets GroupScreen subscribe once instead of separately loading from
+  /// cache on start *and* adopting GroupSettingsScreen's popped result.
+  Stream<Group?> watchCachedGroup(String groupId) {
+    return (select(groups)..where((g) => g.id.equals(groupId)))
+        .watchSingleOrNull()
+        .map((row) {
+      if (row == null) return null;
+      return Group(
+        id: row.id,
+        name: row.name,
+        information: row.information,
+        currency: row.currency,
+        currencyCode: row.currencyCode,
+        participants: (jsonDecode(row.participantsJson) as List)
+            .map((p) => Participant.fromJson(p as Map<String, dynamic>))
+            .toList(),
+      );
+    });
   }
 
   /// The raw cached row for a group, including the multi-group columns

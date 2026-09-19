@@ -10,10 +10,13 @@ import '../sync/outbox.dart';
 
 /// A first pass at the web app's Stats tab (issue #27, split from #6
 /// alongside Activity -- see issue #26): summary totals, group/
-/// participant/category spending, computed entirely from the local
-/// expense cache the same way Balances is (see stats_calculator.dart's
-/// doc comment). Works offline and reflects any pending unsynced
-/// expenses immediately.
+/// participant/category spending, computed entirely from a live
+/// [AppDatabase.watchExpensesForGroup] stream (issue #47) the same way
+/// Balances is (see stats_calculator.dart's doc comment). Works offline,
+/// reflects any pending unsynced expenses immediately, and -- since it's
+/// a stream rather than a one-shot load -- picks up any later change
+/// (an expense added/edited/synced elsewhere) without needing its own
+/// reload wiring.
 ///
 /// Deliberately smaller than the web app's Stats tab: no charts (spending
 /// over time, monthly breakdown), no recurring-spending projection, and
@@ -54,46 +57,19 @@ class StatsScreen extends StatefulWidget {
 }
 
 class _StatsScreenState extends State<StatsScreen> {
-  bool _loading = true;
-  SpendingSummary _summary = const SpendingSummary(expenseCount: 0, totalCents: 0, averageCents: 0);
-  int _groupTotalCents = 0;
-  int? _yourPaidCents;
-  int? _yourShareCents;
-  List<ParticipantSpending> _participants = const [];
-  List<CategorySpending> _categories = const [];
+  late final Stream<List<ExpenseRow>> _expensesStream;
   Map<int, Category> _categoryNames = const {};
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _expensesStream = widget.db.watchExpensesForGroup(widget.group.id);
+    _loadCategoryNames();
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    final rows = await widget.db.expensesForGroup(widget.group.id);
-    final expenses = rows.map(widget.db.rowToExpense).toList();
-
-    final summary = computeSpendingSummary(expenses);
-    final groupTotal = totalGroupSpendingCents(expenses);
-    final yourPaid = activeUserPaidCents(widget.activeUserId, expenses);
-    final yourShare = activeUserShareCents(widget.activeUserId, expenses);
-    final participants = computeParticipantSpending(widget.group.participants, expenses);
-    final categories = computeCategorySpending(expenses);
-
-    if (!mounted) return;
-    setState(() {
-      _summary = summary;
-      _groupTotalCents = groupTotal;
-      _yourPaidCents = yourPaid;
-      _yourShareCents = yourShare;
-      _participants = participants;
-      _categories = categories;
-      _loading = false;
-    });
-
-    // Best-effort only -- see class doc comment. Never blocks the totals
-    // above, which don't need category names to be correct.
+  // Best-effort only -- see class doc comment. Never blocks the totals,
+  // which don't need category names to be correct.
+  Future<void> _loadCategoryNames() async {
     try {
       final cats = await widget.client.fetchCategories();
       if (!mounted) return;
@@ -119,9 +95,9 @@ class _StatsScreenState extends State<StatsScreen> {
   String _formatDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  String _activeSpan() {
-    final first = _summary.firstDate;
-    final last = _summary.lastDate;
+  String _activeSpan(SpendingSummary summary) {
+    final first = summary.firstDate;
+    final last = summary.lastDate;
     if (first == null || last == null) return '—';
     if (first == last) return _formatDate(first);
     return '${_formatDate(first)} – ${_formatDate(last)}';
@@ -129,29 +105,55 @@ class _StatsScreenState extends State<StatsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final body = _loading ? const Center(child: CircularProgressIndicator()) : _body();
-    if (widget.embedded) return body;
-    return Scaffold(appBar: AppBar(title: Text(context.l10n.statsTitle)), body: body);
+    return StreamBuilder<List<ExpenseRow>>(
+      stream: _expensesStream,
+      builder: (context, snapshot) {
+        final rows = snapshot.data;
+        final Widget body;
+        if (rows == null) {
+          body = const Center(child: CircularProgressIndicator());
+        } else {
+          final expenses = rows.map(widget.db.rowToExpense).toList();
+          final summary = computeSpendingSummary(expenses);
+          final groupTotal = totalGroupSpendingCents(expenses);
+          final yourPaid = activeUserPaidCents(widget.activeUserId, expenses);
+          final yourShare = activeUserShareCents(widget.activeUserId, expenses);
+          final participants = computeParticipantSpending(widget.group.participants, expenses);
+          final categories = computeCategorySpending(expenses);
+          body = _body(context, summary, groupTotal, yourPaid, yourShare, participants, categories);
+        }
+        if (widget.embedded) return body;
+        return Scaffold(appBar: AppBar(title: Text(context.l10n.statsTitle)), body: body);
+      },
+    );
   }
 
-  Widget _body() {
-    if (_summary.expenseCount == 0) {
+  Widget _body(
+    BuildContext context,
+    SpendingSummary summary,
+    int groupTotalCents,
+    int? yourPaidCents,
+    int? yourShareCents,
+    List<ParticipantSpending> participants,
+    List<CategorySpending> categories,
+  ) {
+    if (summary.expenseCount == 0) {
       return Center(child: Text(context.l10n.commonNoExpensesYet));
     }
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         _sectionTitle(context, context.l10n.statsSectionSummary),
-        _summaryCard(context),
+        _summaryCard(context, summary),
         const SizedBox(height: 20),
         _sectionTitle(context, context.l10n.statsSectionTotals),
-        _totalsCard(context),
+        _totalsCard(context, groupTotalCents, yourPaidCents, yourShareCents),
         const SizedBox(height: 20),
         _sectionTitle(context, context.l10n.statsSectionByParticipant),
-        for (final p in _participants) _participantTile(context, p),
+        for (final p in participants) _participantTile(context, p),
         const SizedBox(height: 20),
         _sectionTitle(context, context.l10n.statsSectionByCategory),
-        for (final c in _categories) _categoryTile(context, c),
+        for (final c in categories) _categoryTile(context, c),
       ],
     );
   }
@@ -161,40 +163,45 @@ class _StatsScreenState extends State<StatsScreen> {
         child: Text(title, style: Theme.of(context).textTheme.titleMedium),
       );
 
-  Widget _summaryCard(BuildContext context) {
+  Widget _summaryCard(BuildContext context, SpendingSummary summary) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _metricRow(context.l10n.statsMetricExpenses, '${_summary.expenseCount}'),
-            _metricRow(context.l10n.statsMetricAverageExpense, _money(_summary.averageCents)),
+            _metricRow(context.l10n.statsMetricExpenses, '${summary.expenseCount}'),
+            _metricRow(context.l10n.statsMetricAverageExpense, _money(summary.averageCents)),
             _metricRow(
               context.l10n.statsMetricLargestExpense,
-              _summary.largestCents == null
+              summary.largestCents == null
                   ? '—'
-                  : '${_money(_summary.largestCents!)} (${_summary.largestTitle})',
+                  : '${_money(summary.largestCents!)} (${summary.largestTitle})',
             ),
-            _metricRow(context.l10n.statsMetricActiveSpan, _activeSpan()),
+            _metricRow(context.l10n.statsMetricActiveSpan, _activeSpan(summary)),
           ],
         ),
       ),
     );
   }
 
-  Widget _totalsCard(BuildContext context) {
+  Widget _totalsCard(
+    BuildContext context,
+    int groupTotalCents,
+    int? yourPaidCents,
+    int? yourShareCents,
+  ) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _metricRow(context.l10n.statsMetricGroupSpending, _money(_groupTotalCents)),
-            if (_yourPaidCents != null)
-              _metricRow(context.l10n.statsMetricYouPaid, _money(_yourPaidCents!)),
-            if (_yourShareCents != null)
-              _metricRow(context.l10n.statsMetricYourShare, _money(_yourShareCents!)),
+            _metricRow(context.l10n.statsMetricGroupSpending, _money(groupTotalCents)),
+            if (yourPaidCents != null)
+              _metricRow(context.l10n.statsMetricYouPaid, _money(yourPaidCents)),
+            if (yourShareCents != null)
+              _metricRow(context.l10n.statsMetricYourShare, _money(yourShareCents)),
             if (widget.activeUserId == null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),

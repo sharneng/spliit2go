@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
@@ -54,6 +56,16 @@ class _GroupScreenState extends State<GroupScreen> {
   String? _error;
   String? _activeUserId;
 
+  // Live db subscriptions (issue #47) -- replace the old imperative
+  // "write, then explicitly re-query" pattern: once subscribed here,
+  // every local write anywhere (a live refresh's replaceServerExpenses/
+  // cacheGroup, an offline insertPending, a sync-failure retry/delete,
+  // GroupSettingsScreen's own save...) shows up automatically, without
+  // this screen needing to know which specific write just happened or
+  // remembering to reload after each one.
+  StreamSubscription<Group?>? _groupSub;
+  StreamSubscription<List<ExpenseRow>>? _expensesSub;
+
   // Which of the four bottom-nav tabs is showing (issue #38 -- replaces
   // the old design where Balances/Stats/Activity were each a full
   // pushed screen reached from an AppBar icon, which by the fourth icon
@@ -76,8 +88,19 @@ class _GroupScreenState extends State<GroupScreen> {
   @override
   void initState() {
     super.initState();
-    _loadGroupFromCache();
-    _loadFromCache();
+    _groupSub = widget.db.watchCachedGroup(widget.groupId).listen((group) {
+      if (!mounted) return;
+      setState(() => _group = group);
+      // Participants (or which one's remembered as "you") may have
+      // changed along with the group -- re-resolve on every emission,
+      // same as the old code did after both the initial cache load and
+      // every live refresh.
+      _resolveActiveUser();
+    });
+    _expensesSub = widget.db.watchExpensesForGroup(widget.groupId).listen((rows) {
+      if (!mounted) return;
+      setState(() => _expenses = rows.map(widget.db.rowToExpense).toList());
+    });
     _refresh();
     _loadCategories();
     // Guarded: connectivity_plus's platform channel isn't set up in every
@@ -97,23 +120,11 @@ class _GroupScreenState extends State<GroupScreen> {
     } catch (_) {}
   }
 
-  /// Loads whatever group info (name, participants) was cached from the
-  /// last successful fetchGroup(), if any. This is what lets the add
-  /// button work on a cold, offline start -- without it, [_group] only
-  /// ever came from a live fetchGroup() in [_refresh], which throws when
-  /// offline and leaves it null (and the add button disabled) forever,
-  /// even though the expense list loads fine from its own cache.
-  Future<void> _loadGroupFromCache() async {
-    final cached = await widget.db.cachedGroup(widget.groupId);
-    if (!mounted || cached == null) return;
-    setState(() => _group = cached);
-    await _resolveActiveUser();
-  }
-
-  Future<void> _loadFromCache() async {
-    final rows = await widget.db.expensesForGroup(widget.groupId);
-    if (!mounted) return;
-    setState(() => _expenses = rows.map(widget.db.rowToExpense).toList());
+  @override
+  void dispose() {
+    _groupSub?.cancel();
+    _expensesSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadCategories() async {
@@ -138,6 +149,11 @@ class _GroupScreenState extends State<GroupScreen> {
         orElse: () => Category(id: id, name: 'Category $id', grouping: 'Other'),
       );
 
+  /// Fetches the group + its expenses live and writes them to the local
+  /// db. Deliberately doesn't touch [_group]/[_expenses] itself anymore
+  /// (issue #47) -- [_groupSub]/[_expensesSub] pick up [cacheGroup]'s and
+  /// [replaceServerExpenses]'s writes on their own and update those
+  /// fields via setState.
   Future<void> _refresh() async {
     setState(() => _loading = true);
     try {
@@ -146,12 +162,7 @@ class _GroupScreenState extends State<GroupScreen> {
       await widget.db.cacheGroup(group);
       await widget.db.replaceServerExpenses(widget.groupId, fresh);
       if (!mounted) return;
-      setState(() {
-        _group = group;
-        _error = null;
-      });
-      await _loadFromCache();
-      await _resolveActiveUser();
+      setState(() => _error = null);
     } catch (e, st) {
       // Offline or the server's unreachable -- fine, we already loaded
       // whatever's cached. Only surface an error if we have nothing at
@@ -173,14 +184,11 @@ class _GroupScreenState extends State<GroupScreen> {
   }
 
   Future<void> _syncThenRefresh() async {
-    final synced = await widget.outbox.flush(widget.groupId);
-    // Reload from the local cache first, regardless of what happens next --
-    // the outbox already deleted any newly-synced rows from the local db,
-    // so this alone clears their "syncing..." badge even if the live
-    // refresh below fails (e.g. a transient server error unrelated to the
-    // sync itself). Without this, a refresh failure could leave a
-    // genuinely-synced expense stuck showing as pending.
-    if (synced > 0) await _loadFromCache();
+    // No need to reload from the local cache first anymore (issue #47)
+    // -- the outbox's own db writes (markSynced, etc.) already reach
+    // [_expensesSub] on their own, synchronously with the write, so
+    // there's no gap for _refresh's live fetch below to race against.
+    await widget.outbox.flush(widget.groupId);
     await _refresh();
   }
 
@@ -263,9 +271,9 @@ class _GroupScreenState extends State<GroupScreen> {
   /// own initState reloaded from the local cache on every visit), and
   /// keeping that "always current when you look at it" behavior across
   /// the push-to-tab conversion mattered more here than preserving
-  /// scroll position across tab switches. Each embedded screen is cheap
-  /// to rebuild -- everything it reads comes straight from the already-
-  /// local db cache, no network round-trip required just to redraw.
+  /// scroll position across tab switches. Each embedded screen watches
+  /// the same local db cache directly (issue #47), so no explicit
+  /// reload wiring between tabs is needed any more either.
   Widget _tabBody() {
     if (_group == null) {
       return _tabIndex == 0 ? RefreshIndicator(onRefresh: _refresh, child: _body()) : const SizedBox.shrink();
@@ -281,12 +289,6 @@ class _GroupScreenState extends State<GroupScreen> {
           outbox: widget.outbox,
           group: _group!,
           embedded: true,
-          // A settlement marked as paid here is a new (possibly still-
-          // pending) expense -- the old push-based _openBalances used to
-          // pick this up simply by reloading once the push returned;
-          // embedded, there's no "returning" to hook, so BalancesScreen
-          // calls this explicitly once its own settle-up flow finishes.
-          onExpenseChanged: _loadFromCache,
         );
       case 2:
         return StatsScreen(
@@ -429,22 +431,24 @@ class _GroupScreenState extends State<GroupScreen> {
     if (!mounted || action == null) return;
     switch (action) {
       case 'retry':
+        // No _loadFromCache() call needed (issue #47) -- [_expensesSub]
+        // already reflects retrySyncFailure's write by the time this
+        // await returns.
         await widget.db.retrySyncFailure(e.id);
-        await _loadFromCache();
         await _syncThenRefresh();
       case 'delete':
         await widget.db.deleteFailedExpense(e.id);
-        await _loadFromCache();
     }
   }
 
-  /// Opens group settings (rename, currency, participants). Unlike the
-  /// balances screen, GroupSettingsScreen returns the fresh [Group]
-  /// straight from Navigator.pop on a successful save (or null if
-  /// nothing changed / the user backed out), so this can just adopt it
-  /// directly instead of re-reading the cache.
+  /// Opens group settings (rename, currency, participants).
+  /// [GroupSettingsScreen] writes any change straight to the local db
+  /// via [AppDatabase.cacheGroup] before it pops (issue #47) -- so
+  /// [_groupSub] already carries the update back to [_group] by the
+  /// time this returns, and there's nothing left for this method to
+  /// adopt from the popped result the way it used to.
   Future<void> _openGroupSettings() async {
-    final updated = await Navigator.of(context).push<Group>(
+    await Navigator.of(context).push<Group>(
       MaterialPageRoute(
         builder: (_) => GroupSettingsScreen(
           client: widget.client,
@@ -453,9 +457,6 @@ class _GroupScreenState extends State<GroupScreen> {
         ),
       ),
     );
-    if (updated != null && mounted) {
-      setState(() => _group = updated);
-    }
   }
 
   Future<void> _openAddExpense() async {
@@ -471,7 +472,9 @@ class _GroupScreenState extends State<GroupScreen> {
       ),
     );
     if (added == true) {
-      await _loadFromCache();
+      // ExpenseScreen's own save already wrote the pending row via
+      // insertPending, which [_expensesSub] has already picked up by
+      // now (issue #47) -- just kick off a sync.
       _syncThenRefresh();
     }
   }
@@ -518,13 +521,14 @@ class _GroupScreenState extends State<GroupScreen> {
 
   /// Resolves who "you" are in *this* group -- see resolveActiveParticipant
   /// and decisions/multi-group-design.md, decision 2. Called after every
-  /// successful cache load and live refresh (participants can change,
-  /// and this group's own stored choice or the device's default name
-  /// might newly apply). Never prompts on its own: an unresolved result
-  /// just leaves [_activeUserId] null, same as "nothing set yet" always
-  /// meant -- resolveDefaultPaidBy in add-expense already falls back to
-  /// the first participant, and the person icon still lets you pick
-  /// explicitly.
+  /// db-backed cache/refresh update to [_group] (via [_groupSub]) rather
+  /// than being threaded through each individual load path (issue #47):
+  /// participants can change, and this group's own stored choice or the
+  /// device's default name might newly apply. Never prompts on its own:
+  /// an unresolved result just leaves [_activeUserId] null, same as
+  /// "nothing set yet" always meant -- resolveDefaultPaidBy in
+  /// add-expense already falls back to the first participant, and the
+  /// person icon still lets you pick explicitly.
   Future<void> _resolveActiveUser() async {
     if (_group == null) return;
     final row = await widget.db.groupRow(widget.groupId);

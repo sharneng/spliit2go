@@ -13,16 +13,20 @@ import 'expense_screen.dart';
 /// Who-owes-whom for the group, plus one-tap "mark as paid" for the
 /// suggested settlements -- mirrors the web app's Balances tab.
 ///
-/// Balances are computed entirely from the local cache (see
-/// balance_calculator.dart), so this works offline and already reflects
-/// any not-yet-synced pending expenses. "Mark as paid" opens ExpenseScreen
-/// pre-filled with the suggested settlement (amount, "this is a
-/// reimbursement" checked, payer/payee, a "<payer> paid <payee>" title)
-/// rather than recording it directly (issue #22) -- matching the web/iOS
-/// apps' own settle-up flow, and letting the amount be edited down for a
-/// partial payment. From there it's a completely normal add: a pending
-/// expense written locally first, queued for the outbox if there's no
-/// connectivity right now.
+/// Balances are computed entirely from the local cache, via a live
+/// [AppDatabase.watchExpensesForGroup] stream (issue #47) rather than an
+/// imperative reload, so this works offline, already reflects any
+/// not-yet-synced pending expenses, and picks up any change -- a
+/// settlement recorded here, an expense added/edited/synced elsewhere in
+/// the app -- the moment it's written, with no reload wiring of its own
+/// needed. "Mark as paid" opens ExpenseScreen pre-filled with the
+/// suggested settlement (amount, "this is a reimbursement" checked,
+/// payer/payee, a "<payer> paid <payee>" title) rather than recording it
+/// directly (issue #22) -- matching the web/iOS apps' own settle-up
+/// flow, and letting the amount be edited down for a partial payment.
+/// From there it's a completely normal add: a pending expense written
+/// locally first, queued for the outbox if there's no connectivity right
+/// now.
 class BalancesScreen extends StatefulWidget {
   final SpliitClient client;
   final AppDatabase db;
@@ -38,15 +42,6 @@ class BalancesScreen extends StatefulWidget {
   /// been converted to a tab.
   final bool embedded;
 
-  /// Notified after a settlement is recorded and this screen's own
-  /// local reload finishes -- lets GroupScreen refresh its own
-  /// (separately held) expense list, since a "mark as paid" settlement
-  /// is a new expense that GroupScreen's Expenses tab wouldn't
-  /// otherwise know about until its own next fetch. Only meaningful
-  /// when [embedded]; a standalone pushed screen instead relies on
-  /// GroupScreen reloading when the push returns.
-  final VoidCallback? onExpenseChanged;
-
   const BalancesScreen({
     super.key,
     required this.client,
@@ -54,7 +49,6 @@ class BalancesScreen extends StatefulWidget {
     required this.outbox,
     required this.group,
     this.embedded = false,
-    this.onExpenseChanged,
   });
 
   @override
@@ -62,28 +56,13 @@ class BalancesScreen extends StatefulWidget {
 }
 
 class _BalancesScreenState extends State<BalancesScreen> {
-  List<Balance> _balances = [];
-  List<Settlement> _settlements = [];
-  bool _loading = true;
+  late final Stream<List<ExpenseRow>> _expensesStream;
   String? _settlingKey;
 
   @override
   void initState() {
     super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    final rows = await widget.db.expensesForGroup(widget.group.id);
-    final expenses = rows.map(widget.db.rowToExpense).toList();
-    final balances = computeBalances(widget.group.participants, expenses);
-    if (!mounted) return;
-    setState(() {
-      _balances = balances;
-      _settlements = suggestSettlements(balances);
-      _loading = false;
-    });
+    _expensesStream = widget.db.watchExpensesForGroup(widget.group.id);
   }
 
   String _name(String participantId) {
@@ -131,14 +110,15 @@ class _BalancesScreenState extends State<BalancesScreen> {
     setState(() => _settlingKey = key);
     // Best-effort immediate sync, same pattern as adding a regular
     // expense -- if we're offline this just leaves it pending, which is
-    // fine since the local balance recompute below still counts pending
-    // rows. But note what Outbox.flush() does on *success*: it deletes
-    // the local pending row outright and relies on the caller doing a
-    // live re-fetch afterward to bring it back as a normal synced row
-    // (see outbox.dart) -- GroupScreen does this via _syncThenRefresh,
-    // and this screen needs the same follow-up, or a successfully-synced
-    // settlement would vanish from the balance math entirely instead of
-    // clearing the debt it was meant to clear.
+    // fine since the live balance recompute (via [_expensesStream])
+    // still counts pending rows. But note what Outbox.flush() does on
+    // *success*: it deletes the local pending row outright and relies on
+    // the caller doing a live re-fetch afterward to bring it back as a
+    // normal synced row (see outbox.dart) -- without the follow-up
+    // fetchExpenses/replaceServerExpenses below, a successfully-synced
+    // settlement would briefly vanish from the balance math (the pending
+    // row gone, the synced one not yet cached) instead of just clearing
+    // the debt it was meant to clear.
     final synced = await widget.outbox.flush(widget.group.id);
     if (synced > 0) {
       try {
@@ -153,69 +133,88 @@ class _BalancesScreenState extends State<BalancesScreen> {
     }
     if (!mounted) return;
     setState(() => _settlingKey = null);
-    await _load();
-    widget.onExpenseChanged?.call();
+    // No explicit reload and no onExpenseChanged callback to
+    // GroupScreen needed (issue #47) -- every write above went through
+    // AppDatabase, so [_expensesStream] here (and GroupScreen's own
+    // watchExpensesForGroup subscription) already reflect it.
   }
 
   @override
   Widget build(BuildContext context) {
-    final body = _loading
-        ? const Center(child: CircularProgressIndicator())
-        : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                    child: Text(
-                      context.l10n.balancesExplainer,
-                      style: const TextStyle(color: Colors.grey),
+    return StreamBuilder<List<ExpenseRow>>(
+      stream: _expensesStream,
+      builder: (context, snapshot) {
+        final rows = snapshot.data;
+        final Widget body;
+        if (rows == null) {
+          body = const Center(child: CircularProgressIndicator());
+        } else {
+          final expenses = rows.map(widget.db.rowToExpense).toList();
+          final balances = computeBalances(widget.group.participants, expenses);
+          final settlements = suggestSettlements(balances);
+          body = RefreshIndicator(
+            // The list is already always current (it's fed by a live db
+            // stream) -- there's nothing to actually re-fetch here, but
+            // the pull-to-refresh gesture is kept as a harmless no-op
+            // rather than removing an affordance users expect on a
+            // scrollable list (issue #47).
+            onRefresh: () async {},
+            child: ListView(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                  child: Text(
+                    context.l10n.balancesExplainer,
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ),
+                for (final b in balances)
+                  ListTile(
+                    title: Text(_name(b.participantId)),
+                    trailing: Text(
+                      '${b.netCents < 0 ? '-' : ''}${_money(b.netCents)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: b.netCents < 0
+                            ? Theme.of(context).colorScheme.error
+                            : Colors.green.shade700,
+                      ),
                     ),
                   ),
-                  for (final b in _balances)
+                if (settlements.isNotEmpty) ...[
+                  const Divider(),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: Text(context.l10n.balancesSuggestedReimbursements,
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                  for (final s in settlements)
                     ListTile(
-                      title: Text(_name(b.participantId)),
-                      trailing: Text(
-                        '${b.netCents < 0 ? '-' : ''}${_money(b.netCents)}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: b.netCents < 0
-                              ? Theme.of(context).colorScheme.error
-                              : Colors.green.shade700,
-                        ),
-                      ),
-                    ),
-                  if (_settlements.isNotEmpty) ...[
-                    const Divider(),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                      child: Text(context.l10n.balancesSuggestedReimbursements,
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                    for (final s in _settlements)
-                      ListTile(
-                        title: Text(context.l10n.balancesOwes(_name(s.fromId), _name(s.toId))),
-                        trailing: _settlingKey == '${s.fromId}->${s.toId}'
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : TextButton(
-                                onPressed: () => _openSettleUp(s),
-                                child: Text(context.l10n.balancesMarkAsPaid(_money(s.amountCents))),
-                              ),
-                      ),
-                  ],
-                  if (_balances.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Center(child: Text(context.l10n.commonNoExpensesYet)),
-                    ),
+                      title: Text(context.l10n.balancesOwes(_name(s.fromId), _name(s.toId))),
+                      trailing: _settlingKey == '${s.fromId}->${s.toId}'
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : TextButton(
+                              onPressed: () => _openSettleUp(s),
+                              child: Text(context.l10n.balancesMarkAsPaid(_money(s.amountCents))),
+                            ),
+                     ),
                 ],
-              ),
-            );
-    if (widget.embedded) return body;
-    return Scaffold(appBar: AppBar(title: Text(context.l10n.balancesTitle)), body: body);
+                if (balances.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Center(child: Text(context.l10n.commonNoExpensesYet)),
+                  ),
+              ],
+            ),
+          );
+        }
+        if (widget.embedded) return body;
+        return Scaffold(appBar: AppBar(title: Text(context.l10n.balancesTitle)), body: body);
+      },
+    );
   }
 }
