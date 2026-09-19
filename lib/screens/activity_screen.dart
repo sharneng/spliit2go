@@ -7,6 +7,7 @@ import '../models/activity.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
 import '../sync/outbox.dart';
+import '../utils/date_format.dart';
 import 'expense_screen.dart';
 
 /// The group's server-side activity log (issue #26) -- who changed what
@@ -122,11 +123,11 @@ class _ActivityScreenState extends State<ActivityScreen> {
     final diff = today.difference(day).inDays;
     if (diff == 0) return context.l10n.activityToday;
     if (diff == 1) return context.l10n.activityYesterday;
-    return '${t.year.toString().padLeft(4, '0')}-${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')}';
+    return formatDate(t, locale: context.appLocale);
   }
 
   String _formatTime(DateTime t) =>
-      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+      formatTimeOfDay(t, locale: context.appLocale);
 
   /// Opens the activity's expense for editing -- same fetch-fresh-first
   /// pattern as GroupScreen._openEditExpense, for the same reason (no

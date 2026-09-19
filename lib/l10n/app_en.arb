@@ -325,5 +325,15 @@
   "appSettingsThemeLight": "Light",
   "appSettingsThemeDark": "Dark",
   "appSettingsThemeSystem": "Follow System",
-  "appSettingsSaveError": "Could not save your setting. Please try again."
+  "appSettingsSaveError": "Could not save your setting. Please try again.",
+  "appSettingsLanguage": "Language",
+  "appSettingsLanguageSystem": "System default",
+  "categoryFallbackName": "Category {id}",
+  "@categoryFallbackName": {
+    "placeholders": {
+      "id": {
+        "type": "int"
+      }
+    }
+  }
 }

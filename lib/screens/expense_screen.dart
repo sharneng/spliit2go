@@ -8,10 +8,12 @@ import '../models/currency.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
 import '../models/default_split.dart';
+import '../l10n/category_names.dart';
 import '../l10n/context_l10n.dart';
 import '../services/active_user.dart';
 import '../services/expense_shares.dart';
 import '../sync/outbox.dart';
+import '../utils/date_format.dart';
 import '../utils/money.dart';
 import '../utils/decimal_input.dart';
 import '../widgets/currency_picker.dart';
@@ -140,6 +142,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     Category(id: 0, name: 'General', grouping: 'Uncategorized'),
   ];
   int _category = 0;
+
+  /// The fetched [Category] for [_category], or null if it isn't in
+  /// [_categories] (yet, or ever). Its display name is translated at
+  /// presentation time via [localizedCategoryLabel]; the model's own
+  /// English `name`/`grouping` stay untouched, since the icon lookup keys
+  /// on them.
+  Category? get _knownCategory {
+    for (final c in _categories) {
+      if (c.id == _category) return c;
+    }
+    return null;
+  }
 
   /// The currently-selected category, falling back to a synthesized
   /// placeholder if [_category] isn't (yet, or ever) in [_categories] --
@@ -458,7 +472,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       totalCents += (value * 100).round();
     }
     if (totalCents != amountCents) {
-      final diff = formatMoney((amountCents - totalCents).abs(), widget.group.currency);
+      final diff = formatMoney((amountCents - totalCents).abs(), widget.group.currency,
+          locale: context.appLocale);
       return context.l10n.expenseAmountMismatch(diff);
     }
     return null;
@@ -484,7 +499,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             : context.l10n.expensePercentRemaining(formatted);
       }
       final formattedAmount =
-          formatMoney((magnitude * 100).round(), widget.group.currency);
+          formatMoney((magnitude * 100).round(), widget.group.currency,
+              locale: context.appLocale);
       return over
           ? context.l10n.expenseAmountOver(formattedAmount)
           : context.l10n.expenseAmountRemaining(formattedAmount);
@@ -533,7 +549,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 onTap: _pickDate,
                 child: InputDecorator(
                   decoration: InputDecoration(labelText: context.l10n.expenseDateLabel),
-                  child: Text(_formatDate(_date)),
+                  child: Text(formatDate(_date, locale: context.appLocale)),
                 ),
               ),
               const SizedBox(height: 12),
@@ -545,7 +561,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     children: [
                       CategoryIconGlyph(category: _selectedCategory, size: 24),
                       const SizedBox(width: 8),
-                      Text(_selectedCategory.name),
+                      Text(localizedCategoryLabel(
+                          context, _category, _knownCategory)),
                     ],
                   ),
                 ),
@@ -807,9 +824,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     });
   }
 
-  String _formatDate(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
   Widget _paidForRow(Participant p) {
     final included = _includedInSplit[p.id] ?? false;
     final preview = included ? (_livePreviewAmounts()?[p.id]) : null;
@@ -824,7 +838,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             // Amount (the typed field already *is* the amount) and for
             // anything that doesn't yet satisfy [_showsLivePreview].
             subtitle:
-                preview != null ? Text(formatMoney(preview, widget.group.currency)) : null,
+                preview != null
+                    ? Text(formatMoney(preview, widget.group.currency,
+                        locale: context.appLocale))
+                    : null,
             controlAffinity: ListTileControlAffinity.leading,
             contentPadding: EdgeInsets.zero,
           ),
@@ -1088,7 +1105,9 @@ class _CategoryPickerState extends State<_CategoryPicker> {
     final query = _query.trim().toLowerCase();
     final filtered = query.isEmpty
         ? widget.categories
-        : widget.categories.where((c) => c.name.toLowerCase().contains(query)).toList();
+        : widget.categories
+            .where((c) => categoryMatchesQuery(context.appLocale, c, query))
+            .toList();
     final sections = _grouped(filtered);
 
     return SafeArea(
@@ -1119,7 +1138,7 @@ class _CategoryPickerState extends State<_CategoryPicker> {
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                               child: Text(
-                                section.key,
+                                localizedCategoryGrouping(context, section.key),
                                 style: Theme.of(context)
                                     .textTheme
                                     .labelLarge
@@ -1129,7 +1148,7 @@ class _CategoryPickerState extends State<_CategoryPicker> {
                             for (final c in section.value)
                               ListTile(
                                 leading: CategoryIconGlyph(category: c, size: 28),
-                                title: Text(c.name),
+                                title: Text(localizedCategoryName(context, c)),
                                 trailing: c.id == widget.selectedId
                                     ? const Icon(Icons.check)
                                     : null,
