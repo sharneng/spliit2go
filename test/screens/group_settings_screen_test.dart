@@ -196,9 +196,23 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    // The date-span field (issue #55) pushes the participant list further
+    // down than the test surface's default viewport. ensureVisible's
+    // default alignment only scrolls the minimum distance needed to
+    // bring a target's edge into view, which can leave it sitting right
+    // at the Scrollable's viewport boundary -- "visible" but still
+    // outside the render box's actual hit-testable area, so a
+    // subsequent tester.tap silently misses it. A generous manual drag
+    // (clamped at the list's max scroll extent, since this list is
+    // short) gives real margin instead. This SDK's ensureVisible has no
+    // alignment parameter to ask for that directly.
+    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.person_add_outlined));
     await tester.pumpAndSettle();
     // The new row is the last TextField with no decoration label.
+    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Cid');
     await tester.tap(find.byIcon(Icons.check));
     await tester.pumpAndSettle();
@@ -512,7 +526,22 @@ void main() {
     await tester.pumpAndSettle();
 
     // bea (second row) has no expenses -- its remove button still works.
-    await tester.tap(find.byIcon(Icons.close).at(1));
+    // Scoped to bea's own row (rather than find.byIcon(Icons.close).at(1))
+    // so it can't accidentally resolve to a different participant's
+    // button after the date-span field (issue #55) pushes this row
+    // below the test surface's default viewport and it needs scrolling
+    // into view first.
+    final beaCloseButton = find.descendant(
+      of: find.ancestor(of: find.widgetWithText(TextField, 'Bea'), matching: find.byType(Row)),
+      matching: find.byIcon(Icons.close),
+    );
+    // See the comment above the equivalent drag in "adding a
+    // participant sends them with no id" -- ensureVisible's default
+    // alignment left this button just barely in view but outside its
+    // actual hit-testable area, so a plain tap silently missed it.
+    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    await tester.tap(beaCloseButton);
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.check));
     await tester.pumpAndSettle();
@@ -528,6 +557,10 @@ void main() {
 
   // Issue #55: date span shown on this screen, computed from the
   // group's cached expenses -- first expense date to last.
+  // Local, date-only DateTimes -- see the comment on date_span_calculator_test.dart's
+  // expense() helper: AppDatabase's drift round-trip only preserves a
+  // DateTime.utc(...) fixture's calendar date on a machine at UTC+0, and
+  // shifts it a day west of UTC otherwise.
   testWidgets('shows the date span computed from the earliest and latest cached expense dates',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
@@ -540,7 +573,7 @@ void main() {
         amountCents: 1000,
         paidBy: 'alex',
         paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
-        date: DateTime.utc(2026, 1, 2),
+        date: DateTime(2026, 1, 2),
       ),
       Expense(
         id: 'e2',
@@ -549,7 +582,7 @@ void main() {
         amountCents: 5000,
         paidBy: 'alex',
         paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
-        date: DateTime.utc(2026, 6, 15),
+        date: DateTime(2026, 6, 15),
       ),
     ]);
 

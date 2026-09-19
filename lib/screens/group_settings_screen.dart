@@ -103,6 +103,16 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   /// [_participantIdsWithExpenses] rather than a second query, and
   /// null until that load completes (or if the group has no cached
   /// expenses at all).
+  ///
+  /// One-shot, not live (issue #55 review flagged this can go stale if
+  /// the cache changes while this screen is open -- e.g. a background
+  /// GroupScreen refresh elsewhere). A first attempt switched this to
+  /// an AppDatabase.watchExpensesForGroup subscription (issue #47's
+  /// pattern), but that triggered "A Timer is still pending even after
+  /// the widget tree was disposed" test failures -- and, worse, an
+  /// actual hang in the local CI loop -- in ways not yet understood
+  /// well enough to ship. Reverted to one-shot rather than risk
+  /// landing something that hangs CI; see issue #55 for the follow-up.
   DateSpan? _dateSpan;
 
   @override

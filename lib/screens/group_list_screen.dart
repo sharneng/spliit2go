@@ -55,6 +55,18 @@ class _GroupListScreenState extends State<GroupListScreen> {
   /// via [formatDateSpan]'s own null handling.
   Map<String, DateSpan?> _dateSpans = {};
 
+  /// One-shot, not live (issue #55 review flagged a real staleness gap:
+  /// main.dart's _Root auto-opens the last-used group via its own push,
+  /// on top of this screen, without going through [_openGroup] -- so if
+  /// an expense is added there and you back out, this list's span for
+  /// that group is stale until some other refresh happens to run). A
+  /// first attempt switched this to one AppDatabase.watchExpensesForGroup
+  /// subscription per joined group (issue #47's pattern), but that
+  /// triggered "A Timer is still pending even after the widget tree was
+  /// disposed" test failures -- and, worse, an actual hang in the local
+  /// CI loop -- in ways not yet understood well enough to ship. Reverted
+  /// rather than risk landing something that hangs CI; see issue #55 for
+  /// the follow-up.
   @override
   void initState() {
     super.initState();

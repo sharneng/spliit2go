@@ -150,6 +150,9 @@ void main() {
   });
 
   // Issue #55: date span shown right after the currency symbol.
+  // Local, date-only DateTimes -- see date_span_calculator_test.dart's
+  // expense() helper comment: a DateTime.utc(...) fixture doesn't survive
+  // AppDatabase's drift round-trip intact on a machine west of UTC.
   testWidgets("shows each group's date span after its currency symbol", (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
@@ -163,7 +166,7 @@ void main() {
         amountCents: 500,
         paidBy: 'p1',
         paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
-        date: DateTime.utc(2026, 1, 2),
+        date: DateTime(2026, 1, 2),
       ),
       Expense(
         id: 'e2',
@@ -172,7 +175,7 @@ void main() {
         amountCents: 5000,
         paidBy: 'p1',
         paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
-        date: DateTime.utc(2026, 6, 15),
+        date: DateTime(2026, 6, 15),
       ),
     ]);
 
@@ -187,7 +190,7 @@ void main() {
     expect(find.text('\$  2026-01-02 – 2026-06-15'), findsOneWidget);
   });
 
-  testWidgets("shows the em-dash placeholder for a group with no cached expenses", (tester) async {
+  testWidgets('shows the em-dash placeholder for a group with no cached expenses', (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     await db.cacheGroup(const Group(id: 'gA', name: 'Banff Trip', currency: '\$', participants: []));
