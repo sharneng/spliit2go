@@ -20,8 +20,8 @@
   },
   "groupListLeaveConfirm": "Leave",
   "joinGroupScreenTitle": "Join a group",
-  "joinGroupUrlInvalid": "That doesn''t look like a group URL -- it should look like https://spliit.app/groups/xxxxxxxxxxxxxxxxxxxxx",
-  "joinGroupJoinFailed": "Couldn''t join: {error}",
+  "joinGroupUrlInvalid": "That doesn't look like a group URL -- it should look like https://spliit.app/groups/xxxxxxxxxxxxxxxxxxxxx",
+  "joinGroupJoinFailed": "Couldn't join: {error}",
   "@joinGroupJoinFailed": {
     "placeholders": {
       "error": {
@@ -30,7 +30,7 @@
     }
   },
   "joinGroupUrlLabel": "Group URL",
-  "joinGroupUrlHelper": "Paste the group''s URL, e.g. https://spliit.app/groups/xxxxx",
+  "joinGroupUrlHelper": "Paste the group's URL, e.g. https://spliit.app/groups/xxxxx",
   "joinGroupSubmitButton": "Join",
   "groupScreenSearchTooltip": "Search",
   "groupScreenActiveUserTooltip": "Active user",
@@ -40,7 +40,7 @@
   "groupScreenTabBalance": "Balance",
   "groupScreenTabStats": "Stats",
   "groupScreenTabActivities": "Activities",
-  "groupScreenServerError": "Couldn''t reach the server: {error}",
+  "groupScreenServerError": "Couldn't reach the server: {error}",
   "@groupScreenServerError": {
     "placeholders": {
       "error": {
@@ -50,7 +50,7 @@
   },
   "groupScreenSyncFailed": "sync failed",
   "groupScreenSyncing": "syncing…",
-  "groupScreenSyncFailureTitle": "Couldn''t sync this expense",
+  "groupScreenSyncFailureTitle": "Couldn't sync this expense",
   "groupScreenEditNeedsConnection": "Editing an expense needs a connection.",
   "groupScreenActiveUserDialogTitle": "Active user",
   "groupScreenActiveUserNone": "None",
@@ -60,8 +60,8 @@
   "groupSettingsSymbolRequired": "Enter at least one character.",
   "groupSettingsNeedParticipant": "At least one participant is required.",
   "groupSettingsParticipantNameRequired": "Every participant needs a name.",
-  "groupSettingsCantRemoveHasExpenses": "Can''t remove a participant who has expenses in this group.",
-  "groupSettingsSaveFailed": "Couldn''t save: {error}",
+  "groupSettingsCantRemoveHasExpenses": "Can't remove a participant who has expenses in this group.",
+  "groupSettingsSaveFailed": "Couldn't save: {error}",
   "@groupSettingsSaveFailed": {
     "placeholders": {
       "error": {
@@ -73,12 +73,12 @@
   "groupSettingsCurrencyLabel": "Main currency",
   "groupSettingsSymbolLabel": "Currency symbol",
   "groupSettingsSymbolHint": "$, €, £...",
-  "groupSettingsSymbolHelper": "We''ll use it to display amounts.",
+  "groupSettingsSymbolHelper": "We'll use it to display amounts.",
   "groupSettingsInfoLabel": "Group information",
   "groupSettingsInfoHint": "What information is relevant to group participants?",
   "groupSettingsParticipantsHeading": "Participants",
   "groupSettingsAddParticipantTooltip": "Add participant",
-  "groupSettingsCantRemoveTooltip": "Can''t remove: has expenses in this group",
+  "groupSettingsCantRemoveTooltip": "Can't remove: has expenses in this group",
   "groupSettingsRemoveTooltip": "Remove",
   "expenseEditTitle": "Edit expense",
   "expenseAddTitle": "Add expense",
@@ -198,7 +198,7 @@
   "expenseHintShares": "Give anyone paying a larger part more shares.",
   "expenseHintPercentage": "Percentages must add up to 100.",
   "expenseHintAmount": "Amounts must add up to the expense total.",
-  "expenseEditSaveFailed": "Couldn''t save: needs a connection to edit an expense ({error})",
+  "expenseEditSaveFailed": "Couldn't save: needs a connection to edit an expense ({error})",
   "@expenseEditSaveFailed": {
     "placeholders": {
       "error": {
@@ -241,7 +241,7 @@
   "activityEmpty": "There is not yet any activity in your group.",
   "activityLoadMore": "Load more",
   "activityOpenNeedsConnection": "Opening this expense needs a connection.",
-  "activityLoadFailed": "Couldn''t load activity: {error}",
+  "activityLoadFailed": "Couldn't load activity: {error}",
   "@activityLoadFailed": {
     "placeholders": {
       "error": {
