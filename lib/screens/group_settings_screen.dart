@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -99,46 +100,49 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   Set<String> _participantIdsWithExpenses = {};
 
   /// First-to-last expense date across the group's cached expenses
-  /// (issue #55) -- computed from the same [expensesForGroup] fetch as
-  /// [_participantIdsWithExpenses] rather than a second query, and
-  /// null until that load completes (or if the group has no cached
-  /// expenses at all).
-  ///
-  /// One-shot, not live (issue #55 review flagged this can go stale if
-  /// the cache changes while this screen is open -- e.g. a background
-  /// GroupScreen refresh elsewhere). A first attempt switched this to
-  /// an AppDatabase.watchExpensesForGroup subscription (issue #47's
-  /// pattern), but that triggered "A Timer is still pending even after
-  /// the widget tree was disposed" test failures -- and, worse, an
-  /// actual hang in the local CI loop -- in ways not yet understood
-  /// well enough to ship. Reverted to one-shot rather than risk
-  /// landing something that hangs CI; see issue #55 for the follow-up.
+  /// (issue #55) -- computed from the same [AppDatabase.watchExpensesForGroup]
+  /// subscription as [_participantIdsWithExpenses] rather than a second
+  /// query, and null until the first emission (or if the group has no
+  /// cached expenses at all).
   DateSpan? _dateSpan;
+
+  /// Live, not one-shot (issue #57): this screen can be left open while
+  /// a background refresh (GroupScreen's own watchExpensesForGroup
+  /// subscription driving replaceServerExpenses) or another synced
+  /// expense writes new rows into the cache, and both
+  /// [_participantIdsWithExpenses] and [_dateSpan] need to follow that.
+  /// Mirrors GroupScreen's own single-subscription
+  /// watchExpensesForGroup().listen(...) + cancel-in-dispose pattern
+  /// exactly (issue #47) -- unlike the GroupListScreen side of #55's
+  /// review, which needed one subscription *per joined group* and hit a
+  /// "Timer is still pending" leak, this screen only ever needs one
+  /// subscription for its own single group, same as GroupScreen's
+  /// already-working code.
+  StreamSubscription<List<ExpenseRow>>? _expensesSub;
 
   @override
   void initState() {
     super.initState();
-    _loadParticipantsWithExpenses();
-  }
-
-  Future<void> _loadParticipantsWithExpenses() async {
-    final rows = await widget.db.expensesForGroup(widget.group.id);
-    final ids = <String>{};
-    for (final row in rows) {
-      ids.add(row.paidBy);
-      for (final share in jsonDecode(row.paidForJson) as List) {
-        ids.add(ExpenseShare.fromJson(share as Map<String, dynamic>).participantId);
+    _expensesSub =
+        widget.db.watchExpensesForGroup(widget.group.id).listen((rows) {
+      if (!mounted) return;
+      final ids = <String>{};
+      for (final row in rows) {
+        ids.add(row.paidBy);
+        for (final share in jsonDecode(row.paidForJson) as List) {
+          ids.add(ExpenseShare.fromJson(share as Map<String, dynamic>).participantId);
+        }
       }
-    }
-    if (!mounted) return;
-    setState(() {
-      _participantIdsWithExpenses = ids;
-      _dateSpan = computeDateSpan(rows);
+      setState(() {
+        _participantIdsWithExpenses = ids;
+        _dateSpan = computeDateSpan(rows);
+      });
     });
   }
 
   @override
   void dispose() {
+    _expensesSub?.cancel();
     _nameController.dispose();
     _informationController.dispose();
     _customSymbolController.dispose();
@@ -152,7 +156,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     setState(() => _participants.add(_ParticipantRow(id: '', name: '')));
   }
 
-  /// True once [_loadParticipantsWithExpenses] would actually block
+  /// True once the watchExpensesForGroup subscription above would actually block
   /// removing this row -- i.e. it's an existing (not newly-added, empty
   /// [_ParticipantRow.id]) participant with at least one associated
   /// expense in the cache (issue #46).

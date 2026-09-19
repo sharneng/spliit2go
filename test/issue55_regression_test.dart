@@ -1,7 +1,8 @@
 // Regression probes from the review of issue #55 (commit 3c689b5).
-// The same-day-collapse probe is fixed and active. The other two are
-// skipped -- see their own skip reasons -- pending a live-refresh fix
-// that doesn't trip a Flutter-test/drift Timer-pending issue.
+// All three are active: the same-day-collapse probe from #56, and the
+// two live-refresh probes (issue #57) now that GroupListScreen refreshes
+// via RouteAware.didPopNext and GroupSettingsScreen via a single
+// watchExpensesForGroup subscription.
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,6 +29,10 @@ Expense expense(String id, DateTime date) => Expense(
     pending: true);
 Widget app(Widget home, {GlobalKey<NavigatorState>? key}) => MaterialApp(
     navigatorKey: key,
+    // GroupListScreen subscribes to this in didChangeDependencies
+    // (issue #57) -- without it registered here too, didPopNext never
+    // fires in a test.
+    navigatorObservers: [groupListRouteObserver],
     locale: const Locale('en'),
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
@@ -47,13 +52,7 @@ void main() {
     expect(formatDateSpan(computeDateSpan(await db.expensesForGroup('g1'))),
         '2026-01-02');
   });
-  // Real gap (issue #55 review) -- a live
-  // AppDatabase.watchExpensesForGroup-per-group fix triggered "A Timer
-  // is still pending even after the widget tree was disposed" and an
-  // actual hang in the local CI loop. Reverted the fix rather than ship
-  // something that hangs CI; kept skipped as a reminder this needs a
-  // real (working) fix.
-  testWidgets('list updates after a route pushed by root returns', skip: true,
+  testWidgets('list updates after a route pushed by root returns',
       (tester) async {
     final nav = GlobalKey<NavigatorState>();
     await tester.pumpWidget(app(GroupListScreen(db: db), key: nav));
@@ -69,10 +68,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('€  2026-01-02 – 2026-06-15'), findsOneWidget);
   });
-  // Same live-subscription/Timer-pending issue as "list updates after a
-  // route pushed by root returns" above.
   testWidgets('settings span updates when background refresh writes cache',
-      skip: true, (tester) async {
+      (tester) async {
     final client = SpliitClient(
         baseUrl: 'https://example.test',
         httpClient: MockClient((_) async => throw Exception('unused')));

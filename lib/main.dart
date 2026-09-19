@@ -34,6 +34,11 @@ class Spliit2GoApp extends StatelessWidget {
         listenable: settings,
         builder: (context, _) => MaterialApp(
           title: 'spliit2go',
+          // Lets GroupListScreen hear about routes popped back to it
+          // that weren't pushed by its own _openGroup -- e.g. _Root's
+          // own auto-open-last-group push right below -- so it can
+          // refresh a stale date span (issue #57).
+          navigatorObservers: [groupListRouteObserver],
           // i18n phase 1 (issue #37/#48): infra only -- app_en.arb is the
           // only shipped locale for now, so this doesn't change what any
           // user sees yet. The delegates/supportedLocales still have to be

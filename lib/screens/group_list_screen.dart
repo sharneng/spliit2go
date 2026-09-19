@@ -10,6 +10,15 @@ import 'group_screen.dart';
 import 'app_settings_screen.dart';
 import 'join_group_screen.dart';
 
+/// Registered as a `MaterialApp.navigatorObservers` entry (main.dart) so
+/// [_GroupListScreenState] can hear about routes pushed *on top of* it by
+/// something other than its own [_openGroup] -- specifically _Root's own
+/// auto-open-last-group push (main.dart#_Root) -- and refresh when
+/// popping back reveals this screen again (issue #57). A one-shot
+/// [_load] alone only ever re-ran after *this* screen's own row taps.
+final RouteObserver<PageRoute<void>> groupListRouteObserver =
+    RouteObserver<PageRoute<void>>();
+
 /// Every group this device has joined -- the app's true root (see
 /// main.dart#_Root), always reachable via GroupScreen's normal back
 /// arrow, rather than something GroupScreen pushes you into. "Launch
@@ -43,7 +52,7 @@ class GroupListScreen extends StatefulWidget {
   State<GroupListScreen> createState() => _GroupListScreenState();
 }
 
-class _GroupListScreenState extends State<GroupListScreen> {
+class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
   List<GroupRow> _groups = [];
   bool _loading = true;
 
@@ -55,21 +64,42 @@ class _GroupListScreenState extends State<GroupListScreen> {
   /// via [formatDateSpan]'s own null handling.
   Map<String, DateSpan?> _dateSpans = {};
 
-  /// One-shot, not live (issue #55 review flagged a real staleness gap:
-  /// main.dart's _Root auto-opens the last-used group via its own push,
-  /// on top of this screen, without going through [_openGroup] -- so if
-  /// an expense is added there and you back out, this list's span for
-  /// that group is stale until some other refresh happens to run). A
-  /// first attempt switched this to one AppDatabase.watchExpensesForGroup
-  /// subscription per joined group (issue #47's pattern), but that
-  /// triggered "A Timer is still pending even after the widget tree was
-  /// disposed" test failures -- and, worse, an actual hang in the local
-  /// CI loop -- in ways not yet understood well enough to ship. Reverted
-  /// rather than risk landing something that hangs CI; see issue #55 for
-  /// the follow-up.
+  /// Still a one-shot fetch, not a live subscription -- issue #57's
+  /// review found that AppDatabase.watchExpensesForGroup wired up one
+  /// subscription per joined group here caused "A Timer is still
+  /// pending even after the widget tree was disposed" test failures and
+  /// an actual hang in the local CI loop, in ways not pinned down well
+  /// enough to ship. [didPopNext] below covers the staleness case that
+  /// motivated it (a route pushed on top of this screen by something
+  /// other than [_openGroup]) without needing a live stream at all.
   @override
   void initState() {
     super.initState();
+    _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<void>) {
+      groupListRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void dispose() {
+    groupListRouteObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  /// [RouteAware]: fires when a route pushed on top of this one (by
+  /// anything -- _Root's own auto-open push, this screen's own
+  /// [_openGroup], anything else) is popped and this screen becomes the
+  /// top route again. Refreshes so a date span changed while that other
+  /// route was in front (issue #57) isn't left stale.
+  @override
+  void didPopNext() {
     _load();
   }
 
