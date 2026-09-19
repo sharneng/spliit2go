@@ -67,6 +67,15 @@ void main() {
     nav.currentState!.pop();
     await tester.pumpAndSettle();
     expect(find.text('€  2026-01-02 – 2026-06-15'), findsOneWidget);
+    // Same drift-stream-cancel/pending-Timer workaround GroupScreen's own
+    // tests already use (group_screen_test.dart): cancelling a
+    // watchExpensesForGroup subscription in dispose() schedules a
+    // zero-duration Timer (drift's StreamQueryStore.markAsClosed) that
+    // needs one more pump to actually fire, or flutter_test's automatic
+    // end-of-test teardown trips "A Timer is still pending even after
+    // the widget tree was disposed" before it gets the chance.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
   testWidgets('settings span updates when background refresh writes cache',
       (tester) async {
@@ -80,5 +89,8 @@ void main() {
     await db.insertPending(expense('e2', DateTime(2026, 6, 15)));
     await tester.pumpAndSettle();
     expect(find.text('2026-01-02 – 2026-06-15'), findsOneWidget);
+    // Same workaround as above -- see its comment.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 }
