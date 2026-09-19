@@ -58,6 +58,11 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  // The expense form behind the bottom sheet has TextFields of its own;
+  // the picker's search field is the one inside the sheet.
+  Finder searchField() => find.descendant(
+      of: find.byType(BottomSheet), matching: find.byType(TextField));
+
   testWidgets('French: field, headings and names are translated', (tester) async {
     await pumpForm(tester, const Locale('fr'));
     // The selected category (id 0) shows as the translated General.
@@ -79,7 +84,7 @@ void main() {
     await pumpForm(tester, const Locale('fr'));
     await openPicker(tester, 'Général');
 
-    await tester.enterText(find.byType(TextField), 'épic');
+    await tester.enterText(searchField(), 'épic');
     await tester.pumpAndSettle();
     expect(find.text('Épicerie'), findsOneWidget);
     expect(find.text('Nourriture et boissons'), findsOneWidget);
@@ -96,7 +101,7 @@ void main() {
     await pumpForm(tester, const Locale('fr'));
     await openPicker(tester, 'Général');
 
-    await tester.enterText(find.byType(TextField), 'grocer');
+    await tester.enterText(searchField(), 'grocer');
     await tester.pumpAndSettle();
     expect(find.text('Épicerie'), findsOneWidget);
   });
@@ -105,7 +110,7 @@ void main() {
     await pumpForm(tester, const Locale('fr'));
     await openPicker(tester, 'Général');
 
-    await tester.enterText(find.byType(TextField), 'zzzz');
+    await tester.enterText(searchField(), 'zzzz');
     await tester.pumpAndSettle();
     expect(find.text('Aucune catégorie correspondante'), findsOneWidget);
   });
@@ -133,7 +138,7 @@ void main() {
     expect(find.text('杂货'), findsOneWidget);
     expect(find.text('交通'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField), '杂货');
+    await tester.enterText(searchField(), '杂货');
     await tester.pumpAndSettle();
     expect(find.text('杂货'), findsOneWidget);
     expect(find.text('交通'), findsNothing);
