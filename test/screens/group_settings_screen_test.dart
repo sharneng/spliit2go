@@ -112,6 +112,16 @@ void main() {
     expect(popped!.name, 'Renamed Trip');
     // The fresh group should also have landed in the local cache.
     expect((await db.cachedGroup('g1'))?.name, 'Renamed Trip');
+    // Same drift-stream-cancel/pending-Timer workaround
+    // group_screen_test.dart already uses throughout (issue #57):
+    // cancelling GroupSettingsScreen's watchExpensesForGroup
+    // subscription in dispose() schedules a zero-duration Timer
+    // (drift's StreamQueryStore.markAsClosed) that needs one more
+    // pump to fire, or flutter_test's automatic end-of-test teardown
+    // trips "A Timer is still pending even after the widget tree was
+    // disposed" before it gets the chance.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('removing a participant then saving omits them from the request', (tester) async {
@@ -159,6 +169,16 @@ void main() {
     expect(formValues['participants'], [
       {'id': 'bea', 'name': 'Bea'},
     ]);
+    // Same drift-stream-cancel/pending-Timer workaround
+    // group_screen_test.dart already uses throughout (issue #57):
+    // cancelling GroupSettingsScreen's watchExpensesForGroup
+    // subscription in dispose() schedules a zero-duration Timer
+    // (drift's StreamQueryStore.markAsClosed) that needs one more
+    // pump to fire, or flutter_test's automatic end-of-test teardown
+    // trips "A Timer is still pending even after the widget tree was
+    // disposed" before it gets the chance.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('adding a participant sends them with no id', (tester) async {
@@ -226,6 +246,16 @@ void main() {
       {'id': 'bea', 'name': 'Bea'},
       {'name': 'Cid'},
     ]);
+    // Same drift-stream-cancel/pending-Timer workaround
+    // group_screen_test.dart already uses throughout (issue #57):
+    // cancelling GroupSettingsScreen's watchExpensesForGroup
+    // subscription in dispose() schedules a zero-duration Timer
+    // (drift's StreamQueryStore.markAsClosed) that needs one more
+    // pump to fire, or flutter_test's automatic end-of-test teardown
+    // trips "A Timer is still pending even after the widget tree was
+    // disposed" before it gets the chance.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('blank group name blocks save with an inline error', (tester) async {
@@ -254,6 +284,16 @@ void main() {
 
     expect(updateCalled, isFalse);
     expect(find.text('Group name is required.'), findsOneWidget);
+    // Same drift-stream-cancel/pending-Timer workaround
+    // group_screen_test.dart already uses throughout (issue #57):
+    // cancelling GroupSettingsScreen's watchExpensesForGroup
+    // subscription in dispose() schedules a zero-duration Timer
+    // (drift's StreamQueryStore.markAsClosed) that needs one more
+    // pump to fire, or flutter_test's automatic end-of-test teardown
+    // trips "A Timer is still pending even after the widget tree was
+    // disposed" before it gets the chance.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('a group with no currencyCode shows Custom, prefilled with its symbol (issue #23)',
@@ -275,6 +315,16 @@ void main() {
 
     expect(find.text('Custom'), findsOneWidget);
     expect(find.widgetWithText(TextField, '\$'), findsOneWidget);
+    // Same drift-stream-cancel/pending-Timer workaround
+    // group_screen_test.dart already uses throughout (issue #57):
+    // cancelling GroupSettingsScreen's watchExpensesForGroup
+    // subscription in dispose() schedules a zero-duration Timer
+    // (drift's StreamQueryStore.markAsClosed) that needs one more
+    // pump to fire, or flutter_test's automatic end-of-test teardown
+    // trips "A Timer is still pending even after the widget tree was
+    // disposed" before it gets the chance.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('clearing the custom currency symbol blocks save with an inline error',
@@ -304,6 +354,16 @@ void main() {
 
     expect(updateCalled, isFalse);
     expect(find.text('Enter at least one character.'), findsOneWidget);
+    // Same drift-stream-cancel/pending-Timer workaround
+    // group_screen_test.dart already uses throughout (issue #57):
+    // cancelling GroupSettingsScreen's watchExpensesForGroup
+    // subscription in dispose() schedules a zero-duration Timer
+    // (drift's StreamQueryStore.markAsClosed) that needs one more
+    // pump to fire, or flutter_test's automatic end-of-test teardown
+    // trips "A Timer is still pending even after the widget tree was
+    // disposed" before it gets the chance.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('picking a real currency from the picker fills the symbol and sends its code',
@@ -362,6 +422,16 @@ void main() {
         (sent['0'] as Map<String, dynamic>)['json']['groupFormValues'] as Map<String, dynamic>;
     expect(formValues['currency'], '€');
     expect(formValues['currencyCode'], 'EUR');
+    // Same drift-stream-cancel/pending-Timer workaround
+    // group_screen_test.dart already uses throughout (issue #57):
+    // cancelling GroupSettingsScreen's watchExpensesForGroup
+    // subscription in dispose() schedules a zero-duration Timer
+    // (drift's StreamQueryStore.markAsClosed) that needs one more
+    // pump to fire, or flutter_test's automatic end-of-test teardown
+    // trips "A Timer is still pending even after the widget tree was
+    // disposed" before it gets the chance.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('editing group information sends it in the update request', (tester) async {
@@ -411,6 +481,16 @@ void main() {
     final formValues =
         (sent['0'] as Map<String, dynamic>)['json']['groupFormValues'] as Map<String, dynamic>;
     expect(formValues['information'], 'Split hotel evenly.');
+    // Same drift-stream-cancel/pending-Timer workaround
+    // group_screen_test.dart already uses throughout (issue #57):
+    // cancelling GroupSettingsScreen's watchExpensesForGroup
+    // subscription in dispose() schedules a zero-duration Timer
+    // (drift's StreamQueryStore.markAsClosed) that needs one more
+    // pump to fire, or flutter_test's automatic end-of-test teardown
+    // trips "A Timer is still pending even after the widget tree was
+    // disposed" before it gets the chance.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   // Protects participants with expenses (issue #46).
@@ -447,6 +527,16 @@ void main() {
     // Row order matches group.participants: alex, then bea.
     expect(closeButtons[0].onPressed, isNull);
     expect(closeButtons[1].onPressed, isNotNull);
+    // Same drift-stream-cancel/pending-Timer workaround
+    // group_screen_test.dart already uses throughout (issue #57):
+    // cancelling GroupSettingsScreen's watchExpensesForGroup
+    // subscription in dispose() schedules a zero-duration Timer
+    // (drift's StreamQueryStore.markAsClosed) that needs one more
+    // pump to fire, or flutter_test's automatic end-of-test teardown
+    // trips "A Timer is still pending even after the widget tree was
+    // disposed" before it gets the chance.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('also protects a participant who is only in paidFor, not paidBy', (tester) async {
@@ -483,6 +573,16 @@ void main() {
         .toList();
     expect(closeButtons[0].onPressed, isNull); // alex: in paidFor
     expect(closeButtons[1].onPressed, isNull); // bea: paidBy
+    // Same drift-stream-cancel/pending-Timer workaround
+    // group_screen_test.dart already uses throughout (issue #57):
+    // cancelling GroupSettingsScreen's watchExpensesForGroup
+    // subscription in dispose() schedules a zero-duration Timer
+    // (drift's StreamQueryStore.markAsClosed) that needs one more
+    // pump to fire, or flutter_test's automatic end-of-test teardown
+    // trips "A Timer is still pending even after the widget tree was
+    // disposed" before it gets the chance.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('a participant with no associated expenses can still be removed', (tester) async {
@@ -553,6 +653,16 @@ void main() {
     expect(formValues['participants'], [
       {'id': 'alex', 'name': 'Alex'},
     ]);
+    // Same drift-stream-cancel/pending-Timer workaround
+    // group_screen_test.dart already uses throughout (issue #57):
+    // cancelling GroupSettingsScreen's watchExpensesForGroup
+    // subscription in dispose() schedules a zero-duration Timer
+    // (drift's StreamQueryStore.markAsClosed) that needs one more
+    // pump to fire, or flutter_test's automatic end-of-test teardown
+    // trips "A Timer is still pending even after the widget tree was
+    // disposed" before it gets the chance.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   // Issue #55: date span shown on this screen, computed from the
@@ -600,6 +710,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('2026-01-02 – 2026-06-15'), findsOneWidget);
+    // Same drift-stream-cancel/pending-Timer workaround
+    // group_screen_test.dart already uses throughout (issue #57):
+    // cancelling GroupSettingsScreen's watchExpensesForGroup
+    // subscription in dispose() schedules a zero-duration Timer
+    // (drift's StreamQueryStore.markAsClosed) that needs one more
+    // pump to fire, or flutter_test's automatic end-of-test teardown
+    // trips "A Timer is still pending even after the widget tree was
+    // disposed" before it gets the chance.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('shows the em-dash placeholder when the group has no cached expenses',
@@ -621,5 +741,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('—'), findsOneWidget);
+    // Same drift-stream-cancel/pending-Timer workaround
+    // group_screen_test.dart already uses throughout (issue #57):
+    // cancelling GroupSettingsScreen's watchExpensesForGroup
+    // subscription in dispose() schedules a zero-duration Timer
+    // (drift's StreamQueryStore.markAsClosed) that needs one more
+    // pump to fire, or flutter_test's automatic end-of-test teardown
+    // trips "A Timer is still pending even after the widget tree was
+    // disposed" before it gets the chance.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 }

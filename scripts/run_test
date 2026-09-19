@@ -17,10 +17,41 @@ if ! command -v flutter >/dev/null 2>&1; then
   exit 1
 fi
 
+# Each step below is guarded by `timeout` so a genuine hang (seen once,
+# issue #55 -- a Flutter-test/drift interaction left a dangling Timer
+# and stalled the whole fswatch loop indefinitely, with no way for
+# Claude to detect or recover it over the device bridge) fails loudly
+# in the log instead of wedging this terminal until someone notices and
+# manually interrupts it. `timeout` isn't POSIX/built into macOS by
+# default; if it's missing, steps just run unbounded as before (same
+# risk as pre-#55, not a new failure mode) rather than erroring out.
+# A killed step's exit status comes back as 124 by convention.
+if command -v timeout >/dev/null 2>&1; then
+  RUN_TIMEOUT="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+  RUN_TIMEOUT="gtimeout"
+else
+  RUN_TIMEOUT=""
+fi
+run_bounded() {
+  # $1 = seconds, rest = command. Falls back to running unbounded if
+  # neither timeout nor gtimeout is on PATH.
+  limit="$1"
+  shift
+  if [ -n "$RUN_TIMEOUT" ]; then
+    "$RUN_TIMEOUT" "$limit" "$@"
+  else
+    "$@"
+  fi
+}
+
 cur="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) -- running local CI for $cur..."
 (
   echo "=== spliit2go local CI: $(date -u +%Y-%m-%dT%H:%M:%SZ) commit $cur ($(git log -1 --format=%s 2>/dev/null)) ==="
+  if [ -z "$RUN_TIMEOUT" ]; then
+    echo "--- warning: no 'timeout' or 'gtimeout' on PATH -- steps below are unbounded ---"
+  fi
   # app_database.g.dart (and any other *.g.dart) is gitignored -- generated,
   # not committed -- same as CI (.github/workflows/ci.yml). Without this,
   # this script only ever tests whatever .g.dart happened to be sitting on
@@ -28,7 +59,7 @@ echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) -- running local CI for $cur..."
   # sync with the actual table definitions the moment a schema change
   # lands -- exactly the gap that let this go unnoticed until now.
   echo "--- dart run build_runner build ---"
-  dart run build_runner build --delete-conflicting-outputs
+  run_bounded 60 dart run build_runner build --delete-conflicting-outputs
   build_status=$?
   echo "--- build_runner exit: $build_status ---"
   # flutter gen-l10n (issue #37 phase 1): `flutter analyze` does NOT
@@ -42,15 +73,15 @@ echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) -- running local CI for $cur..."
   # Same gap this script's own comment already called out for
   # build_runner/app_database.g.dart, one layer up.
   echo "--- flutter gen-l10n ---"
-  flutter gen-l10n
+  run_bounded 30 flutter gen-l10n
   gen_l10n_status=$?
   echo "--- flutter gen-l10n exit: $gen_l10n_status ---"
   echo "--- flutter analyze ---"
-  flutter analyze
+  run_bounded 30 flutter analyze
   analyze_status=$?
   echo "--- flutter analyze exit: $analyze_status ---"
   echo "--- flutter test --coverage ---"
-  flutter test --coverage
+  run_bounded 60 flutter test --coverage
   test_status=$?
   echo "--- flutter test exit: $test_status ---"
   if command -v lcov >/dev/null 2>&1 && [ -f coverage/lcov.info ]; then
