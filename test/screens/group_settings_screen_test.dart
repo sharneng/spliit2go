@@ -527,8 +527,19 @@ void main() {
       matching: find.byIcon(Icons.close),
     );
     await tester.ensureVisible(beaCloseButton);
+    // TEMP DEBUG (issue #55 CI investigation) -- remove before merge.
+    final beaIconButton = tester.widget<IconButton>(
+      find.ancestor(of: beaCloseButton, matching: find.byType(IconButton)),
+    );
+    // ignore: avoid_print
+    print('DEBUG bea IconButton onPressed is null: ${beaIconButton.onPressed == null}');
     await tester.tap(beaCloseButton);
+    await tester.pump();
+    // ignore: avoid_print
+    print('DEBUG close-icon count after tap+pump: ${find.byIcon(Icons.close).evaluate().length}');
     await tester.pumpAndSettle();
+    // ignore: avoid_print
+    print('DEBUG close-icon count after settle: ${find.byIcon(Icons.close).evaluate().length}');
     await tester.tap(find.byIcon(Icons.check));
     await tester.pumpAndSettle();
 
