@@ -176,6 +176,20 @@ class AppDatabase extends _$AppDatabase {
     return (select(expenses)..where((e) => e.pending.equals(true))).get();
   }
 
+  /// Same as [pendingExpenses], scoped to one group (issue #42). Every
+  /// group has its own server (see decisions/multi-group-design.md), and
+  /// [Outbox] is constructed per-group with a single [SpliitClient]
+  /// fixed to that group's server -- so [Outbox.flush] must only ever
+  /// replay a group's own pending rows against its own client. Flushing
+  /// with the unscoped [pendingExpenses] would also pick up another
+  /// group's still-pending rows (added offline, not yet synced) and
+  /// replay them against the wrong server entirely.
+  Future<List<ExpenseRow>> pendingExpensesForGroup(String groupId) {
+    return (select(expenses)
+          ..where((e) => e.pending.equals(true) & e.groupId.equals(groupId)))
+        .get();
+  }
+
   /// Overwrites the cached (non-pending) rows for a group with a fresh
   /// fetch from the server. Pending rows are left untouched -- they're
   /// only cleared by the outbox once the server confirms them.

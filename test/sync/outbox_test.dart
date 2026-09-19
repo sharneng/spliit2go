@@ -46,7 +46,7 @@ void main() {
     );
     final outbox = Outbox(db, client);
 
-    final synced = await outbox.flush();
+    final synced = await outbox.flush('g1');
 
     expect(synced, 1);
     expect(await db.pendingExpenses(), isEmpty);
@@ -61,7 +61,7 @@ void main() {
     );
     final outbox = Outbox(db, client);
 
-    final synced = await outbox.flush();
+    final synced = await outbox.flush('g1');
 
     expect(synced, 0);
     expect(await db.pendingExpenses(), hasLength(1));
@@ -79,7 +79,7 @@ void main() {
     );
     final outbox = Outbox(db, client);
 
-    final synced = await outbox.flush();
+    final synced = await outbox.flush('g1');
 
     expect(synced, 2);
     expect(await db.pendingExpenses(), isEmpty);
@@ -117,7 +117,7 @@ void main() {
     );
     final outbox = Outbox(db, client);
 
-    await outbox.flush();
+    await outbox.flush('g1');
 
     expect(captured, isNotNull);
     final sent = jsonDecode(captured!.body) as Map<String, dynamic>;
@@ -127,5 +127,48 @@ void main() {
     expect(formValues['originalAmount'], 9000);
     expect(formValues['originalCurrency'], 'EUR');
     expect(formValues['conversionRate'], 1.111);
+  });
+
+  // Issue #42: flush(groupId) must not replay another group's pending
+  // rows against this group's client -- each Outbox is constructed
+  // per-group, fixed to that one group's own server (see
+  // decisions/multi-group-design.md), so a pending row from a group on
+  // a different server would otherwise get POSTed to the wrong server
+  // entirely.
+  test("flush(groupId) only syncs that group's pending rows, leaving others' untouched",
+      () async {
+    await db.insertPending(pendingExpense('g1-local'));
+    await db.insertPending(Expense(
+      id: 'g2-local',
+      groupId: 'g2',
+      title: 'Souvenir',
+      amountCents: 1200,
+      paidBy: 'p2',
+      paidFor: const [ExpenseShare(participantId: 'p2', shares: 1)],
+      date: DateTime.utc(2026, 9, 16),
+      pending: true,
+    ));
+
+    http.Request? captured;
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async {
+        captured = req;
+        return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+      }),
+    );
+    final outbox = Outbox(db, client);
+
+    final synced = await outbox.flush('g1');
+
+    expect(synced, 1);
+    // Only g1's row was ever sent to this (g1-scoped) client.
+    expect(captured, isNotNull);
+    final sent = jsonDecode(captured!.body) as Map<String, dynamic>;
+    expect((sent['0'] as Map<String, dynamic>)['json']['groupId'], 'g1');
+    // g2's row is untouched -- still pending, never replayed here.
+    final stillPending = await db.pendingExpenses();
+    expect(stillPending, hasLength(1));
+    expect(stillPending.single.id, 'g2-local');
   });
 }

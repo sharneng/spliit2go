@@ -13,14 +13,21 @@ class Outbox {
 
   Outbox(this._db, this._api);
 
-  /// Attempts to sync every pending expense. Each row is synced
-  /// independently -- one failure (still offline, server rejected it,
-  /// etc.) doesn't block the rest, and the row is simply left pending to
-  /// retry on the next flush.
+  /// Attempts to sync every pending expense belonging to [groupId].
+  /// Each row is synced independently -- one failure (still offline,
+  /// server rejected it, etc.) doesn't block the rest, and the row is
+  /// simply left pending to retry on the next flush.
+  ///
+  /// Scoped to a single group (issue #42) because this [Outbox] is
+  /// itself constructed per-group, with [_api] fixed to that group's
+  /// own server (see decisions/multi-group-design.md) -- flushing every
+  /// pending row regardless of group used to mean a pending expense
+  /// from a group on a *different* server got replayed against this
+  /// one, silently corrupting it.
   ///
   /// Returns the number of rows successfully synced.
-  Future<int> flush() async {
-    final pendingRows = await _db.pendingExpenses();
+  Future<int> flush(String groupId) async {
+    final pendingRows = await _db.pendingExpensesForGroup(groupId);
     var synced = 0;
     for (final row in pendingRows) {
       final local = _db.rowToExpense(row);

@@ -172,7 +172,7 @@ class _GroupScreenState extends State<GroupScreen> {
   }
 
   Future<void> _syncThenRefresh() async {
-    final synced = await widget.outbox.flush();
+    final synced = await widget.outbox.flush(widget.groupId);
     // Reload from the local cache first, regardless of what happens next --
     // the outbox already deleted any newly-synced rows from the local db,
     // so this alone clears their "syncing..." badge even if the live
