@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -99,36 +100,45 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   Set<String> _participantIdsWithExpenses = {};
 
   /// First-to-last expense date across the group's cached expenses
-  /// (issue #55) -- computed from the same [expensesForGroup] fetch as
-  /// [_participantIdsWithExpenses] rather than a second query, and
-  /// null until that load completes (or if the group has no cached
-  /// expenses at all).
+  /// (issue #55) -- computed from the same [watchExpensesForGroup]
+  /// subscription as [_participantIdsWithExpenses] rather than a
+  /// second query, and null until the first emission (or if the group
+  /// has no cached expenses at all).
   DateSpan? _dateSpan;
+
+  /// Live, not one-shot (issue #55 review): this screen can be left
+  /// open while a background refresh (GroupScreen's own
+  /// watchExpensesForGroup subscription driving replaceServerExpenses)
+  /// or another synced expense writes new rows into the cache, and
+  /// both [_participantIdsWithExpenses] and [_dateSpan] need to follow
+  /// that -- a one-shot fetch in initState only ever reflected whatever
+  /// was cached at the moment this screen opened. Same
+  /// [AppDatabase.watchExpensesForGroup] stream GroupScreen/
+  /// BalancesScreen/StatsScreen already subscribe to (issue #47).
+  late final StreamSubscription<List<ExpenseRow>> _expensesSub;
 
   @override
   void initState() {
     super.initState();
-    _loadParticipantsWithExpenses();
-  }
-
-  Future<void> _loadParticipantsWithExpenses() async {
-    final rows = await widget.db.expensesForGroup(widget.group.id);
-    final ids = <String>{};
-    for (final row in rows) {
-      ids.add(row.paidBy);
-      for (final share in jsonDecode(row.paidForJson) as List) {
-        ids.add(ExpenseShare.fromJson(share as Map<String, dynamic>).participantId);
+    _expensesSub = widget.db.watchExpensesForGroup(widget.group.id).listen((rows) {
+      final ids = <String>{};
+      for (final row in rows) {
+        ids.add(row.paidBy);
+        for (final share in jsonDecode(row.paidForJson) as List) {
+          ids.add(ExpenseShare.fromJson(share as Map<String, dynamic>).participantId);
+        }
       }
-    }
-    if (!mounted) return;
-    setState(() {
-      _participantIdsWithExpenses = ids;
-      _dateSpan = computeDateSpan(rows);
+      if (!mounted) return;
+      setState(() {
+        _participantIdsWithExpenses = ids;
+        _dateSpan = computeDateSpan(rows);
+      });
     });
   }
 
   @override
   void dispose() {
+    _expensesSub.cancel();
     _nameController.dispose();
     _informationController.dispose();
     _customSymbolController.dispose();
@@ -142,7 +152,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     setState(() => _participants.add(_ParticipantRow(id: '', name: '')));
   }
 
-  /// True once [_loadParticipantsWithExpenses] would actually block
+  /// True once the watchExpensesForGroup subscription above would actually block
   /// removing this row -- i.e. it's an existing (not newly-added, empty
   /// [_ParticipantRow.id]) participant with at least one associated
   /// expense in the cache (issue #46).

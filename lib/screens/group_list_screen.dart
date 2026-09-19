@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api/spliit_client.dart';
@@ -55,6 +57,21 @@ class _GroupListScreenState extends State<GroupListScreen> {
   /// via [formatDateSpan]'s own null handling.
   Map<String, DateSpan?> _dateSpans = {};
 
+  /// One live subscription per joined group, keyed by [GroupRow.id] --
+  /// kept alive for as long as this screen is mounted, independent of
+  /// how a group's own GroupScreen gets pushed (issue #55 review): the
+  /// app's root (_Root in main.dart) auto-opens the last-used group via
+  /// its own push, on top of this screen, without going through
+  /// [_openGroup] -- so a one-shot fetch only refreshed on [_load]
+  /// (called after *this* screen's own row taps) would show a stale
+  /// span if an expense was added while that auto-opened screen was in
+  /// front and then popped back here. A per-group AppDatabase.
+  /// watchExpensesForGroup subscription (issue #47's pattern, same one
+  /// GroupScreen/BalancesScreen/StatsScreen already use) sidesteps that
+  /// entirely -- it doesn't care which navigation path caused the
+  /// underlying cache to change.
+  final Map<String, StreamSubscription<List<ExpenseRow>>> _spanSubs = {};
+
   @override
   void initState() {
     super.initState();
@@ -63,16 +80,42 @@ class _GroupListScreenState extends State<GroupListScreen> {
 
   Future<void> _load() async {
     final rows = await widget.db.allJoinedGroups();
-    final spans = <String, DateSpan?>{};
-    for (final row in rows) {
-      spans[row.id] = computeDateSpan(await widget.db.expensesForGroup(row.id));
-    }
     if (!mounted) return;
     setState(() {
       _groups = rows;
-      _dateSpans = spans;
       _loading = false;
     });
+    _syncSpanSubscriptions(rows);
+  }
+
+  /// Adds a subscription for any newly-joined group and cancels one for
+  /// any group that's no longer joined (left, or -- not currently
+  /// possible, but harmless to handle -- removed by another means).
+  /// Never re-subscribes a group already being watched, so this stays
+  /// idempotent across every [_load] call.
+  void _syncSpanSubscriptions(List<GroupRow> rows) {
+    final currentIds = {for (final row in rows) row.id};
+    for (final id in _spanSubs.keys.toList()) {
+      if (!currentIds.contains(id)) {
+        _spanSubs.remove(id)?.cancel();
+        _dateSpans.remove(id);
+      }
+    }
+    for (final row in rows) {
+      if (_spanSubs.containsKey(row.id)) continue;
+      _spanSubs[row.id] = widget.db.watchExpensesForGroup(row.id).listen((expenses) {
+        if (!mounted) return;
+        setState(() => _dateSpans[row.id] = computeDateSpan(expenses));
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final sub in _spanSubs.values) {
+      sub.cancel();
+    }
+    super.dispose();
   }
 
   Future<void> _openGroup(GroupRow row) async {

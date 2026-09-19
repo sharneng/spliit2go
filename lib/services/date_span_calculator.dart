@@ -19,16 +19,29 @@ class DateSpan {
 /// filtered out -- issue #55 defines it plainly as "first expense date
 /// to last expense date in the group".
 ///
+/// Every [ExpenseRow.date] is normalized to its bare calendar date
+/// (year/month/day, time-of-day dropped) before comparison. Most
+/// expense dates are already date-only (see decisions/date-handling.md
+/// and lib/services/date_only.dart), but a newly-added pending expense
+/// is dated with the real DateTime.now() at creation time (add_expense_
+/// screen.dart has no date picker yet), so two pending expenses added
+/// on the same calendar day at different times would otherwise compare
+/// as different DateTimes and render as a spurious same-day range like
+/// "2026-01-02 -- 2026-01-02" instead of collapsing to a single date
+/// (caught in review of this feature -- see issue #55).
+///
 /// Null if [rows] is empty -- a group with no cached expenses at all
 /// (a just-joined group whose expenses haven't been fetched down yet,
 /// or a genuinely brand-new group with zero expenses).
 DateSpan? computeDateSpan(List<ExpenseRow> rows) {
   if (rows.isEmpty) return null;
-  var first = rows.first.date;
-  var last = rows.first.date;
+  DateTime dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+  var first = dateOnly(rows.first.date);
+  var last = first;
   for (final row in rows.skip(1)) {
-    if (row.date.isBefore(first)) first = row.date;
-    if (row.date.isAfter(last)) last = row.date;
+    final d = dateOnly(row.date);
+    if (d.isBefore(first)) first = d;
+    if (d.isAfter(last)) last = d;
   }
   return DateSpan(first: first, last: last);
 }
