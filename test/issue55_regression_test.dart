@@ -47,13 +47,13 @@ void main() {
     expect(formatDateSpan(computeDateSpan(await db.expensesForGroup('g1'))),
         '2026-01-02');
   });
-  testWidgets('list updates after a route pushed by root returns',
-      skip: 'Real gap (issue #55 review) -- a live '
-          'AppDatabase.watchExpensesForGroup-per-group fix triggered '
-          '"A Timer is still pending even after the widget tree was '
-          'disposed" and an actual hang in the local CI loop. Reverted '
-          'the fix rather than ship something that hangs CI; kept as a '
-          'reminder this needs a real (working) fix.',
+  // Real gap (issue #55 review) -- a live
+  // AppDatabase.watchExpensesForGroup-per-group fix triggered "A Timer
+  // is still pending even after the widget tree was disposed" and an
+  // actual hang in the local CI loop. Reverted the fix rather than ship
+  // something that hangs CI; kept skipped as a reminder this needs a
+  // real (working) fix.
+  testWidgets('list updates after a route pushed by root returns', skip: true,
       (tester) async {
     final nav = GlobalKey<NavigatorState>();
     await tester.pumpWidget(app(GroupListScreen(db: db), key: nav));
@@ -69,11 +69,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('€  2026-01-02 – 2026-06-15'), findsOneWidget);
   });
+  // Same live-subscription/Timer-pending issue as "list updates after a
+  // route pushed by root returns" above.
   testWidgets('settings span updates when background refresh writes cache',
-      skip: 'Same live-subscription/Timer-pending issue as "list updates '
-          'after a route pushed by root returns" above -- see that skip '
-          'reason.',
-      (tester) async {
+      skip: true, (tester) async {
     final client = SpliitClient(
         baseUrl: 'https://example.test',
         httpClient: MockClient((_) async => throw Exception('unused')));
