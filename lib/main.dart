@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -7,6 +10,8 @@ import 'db/connection.dart';
 import 'l10n/app_localizations.dart';
 import 'screens/group_list_screen.dart';
 import 'screens/group_screen.dart';
+import 'screens/join_group_screen.dart';
+import 'services/group_url.dart';
 import 'services/settings_service.dart';
 import 'services/app_settings.dart';
 import 'sync/outbox.dart';
@@ -14,8 +19,14 @@ import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final links = AppLinks();
   final settings = await AppSettings.load(SettingsService());
-  runApp(Spliit2GoApp(settings: settings));
+  runApp(Spliit2GoApp(
+      settings: settings,
+      home: AppRoot(
+        links: links.uriLinkStream,
+        initialLink: links.getInitialLink(),
+      )));
 }
 
 class Spliit2GoApp extends StatelessWidget {
@@ -50,7 +61,7 @@ class Spliit2GoApp extends StatelessWidget {
           theme: spliit2goLightTheme,
           darkTheme: spliit2goDarkTheme,
           themeMode: settings.themeMode,
-          home: home ?? const _Root(),
+          home: home ?? const AppRoot(),
           // Issue #24: modern Android (edge-to-edge is mandatory starting
           // with API 35, and Flutter's default template doesn't opt out of
           // it) draws the app behind the status bar *and* the bottom
@@ -139,37 +150,119 @@ Widget spliit2goAppBuilder(BuildContext context, Widget? child) {
 /// list) out of the way. Owns the AppDatabase instance (the one
 /// long-lived object every screen shares) -- there's no DI framework,
 /// just one screen graph.
-class _Root extends StatefulWidget {
-  const _Root();
+class AppRoot extends StatefulWidget {
+  const AppRoot(
+      {super.key, this.db, this.links, this.initialLink, this.clientFactory});
+
+  final AppDatabase? db;
+  final Stream<Uri>? links;
+  final Future<Uri?>? initialLink;
+  final SpliitClient Function(String)? clientFactory;
 
   @override
-  State<_Root> createState() => _RootState();
+  State<AppRoot> createState() => _RootState();
 }
 
-class _RootState extends State<_Root> {
-  final _db = AppDatabase(openConnection());
+class _RootState extends State<AppRoot> {
+  late final _db = widget.db ?? AppDatabase(openConnection());
+  StreamSubscription<Uri>? _linkSubscription;
+  final _pendingLinks = <Uri>[];
+  String? _activeLink;
+  bool _readyForLinks = false;
+
+  String? _linkKey(Uri uri) {
+    // External intents are narrower than manually pasted self-hosted URLs.
+    if (uri.scheme != 'https' ||
+        uri.host != 'spliit.app' ||
+        uri.userInfo.isNotEmpty ||
+        (uri.hasPort && uri.port != 443) ||
+        !uri.path.startsWith('/groups/')) {
+      return null;
+    }
+    final parsed = parseGroupUrl(uri.toString());
+    return parsed?.groupId;
+  }
+
+  void _receiveLink(Uri uri) {
+    final key = _linkKey(uri);
+    if (key == null ||
+        key == _activeLink ||
+        _pendingLinks.any((link) => _linkKey(link) == key)) {
+      return;
+    }
+    _pendingLinks.add(uri);
+    if (_readyForLinks) unawaited(_drainLinks());
+  }
+
+  Future<void> _drainLinks() async {
+    if (_activeLink != null || !mounted || !_readyForLinks) return;
+    while (_pendingLinks.isNotEmpty && mounted) {
+      final uri = _pendingLinks.removeAt(0);
+      _activeLink = _linkKey(uri);
+      try {
+        final parsed = parseGroupUrl(uri.toString())!;
+        var row = await _db.groupRow(parsed.groupId);
+        if (!mounted) return;
+        if (row == null || row.serverUrl != parsed.serverUrl) {
+          final joined =
+              await Navigator.of(context).push<String>(MaterialPageRoute(
+            builder: (_) => JoinGroupScreen(
+                db: _db,
+                initialUrl: uri.toString(),
+                clientFactory: widget.clientFactory),
+          ));
+          if (!mounted) return;
+          if (joined == null) continue;
+          row = await _db.groupRow(joined);
+        }
+        if (row != null && mounted) await _openGroup(row);
+      } finally {
+        _activeLink = null;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _linkSubscription?.cancel();
+    // Routes share this database; injected databases belong to the caller.
+    if (widget.db == null) unawaited(_db.close());
+    super.dispose();
+  }
 
   bool _checked = false;
 
   @override
   void initState() {
     super.initState();
+    _linkSubscription =
+        widget.links?.listen(_receiveLink, onError: (Object error) {
+      // Invalid platform events should not prevent normal app navigation.
+      debugPrint('Unable to receive app link: $error');
+    });
     _start();
   }
 
   Future<void> _start() async {
+    try {
+      final initial = await widget.initialLink;
+      if (initial != null) _receiveLink(initial);
+    } catch (error) {
+      debugPrint('Unable to read initial app link: $error');
+    }
     await _migrateLegacySingleGroup();
     final last = await _db.mostRecentlyOpenedGroup();
     if (!mounted) return;
     setState(() => _checked = true);
-    // Deferred to a post-frame callback: GroupListScreen (this build's
-    // `home`) has to actually exist and be mounted, with a Navigator
-    // above it, before anything can be pushed onto it.
-    if (last != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _openGroup(last);
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _readyForLinks = true;
+      if (_pendingLinks.isNotEmpty) {
+        unawaited(_drainLinks());
+      } else if (last != null) {
+        unawaited(_openGroup(last));
+      }
+    });
   }
 
   /// Pushes [row] as a GroupScreen on top of the (always-present)
@@ -178,9 +271,10 @@ class _RootState extends State<_Root> {
   Future<void> _openGroup(GroupRow row) async {
     await _db.recordGroupOpened(row.id, serverUrl: row.serverUrl);
     if (!mounted) return;
-    final client = SpliitClient(baseUrl: row.serverUrl);
+    final client = widget.clientFactory?.call(row.serverUrl) ??
+        SpliitClient(baseUrl: row.serverUrl);
     final outbox = Outbox(_db, client, groupId: row.id);
-    Navigator.of(context).push(
+    await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => GroupScreen(
             client: client, db: _db, outbox: outbox, groupId: row.id),
