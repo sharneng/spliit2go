@@ -120,7 +120,7 @@ void main() {
     // pending timers" invariant check, so we force disposal ourselves
     // here and pump once more to drain it.
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('leaving a group via dismiss removes it after confirmation', (tester) async {

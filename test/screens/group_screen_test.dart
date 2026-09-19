@@ -69,7 +69,7 @@ void main() {
       // before its "no pending timers" invariant check, so we force
       // disposal ourselves here and pump once more to drain it.
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     },
   );
 
@@ -94,7 +94,7 @@ void main() {
       expect(fab.onPressed, isNull);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     },
   );
 
@@ -155,7 +155,7 @@ void main() {
       expect(find.text('Edit expense'), findsOneWidget);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     });
 
     testWidgets('tapping a synced expense while offline shows an error, no navigation',
@@ -186,7 +186,7 @@ void main() {
       expect(find.textContaining('needs a connection'), findsOneWidget);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     });
 
     testWidgets('a still-pending (not yet synced) expense is not tappable', (tester) async {
@@ -222,7 +222,7 @@ void main() {
       expect(tile.onTap, isNull);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     });
   });
 
@@ -288,7 +288,7 @@ void main() {
       expect(find.text('syncing…'), findsNothing);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     });
 
     testWidgets('tapping a sync-failed expense opens retry/delete options with the error message',
@@ -325,7 +325,7 @@ void main() {
       expect(find.text('Edit'), findsNothing);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     });
 
     testWidgets('Retry re-queues the expense and a subsequent flush can sync it',
@@ -367,7 +367,7 @@ void main() {
       expect(rows.single.syncFailed, isFalse);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     });
 
     testWidgets('Delete removes the sync-failed expense from the list and the local db',
@@ -400,7 +400,7 @@ void main() {
       expect(await db.expensesForGroup('g1'), isEmpty);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     });
   });
 
@@ -453,7 +453,7 @@ void main() {
     );
     // See the first test above for why. (issue #47)
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   group('bottom-nav tabs (issue #38)', () {
@@ -492,7 +492,7 @@ void main() {
       expect(find.text('Activities'), findsOneWidget);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     });
 
     testWidgets('the add button and search icon only show on the Expenses tab', (tester) async {
@@ -510,7 +510,7 @@ void main() {
       expect(find.byIcon(Icons.search), findsNothing);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     });
 
     testWidgets('tapping Balance shows BalancesScreen embedded, without pushing a new route',
@@ -529,7 +529,7 @@ void main() {
       expect(find.text('Banff Trip'), findsOneWidget);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     });
 
     testWidgets('tapping Stats shows StatsScreen embedded, without pushing a new route',
@@ -545,7 +545,7 @@ void main() {
       expect(find.text('Banff Trip'), findsOneWidget);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     });
 
     testWidgets('tapping Activities shows ActivityScreen embedded, without pushing a new route',
@@ -561,7 +561,7 @@ void main() {
       expect(find.text('Banff Trip'), findsOneWidget);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     });
 
     testWidgets('tapping the search icon on the Expenses tab shows the placeholder message',
@@ -576,7 +576,7 @@ void main() {
       expect(find.text('Search is coming soon (issue #39).'), findsOneWidget);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     });
 
     testWidgets('switching back to Expenses shows the expense list again', (tester) async {
@@ -595,7 +595,7 @@ void main() {
       expect(find.byType(FloatingActionButton), findsOneWidget);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     });
   });
 }

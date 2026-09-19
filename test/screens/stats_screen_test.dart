@@ -142,7 +142,7 @@ void main() {
     // before its "no pending timers" invariant check, so we force
     // disposal ourselves here and pump once more to drain it.
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('falls back to an id-based category label when the fetch fails', (tester) async {
@@ -172,7 +172,7 @@ void main() {
     expect(find.text('You paid'), findsNothing);
     // See the first test above for why. (issue #47)
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('shows an empty state with no expenses', (tester) async {
@@ -195,6 +195,6 @@ void main() {
     expect(find.text('No expenses yet.'), findsOneWidget);
     // See the first test above for why. (issue #47)
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
   });
 }

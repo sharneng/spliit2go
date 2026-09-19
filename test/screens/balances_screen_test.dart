@@ -74,7 +74,7 @@ void main() {
     // before its "no pending timers" invariant check, so we force
     // disposal ourselves here and pump once more to drain it.
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('marking a settlement as paid clears it once synced', (tester) async {
@@ -169,7 +169,7 @@ void main() {
     expect(find.text('Cid owes Alex'), findsOneWidget);
     // See the first test above for why. (issue #47)
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('the settlement amount can be edited before saving (partial payment)',
@@ -203,6 +203,6 @@ void main() {
     expect(find.textContaining('owes Alex'), findsWidgets);
     // See the first test above for why. (issue #47)
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
   });
 }
