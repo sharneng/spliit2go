@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
 import '../models/currency.dart';
+import '../models/expense.dart';
 import '../models/group.dart';
 import '../widgets/currency_picker.dart';
 
@@ -72,6 +75,45 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   bool _saving = false;
   String? _error;
 
+  /// Participant ids (from [Group.participants]) that have at least one
+  /// associated expense (paidBy or paidFor) in this group's local cache
+  /// (issue #46) -- populated from [AppDatabase.expensesForGroup] rather
+  /// than a live fetch, matching this screen's existing offline-first
+  /// posture (everything else it shows -- name, currency, participant
+  /// list -- comes from the same local cache too). A participant in
+  /// this set can't be removed: doing so would corrupt group history
+  /// and balance calculations for expenses that still reference them,
+  /// since Spliit's server has no participant-merge/reassignment story.
+  ///
+  /// Deliberately checked against the *cache*, not a live fetch: this
+  /// screen already works offline for everything else, and a stale
+  /// cache under-protecting (an expense synced elsewhere, not yet
+  /// pulled down here) is no worse than the pre-#46 behavior of not
+  /// checking at all -- whereas requiring connectivity just to open
+  /// group settings would be a regression. [_save] is the last line of
+  /// defense regardless (see its own check), independent of whether
+  /// this set is complete.
+  Set<String> _participantIdsWithExpenses = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadParticipantsWithExpenses();
+  }
+
+  Future<void> _loadParticipantsWithExpenses() async {
+    final rows = await widget.db.expensesForGroup(widget.group.id);
+    final ids = <String>{};
+    for (final row in rows) {
+      ids.add(row.paidBy);
+      for (final share in jsonDecode(row.paidForJson) as List) {
+        ids.add(ExpenseShare.fromJson(share as Map<String, dynamic>).participantId);
+      }
+    }
+    if (!mounted) return;
+    setState(() => _participantIdsWithExpenses = ids);
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -87,7 +129,15 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     setState(() => _participants.add(_ParticipantRow(id: '', name: '')));
   }
 
+  /// True once [_loadParticipantsWithExpenses] would actually block
+  /// removing this row -- i.e. it's an existing (not newly-added, empty
+  /// [_ParticipantRow.id]) participant with at least one associated
+  /// expense in the cache (issue #46).
+  bool _hasExpenses(_ParticipantRow row) =>
+      row.id.isNotEmpty && _participantIdsWithExpenses.contains(row.id);
+
   void _removeParticipant(int index) {
+    if (_hasExpenses(_participants[index])) return;
     setState(() {
       _participants.removeAt(index).controller.dispose();
     });
@@ -130,6 +180,18 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     }
     if (names.any((n) => n.isEmpty)) {
       setState(() => _error = 'Every participant needs a name.');
+      return;
+    }
+    // Belt-and-braces alongside the disabled remove button (issue #46):
+    // the button already stops this in the UI, but _save is the one
+    // place that actually knows the request about to go out, so it's
+    // the backstop against any path that skips the button (a future
+    // bulk-edit UI, a bug in _hasExpenses, ...).
+    final removedIds = {for (final p in widget.group.participants) p.id} -
+        {for (final p in _participants) p.id};
+    if (removedIds.any(_participantIdsWithExpenses.contains)) {
+      setState(() => _error =
+          "Can't remove a participant who has expenses in this group.");
       return;
     }
 
@@ -261,8 +323,17 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),
-                    tooltip: 'Remove',
-                    onPressed: () => _removeParticipant(i),
+                    // Disabled rather than hidden (issue #46) -- still
+                    // visible where every other participant's remove
+                    // button is, but greyed out and inert, so a
+                    // participant with expenses reads as "protected"
+                    // rather than as a row that's simply missing a
+                    // control.
+                    tooltip: _hasExpenses(_participants[i])
+                        ? "Can't remove: has expenses in this group"
+                        : 'Remove',
+                    onPressed:
+                        _hasExpenses(_participants[i]) ? null : () => _removeParticipant(i),
                   ),
                 ],
               ),
