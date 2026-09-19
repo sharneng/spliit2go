@@ -77,3 +77,5 @@ fswatch -o build/trigger | while read; do scripts/run_test; done
 ```
 
 Each trigger runs `flutter analyze` + `flutter test --coverage` once and overwrites `.flutter-ci.log` (gitignored) at the repo root. Stop the loop with Ctrl-C or by closing the tab. `scripts/run_test` can also be run by hand any time.
+
+Each step inside `scripts/run_test` is bounded by [`timeout`](https://www.gnu.org/software/coreutils/timeout) (or `gtimeout`, e.g. `brew install coreutils`) if either is on `PATH` -- a genuine hang in one step (seen once, issue #55) otherwise wedges this whole loop indefinitely, since nothing watching `.flutter-ci.log` over the device bridge can detect or recover from a stuck process, only a human at this terminal can. Without `timeout`/`gtimeout` installed, steps run unbounded as before.
