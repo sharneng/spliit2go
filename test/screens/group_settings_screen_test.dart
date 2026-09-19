@@ -197,13 +197,22 @@ void main() {
     await tester.pumpAndSettle();
 
     // The date-span field (issue #55) pushes the participant list further
-    // down than the test surface's default viewport, so the add button
-    // needs an explicit scroll-into-view before it's tappable.
-    await tester.ensureVisible(find.byIcon(Icons.person_add_outlined), alignment: 0.5);
+    // down than the test surface's default viewport. ensureVisible's
+    // default alignment only scrolls the minimum distance needed to
+    // bring a target's edge into view, which can leave it sitting right
+    // at the Scrollable's viewport boundary -- "visible" but still
+    // outside the render box's actual hit-testable area, so a
+    // subsequent tester.tap silently misses it. A generous manual drag
+    // (clamped at the list's max scroll extent, since this list is
+    // short) gives real margin instead. This SDK's ensureVisible has no
+    // alignment parameter to ask for that directly.
+    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.person_add_outlined));
     await tester.pumpAndSettle();
     // The new row is the last TextField with no decoration label.
-    await tester.ensureVisible(find.byType(TextField).last, alignment: 0.5);
+    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Cid');
     await tester.tap(find.byIcon(Icons.check));
     await tester.pumpAndSettle();
@@ -526,14 +535,12 @@ void main() {
       of: find.ancestor(of: find.widgetWithText(TextField, 'Bea'), matching: find.byType(Row)),
       matching: find.byIcon(Icons.close),
     );
-    // ensureVisible's default alignment (0.0) only scrolls the minimum
-    // distance needed to bring the target's edge into view, which can
-    // leave it sitting right at the viewport boundary -- close enough
-    // to be "visible" but with its computed center still clipped by the
-    // Scrollable's own render box, so tester.tap silently lands outside
-    // it and never reaches onPressed. alignment: 0.5 centers it with
-    // real margin instead.
-    await tester.ensureVisible(beaCloseButton, alignment: 0.5);
+    // See the comment above the equivalent drag in "adding a
+    // participant sends them with no id" -- ensureVisible's default
+    // alignment left this button just barely in view but outside its
+    // actual hit-testable area, so a plain tap silently missed it.
+    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.pumpAndSettle();
     await tester.tap(beaCloseButton);
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.check));
