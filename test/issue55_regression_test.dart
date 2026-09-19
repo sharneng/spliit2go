@@ -7,6 +7,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
@@ -39,6 +40,10 @@ Widget app(Widget home, {GlobalKey<NavigatorState>? key}) => MaterialApp(
     home: home);
 void main() {
   late AppDatabase db;
+  // The plain (non-widget) test below calls formatDateSpan directly; inside
+  // a widget tree MaterialApp's localizations delegates load intl's date
+  // symbols, but a bare unit test has to initialize them itself.
+  setUpAll(() => initializeDateFormatting('en'));
   setUp(() async {
     db = AppDatabase(NativeDatabase.memory());
     await db.cacheGroup(group);
