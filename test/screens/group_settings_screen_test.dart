@@ -517,10 +517,17 @@ void main() {
     await tester.pumpAndSettle();
 
     // bea (second row) has no expenses -- its remove button still works.
-    // (The date-span field, issue #55, pushes this below the test
-    // surface's default viewport -- scroll it into view first.)
-    await tester.ensureVisible(find.byIcon(Icons.close).at(1));
-    await tester.tap(find.byIcon(Icons.close).at(1));
+    // Scoped to bea's own row (rather than find.byIcon(Icons.close).at(1))
+    // so it can't accidentally resolve to a different participant's
+    // button after the date-span field (issue #55) pushes this row
+    // below the test surface's default viewport and it needs scrolling
+    // into view first.
+    final beaCloseButton = find.descendant(
+      of: find.ancestor(of: find.widgetWithText(TextField, 'Bea'), matching: find.byType(Row)),
+      matching: find.byIcon(Icons.close),
+    );
+    await tester.ensureVisible(beaCloseButton);
+    await tester.tap(beaCloseButton);
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.check));
     await tester.pumpAndSettle();
