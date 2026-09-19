@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
+import '../l10n/category_names.dart';
 import '../l10n/context_l10n.dart';
 import '../models/category.dart';
 import '../models/group.dart';
@@ -87,13 +88,14 @@ class _StatsScreenState extends State<StatsScreen> {
   // a thin wrapper (rather than replacing every call site below) purely
   // to avoid a churny diff; it's still the same shared formatting logic
   // everywhere.
-  String _money(int cents) => formatMoney(cents, widget.group.currency);
+  String _money(int cents) =>
+      formatMoney(cents, widget.group.currency, locale: context.appLocale);
 
-  String _categoryLabel(int categoryId) {
-    final known = _categoryNames[categoryId];
-    if (known != null) return known.name;
-    return categoryId == 0 ? 'General' : 'Category $categoryId';
-  }
+  // Translated at presentation time (issue #51); an id whose Category
+  // hasn't been fetched falls back to the localized "General" (id 0) or
+  // "Category {id}".
+  String _categoryLabel(int categoryId) =>
+      localizedCategoryLabel(context, categoryId, _categoryNames[categoryId]);
 
   // Delegates to the shared formatDate/formatDateSpan helpers (issue
   // #55), which also back GroupSettingsScreen's and GroupListScreen's
@@ -105,8 +107,9 @@ class _StatsScreenState extends State<StatsScreen> {
   String _activeSpan(SpendingSummary summary) {
     final first = summary.firstDate;
     final last = summary.lastDate;
-    if (first == null || last == null) return formatDateSpan(null);
-    return formatDateSpan(DateSpan(first: first, last: last));
+    final locale = context.appLocale;
+    if (first == null || last == null) return formatDateSpan(null, locale: locale);
+    return formatDateSpan(DateSpan(first: first, last: last), locale: locale);
   }
 
   @override

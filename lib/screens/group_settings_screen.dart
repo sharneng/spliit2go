@@ -317,7 +317,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
           // expense dates (issue #55), there's nothing here to edit.
           InputDecorator(
             decoration: InputDecoration(labelText: context.l10n.groupSettingsDateSpanLabel),
-            child: Text(formatDateSpan(_dateSpan)),
+            child: Text(formatDateSpan(_dateSpan, locale: context.appLocale)),
           ),
           const SizedBox(height: 12),
           TextField(

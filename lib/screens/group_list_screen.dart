@@ -226,7 +226,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
           child: ListTile(
             title: Text(row.name),
             // Date span right after the currency symbol (issue #55).
-            subtitle: Text('${row.currency}  ${formatDateSpan(_dateSpans[row.id])}'),
+            subtitle: Text('${row.currency}  ${formatDateSpan(_dateSpans[row.id], locale: context.appLocale)}'),
             onTap: () => _openGroup(row),
           ),
         );
