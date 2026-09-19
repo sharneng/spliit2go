@@ -25,6 +25,7 @@ import '../services/settings_service.dart';
 /// typed, so there's no offline path here the way add-expense has one.
 class JoinGroupScreen extends StatefulWidget {
   final AppDatabase db;
+  final String? initialUrl;
 
   /// Builds the SpliitClient to fetch the entered group with. Defaults
   /// to a real one for the entered server URL; overridable so tests can
@@ -35,7 +36,11 @@ class JoinGroupScreen extends StatefulWidget {
   /// known ahead of time.
   final SpliitClient Function(String serverUrl) clientFactory;
 
-  JoinGroupScreen({super.key, required this.db, SpliitClient Function(String)? clientFactory})
+  JoinGroupScreen(
+      {super.key,
+      required this.db,
+      this.initialUrl,
+      SpliitClient Function(String)? clientFactory})
       : clientFactory = clientFactory ?? ((url) => SpliitClient(baseUrl: url));
 
   @override
@@ -44,7 +49,7 @@ class JoinGroupScreen extends StatefulWidget {
 
 class _JoinGroupScreenState extends State<JoinGroupScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _urlController = TextEditingController();
+  late final _urlController = TextEditingController(text: widget.initialUrl);
   final _settings = SettingsService();
 
   bool _joining = false;
@@ -111,7 +116,9 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (_error != null) ...[
-                Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                Text(_error!,
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error)),
                 const SizedBox(height: 12),
               ],
               TextFormField(
@@ -121,8 +128,9 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
                   helperText: context.l10n.joinGroupUrlHelper,
                 ),
                 keyboardType: TextInputType.url,
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? context.l10n.commonRequired : null,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? context.l10n.commonRequired
+                    : null,
               ),
               const SizedBox(height: 24),
               FilledButton(
@@ -142,4 +150,3 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
     );
   }
 }
-
