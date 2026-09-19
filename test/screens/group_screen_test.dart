@@ -50,7 +50,7 @@ void main() {
       ));
 
       final client = offlineClient();
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
       await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -80,7 +80,7 @@ void main() {
       addTearDown(db.close);
 
       final client = offlineClient();
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
       await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -139,7 +139,7 @@ void main() {
           throw Exception('offline'); // fetchGroup/fetchExpenses -- _refresh falls back to cache
         }),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
       await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -169,7 +169,7 @@ void main() {
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async => throw Exception('offline')),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
       await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -208,7 +208,7 @@ void main() {
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async => throw Exception('offline')),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
       await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -274,7 +274,7 @@ void main() {
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async => throw Exception('not used')),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
       await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -302,7 +302,7 @@ void main() {
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async => throw Exception('not used')),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
       await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -345,7 +345,7 @@ void main() {
           throw Exception('offline');
         }),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
       await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -381,7 +381,7 @@ void main() {
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async => throw Exception('not used')),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
       await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -434,7 +434,7 @@ void main() {
       baseUrl: 'https://example.test',
       httpClient: MockClient((req) async => throw Exception('offline')),
     );
-    final outbox = Outbox(db, client);
+    final outbox = Outbox(db, client, groupId: 'g1');
 
     await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -470,7 +470,7 @@ void main() {
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async => throw Exception('offline')),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
       await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,

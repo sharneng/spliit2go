@@ -110,7 +110,7 @@ void main() {
             200,
           )),
     );
-    final outbox = Outbox(db, client);
+    final outbox = Outbox(db, client, groupId: 'g1');
 
     await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -156,7 +156,7 @@ void main() {
       baseUrl: 'https://example.test',
       httpClient: MockClient((req) async => http.Response('offline', 500)),
     );
-    final outbox = Outbox(db, client);
+    final outbox = Outbox(db, client, groupId: 'g1');
 
     await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -182,7 +182,7 @@ void main() {
       baseUrl: 'https://example.test',
       httpClient: MockClient((req) async => http.Response('offline', 500)),
     );
-    final outbox = Outbox(db, client);
+    final outbox = Outbox(db, client, groupId: 'g1');
 
     await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),

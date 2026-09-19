@@ -29,7 +29,7 @@ void main() {
       baseUrl: 'https://example.test',
       httpClient: MockClient((req) async => throw Exception('offline')),
     );
-    final outbox = Outbox(db, client);
+    final outbox = Outbox(db, client, groupId: 'g1');
     // Mirrors real usage: this screen is only ever reached from
     // GroupScreen, which has already cached the group by the time it's
     // opened -- needed here so the remembered-default-split feature
@@ -246,7 +246,7 @@ void main() {
         return http.Response(categoriesResponseBody(), 200);
       }),
     );
-    final outbox = Outbox(db, client);
+    final outbox = Outbox(db, client, groupId: 'g1');
 
     await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -287,7 +287,7 @@ void main() {
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async => http.Response(categoriesResponseBody(), 200)),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
       await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -318,7 +318,7 @@ void main() {
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async => http.Response(categoriesResponseBody(), 200)),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
       await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -368,7 +368,7 @@ void main() {
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async => throw Exception('offline')),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
       await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -421,7 +421,7 @@ void main() {
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async => throw Exception('offline')),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
       final percentageExpense = Expense(
         id: 'e2',
         groupId: 'g1',
@@ -472,7 +472,7 @@ void main() {
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async => throw Exception('offline')),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
       final evenlyExpense = Expense(
         id: 'e3',
         groupId: 'g1',
@@ -519,7 +519,7 @@ void main() {
           return http.Response('[{"result":{"data":{"json":{"expenseId":"e1"}}}}]', 200);
         }),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
       await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -555,7 +555,7 @@ void main() {
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async => throw Exception('offline')),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
       await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -620,7 +620,7 @@ void main() {
       baseUrl: 'https://example.test',
       httpClient: MockClient((req) async => throw Exception('offline')),
     );
-    final outbox = Outbox(db, client);
+    final outbox = Outbox(db, client, groupId: 'g2');
 
     await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),

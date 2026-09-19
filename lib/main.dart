@@ -171,7 +171,7 @@ class _RootState extends State<_Root> {
     await _db.recordGroupOpened(row.id, serverUrl: row.serverUrl);
     if (!mounted) return;
     final client = SpliitClient(baseUrl: row.serverUrl);
-    final outbox = Outbox(_db, client);
+    final outbox = Outbox(_db, client, groupId: row.id);
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => GroupScreen(client: client, db: _db, outbox: outbox, groupId: row.id),

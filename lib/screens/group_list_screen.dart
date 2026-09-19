@@ -59,7 +59,7 @@ class _GroupListScreenState extends State<GroupListScreen> {
   Future<void> _openGroup(GroupRow row) async {
     await widget.db.recordGroupOpened(row.id, serverUrl: row.serverUrl);
     final client = widget.clientFactory(row.serverUrl);
-    final outbox = Outbox(widget.db, client);
+    final outbox = Outbox(widget.db, client, groupId: row.id);
     if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute(

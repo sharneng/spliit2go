@@ -189,7 +189,7 @@ class _GroupScreenState extends State<GroupScreen> {
     // -- the outbox's own db writes (markSynced, etc.) already reach
     // [_expensesSub] on their own, synchronously with the write, so
     // there's no gap for _refresh's live fetch below to race against.
-    await widget.outbox.flush(widget.groupId);
+    await widget.outbox.flush();
     await _refresh();
   }
 

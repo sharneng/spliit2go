@@ -40,9 +40,9 @@ void main() {
         (req) async => http.Response('[{"result":{"data":{"json":{}}}}]', 200),
       ),
     );
-    final outbox = Outbox(db, client);
+    final outbox = Outbox(db, client, groupId: 'g1');
 
-    final synced = await outbox.flush('g1');
+    final synced = await outbox.flush();
 
     expect(synced, 1);
     expect(await db.pendingExpenses(), isEmpty);
@@ -67,9 +67,9 @@ void main() {
             http.Response('[{"result":{"data":{"json":{"expenseId":"server-1"}}}}]', 200),
       ),
     );
-    final outbox = Outbox(db, client);
+    final outbox = Outbox(db, client, groupId: 'g1');
 
-    final synced = await outbox.flush('g1');
+    final synced = await outbox.flush();
 
     expect(synced, 1);
     // Not gone -- present under its new, server-assigned id, and no
@@ -95,9 +95,9 @@ void main() {
         (req) async => http.Response('[{"result":{"data":{"json":{}}}}]', 200),
       ),
     );
-    final outbox = Outbox(db, client);
+    final outbox = Outbox(db, client, groupId: 'g1');
 
-    final synced = await outbox.flush('g1');
+    final synced = await outbox.flush();
 
     expect(synced, 1);
     final rows = await db.expensesForGroup('g1');
@@ -113,9 +113,9 @@ void main() {
       baseUrl: 'https://example.test',
       httpClient: MockClient((req) async => http.Response('server error', 500)),
     );
-    final outbox = Outbox(db, client);
+    final outbox = Outbox(db, client, groupId: 'g1');
 
-    final synced = await outbox.flush('g1');
+    final synced = await outbox.flush();
 
     expect(synced, 0);
     expect(await db.pendingExpenses(), hasLength(1));
@@ -131,9 +131,9 @@ void main() {
         (req) async => http.Response('[{"result":{"data":{"json":{}}}}]', 200),
       ),
     );
-    final outbox = Outbox(db, client);
+    final outbox = Outbox(db, client, groupId: 'g1');
 
-    final synced = await outbox.flush('g1');
+    final synced = await outbox.flush();
 
     expect(synced, 2);
     expect(await db.pendingExpenses(), isEmpty);
@@ -169,9 +169,9 @@ void main() {
         return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
       }),
     );
-    final outbox = Outbox(db, client);
+    final outbox = Outbox(db, client, groupId: 'g1');
 
-    await outbox.flush('g1');
+    await outbox.flush();
 
     expect(captured, isNotNull);
     final sent = jsonDecode(captured!.body) as Map<String, dynamic>;
@@ -183,13 +183,13 @@ void main() {
     expect(formValues['conversionRate'], 1.111);
   });
 
-  // Issue #42: flush(groupId) must not replay another group's pending
-  // rows against this group's client -- each Outbox is constructed
-  // per-group, fixed to that one group's own server (see
-  // decisions/multi-group-design.md), so a pending row from a group on
-  // a different server would otherwise get POSTed to the wrong server
-  // entirely.
-  test("flush(groupId) only syncs that group's pending rows, leaving others' untouched",
+  // Issue #42 (constructor-bound groupId per issue #52): flush() must
+  // not replay another group's pending rows against this group's client
+  // -- each Outbox is constructed per-group, fixed to that one group's
+  // own server (see decisions/multi-group-design.md), so a pending row
+  // from a group on a different server would otherwise get POSTed to
+  // the wrong server entirely.
+  test("flush() only syncs its own group's pending rows, leaving others' untouched",
       () async {
     await db.insertPending(pendingExpense('g1-local'));
     await db.insertPending(Expense(
@@ -211,9 +211,9 @@ void main() {
         return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
       }),
     );
-    final outbox = Outbox(db, client);
+    final outbox = Outbox(db, client, groupId: 'g1');
 
-    final synced = await outbox.flush('g1');
+    final synced = await outbox.flush();
 
     expect(synced, 1);
     // Only g1's row was ever sent to this (g1-scoped) client.
@@ -235,9 +235,9 @@ void main() {
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async => http.Response('bad request', 400)),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
-      final synced = await outbox.flush('g1');
+      final synced = await outbox.flush();
 
       expect(synced, 0);
       final rows = await db.expensesForGroup('g1');
@@ -254,9 +254,9 @@ void main() {
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async => http.Response('server error', 500)),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
-      await outbox.flush('g1');
+      await outbox.flush();
 
       final rows = await db.expensesForGroup('g1');
       expect(rows.single.syncFailed, isFalse);
@@ -273,10 +273,10 @@ void main() {
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async => http.Response('server error', 500)),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
       for (var i = 0; i < Outbox.maxRetries; i++) {
-        await outbox.flush('g1');
+        await outbox.flush();
       }
 
       final rows = await db.expensesForGroup('g1');
@@ -304,9 +304,9 @@ void main() {
           return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
         }),
       );
-      final outbox = Outbox(db, client);
+      final outbox = Outbox(db, client, groupId: 'g1');
 
-      final synced = await outbox.flush('g1');
+      final synced = await outbox.flush();
 
       expect(synced, 0);
       expect(requested, isFalse);
@@ -335,8 +335,8 @@ void main() {
           (req) async => http.Response('[{"result":{"data":{"json":{}}}}]', 200),
         ),
       );
-      final outbox = Outbox(db, client);
-      final synced = await outbox.flush('g1');
+      final outbox = Outbox(db, client, groupId: 'g1');
+      final synced = await outbox.flush();
 
       expect(synced, 1);
     });

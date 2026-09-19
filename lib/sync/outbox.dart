@@ -11,6 +11,19 @@ class Outbox {
   final AppDatabase _db;
   final SpliitClient _api;
 
+  /// The single group this instance is scoped to -- see [flush]'s own
+  /// doc comment for why. Bound once at construction (issue #52) rather
+  /// than accepted as a [flush] parameter: this [Outbox] is already
+  /// built fresh per-group at every real call site (main.dart,
+  /// group_list_screen.dart), with [_api] itself fixed to that group's
+  /// server, so a groupId parameter on [flush] could never legitimately
+  /// differ from this one -- it just left the invariant unenforced,
+  /// where a mismatched value would have silently replayed one group's
+  /// pending rows against another group's server. Making it a required
+  /// constructor field turns "forgot to update a call site" into a
+  /// compile error instead of a latent runtime bug.
+  final String groupId;
+
   /// After this many failed attempts, [flush] gives up retrying a row
   /// automatically and marks it [Expenses.syncFailed] regardless of the
   /// error (issue #44) -- otherwise a persistently-unreachable server,
@@ -20,11 +33,12 @@ class Outbox {
   /// own body for why that's treated differently.
   static const maxRetries = 5;
 
-  Outbox(this._db, this._api);
+  Outbox(this._db, this._api, {required this.groupId});
 
   /// Attempts to sync every pending, not-yet-failed expense belonging
-  /// to [groupId]. Each row is synced independently -- one failure
-  /// (still offline, server rejected it, etc.) doesn't block the rest.
+  /// to [groupId] (see the field's own doc comment). Each row is synced
+  /// independently -- one failure (still offline, server rejected it,
+  /// etc.) doesn't block the rest.
   /// A failure that looks transient is simply left pending to retry on
   /// the next flush; one that looks permanent (or that's failed too
   /// many times already) is marked [Expenses.syncFailed] instead and
@@ -39,7 +53,7 @@ class Outbox {
   /// one, silently corrupting it.
   ///
   /// Returns the number of rows successfully synced.
-  Future<int> flush(String groupId) async {
+  Future<int> flush() async {
     final pendingRows = await _db.pendingExpensesForGroup(groupId);
     var synced = 0;
     for (final row in pendingRows) {

@@ -118,7 +118,7 @@ class _BalancesScreenState extends State<BalancesScreen> {
     // settlement would briefly vanish from the balance math (the pending
     // row gone, the synced one not yet cached) instead of just clearing
     // the debt it was meant to clear.
-    final synced = await widget.outbox.flush(widget.group.id);
+    final synced = await widget.outbox.flush();
     if (synced > 0) {
       try {
         final fresh = await widget.client.fetchExpenses(widget.group.id);
