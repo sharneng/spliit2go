@@ -187,8 +187,8 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     // place that actually knows the request about to go out, so it's
     // the backstop against any path that skips the button (a future
     // bulk-edit UI, a bug in _hasExpenses, ...).
-    final removedIds = {for (final p in widget.group.participants) p.id} -
-        {for (final p in _participants) p.id};
+    final removedIds = {for (final p in widget.group.participants) p.id}
+        .difference({for (final p in _participants) p.id});
     if (removedIds.any(_participantIdsWithExpenses.contains)) {
       setState(() => _error =
           "Can't remove a participant who has expenses in this group.");

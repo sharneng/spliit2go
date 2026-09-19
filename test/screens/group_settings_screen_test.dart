@@ -11,6 +11,23 @@ import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/group_settings_screen.dart';
 
+/// A minimal expense used purely to exercise the participant-protection
+/// checks (issue #46) below -- title/amount/date are arbitrary.
+Expense _expenseWithSplit({
+  required String id,
+  required String paidBy,
+  required List<ExpenseShare> paidFor,
+}) =>
+    Expense(
+      id: id,
+      groupId: 'g1',
+      title: 'Dinner',
+      amountCents: 1000,
+      paidBy: paidBy,
+      paidFor: paidFor,
+      date: DateTime.utc(2026, 9, 19),
+    );
+
 void main() {
   const group = Group(
     id: 'g1',
@@ -357,128 +374,113 @@ void main() {
     expect(formValues['information'], 'Split hotel evenly.');
   });
 
-  group('protects participants with expenses (issue #46)', () {
-    Expense expense({
-      required String id,
-      required String paidBy,
-      required List<ExpenseShare> paidFor,
-    }) =>
-        Expense(
-          id: id,
-          groupId: 'g1',
-          title: 'Dinner',
-          amountCents: 1000,
-          paidBy: paidBy,
-          paidFor: paidFor,
-          date: DateTime.utc(2026, 9, 19),
+  // Protects participants with expenses (issue #46).
+
+  testWidgets('disables the remove button for a participant who paid an expense', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.replaceServerExpenses('g1', [
+      _expenseWithSplit(
+        id: 'e1',
+        paidBy: 'alex',
+        paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
+      ),
+    ]);
+
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async => throw Exception('not used')),
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: GroupSettingsScreen(client: client, db: db, group: group),
+    ));
+    await tester.pumpAndSettle();
+
+    final closeButtons = tester.widgetList<IconButton>(find.byIcon(Icons.close)).toList();
+    // Row order matches group.participants: alex, then bea.
+    expect(closeButtons[0].onPressed, isNull);
+    expect(closeButtons[1].onPressed, isNotNull);
+  });
+
+  testWidgets('also protects a participant who is only in paidFor, not paidBy', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.replaceServerExpenses('g1', [
+      _expenseWithSplit(
+        id: 'e1',
+        paidBy: 'bea',
+        paidFor: const [
+          ExpenseShare(participantId: 'bea', shares: 1),
+          ExpenseShare(participantId: 'alex', shares: 1),
+        ],
+      ),
+    ]);
+
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async => throw Exception('not used')),
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: GroupSettingsScreen(client: client, db: db, group: group),
+    ));
+    await tester.pumpAndSettle();
+
+    final closeButtons = tester.widgetList<IconButton>(find.byIcon(Icons.close)).toList();
+    expect(closeButtons[0].onPressed, isNull); // alex: in paidFor
+    expect(closeButtons[1].onPressed, isNull); // bea: paidBy
+  });
+
+  testWidgets('a participant with no associated expenses can still be removed', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.replaceServerExpenses('g1', [
+      _expenseWithSplit(
+        id: 'e1',
+        paidBy: 'alex',
+        paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
+      ),
+    ]);
+    http.Request? updateRequest;
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async {
+        if (req.url.toString().contains('groups.update')) {
+          updateRequest = req;
+          return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+        }
+        return http.Response(
+          freshGroupResponse({
+            'id': 'g1',
+            'name': 'Banff Trip',
+            'currency': '\$',
+            'participants': [
+              {'id': 'alex', 'name': 'Alex'},
+            ],
+          }),
+          200,
         );
+      }),
+    );
 
-    testWidgets('disables the remove button for a participant who paid an expense', (tester) async {
-      final db = AppDatabase(NativeDatabase.memory());
-      addTearDown(db.close);
-      await db.replaceServerExpenses('g1', [
-        expense(
-          id: 'e1',
-          paidBy: 'alex',
-          paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
-        ),
-      ]);
+    await tester.pumpWidget(MaterialApp(
+      home: GroupSettingsScreen(client: client, db: db, group: group),
+    ));
+    await tester.pumpAndSettle();
 
-      final client = SpliitClient(
-        baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw Exception('not used')),
-      );
+    // bea (second row) has no expenses -- its remove button still works.
+    await tester.tap(find.byIcon(Icons.close).at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.check));
+    await tester.pumpAndSettle();
 
-      await tester.pumpWidget(MaterialApp(
-        home: GroupSettingsScreen(client: client, db: db, group: group),
-      ));
-      await tester.pumpAndSettle();
-
-      final closeButtons = tester.widgetList<IconButton>(find.byIcon(Icons.close)).toList();
-      // Row order matches group.participants: alex, then bea.
-      expect(closeButtons[0].onPressed, isNull);
-      expect(closeButtons[1].onPressed, isNotNull);
-    });
-
-    testWidgets('also protects a participant who is only in paidFor, not paidBy', (tester) async {
-      final db = AppDatabase(NativeDatabase.memory());
-      addTearDown(db.close);
-      await db.replaceServerExpenses('g1', [
-        expense(
-          id: 'e1',
-          paidBy: 'bea',
-          paidFor: const [
-            ExpenseShare(participantId: 'bea', shares: 1),
-            ExpenseShare(participantId: 'alex', shares: 1),
-          ],
-        ),
-      ]);
-
-      final client = SpliitClient(
-        baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw Exception('not used')),
-      );
-
-      await tester.pumpWidget(MaterialApp(
-        home: GroupSettingsScreen(client: client, db: db, group: group),
-      ));
-      await tester.pumpAndSettle();
-
-      final closeButtons = tester.widgetList<IconButton>(find.byIcon(Icons.close)).toList();
-      expect(closeButtons[0].onPressed, isNull); // alex: in paidFor
-      expect(closeButtons[1].onPressed, isNull); // bea: paidBy
-    });
-
-    testWidgets('a participant with no associated expenses can still be removed', (tester) async {
-      final db = AppDatabase(NativeDatabase.memory());
-      addTearDown(db.close);
-      await db.replaceServerExpenses('g1', [
-        expense(
-          id: 'e1',
-          paidBy: 'alex',
-          paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
-        ),
-      ]);
-      http.Request? updateRequest;
-      final client = SpliitClient(
-        baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async {
-          if (req.url.toString().contains('groups.update')) {
-            updateRequest = req;
-            return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
-          }
-          return http.Response(
-            freshGroupResponse({
-              'id': 'g1',
-              'name': 'Banff Trip',
-              'currency': '\$',
-              'participants': [
-                {'id': 'alex', 'name': 'Alex'},
-              ],
-            }),
-            200,
-          );
-        }),
-      );
-
-      await tester.pumpWidget(MaterialApp(
-        home: GroupSettingsScreen(client: client, db: db, group: group),
-      ));
-      await tester.pumpAndSettle();
-
-      // bea (second row) has no expenses -- its remove button still works.
-      await tester.tap(find.byIcon(Icons.close).at(1));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.check));
-      await tester.pumpAndSettle();
-
-      expect(updateRequest, isNotNull);
-      final sent = jsonDecode(updateRequest!.body) as Map<String, dynamic>;
-      final formValues =
-          (sent['0'] as Map<String, dynamic>)['json']['groupFormValues'] as Map<String, dynamic>;
-      expect(formValues['participants'], [
-        {'id': 'alex', 'name': 'Alex'},
-      ]);
-    });
+    expect(updateRequest, isNotNull);
+    final sent = jsonDecode(updateRequest!.body) as Map<String, dynamic>;
+    final formValues =
+        (sent['0'] as Map<String, dynamic>)['json']['groupFormValues'] as Map<String, dynamic>;
+    expect(formValues['participants'], [
+      {'id': 'alex', 'name': 'Alex'},
+    ]);
   });
 }
