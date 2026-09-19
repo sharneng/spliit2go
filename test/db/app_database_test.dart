@@ -176,6 +176,41 @@ void main() {
     });
   });
 
+  group('markSynced (issue #43)', () {
+    Expense expense({required String id, required bool pending}) => Expense(
+          id: id,
+          groupId: 'g1',
+          title: 'Coffee',
+          amountCents: 500,
+          paidBy: 'p1',
+          paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+          date: DateTime.utc(2026, 9, 16),
+          pending: pending,
+        );
+
+    test('switches the row to the server id and clears pending, in place', () async {
+      await db.insertPending(expense(id: 'local-1', pending: true));
+
+      await db.markSynced(localId: 'local-1', serverId: 'server-1');
+
+      final rows = await db.expensesForGroup('g1');
+      expect(rows, hasLength(1));
+      expect(rows.single.id, 'server-1');
+      expect(rows.single.pending, isFalse);
+    });
+
+    test('keeps the local id when serverId is empty, still clears pending', () async {
+      await db.insertPending(expense(id: 'local-1', pending: true));
+
+      await db.markSynced(localId: 'local-1', serverId: '');
+
+      final rows = await db.expensesForGroup('g1');
+      expect(rows, hasLength(1));
+      expect(rows.single.id, 'local-1');
+      expect(rows.single.pending, isFalse);
+    });
+  });
+
   group('multi-group support', () {
     const groupA = Group(id: 'gA', name: 'Banff Trip', currency: '\$', participants: []);
     const groupB = Group(id: 'gB', name: 'Tokyo Trip', currency: '¥', participants: []);

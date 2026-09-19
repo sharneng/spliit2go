@@ -32,7 +32,7 @@ class Outbox {
     for (final row in pendingRows) {
       final local = _db.rowToExpense(row);
       try {
-        await _api.createExpense(
+        final serverId = await _api.createExpense(
           groupId: local.groupId,
           title: local.title,
           amountCents: local.amountCents,
@@ -48,11 +48,14 @@ class Outbox {
           originalCurrency: local.originalCurrency,
           conversionRate: local.conversionRate,
         );
-        // The server assigns its own id; rather than trying to learn and
-        // reconcile it here, just drop the local pending row -- the next
-        // fetchExpenses()-backed refresh (triggered right after a
-        // successful flush) picks it back up as a normal synced row.
-        await (_db.delete(_db.expenses)..where((tbl) => tbl.id.equals(row.id))).go();
+        // Updates the row in place rather than deleting it (issue #43)
+        // -- deleting here and relying on the caller's follow-up
+        // fetchExpenses() to bring the row back meant a network drop
+        // between the two calls left the just-synced expense absent
+        // from the local cache (and so missing from the list and
+        // balance math) until the next successful refresh, whenever
+        // that happened to be.
+        await _db.markSynced(localId: row.id, serverId: serverId);
         synced++;
       } catch (_) {
         // Left pending; next flush() (e.g. on the next connectivity

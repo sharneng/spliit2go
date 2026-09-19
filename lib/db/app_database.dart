@@ -190,6 +190,35 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  /// Marks a pending row as synced in place (issue #43), instead of the
+  /// outbox deleting it outright the moment [SpliitClient.createExpense]
+  /// succeeds. Deleting-then-relying-on-the-caller's-next-fetchExpenses()
+  /// meant a network drop between those two calls left a genuinely-
+  /// synced expense absent from the local cache -- and so missing from
+  /// both the expense list and balance math -- until whatever *next*
+  /// refresh happened to succeed.
+  ///
+  /// Switches the row's primary key from [localId] (the client-generated
+  /// id it was created under) to [serverId] and clears [Expenses.pending]
+  /// -- an ordinary UPDATE, not a delete+reinsert, so the row is never
+  /// briefly absent. [serverId] can be the same as [localId] when
+  /// [SpliitClient.createExpense] couldn't parse an id out of the
+  /// server's response (see that method's own doc comment on why it can
+  /// return `''`); in that case this just clears [Expenses.pending] and
+  /// leaves the row under its local id until the next full
+  /// [replaceServerExpenses] reconciles it -- exactly the outcome a
+  /// normal successful refresh already produces today, just without the
+  /// in-between gap.
+  Future<void> markSynced({required String localId, required String serverId}) {
+    final newId = serverId.isNotEmpty ? serverId : localId;
+    return (update(expenses)..where((e) => e.id.equals(localId))).write(
+      ExpensesCompanion(
+        id: Value(newId),
+        pending: const Value(false),
+      ),
+    );
+  }
+
   /// Overwrites the cached (non-pending) rows for a group with a fresh
   /// fetch from the server. Pending rows are left untouched -- they're
   /// only cleared by the outbox once the server confirms them.

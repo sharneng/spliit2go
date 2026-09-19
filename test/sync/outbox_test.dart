@@ -31,11 +31,7 @@ void main() {
         pending: true,
       );
 
-  // Regression test for the whereSamePrimaryKey bug: the original delete
-  // used a method that only exists on drift's update statements, not
-  // delete statements, so this never even compiled, let alone actually
-  // cleared a synced expense's pending flag.
-  test('flush() syncs a pending expense and removes it from the local db', () async {
+  test('flush() syncs a pending expense and clears its pending flag', () async {
     await db.insertPending(pendingExpense('local-1'));
 
     final client = SpliitClient(
@@ -50,6 +46,64 @@ void main() {
 
     expect(synced, 1);
     expect(await db.pendingExpenses(), isEmpty);
+  });
+
+  // Issue #43: the pending row used to be deleted outright the moment
+  // createExpense() succeeded, relying on the caller's own follow-up
+  // fetchExpenses() to bring it back as a normal synced row -- so a
+  // network drop between those two calls left a genuinely-synced
+  // expense absent from the local cache (and so missing from the list
+  // and balance math) until whatever refresh *next* happened to
+  // succeed. It should instead be updated in place and never actually
+  // disappear.
+  test('flush() updates a synced row to the server-assigned id in place, never deleting it',
+      () async {
+    await db.insertPending(pendingExpense('local-1'));
+
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient(
+        (req) async =>
+            http.Response('[{"result":{"data":{"json":{"expenseId":"server-1"}}}}]', 200),
+      ),
+    );
+    final outbox = Outbox(db, client);
+
+    final synced = await outbox.flush('g1');
+
+    expect(synced, 1);
+    // Not gone -- present under its new, server-assigned id, and no
+    // longer pending.
+    final rows = await db.expensesForGroup('g1');
+    expect(rows, hasLength(1));
+    expect(rows.single.id, 'server-1');
+    expect(rows.single.pending, isFalse);
+  });
+
+  // The server's create response doesn't always carry a parseable
+  // expenseId (see SpliitClient.createExpense's own doc comment) --
+  // markSynced falls back to keeping the row under its original local
+  // id in that case, same outcome a normal successful refresh would
+  // eventually produce, just without ever going missing in between.
+  test("flush() keeps the local id when the server response has no expenseId, but still "
+      'clears pending', () async {
+    await db.insertPending(pendingExpense('local-1'));
+
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient(
+        (req) async => http.Response('[{"result":{"data":{"json":{}}}}]', 200),
+      ),
+    );
+    final outbox = Outbox(db, client);
+
+    final synced = await outbox.flush('g1');
+
+    expect(synced, 1);
+    final rows = await db.expensesForGroup('g1');
+    expect(rows, hasLength(1));
+    expect(rows.single.id, 'local-1');
+    expect(rows.single.pending, isFalse);
   });
 
   test('flush() leaves a row pending when the server call fails', () async {
