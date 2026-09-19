@@ -318,5 +318,11 @@
   "currencyPickerSearchHint": "Search currency...",
   "currencyPickerNoResults": "No currency found",
   "currencyPickerMostCommon": "Most common",
-  "currencyPickerOtherCurrencies": "Other currencies"
+  "currencyPickerOtherCurrencies": "Other currencies",
+  "appSettingsTitle": "App settings",
+  "appSettingsTheme": "Theme",
+  "appSettingsThemeLight": "Light",
+  "appSettingsThemeDark": "Dark",
+  "appSettingsThemeSystem": "Follow System",
+  "appSettingsSaveError": "Could not save your setting. Please try again."
 }
