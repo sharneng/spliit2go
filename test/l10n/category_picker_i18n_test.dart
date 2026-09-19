@@ -140,7 +140,8 @@ void main() {
 
     await tester.enterText(searchField(), '杂货');
     await tester.pumpAndSettle();
-    expect(find.text('杂货'), findsOneWidget);
+    // (The typed query itself also reads 杂货, so match the list row.)
+    expect(find.widgetWithText(ListTile, '杂货'), findsOneWidget);
     expect(find.text('交通'), findsNothing);
   });
 
