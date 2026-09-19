@@ -85,7 +85,7 @@ void main() {
   // markSynced falls back to keeping the row under its original local
   // id in that case, same outcome a normal successful refresh would
   // eventually produce, just without ever going missing in between.
-  test("flush() keeps the local id when the server response has no expenseId, but still "
+  test('flush() keeps the local id when the server response has no expenseId, but still '
       'clears pending', () async {
     await db.insertPending(pendingExpense('local-1'));
 
