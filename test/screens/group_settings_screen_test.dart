@@ -397,7 +397,11 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    final closeButtons = tester.widgetList<IconButton>(find.byIcon(Icons.close)).toList();
+    final closeButtons = tester
+        .widgetList<IconButton>(
+          find.ancestor(of: find.byIcon(Icons.close), matching: find.byType(IconButton)),
+        )
+        .toList();
     // Row order matches group.participants: alex, then bea.
     expect(closeButtons[0].onPressed, isNull);
     expect(closeButtons[1].onPressed, isNotNull);
@@ -427,7 +431,11 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    final closeButtons = tester.widgetList<IconButton>(find.byIcon(Icons.close)).toList();
+    final closeButtons = tester
+        .widgetList<IconButton>(
+          find.ancestor(of: find.byIcon(Icons.close), matching: find.byType(IconButton)),
+        )
+        .toList();
     expect(closeButtons[0].onPressed, isNull); // alex: in paidFor
     expect(closeButtons[1].onPressed, isNull); // bea: paidBy
   });
