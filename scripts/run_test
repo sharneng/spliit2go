@@ -81,7 +81,7 @@ echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) -- running local CI for $cur..."
   analyze_status=$?
   echo "--- flutter analyze exit: $analyze_status ---"
   echo "--- flutter test --coverage ---"
-  run_bounded 60 flutter test --coverage test/issue55_regression_test.dart
+  run_bounded 60 flutter test --coverage
   test_status=$?
   echo "--- flutter test exit: $test_status ---"
   if command -v lcov >/dev/null 2>&1 && [ -f coverage/lcov.info ]; then
