@@ -1,4 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required at runtime by SpliitClient's network calls (issue #40).
+         The debug/profile manifests already declare this for Flutter's
+         own tooling (hot reload, breakpoints), which is why the app's
+         own network calls worked in every dev/profile build and only
+         failed in release: Flutter doesn't merge debug-only permissions
+         into a release manifest. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="spliit2go"
         android:name="${applicationName}"
