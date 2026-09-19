@@ -59,7 +59,7 @@ echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) -- running local CI for $cur..."
   # sync with the actual table definitions the moment a schema change
   # lands -- exactly the gap that let this go unnoticed until now.
   echo "--- dart run build_runner build ---"
-  run_bounded 300 dart run build_runner build --delete-conflicting-outputs
+  run_bounded 60 dart run build_runner build --delete-conflicting-outputs
   build_status=$?
   echo "--- build_runner exit: $build_status ---"
   # flutter gen-l10n (issue #37 phase 1): `flutter analyze` does NOT
@@ -73,15 +73,15 @@ echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) -- running local CI for $cur..."
   # Same gap this script's own comment already called out for
   # build_runner/app_database.g.dart, one layer up.
   echo "--- flutter gen-l10n ---"
-  run_bounded 120 flutter gen-l10n
+  run_bounded 30 flutter gen-l10n
   gen_l10n_status=$?
   echo "--- flutter gen-l10n exit: $gen_l10n_status ---"
   echo "--- flutter analyze ---"
-  run_bounded 120 flutter analyze
+  run_bounded 30 flutter analyze
   analyze_status=$?
   echo "--- flutter analyze exit: $analyze_status ---"
   echo "--- flutter test --coverage ---"
-  run_bounded 300 flutter test --coverage
+  run_bounded 60 flutter test --coverage
   test_status=$?
   echo "--- flutter test exit: $test_status ---"
   if command -v lcov >/dev/null 2>&1 && [ -f coverage/lcov.info ]; then
