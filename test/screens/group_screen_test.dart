@@ -198,7 +198,7 @@ void main() {
       participants: [Participant(id: 'p1', name: 'Ken')],
     );
 
-    Expense failedExpense() => Expense(
+    Expense pendingExpense() => Expense(
           id: 'local-1',
           groupId: 'g1',
           title: 'Snacks',
@@ -207,16 +207,32 @@ void main() {
           paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
           date: DateTime.utc(2026, 9, 16),
           pending: true,
-          syncFailed: true,
-          lastError: "SpliitApiException(400): participant doesn't exist",
         );
+
+    // A row only ever becomes syncFailed the way the outbox itself sets
+    // it -- via AppDatabase.recordSyncFailure, called from
+    // Outbox.flush() -- never by constructing an Expense with
+    // syncFailed already set: insertPending's own toCompanion()
+    // deliberately doesn't forward that field (or lastError), since a
+    // freshly-queued offline add can never have failed a sync attempt
+    // yet. Seeding it this way exercises the exact same path
+    // production code takes.
+    Future<void> insertFailedExpense(AppDatabase db) async {
+      await db.insertPending(pendingExpense());
+      await db.recordSyncFailure(
+        id: 'local-1',
+        error: "SpliitApiException(400): participant doesn't exist",
+        retryCount: 1,
+        failed: true,
+      );
+    }
 
     testWidgets('a sync-failed expense shows an error badge instead of "syncing…"',
         (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       await db.cacheGroup(cachedGroup);
-      await db.insertPending(failedExpense());
+      await insertFailedExpense(db);
 
       final client = SpliitClient(
         baseUrl: 'https://example.test',
@@ -238,7 +254,7 @@ void main() {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       await db.cacheGroup(cachedGroup);
-      await db.insertPending(failedExpense());
+      await insertFailedExpense(db);
 
       final client = SpliitClient(
         baseUrl: 'https://example.test',
@@ -269,7 +285,7 @@ void main() {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       await db.cacheGroup(cachedGroup);
-      await db.insertPending(failedExpense());
+      await insertFailedExpense(db);
 
       final client = SpliitClient(
         baseUrl: 'https://example.test',
@@ -305,7 +321,7 @@ void main() {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       await db.cacheGroup(cachedGroup);
-      await db.insertPending(failedExpense());
+      await insertFailedExpense(db);
 
       final client = SpliitClient(
         baseUrl: 'https://example.test',
