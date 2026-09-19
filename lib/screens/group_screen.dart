@@ -12,6 +12,7 @@ import '../models/group.dart';
 import '../services/active_user.dart';
 import '../services/settings_service.dart';
 import '../sync/outbox.dart';
+import '../utils/date_format.dart';
 import '../utils/money.dart';
 import '../widgets/category_icon.dart';
 import 'expense_screen.dart';
@@ -355,12 +356,13 @@ class _GroupScreenState extends State<GroupScreen> {
           // that would perform a real timezone conversion on a value
           // that was never one, and roll the date back a day west of
           // UTC. See decisions/date-handling.md.
-          subtitle: Text('${e.date}'.split(' ').first),
+          subtitle: Text(formatDate(e.date, locale: context.appLocale)),
           trailing: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(formatMoney(e.amountCents, _group?.currency ?? '\$')),
+              Text(formatMoney(e.amountCents, _group?.currency ?? '\$',
+                  locale: context.appLocale)),
               if (e.syncFailed)
                 Row(
                   mainAxisSize: MainAxisSize.min,

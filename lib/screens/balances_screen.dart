@@ -171,7 +171,8 @@ class _BalancesScreenState extends State<BalancesScreen> {
                   ListTile(
                     title: Text(_name(b.participantId)),
                     trailing: Text(
-                      formatMoney(b.netCents, widget.group.currency),
+                      formatMoney(b.netCents, widget.group.currency,
+                          locale: context.appLocale),
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: b.netCents < 0
@@ -199,7 +200,8 @@ class _BalancesScreenState extends State<BalancesScreen> {
                           : TextButton(
                               onPressed: () => _openSettleUp(s),
                               child: Text(context.l10n
-                                  .balancesMarkAsPaid(formatMoney(s.amountCents, widget.group.currency))),
+                                  .balancesMarkAsPaid(formatMoney(s.amountCents, widget.group.currency,
+                                      locale: context.appLocale))),
                             ),
                      ),
                 ],

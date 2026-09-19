@@ -39,14 +39,22 @@ class Spliit2GoApp extends StatelessWidget {
           // own auto-open-last-group push right below -- so it can
           // refresh a stale date span (issue #57).
           navigatorObservers: [groupListRouteObserver],
-          // i18n phase 1 (issue #37/#48): infra only -- app_en.arb is the
-          // only shipped locale for now, so this doesn't change what any
-          // user sees yet. The delegates/supportedLocales still have to be
-          // wired up here regardless, since AppLocalizations.of(context)
-          // (used at every replaced Text() call site) resolves through
-          // whatever Localizations ancestor MaterialApp installs.
+          // i18n (issues #37/#48/#51): AppLocalizations.of(context) (used
+          // at every Text() call site) resolves through whatever
+          // Localizations ancestor MaterialApp installs from these
+          // delegates and supportedLocales -- the latter generated from
+          // every lib/l10n/app_*.arb (en, fr, zh).
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
+          // Issue #51: the explicit language override from App settings;
+          // null (the "System default" choice) lets Flutter resolve the
+          // device locale against supportedLocales, falling back to the
+          // first supported locale (en). Because this MaterialApp is
+          // rebuilt whenever [settings] notifies (see the ListenableBuilder
+          // above), changing the override re-localizes the whole running
+          // app -- text, and every formatter that reads
+          // Localizations.localeOf(context) -- with no restart.
+          locale: settings.locale,
           theme: spliit2goLightTheme,
           darkTheme: spliit2goDarkTheme,
           themeMode: settings.themeMode,

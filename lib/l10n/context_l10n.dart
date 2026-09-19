@@ -12,4 +12,11 @@ import 'app_localizations.dart';
 /// `localizationsDelegates`/`supportedLocales` (see main.dart).
 extension AppLocalizationsX on BuildContext {
   AppLocalizations get l10n => AppLocalizations.of(this);
+
+  /// The resolved app locale -- the language override from App settings if
+  /// there is one, otherwise the device's (issue #51). Every money/date
+  /// formatter call takes this as a required argument (never the device
+  /// locale, and never a separately-tracked global like
+  /// `Intl.defaultLocale`), so a live language switch reaches all of them.
+  Locale get appLocale => Localizations.localeOf(this);
 }

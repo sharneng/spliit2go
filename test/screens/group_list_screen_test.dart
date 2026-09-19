@@ -187,7 +187,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('\$  2026-01-02 – 2026-06-15'), findsOneWidget);
+    expect(find.text('\$  Jan 2, 2026 – Jun 15, 2026'), findsOneWidget);
   });
 
   testWidgets('shows the em-dash placeholder for a group with no cached expenses', (tester) async {

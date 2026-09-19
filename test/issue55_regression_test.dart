@@ -7,6 +7,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
@@ -39,6 +40,10 @@ Widget app(Widget home, {GlobalKey<NavigatorState>? key}) => MaterialApp(
     home: home);
 void main() {
   late AppDatabase db;
+  // The plain (non-widget) test below calls formatDateSpan directly; inside
+  // a widget tree MaterialApp's localizations delegates load intl's date
+  // symbols, but a bare unit test has to initialize them itself.
+  setUpAll(() => initializeDateFormatting('en'));
   setUp(() async {
     db = AppDatabase(NativeDatabase.memory());
     await db.cacheGroup(group);
@@ -49,15 +54,17 @@ void main() {
   test('same calendar day with distinct pending timestamps collapses',
       () async {
     await db.insertPending(expense('e2', DateTime(2026, 1, 2, 14)));
-    expect(formatDateSpan(computeDateSpan(await db.expensesForGroup('g1'))),
-        '2026-01-02');
+    expect(
+        formatDateSpan(computeDateSpan(await db.expensesForGroup('g1')),
+            locale: const Locale('en')),
+        'Jan 2, 2026');
   });
   testWidgets('list updates after a route pushed by root returns',
       (tester) async {
     final nav = GlobalKey<NavigatorState>();
     await tester.pumpWidget(app(GroupListScreen(db: db), key: nav));
     await tester.pumpAndSettle();
-    expect(find.text('€  2026-01-02'), findsOneWidget);
+    expect(find.text('€  Jan 2, 2026'), findsOneWidget);
     // Models _Root opening the last-used group outside the list's tap handler.
     nav.currentState!.push(MaterialPageRoute<void>(
         builder: (_) =>
@@ -66,7 +73,7 @@ void main() {
     await db.insertPending(expense('e2', DateTime(2026, 6, 15)));
     nav.currentState!.pop();
     await tester.pumpAndSettle();
-    expect(find.text('€  2026-01-02 – 2026-06-15'), findsOneWidget);
+    expect(find.text('€  Jan 2, 2026 – Jun 15, 2026'), findsOneWidget);
     // Same drift-stream-cancel/pending-Timer workaround GroupScreen's own
     // tests already use (group_screen_test.dart): cancelling a
     // watchExpensesForGroup subscription in dispose() schedules a
@@ -85,10 +92,10 @@ void main() {
     await tester.pumpWidget(
         app(GroupSettingsScreen(client: client, db: db, group: group)));
     await tester.pumpAndSettle();
-    expect(find.text('2026-01-02'), findsOneWidget);
+    expect(find.text('Jan 2, 2026'), findsOneWidget);
     await db.insertPending(expense('e2', DateTime(2026, 6, 15)));
     await tester.pumpAndSettle();
-    expect(find.text('2026-01-02 – 2026-06-15'), findsOneWidget);
+    expect(find.text('Jan 2, 2026 – Jun 15, 2026'), findsOneWidget);
     // Same workaround as above -- see its comment.
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));

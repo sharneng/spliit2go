@@ -15,6 +15,7 @@ class SettingsService {
   static const _keyDefaultActiveUserName = 'default_active_user_name';
 
   static const _keyThemeMode = 'theme_mode';
+  static const _keyPreferredLocaleTag = 'preferred_locale_tag';
 
   Future<ThemeMode> themeMode() async {
     final value =
@@ -32,6 +33,25 @@ class SettingsService {
         ? await prefs.remove(_keyThemeMode)
         : await prefs.setString(_keyThemeMode, mode.name);
     if (!saved) throw StateError('Could not save theme preference');
+  }
+
+  /// The explicit language override chosen in App settings (issue #51),
+  /// as a tag from `appLocaleOptions` (e.g. `fr`, `zh`); null means "System
+  /// default" -- follow the device locale. Device-wide and never synced to
+  /// the server, same as [defaultActiveUserName]. Turning it into a
+  /// `Locale` (and ignoring a tag this build doesn't know) is
+  /// `localeFromTag`'s job, not this store's.
+  Future<String?> preferredLocaleTag() async =>
+      (await SharedPreferences.getInstance()).getString(_keyPreferredLocaleTag);
+
+  /// Saves [tag], or clears the override when null. Throws if the write
+  /// fails, like [setThemeMode], so the caller can revert what it showed.
+  Future<void> setPreferredLocaleTag(String? tag) async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = tag == null
+        ? await prefs.remove(_keyPreferredLocaleTag)
+        : await prefs.setString(_keyPreferredLocaleTag, tag);
+    if (!saved) throw StateError('Could not save language preference');
   }
 
   /// Legacy single-group server URL -- see class doc. Read-only; only
