@@ -8,96 +8,99 @@ import 'l10n/app_localizations.dart';
 import 'screens/group_list_screen.dart';
 import 'screens/group_screen.dart';
 import 'services/settings_service.dart';
+import 'services/app_settings.dart';
 import 'sync/outbox.dart';
 import 'theme.dart';
 
-void main() {
-  runApp(const Spliit2GoApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final settings = await AppSettings.load(SettingsService());
+  runApp(Spliit2GoApp(settings: settings));
 }
 
 class Spliit2GoApp extends StatelessWidget {
-  const Spliit2GoApp({super.key});
+  const Spliit2GoApp({super.key, required this.settings, this.home});
+
+  final AppSettings settings;
+
+  /// Allows embedding a screen without opening the production database.
+  final Widget? home;
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'spliit2go',
-      // i18n phase 1 (issue #37/#48): infra only -- app_en.arb is the
-      // only shipped locale for now, so this doesn't change what any
-      // user sees yet. The delegates/supportedLocales still have to be
-      // wired up here regardless, since AppLocalizations.of(context)
-      // (used at every replaced Text() call site) resolves through
-      // whatever Localizations ancestor MaterialApp installs.
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      // Issue #25: MaterialApp's own default `themeMode` is already
-      // ThemeMode.system -- the app was never actually opted into
-      // "always light," that setting simply had nothing to switch to.
-      // Without a `darkTheme`, MaterialApp falls back to `theme` even
-      // when the system is in dark mode (see WidgetsApp's theme
-      // resolution: it's `darkTheme ?? theme`, never a synthesized dark
-      // variant of `theme`), so this was silently always-light
-      // regardless of the device setting. [spliit2goDarkTheme] (see
-      // theme.dart) is the whole fix; `themeMode: system` is written
-      // out explicitly below only so that intent doesn't rely on a
-      // reader already knowing MaterialApp's default.
-      theme: spliit2goLightTheme,
-      darkTheme: spliit2goDarkTheme,
-      themeMode: ThemeMode.system,
-      home: const _Root(),
-      // Issue #24: modern Android (edge-to-edge is mandatory starting
-      // with API 35, and Flutter's default template doesn't opt out of
-      // it) draws the app behind the status bar *and* the bottom
-      // gesture/nav bar. Scaffold only insets its AppBar for the top
-      // status bar automatically (AppBar already extends its own color
-      // up behind the translucent status bar and lays its content below
-      // it) -- it does nothing for the bottom, so plain body content
-      // (a form's Save button at the bottom of a ListView, a bottom
-      // sheet's last row) was left sitting right behind the bottom
-      // gesture/nav bar, exactly the "save button under bottom nav bar"
-      // symptom reported.
-      //
-      // top: false here is deliberate, not an oversight: an *unscoped*
-      // SafeArea insets from the top too, which double-insets below
-      // AppBar's own handling and leaves a blank gap the app's
-      // background color, not the AppBar's, shows through -- confirmed
-      // on a real device after the first version of this fix (see the
-      // issue). Bottom-only avoids that while still fixing the actual
-      // complaint. Wrapping the whole app once here, rather than adding
-      // it to every individual screen, insets every route's bottom
-      // content uniformly, including screens added later. A descendant
-      // SafeArea (e.g. the currency/category picker bottom sheets)
-      // still works correctly nested inside this one: SafeArea consumes
-      // the padding it applies, so there's no double-inset there.
-      //
-      // The nav bar itself still showed up deep black regardless of
-      // theme even after setting systemNavigationBarColor via
-      // AnnotatedRegion<SystemUiOverlayStyle> -- confirmed on-device.
-      // The reason: starting with apps that target API 35,
-      // Window.setNavigationBarColor (what that overlay style call
-      // turns into) is a documented no-op -- edge-to-edge means the
-      // system nav bar is *always* transparent now, and it's the app's
-      // own job to paint content behind it, not ask the system to tint
-      // it. What was actually showing through as "deep black" was the
-      // plain Android window background (styles.xml's LaunchTheme),
-      // because SafeArea's Padding stops our Scaffold from painting
-      // into that strip at all -- there was nothing Flutter-side there
-      // to show through the now-transparent bar. The fix is this
-      // Container: a full-bleed backdrop in the *current* theme's own
-      // scaffoldBackgroundColor, painted underneath the SafeArea-inset
-      // content, so the strip behind the bar shows our theme's color
-      // instead of the native window background. This is the standard
-      // fix for this exact class of bug on API 35+; keeping
-      // spliit2goSystemUiOverlayStyle's color/contrast fields too is
-      // just belt-and-suspenders for whatever pre-35 devices are still
-      // out there, where Window.setNavigationBarColor still works.
-      //
-      // Theme.of(context) here resolves to whichever of
-      // theme/darkTheme MaterialApp picked for the current system
-      // brightness, so both the backdrop and the overlay style stay
-      // correct across light and dark mode (issue #25) without needing
-      // their own brightness plumbing.
-      builder: spliit2goAppBuilder,
+    return AppSettingsScope(
+      notifier: settings,
+      child: ListenableBuilder(
+        listenable: settings,
+        builder: (context, _) => MaterialApp(
+          title: 'spliit2go',
+          // i18n phase 1 (issue #37/#48): infra only -- app_en.arb is the
+          // only shipped locale for now, so this doesn't change what any
+          // user sees yet. The delegates/supportedLocales still have to be
+          // wired up here regardless, since AppLocalizations.of(context)
+          // (used at every replaced Text() call site) resolves through
+          // whatever Localizations ancestor MaterialApp installs.
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: spliit2goLightTheme,
+          darkTheme: spliit2goDarkTheme,
+          themeMode: settings.themeMode,
+          home: home ?? const _Root(),
+          // Issue #24: modern Android (edge-to-edge is mandatory starting
+          // with API 35, and Flutter's default template doesn't opt out of
+          // it) draws the app behind the status bar *and* the bottom
+          // gesture/nav bar. Scaffold only insets its AppBar for the top
+          // status bar automatically (AppBar already extends its own color
+          // up behind the translucent status bar and lays its content below
+          // it) -- it does nothing for the bottom, so plain body content
+          // (a form's Save button at the bottom of a ListView, a bottom
+          // sheet's last row) was left sitting right behind the bottom
+          // gesture/nav bar, exactly the "save button under bottom nav bar"
+          // symptom reported.
+          //
+          // top: false here is deliberate, not an oversight: an *unscoped*
+          // SafeArea insets from the top too, which double-insets below
+          // AppBar's own handling and leaves a blank gap the app's
+          // background color, not the AppBar's, shows through -- confirmed
+          // on a real device after the first version of this fix (see the
+          // issue). Bottom-only avoids that while still fixing the actual
+          // complaint. Wrapping the whole app once here, rather than adding
+          // it to every individual screen, insets every route's bottom
+          // content uniformly, including screens added later. A descendant
+          // SafeArea (e.g. the currency/category picker bottom sheets)
+          // still works correctly nested inside this one: SafeArea consumes
+          // the padding it applies, so there's no double-inset there.
+          //
+          // The nav bar itself still showed up deep black regardless of
+          // theme even after setting systemNavigationBarColor via
+          // AnnotatedRegion<SystemUiOverlayStyle> -- confirmed on-device.
+          // The reason: starting with apps that target API 35,
+          // Window.setNavigationBarColor (what that overlay style call
+          // turns into) is a documented no-op -- edge-to-edge means the
+          // system nav bar is *always* transparent now, and it's the app's
+          // own job to paint content behind it, not ask the system to tint
+          // it. What was actually showing through as "deep black" was the
+          // plain Android window background (styles.xml's LaunchTheme),
+          // because SafeArea's Padding stops our Scaffold from painting
+          // into that strip at all -- there was nothing Flutter-side there
+          // to show through the now-transparent bar. The fix is this
+          // Container: a full-bleed backdrop in the *current* theme's own
+          // scaffoldBackgroundColor, painted underneath the SafeArea-inset
+          // content, so the strip behind the bar shows our theme's color
+          // instead of the native window background. This is the standard
+          // fix for this exact class of bug on API 35+; keeping
+          // spliit2goSystemUiOverlayStyle's color/contrast fields too is
+          // just belt-and-suspenders for whatever pre-35 devices are still
+          // out there, where Window.setNavigationBarColor still works.
+          //
+          // Theme.of(context) here resolves to whichever of
+          // theme/darkTheme MaterialApp picked for the current system
+          // brightness, so both the backdrop and the overlay style stay
+          // correct across light and dark mode (issue #25) without needing
+          // their own brightness plumbing.
+          builder: spliit2goAppBuilder,
+        ),
+      ),
     );
   }
 }
@@ -174,7 +177,8 @@ class _RootState extends State<_Root> {
     final outbox = Outbox(_db, client, groupId: row.id);
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => GroupScreen(client: client, db: _db, outbox: outbox, groupId: row.id),
+        builder: (_) => GroupScreen(
+            client: client, db: _db, outbox: outbox, groupId: row.id),
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Device-wide settings, plus read-only access to the single
@@ -12,6 +13,26 @@ class SettingsService {
   static const _keyGroupId = 'group_id';
   static const _keyActiveUserId = 'active_user_id';
   static const _keyDefaultActiveUserName = 'default_active_user_name';
+
+  static const _keyThemeMode = 'theme_mode';
+
+  Future<ThemeMode> themeMode() async {
+    final value =
+        (await SharedPreferences.getInstance()).getString(_keyThemeMode);
+    return switch (value) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = mode == ThemeMode.system
+        ? await prefs.remove(_keyThemeMode)
+        : await prefs.setString(_keyThemeMode, mode.name);
+    if (!saved) throw StateError('Could not save theme preference');
+  }
 
   /// Legacy single-group server URL -- see class doc. Read-only; only
   /// main.dart's startup migration reads this.
@@ -35,7 +56,8 @@ class SettingsService {
   /// server; purely a local convenience, same as the per-group choice it
   /// helps seed.
   Future<String?> defaultActiveUserName() async =>
-      (await SharedPreferences.getInstance()).getString(_keyDefaultActiveUserName);
+      (await SharedPreferences.getInstance())
+          .getString(_keyDefaultActiveUserName);
 
   Future<void> setDefaultActiveUserName(String? name) async {
     final prefs = await SharedPreferences.getInstance();

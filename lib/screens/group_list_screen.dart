@@ -5,6 +5,7 @@ import '../db/app_database.dart';
 import '../l10n/context_l10n.dart';
 import '../sync/outbox.dart';
 import 'group_screen.dart';
+import 'app_settings_screen.dart';
 import 'join_group_screen.dart';
 
 /// Every group this device has joined -- the app's true root (see
@@ -30,7 +31,10 @@ class GroupListScreen extends StatefulWidget {
   /// JoinGroupScreen.clientFactory.
   final SpliitClient Function(String serverUrl) clientFactory;
 
-  GroupListScreen({super.key, required this.db, SpliitClient Function(String)? clientFactory})
+  GroupListScreen(
+      {super.key,
+      required this.db,
+      SpliitClient Function(String)? clientFactory})
       : clientFactory = clientFactory ?? ((url) => SpliitClient(baseUrl: url));
 
   @override
@@ -63,8 +67,8 @@ class _GroupListScreenState extends State<GroupListScreen> {
     if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            GroupScreen(client: client, db: widget.db, outbox: outbox, groupId: row.id),
+        builder: (_) => GroupScreen(
+            client: client, db: widget.db, outbox: outbox, groupId: row.id),
       ),
     );
     await _load();
@@ -91,13 +95,20 @@ class _GroupListScreenState extends State<GroupListScreen> {
         title: Text(context.l10n.groupListTitle),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: context.l10n.groupListJoinTooltip,
-            onPressed: _joinAnother,
+            icon: const Icon(Icons.settings),
+            tooltip: context.l10n.appSettingsTitle,
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+            ),
           ),
         ],
       ),
       body: _body(context),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _joinAnother,
+        tooltip: context.l10n.groupListJoinTooltip,
+        child: const Icon(Icons.add),
+      ),
     );
   }
 
@@ -114,13 +125,16 @@ class _GroupListScreenState extends State<GroupListScreen> {
             children: [
               Text(context.l10n.groupListEmpty),
               const SizedBox(height: 12),
-              FilledButton(onPressed: _joinAnother, child: Text(context.l10n.groupListEmptyJoinButton)),
+              FilledButton(
+                  onPressed: _joinAnother,
+                  child: Text(context.l10n.groupListEmptyJoinButton)),
             ],
           ),
         ),
       );
     }
     return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 88),
       itemCount: _groups.length,
       itemBuilder: (context, i) {
         final row = _groups[i];
@@ -131,7 +145,8 @@ class _GroupListScreenState extends State<GroupListScreen> {
             color: Theme.of(context).colorScheme.error,
             alignment: Alignment.centerRight,
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.onError),
+            child: Icon(Icons.delete_outline,
+                color: Theme.of(context).colorScheme.onError),
           ),
           confirmDismiss: (_) => showDialog<bool>(
             context: context,
