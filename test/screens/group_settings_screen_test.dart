@@ -196,9 +196,14 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    // The date-span field (issue #55) pushes the participant list further
+    // down than the test surface's default viewport, so the add button
+    // needs an explicit scroll-into-view before it's tappable.
+    await tester.ensureVisible(find.byIcon(Icons.person_add_outlined));
     await tester.tap(find.byIcon(Icons.person_add_outlined));
     await tester.pumpAndSettle();
     // The new row is the last TextField with no decoration label.
+    await tester.ensureVisible(find.byType(TextField).last);
     await tester.enterText(find.byType(TextField).last, 'Cid');
     await tester.tap(find.byIcon(Icons.check));
     await tester.pumpAndSettle();
@@ -512,6 +517,9 @@ void main() {
     await tester.pumpAndSettle();
 
     // bea (second row) has no expenses -- its remove button still works.
+    // (The date-span field, issue #55, pushes this below the test
+    // surface's default viewport -- scroll it into view first.)
+    await tester.ensureVisible(find.byIcon(Icons.close).at(1));
     await tester.tap(find.byIcon(Icons.close).at(1));
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.check));
@@ -528,6 +536,10 @@ void main() {
 
   // Issue #55: date span shown on this screen, computed from the
   // group's cached expenses -- first expense date to last.
+  // Local, date-only DateTimes -- see the comment on date_span_calculator_test.dart's
+  // expense() helper: AppDatabase's drift round-trip only preserves a
+  // DateTime.utc(...) fixture's calendar date on a machine at UTC+0, and
+  // shifts it a day west of UTC otherwise.
   testWidgets('shows the date span computed from the earliest and latest cached expense dates',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
@@ -540,7 +552,7 @@ void main() {
         amountCents: 1000,
         paidBy: 'alex',
         paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
-        date: DateTime.utc(2026, 1, 2),
+        date: DateTime(2026, 1, 2),
       ),
       Expense(
         id: 'e2',
@@ -549,7 +561,7 @@ void main() {
         amountCents: 5000,
         paidBy: 'alex',
         paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
-        date: DateTime.utc(2026, 6, 15),
+        date: DateTime(2026, 6, 15),
       ),
     ]);
 
