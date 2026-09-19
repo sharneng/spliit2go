@@ -38,8 +38,9 @@ void main() {
     }
   });
 
-  test('Simplified Chinese is filed as zh_CN, not bare zh', () {
-    expect(AppLocalizations.supportedLocales,
-        contains(const Locale('zh', 'CN')));
+  test('Simplified Chinese is the bare-language zh base', () {
+    // gen-l10n requires a bare `zh` base file before it accepts any
+    // country/script variant; it also stays the fallback for zh_TW/zh_HK.
+    expect(AppLocalizations.supportedLocales, contains(const Locale('zh')));
   });
 }

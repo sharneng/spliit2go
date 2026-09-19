@@ -56,7 +56,7 @@ void main() {
       await tester.tap(find.text('简体中文'));
       await tester.pumpAndSettle();
       expect(find.text('应用设置'), findsOneWidget);
-      expect(await SettingsService().preferredLocaleTag(), 'zh-CN');
+      expect(await SettingsService().preferredLocaleTag(), 'zh');
 
       // "System default" in the current (Chinese) UI; the test device is
       // English, so clearing the override returns to English.
@@ -123,7 +123,7 @@ void main() {
 
     testWidgets('an explicit override wins over the device locale', (tester) async {
       setDeviceLocales(tester, const [Locale('fr', 'FR')]);
-      SharedPreferences.setMockInitialValues({'preferred_locale_tag': 'zh-CN'});
+      SharedPreferences.setMockInitialValues({'preferred_locale_tag': 'zh'});
       await pumpSettingsApp(tester, await loadSettings(tester));
       expect(find.text('应用设置'), findsOneWidget);
     });
@@ -197,7 +197,7 @@ void main() {
     });
 
     testWidgets('Simplified Chinese', (tester) async {
-      await pumpGroupScreen(tester, const Locale('zh', 'CN'));
+      await pumpGroupScreen(tester, const Locale('zh'));
       expect(find.text('消费'), findsWidgets);
       expect(find.text('余额'), findsWidgets);
       expect(find.text('统计'), findsWidgets);

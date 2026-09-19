@@ -43,7 +43,7 @@ class Spliit2GoApp extends StatelessWidget {
           // at every Text() call site) resolves through whatever
           // Localizations ancestor MaterialApp installs from these
           // delegates and supportedLocales -- the latter generated from
-          // every lib/l10n/app_*.arb (en, fr, zh_CN).
+          // every lib/l10n/app_*.arb (en, fr, zh).
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           // Issue #51: the explicit language override from App settings;

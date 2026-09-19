@@ -5,7 +5,7 @@ import 'package:spliit2go/utils/money.dart';
 void main() {
   const en = Locale('en');
   const fr = Locale('fr');
-  const zh = Locale('zh', 'CN');
+  const zh = Locale('zh');
 
   // fr's currency pattern and digit grouping use no-break / narrow
   // no-break spaces; compare with those folded to a plain space so the
@@ -74,7 +74,7 @@ void main() {
     });
   });
 
-  group('formatMoney (zh_CN)', () {
+  group('formatMoney (zh)', () {
     test('symbol before the digits, dot decimal', () {
       expect(formatMoney(1250, '¥', locale: zh), '¥12.50');
     });

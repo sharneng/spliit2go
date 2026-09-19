@@ -6,7 +6,7 @@ import 'package:spliit2go/models/category.dart';
 
 void main() {
   const fr = Locale('fr');
-  const zh = Locale('zh', 'CN');
+  const zh = Locale('zh');
   const en = Locale('en');
 
   const groceries = Category(id: 9, name: 'Groceries', grouping: 'Food and Drink');

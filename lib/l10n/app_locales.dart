@@ -20,16 +20,20 @@ class AppLocaleOption {
 /// `app_<locale>.arb`, or `AppLocalizations.supportedLocales` won't
 /// contain it and Flutter will silently resolve to another language.
 ///
-/// Chinese ships as Simplified only (`app_zh_CN.arb`). A device set to a
-/// Traditional-script locale (`zh_TW`, `zh_HK`, `zh_Hant`) is not offered
-/// its own option; Flutter's default locale resolution falls it back to
-/// this Simplified entry by language-only matching, which is better than
-/// English for a Chinese reader. Adding `app_zh_TW.arb` later is a new
-/// sibling file plus one entry here -- no rename.
+/// Chinese ships as Simplified only, filed as the bare-language base
+/// `app_zh.arb`. (Issue #51 first planned `app_zh_CN.arb`, but
+/// `flutter gen-l10n` refuses a country-qualified locale without a bare
+/// `zh` base file to fall back on.) A device set to a Traditional-script
+/// locale (`zh_TW`, `zh_HK`, `zh_Hant`) is not offered its own option;
+/// Flutter's default locale resolution falls it back to this Simplified
+/// entry by language-only matching, which is better than English for a
+/// Chinese reader. Adding Traditional later is a new sibling file
+/// (`app_zh_TW.arb` / `app_zh_Hant.arb`) plus one entry here; `app_zh.arb`
+/// stays the Simplified base, so nothing is renamed.
 const List<AppLocaleOption> appLocaleOptions = [
   AppLocaleOption('en', Locale('en'), 'English'),
   AppLocaleOption('fr', Locale('fr'), 'Français'),
-  AppLocaleOption('zh-CN', Locale('zh', 'CN'), '简体中文'),
+  AppLocaleOption('zh', Locale('zh'), '简体中文'),
 ];
 
 /// The locale a persisted [tag] stands for, or null ("System default") for

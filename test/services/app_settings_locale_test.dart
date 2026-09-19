@@ -20,10 +20,10 @@ void main() {
   });
 
   test('loads a persisted override at startup', () async {
-    SharedPreferences.setMockInitialValues({'preferred_locale_tag': 'zh-CN'});
+    SharedPreferences.setMockInitialValues({'preferred_locale_tag': 'zh'});
     final settings = await AppSettings.load(SettingsService());
     addTearDown(settings.dispose);
-    expect(settings.locale, const Locale('zh', 'CN'));
+    expect(settings.locale, const Locale('zh'));
   });
 
   test('ignores a persisted tag this build does not know', () async {

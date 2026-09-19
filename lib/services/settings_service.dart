@@ -36,7 +36,7 @@ class SettingsService {
   }
 
   /// The explicit language override chosen in App settings (issue #51),
-  /// as a tag from `appLocaleOptions` (e.g. `fr`, `zh-CN`); null means "System
+  /// as a tag from `appLocaleOptions` (e.g. `fr`, `zh`); null means "System
   /// default" -- follow the device locale. Device-wide and never synced to
   /// the server, same as [defaultActiveUserName]. Turning it into a
   /// `Locale` (and ignoring a tag this build doesn't know) is

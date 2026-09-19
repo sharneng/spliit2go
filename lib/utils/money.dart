@@ -17,7 +17,7 @@ import 'package:intl/intl.dart';
 /// Locale-aware since issue #51: [NumberFormat.currency] supplies the
 /// locale's digit grouping, decimal separator, and where the symbol goes
 /// and how it's spaced (`\$12.50` in en-US, `12,50 €` in fr, `¥12.50` in
-/// zh-CN). It's handed [currencySymbol] as `symbol:` -- never `name:`, the
+/// zh)`. It's handed [currencySymbol] as `symbol:` -- never `name:`, the
 /// ISO-code parameter -- so the symbol shown is still exactly the literal
 /// `Group.currency` the group's owner typed, never one `NumberFormat`
 /// derived from a currency code (issue #37's decision). Only the

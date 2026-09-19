@@ -7,13 +7,13 @@ import 'package:spliit2go/utils/date_format.dart';
 void main() {
   const en = Locale('en');
   const fr = Locale('fr');
-  const zh = Locale('zh', 'CN');
+  const zh = Locale('zh');
 
   // Inside the app, MaterialApp's localizations delegates load intl's
   // date symbols for the active locale; a bare unit test has to do it.
   setUpAll(() async {
     await initializeDateFormatting('fr');
-    await initializeDateFormatting('zh_CN');
+    await initializeDateFormatting('zh');
   });
 
   group('formatDate', () {

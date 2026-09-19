@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import '../services/date_span_calculator.dart';
 
 /// Formats [d] as a locale-appropriate calendar date -- `Sep 19, 2026`
-/// (en), `19 sept. 2026` (fr), `2026年9月19日` (zh-CN). e.date (and
+/// (en), `19 sept. 2026` (fr), `2026年9月19日` (zh). e.date (and
 /// everything a [DateSpan] is built from) is a date-only value (see
 /// decisions/date-handling.md and lib/services/date_only.dart), so
 /// there's no time-of-day or timezone to render, only the calendar date;
