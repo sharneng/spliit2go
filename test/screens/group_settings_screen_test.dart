@@ -199,11 +199,11 @@ void main() {
     // The date-span field (issue #55) pushes the participant list further
     // down than the test surface's default viewport, so the add button
     // needs an explicit scroll-into-view before it's tappable.
-    await tester.ensureVisible(find.byIcon(Icons.person_add_outlined));
+    await tester.ensureVisible(find.byIcon(Icons.person_add_outlined), alignment: 0.5);
     await tester.tap(find.byIcon(Icons.person_add_outlined));
     await tester.pumpAndSettle();
     // The new row is the last TextField with no decoration label.
-    await tester.ensureVisible(find.byType(TextField).last);
+    await tester.ensureVisible(find.byType(TextField).last, alignment: 0.5);
     await tester.enterText(find.byType(TextField).last, 'Cid');
     await tester.tap(find.byIcon(Icons.check));
     await tester.pumpAndSettle();
@@ -526,20 +526,16 @@ void main() {
       of: find.ancestor(of: find.widgetWithText(TextField, 'Bea'), matching: find.byType(Row)),
       matching: find.byIcon(Icons.close),
     );
-    await tester.ensureVisible(beaCloseButton);
-    // TEMP DEBUG (issue #55 CI investigation) -- remove before merge.
-    final beaIconButton = tester.widget<IconButton>(
-      find.ancestor(of: beaCloseButton, matching: find.byType(IconButton)),
-    );
-    // ignore: avoid_print
-    print('DEBUG bea IconButton onPressed is null: ${beaIconButton.onPressed == null}');
+    // ensureVisible's default alignment (0.0) only scrolls the minimum
+    // distance needed to bring the target's edge into view, which can
+    // leave it sitting right at the viewport boundary -- close enough
+    // to be "visible" but with its computed center still clipped by the
+    // Scrollable's own render box, so tester.tap silently lands outside
+    // it and never reaches onPressed. alignment: 0.5 centers it with
+    // real margin instead.
+    await tester.ensureVisible(beaCloseButton, alignment: 0.5);
     await tester.tap(beaCloseButton);
-    await tester.pump();
-    // ignore: avoid_print
-    print('DEBUG close-icon count after tap+pump: ${find.byIcon(Icons.close).evaluate().length}');
     await tester.pumpAndSettle();
-    // ignore: avoid_print
-    print('DEBUG close-icon count after settle: ${find.byIcon(Icons.close).evaluate().length}');
     await tester.tap(find.byIcon(Icons.check));
     await tester.pumpAndSettle();
 
