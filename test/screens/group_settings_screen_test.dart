@@ -525,4 +525,68 @@ void main() {
       {'id': 'alex', 'name': 'Alex'},
     ]);
   });
+
+  // Issue #55: date span shown on this screen, computed from the
+  // group's cached expenses -- first expense date to last.
+  testWidgets('shows the date span computed from the earliest and latest cached expense dates',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.replaceServerExpenses('g1', [
+      Expense(
+        id: 'e1',
+        groupId: 'g1',
+        title: 'Dinner',
+        amountCents: 1000,
+        paidBy: 'alex',
+        paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
+        date: DateTime.utc(2026, 1, 2),
+      ),
+      Expense(
+        id: 'e2',
+        groupId: 'g1',
+        title: 'Hotel',
+        amountCents: 5000,
+        paidBy: 'alex',
+        paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
+        date: DateTime.utc(2026, 6, 15),
+      ),
+    ]);
+
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async => throw Exception('not used')),
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: GroupSettingsScreen(client: client, db: db, group: group),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2026-01-02 – 2026-06-15'), findsOneWidget);
+  });
+
+  testWidgets('shows the em-dash placeholder when the group has no cached expenses',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async => throw Exception('not used')),
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: GroupSettingsScreen(client: client, db: db, group: group),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('—'), findsOneWidget);
+  });
 }

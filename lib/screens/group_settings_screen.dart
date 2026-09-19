@@ -8,6 +8,8 @@ import '../l10n/context_l10n.dart';
 import '../models/currency.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
+import '../services/date_span_calculator.dart';
+import '../utils/date_format.dart';
 import '../widgets/currency_picker.dart';
 
 /// Group settings: rename the group, add or change its notes, change its
@@ -96,6 +98,13 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   /// this set is complete.
   Set<String> _participantIdsWithExpenses = {};
 
+  /// First-to-last expense date across the group's cached expenses
+  /// (issue #55) -- computed from the same [expensesForGroup] fetch as
+  /// [_participantIdsWithExpenses] rather than a second query, and
+  /// null until that load completes (or if the group has no cached
+  /// expenses at all).
+  DateSpan? _dateSpan;
+
   @override
   void initState() {
     super.initState();
@@ -112,7 +121,10 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
       }
     }
     if (!mounted) return;
-    setState(() => _participantIdsWithExpenses = ids);
+    setState(() {
+      _participantIdsWithExpenses = ids;
+      _dateSpan = computeDateSpan(rows);
+    });
   }
 
   @override
@@ -286,6 +298,13 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
               maxLength: 5,
             ),
           ],
+          const SizedBox(height: 12),
+          // Read-only -- the date span is derived entirely from cached
+          // expense dates (issue #55), there's nothing here to edit.
+          InputDecorator(
+            decoration: InputDecoration(labelText: context.l10n.groupSettingsDateSpanLabel),
+            child: Text(formatDateSpan(_dateSpan)),
+          ),
           const SizedBox(height: 12),
           TextField(
             controller: _informationController,

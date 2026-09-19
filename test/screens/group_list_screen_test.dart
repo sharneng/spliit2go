@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
+import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/group_list_screen.dart';
 
@@ -146,6 +147,61 @@ void main() {
 
     expect(find.text('No groups yet.'), findsOneWidget);
     expect(await db.groupRow('gA'), isNull);
+  });
+
+  // Issue #55: date span shown right after the currency symbol.
+  testWidgets("shows each group's date span after its currency symbol", (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.cacheGroup(const Group(id: 'gA', name: 'Banff Trip', currency: '\$', participants: []));
+    await db.recordGroupOpened('gA', serverUrl: 'https://example.test');
+    await db.replaceServerExpenses('gA', [
+      Expense(
+        id: 'e1',
+        groupId: 'gA',
+        title: 'Coffee',
+        amountCents: 500,
+        paidBy: 'p1',
+        paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+        date: DateTime.utc(2026, 1, 2),
+      ),
+      Expense(
+        id: 'e2',
+        groupId: 'gA',
+        title: 'Hotel',
+        amountCents: 5000,
+        paidBy: 'p1',
+        paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+        date: DateTime.utc(2026, 6, 15),
+      ),
+    ]);
+
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: GroupListScreen(db: db, clientFactory: (_) => offlineClient()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('\$  2026-01-02 – 2026-06-15'), findsOneWidget);
+  });
+
+  testWidgets("shows the em-dash placeholder for a group with no cached expenses", (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.cacheGroup(const Group(id: 'gA', name: 'Banff Trip', currency: '\$', participants: []));
+    await db.recordGroupOpened('gA', serverUrl: 'https://example.test');
+
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: GroupListScreen(db: db, clientFactory: (_) => offlineClient()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('\$  —'), findsOneWidget);
   });
 
   testWidgets('cancelling the leave confirmation keeps the group', (tester) async {

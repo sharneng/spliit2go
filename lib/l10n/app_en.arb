@@ -71,6 +71,7 @@
   },
   "groupSettingsNameLabel": "Group name",
   "groupSettingsCurrencyLabel": "Main currency",
+  "groupSettingsDateSpanLabel": "Date span",
   "groupSettingsSymbolLabel": "Currency symbol",
   "groupSettingsSymbolHint": "$, €, £...",
   "groupSettingsSymbolHelper": "We'll use it to display amounts.",

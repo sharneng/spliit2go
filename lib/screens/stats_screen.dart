@@ -5,8 +5,10 @@ import '../db/app_database.dart';
 import '../l10n/context_l10n.dart';
 import '../models/category.dart';
 import '../models/group.dart';
+import '../services/date_span_calculator.dart';
 import '../services/stats_calculator.dart';
 import '../sync/outbox.dart';
+import '../utils/date_format.dart';
 import '../utils/money.dart';
 
 /// A first pass at the web app's Stats tab (issue #27, split from #6
@@ -93,15 +95,18 @@ class _StatsScreenState extends State<StatsScreen> {
     return categoryId == 0 ? 'General' : 'Category $categoryId';
   }
 
-  String _formatDate(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
+  // Delegates to the shared formatDate/formatDateSpan helpers (issue
+  // #55), which also back GroupSettingsScreen's and GroupListScreen's
+  // own date-span display -- this screen's "active span" is a
+  // spending-only span (firstDate/lastDate already exclude
+  // reimbursements, see SpendingSummary's own doc comment), so it's
+  // wrapped in its own DateSpan here rather than sharing
+  // computeDateSpan's all-expenses-including-reimbursements semantics.
   String _activeSpan(SpendingSummary summary) {
     final first = summary.firstDate;
     final last = summary.lastDate;
-    if (first == null || last == null) return '—';
-    if (first == last) return _formatDate(first);
-    return '${_formatDate(first)} – ${_formatDate(last)}';
+    if (first == null || last == null) return formatDateSpan(null);
+    return formatDateSpan(DateSpan(first: first, last: last));
   }
 
   @override

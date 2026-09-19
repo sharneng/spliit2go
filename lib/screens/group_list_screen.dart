@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
 import '../l10n/context_l10n.dart';
+import '../services/date_span_calculator.dart';
 import '../sync/outbox.dart';
+import '../utils/date_format.dart';
 import 'group_screen.dart';
 import 'app_settings_screen.dart';
 import 'join_group_screen.dart';
@@ -45,6 +47,14 @@ class _GroupListScreenState extends State<GroupListScreen> {
   List<GroupRow> _groups = [];
   bool _loading = true;
 
+  /// Each joined group's cached first-to-last expense date (issue #55),
+  /// keyed by [GroupRow.id] -- loaded alongside [_groups] rather than
+  /// lazily per row, so the list doesn't kick off a burst of individual
+  /// queries as it scrolls. A group missing from this map (still
+  /// loading) or mapped to null (no cached expenses yet) both render
+  /// via [formatDateSpan]'s own null handling.
+  Map<String, DateSpan?> _dateSpans = {};
+
   @override
   void initState() {
     super.initState();
@@ -53,9 +63,14 @@ class _GroupListScreenState extends State<GroupListScreen> {
 
   Future<void> _load() async {
     final rows = await widget.db.allJoinedGroups();
+    final spans = <String, DateSpan?>{};
+    for (final row in rows) {
+      spans[row.id] = computeDateSpan(await widget.db.expensesForGroup(row.id));
+    }
     if (!mounted) return;
     setState(() {
       _groups = rows;
+      _dateSpans = spans;
       _loading = false;
     });
   }
@@ -168,7 +183,8 @@ class _GroupListScreenState extends State<GroupListScreen> {
           onDismissed: (_) => _leaveGroup(row),
           child: ListTile(
             title: Text(row.name),
-            subtitle: Text(row.currency),
+            // Date span right after the currency symbol (issue #55).
+            subtitle: Text('${row.currency}  ${formatDateSpan(_dateSpans[row.id])}'),
             onTap: () => _openGroup(row),
           ),
         );
