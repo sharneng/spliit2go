@@ -225,4 +225,134 @@ void main() {
     expect(stillPending, hasLength(1));
     expect(stillPending.single.id, 'g2-local');
   });
+
+  group('retry limit and failure state (issue #44)', () {
+    test('flush() marks a row syncFailed immediately on a 4xx response, without waiting for '
+        'maxRetries', () async {
+      await db.insertPending(pendingExpense('local-1'));
+
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response('bad request', 400)),
+      );
+      final outbox = Outbox(db, client);
+
+      final synced = await outbox.flush('g1');
+
+      expect(synced, 0);
+      final rows = await db.expensesForGroup('g1');
+      expect(rows.single.pending, isTrue); // still hasn't synced
+      expect(rows.single.syncFailed, isTrue); // but given up retrying it automatically
+      expect(rows.single.retryCount, 1);
+      expect(rows.single.lastError, contains('400'));
+    });
+
+    test('flush() leaves a row pending and retriable after a single non-4xx failure', () async {
+      await db.insertPending(pendingExpense('local-1'));
+
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response('server error', 500)),
+      );
+      final outbox = Outbox(db, client);
+
+      await outbox.flush('g1');
+
+      final rows = await db.expensesForGroup('g1');
+      expect(rows.single.syncFailed, isFalse);
+      expect(rows.single.retryCount, 1);
+      // Still picked up by the next flush -- not excluded like a
+      // syncFailed row would be.
+      expect(await db.pendingExpensesForGroup('g1'), hasLength(1));
+    });
+
+    test('flush() marks a row syncFailed once it hits maxRetries non-4xx failures', () async {
+      await db.insertPending(pendingExpense('local-1'));
+
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response('server error', 500)),
+      );
+      final outbox = Outbox(db, client);
+
+      for (var i = 0; i < Outbox.maxRetries; i++) {
+        await outbox.flush('g1');
+      }
+
+      final rows = await db.expensesForGroup('g1');
+      expect(rows.single.retryCount, Outbox.maxRetries);
+      expect(rows.single.syncFailed, isTrue);
+      // No longer offered to the next flush automatically.
+      expect(await db.pendingExpensesForGroup('g1'), isEmpty);
+    });
+
+    test("flush() doesn't retry a syncFailed row automatically, even if the server would now "
+        'accept it', () async {
+      await db.insertPending(pendingExpense('local-1'));
+      await db.recordSyncFailure(
+        id: 'local-1',
+        error: 'bad request',
+        retryCount: 1,
+        failed: true,
+      );
+
+      var requested = false;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          requested = true;
+          return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+        }),
+      );
+      final outbox = Outbox(db, client);
+
+      final synced = await outbox.flush('g1');
+
+      expect(synced, 0);
+      expect(requested, isFalse);
+      final rows = await db.expensesForGroup('g1');
+      expect(rows.single.syncFailed, isTrue);
+    });
+
+    test('retrySyncFailure re-queues a failed row so the next flush picks it up', () async {
+      await db.insertPending(pendingExpense('local-1'));
+      await db.recordSyncFailure(
+        id: 'local-1',
+        error: 'bad request',
+        retryCount: 1,
+        failed: true,
+      );
+
+      await db.retrySyncFailure('local-1');
+
+      final row = (await db.expensesForGroup('g1')).single;
+      expect(row.syncFailed, isFalse);
+      expect(row.retryCount, 0);
+
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient(
+          (req) async => http.Response('[{"result":{"data":{"json":{}}}}]', 200),
+        ),
+      );
+      final outbox = Outbox(db, client);
+      final synced = await outbox.flush('g1');
+
+      expect(synced, 1);
+    });
+
+    test('deleteFailedExpense removes a failed row outright', () async {
+      await db.insertPending(pendingExpense('local-1'));
+      await db.recordSyncFailure(
+        id: 'local-1',
+        error: 'bad request',
+        retryCount: 1,
+        failed: true,
+      );
+
+      await db.deleteFailedExpense('local-1');
+
+      expect(await db.expensesForGroup('g1'), isEmpty);
+    });
+  });
 }

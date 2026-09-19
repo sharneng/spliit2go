@@ -11,12 +11,25 @@ class Outbox {
   final AppDatabase _db;
   final SpliitClient _api;
 
+  /// After this many failed attempts, [flush] gives up retrying a row
+  /// automatically and marks it [Expenses.syncFailed] regardless of the
+  /// error (issue #44) -- otherwise a persistently-unreachable server,
+  /// or any other repeatedly-failing-but-not-obviously-permanent error,
+  /// would retry the same row forever on every flush. A 4xx response
+  /// gives up immediately instead, on the first attempt -- see [flush]'s
+  /// own body for why that's treated differently.
+  static const maxRetries = 5;
+
   Outbox(this._db, this._api);
 
-  /// Attempts to sync every pending expense belonging to [groupId].
-  /// Each row is synced independently -- one failure (still offline,
-  /// server rejected it, etc.) doesn't block the rest, and the row is
-  /// simply left pending to retry on the next flush.
+  /// Attempts to sync every pending, not-yet-failed expense belonging
+  /// to [groupId]. Each row is synced independently -- one failure
+  /// (still offline, server rejected it, etc.) doesn't block the rest.
+  /// A failure that looks transient is simply left pending to retry on
+  /// the next flush; one that looks permanent (or that's failed too
+  /// many times already) is marked [Expenses.syncFailed] instead and
+  /// stops being picked up here automatically until a person retries it
+  /// (issue #44 -- see [maxRetries] and this method's own body).
   ///
   /// Scoped to a single group (issue #42) because this [Outbox] is
   /// itself constructed per-group, with [_api] fixed to that group's
@@ -57,10 +70,35 @@ class Outbox {
         // that happened to be.
         await _db.markSynced(localId: row.id, serverId: serverId);
         synced++;
-      } catch (_) {
-        // Left pending; next flush() (e.g. on the next connectivity
-        // change) will retry it. TODO: cap retries / surface a
-        // user-visible "couldn't sync" state after N failures.
+      } catch (e) {
+        // Left pending either way -- the row still hasn't synced. But
+        // whether it's retried automatically on the *next* flush
+        // depends on what went wrong (issue #44):
+        //
+        // - A 4xx [SpliitApiException] means the server is actively
+        //   rejecting this specific request (bad data, a participant
+        //   that no longer exists, ...) -- retrying the exact same
+        //   payload unchanged would never succeed, so give up on the
+        //   first failure rather than pointlessly hammering the server
+        //   with the same rejected request on every future flush.
+        // - Anything else (still offline, a 5xx, a transient network
+        //   error) is presumed retriable, but only up to [maxRetries]
+        //   attempts -- past that, something's persistently wrong and
+        //   it needs a person's attention rather than silently retrying
+        //   forever in the background.
+        //
+        // Either way the row is marked syncFailed and stops being
+        // picked up by pendingExpensesForGroup; the UI offers a
+        // retry/delete affordance instead (see GroupScreen's expense
+        // list).
+        final isClientError = e is SpliitApiException && e.statusCode >= 400 && e.statusCode < 500;
+        final retryCount = row.retryCount + 1;
+        await _db.recordSyncFailure(
+          id: row.id,
+          error: e.toString(),
+          retryCount: retryCount,
+          failed: isClientError || retryCount >= maxRetries,
+        );
       }
     }
     return synced;

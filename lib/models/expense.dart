@@ -134,6 +134,19 @@ class Expense {
   /// from the API.
   final bool pending;
 
+  /// True once the outbox has given up retrying this pending expense
+  /// automatically (issue #44) -- a 4xx rejection from the server, or
+  /// too many failed attempts. Still [pending] (it hasn't synced), but
+  /// no longer retried on every flush; the UI surfaces this with a
+  /// retry/delete affordance instead of the ordinary "syncing…" badge.
+  /// Never true for anything read back from the API.
+  final bool syncFailed;
+
+  /// The most recent sync failure's message, or null if this expense
+  /// has never failed to sync (including every expense read back from
+  /// the API, which was never queued in the first place).
+  final String? lastError;
+
   const Expense({
     required this.id,
     required this.groupId,
@@ -151,5 +164,7 @@ class Expense {
     this.originalCurrency,
     this.conversionRate,
     this.pending = false,
+    this.syncFailed = false,
+    this.lastError,
   });
 }

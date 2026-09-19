@@ -47,6 +47,30 @@ class Expenses extends Table {
 
   BoolColumn get pending => boolean().withDefault(const Constant(false))();
 
+  /// How many times [Outbox.flush] has tried and failed to sync this
+  /// row (issue #44). Reset to 0 whenever the row is (re)inserted as
+  /// pending -- including an explicit user retry, which re-queues it
+  /// the same way a fresh offline add does.
+  IntColumn get retryCount => integer().withDefault(const Constant(0))();
+
+  /// The most recent sync failure's message (typically a
+  /// [SpliitApiException]'s `toString()`), or null if this row has
+  /// never failed to sync. Kept even after [syncFailed] is cleared by a
+  /// retry, so "what went wrong last time" survives until the next
+  /// attempt actually overwrites it -- only cleared back to null once a
+  /// sync attempt succeeds.
+  TextColumn get lastError => text().nullable()();
+
+  /// True once [Outbox.flush] has given up retrying this row on its
+  /// own (issue #44) -- either a 4xx response (the server is rejecting
+  /// the request itself, not just unreachable) or [retryCount] passing
+  /// a small fixed limit. A failed row is left [pending] (it still
+  /// hasn't synced) but is no longer picked up by ordinary flushes,
+  /// exactly to stop what would otherwise be an infinite retry loop
+  /// hammering the server with a request it's already rejected; the UI
+  /// shows it as needing the user's attention (retry or delete) instead.
+  BoolColumn get syncFailed => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -125,7 +149,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -162,6 +186,13 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(groups, groups.defaultSplitMode);
             await m.addColumn(groups, groups.defaultSplitSharesJson);
           }
+          if (from < 7) {
+            // Outbox retry limit / failure state (issue #44) -- see
+            // class doc on each column.
+            await m.addColumn(expenses, expenses.retryCount);
+            await m.addColumn(expenses, expenses.lastError);
+            await m.addColumn(expenses, expenses.syncFailed);
+          }
         },
       );
 
@@ -176,17 +207,26 @@ class AppDatabase extends _$AppDatabase {
     return (select(expenses)..where((e) => e.pending.equals(true))).get();
   }
 
-  /// Same as [pendingExpenses], scoped to one group (issue #42). Every
-  /// group has its own server (see decisions/multi-group-design.md), and
-  /// [Outbox] is constructed per-group with a single [SpliitClient]
-  /// fixed to that group's server -- so [Outbox.flush] must only ever
-  /// replay a group's own pending rows against its own client. Flushing
-  /// with the unscoped [pendingExpenses] would also pick up another
-  /// group's still-pending rows (added offline, not yet synced) and
-  /// replay them against the wrong server entirely.
+  /// Same as [pendingExpenses], scoped to one group (issue #42) and
+  /// excluding rows [Outbox] has already given up retrying (issue #44,
+  /// see [Expenses.syncFailed]'s own doc comment). Every group has its
+  /// own server (see decisions/multi-group-design.md), and [Outbox] is
+  /// constructed per-group with a single [SpliitClient] fixed to that
+  /// group's server -- so [Outbox.flush] must only ever replay a
+  /// group's own pending rows against its own client. Flushing with the
+  /// unscoped [pendingExpenses] would also pick up another group's
+  /// still-pending rows (added offline, not yet synced) and replay them
+  /// against the wrong server entirely. And a syncFailed row is
+  /// deliberately excluded here too -- it's still pending (hasn't
+  /// synced), but automatically retrying something the server has
+  /// already rejected (or that's failed repeatedly for some other
+  /// reason) on every flush would just hammer it forever; a
+  /// syncFailed row only gets retried again via an explicit user action
+  /// ([retrySyncFailure]).
   Future<List<ExpenseRow>> pendingExpensesForGroup(String groupId) {
     return (select(expenses)
-          ..where((e) => e.pending.equals(true) & e.groupId.equals(groupId)))
+          ..where((e) =>
+              e.pending.equals(true) & e.groupId.equals(groupId) & e.syncFailed.equals(false)))
         .get();
   }
 
@@ -215,8 +255,66 @@ class AppDatabase extends _$AppDatabase {
       ExpensesCompanion(
         id: Value(newId),
         pending: const Value(false),
+        // A synced row can't also be a failed one -- clear whatever a
+        // prior failed attempt (before a successful retry) left behind
+        // (issue #44).
+        retryCount: const Value(0),
+        lastError: const Value(null),
+        syncFailed: const Value(false),
       ),
     );
+  }
+
+  /// Records a failed sync attempt on a still-pending row (issue #44):
+  /// bumps [Expenses.retryCount], remembers the error, and sets
+  /// [Expenses.syncFailed] once [Outbox.flush] has decided to stop
+  /// retrying it automatically -- see that method's own doc comment for
+  /// exactly when ([failed] is computed there, not here). The row stays
+  /// [Expenses.pending] regardless: syncFailed only stops *automatic*
+  /// retries picked up by [pendingExpensesForGroup], it doesn't mean the
+  /// expense is gone or somehow no longer needs to sync.
+  Future<void> recordSyncFailure({
+    required String id,
+    required String error,
+    required int retryCount,
+    required bool failed,
+  }) {
+    return (update(expenses)..where((e) => e.id.equals(id))).write(
+      ExpensesCompanion(
+        retryCount: Value(retryCount),
+        lastError: Value(error),
+        syncFailed: Value(failed),
+      ),
+    );
+  }
+
+  /// Re-queues a failed row for automatic retry (issue #44) -- backs
+  /// the "Retry" action on a sync-failed expense. Clears
+  /// [Expenses.syncFailed] and resets [Expenses.retryCount] to 0, so
+  /// the next [Outbox.flush] picks it back up (via
+  /// [pendingExpensesForGroup]) with a full fresh set of attempts, the
+  /// same as a brand new offline add. [Expenses.lastError] is
+  /// deliberately left alone -- still useful context ("what went wrong
+  /// last time") until the next attempt overwrites it (on another
+  /// failure) or clears it (on success, via [markSynced]).
+  Future<void> retrySyncFailure(String id) {
+    return (update(expenses)..where((e) => e.id.equals(id))).write(
+      const ExpensesCompanion(
+        retryCount: Value(0),
+        syncFailed: Value(false),
+      ),
+    );
+  }
+
+  /// Discards a sync-failed row outright (issue #44) -- backs the
+  /// "Delete" action on a sync-failed expense. Only ever offered by the
+  /// UI for a row that's still [Expenses.pending] (never reached the
+  /// server), which is the only case this is safe for: deleting a row
+  /// that already synced would just make it reappear on the next
+  /// [replaceServerExpenses]-backed refresh, since the server still has
+  /// it.
+  Future<void> deleteFailedExpense(String id) {
+    return (delete(expenses)..where((e) => e.id.equals(id))).go();
   }
 
   /// Overwrites the cached (non-pending) rows for a group with a fresh
@@ -420,5 +518,7 @@ class AppDatabase extends _$AppDatabase {
         originalCurrency: row.originalCurrency,
         conversionRate: row.conversionRate,
         pending: row.pending,
+        syncFailed: row.syncFailed,
+        lastError: row.lastError,
       );
 }

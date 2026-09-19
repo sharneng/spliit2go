@@ -209,6 +209,106 @@ void main() {
       expect(rows.single.id, 'local-1');
       expect(rows.single.pending, isFalse);
     });
+
+    test('also clears a prior failure (retryCount/lastError/syncFailed), not just pending',
+        () async {
+      await db.insertPending(expense(id: 'local-1', pending: true));
+      await db.recordSyncFailure(
+        id: 'local-1',
+        error: 'server error',
+        retryCount: 3,
+        failed: true,
+      );
+
+      await db.markSynced(localId: 'local-1', serverId: 'server-1');
+
+      final row = (await db.expensesForGroup('g1')).single;
+      expect(row.syncFailed, isFalse);
+      expect(row.retryCount, 0);
+      expect(row.lastError, isNull);
+    });
+  });
+
+  group('sync failure state (issue #44)', () {
+    Expense expense({required String id}) => Expense(
+          id: id,
+          groupId: 'g1',
+          title: 'Coffee',
+          amountCents: 500,
+          paidBy: 'p1',
+          paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+          date: DateTime.utc(2026, 9, 16),
+          pending: true,
+        );
+
+    test('recordSyncFailure bumps retryCount, remembers the error, stays pending', () async {
+      await db.insertPending(expense(id: 'local-1'));
+
+      await db.recordSyncFailure(
+        id: 'local-1',
+        error: 'SpliitApiException(500): server error',
+        retryCount: 1,
+        failed: false,
+      );
+
+      final row = (await db.expensesForGroup('g1')).single;
+      expect(row.pending, isTrue);
+      expect(row.retryCount, 1);
+      expect(row.lastError, 'SpliitApiException(500): server error');
+      expect(row.syncFailed, isFalse);
+    });
+
+    test('recordSyncFailure(failed: true) marks the row syncFailed and excludes it from '
+        'pendingExpensesForGroup', () async {
+      await db.insertPending(expense(id: 'local-1'));
+
+      await db.recordSyncFailure(
+        id: 'local-1',
+        error: 'SpliitApiException(400): bad request',
+        retryCount: 1,
+        failed: true,
+      );
+
+      expect(await db.pendingExpensesForGroup('g1'), isEmpty);
+      // Still there, still pending -- just not auto-retried.
+      final row = (await db.expensesForGroup('g1')).single;
+      expect(row.pending, isTrue);
+      expect(row.syncFailed, isTrue);
+    });
+
+    test('retrySyncFailure clears syncFailed and resets retryCount, keeping lastError', () async {
+      await db.insertPending(expense(id: 'local-1'));
+      await db.recordSyncFailure(
+        id: 'local-1',
+        error: 'SpliitApiException(400): bad request',
+        retryCount: 2,
+        failed: true,
+      );
+
+      await db.retrySyncFailure('local-1');
+
+      final row = (await db.expensesForGroup('g1')).single;
+      expect(row.syncFailed, isFalse);
+      expect(row.retryCount, 0);
+      // lastError is deliberately left as-is -- still useful context
+      // until the next attempt overwrites or clears it.
+      expect(row.lastError, 'SpliitApiException(400): bad request');
+      expect(await db.pendingExpensesForGroup('g1'), hasLength(1));
+    });
+
+    test('deleteFailedExpense removes the row entirely', () async {
+      await db.insertPending(expense(id: 'local-1'));
+      await db.recordSyncFailure(
+        id: 'local-1',
+        error: 'SpliitApiException(400): bad request',
+        retryCount: 1,
+        failed: true,
+      );
+
+      await db.deleteFailedExpense('local-1');
+
+      expect(await db.expensesForGroup('g1'), isEmpty);
+    });
   });
 
   group('multi-group support', () {

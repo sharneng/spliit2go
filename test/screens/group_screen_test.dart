@@ -190,6 +190,144 @@ void main() {
     });
   });
 
+  group('sync failure retry/delete (issue #44)', () {
+    const cachedGroup = Group(
+      id: 'g1',
+      name: 'Banff Trip',
+      currency: '\$',
+      participants: [Participant(id: 'p1', name: 'Ken')],
+    );
+
+    Expense failedExpense() => Expense(
+          id: 'local-1',
+          groupId: 'g1',
+          title: 'Snacks',
+          amountCents: 300,
+          paidBy: 'p1',
+          paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+          date: DateTime.utc(2026, 9, 16),
+          pending: true,
+          syncFailed: true,
+          lastError: "SpliitApiException(400): participant doesn't exist",
+        );
+
+    testWidgets('a sync-failed expense shows an error badge instead of "syncing…"',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.cacheGroup(cachedGroup);
+      await db.insertPending(failedExpense());
+
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => throw Exception('not used')),
+      );
+      final outbox = Outbox(db, client);
+
+      await tester.pumpWidget(MaterialApp(
+        home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('sync failed'), findsOneWidget);
+      expect(find.text('syncing…'), findsNothing);
+    });
+
+    testWidgets('tapping a sync-failed expense opens retry/delete options with the error message',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.cacheGroup(cachedGroup);
+      await db.insertPending(failedExpense());
+
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => throw Exception('not used')),
+      );
+      final outbox = Outbox(db, client);
+
+      await tester.pumpWidget(MaterialApp(
+        home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Snacks'));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Couldn't sync this expense"), findsOneWidget);
+      expect(find.textContaining("participant doesn't exist"), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text('Delete'), findsOneWidget);
+      // Deliberately no "edit" option -- see _showSyncFailureOptions's
+      // own doc comment (this app is view+add only, never offline
+      // edit).
+      expect(find.text('Edit'), findsNothing);
+    });
+
+    testWidgets('Retry re-queues the expense and a subsequent flush can sync it',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.cacheGroup(cachedGroup);
+      await db.insertPending(failedExpense());
+
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          if (req.url.toString().contains('expenses.create')) {
+            return http.Response('[{"result":{"data":{"json":{"expenseId":"server-1"}}}}]', 200);
+          }
+          // groups.get / groups.expenses.list follow-up refresh.
+          throw Exception('offline');
+        }),
+      );
+      final outbox = Outbox(db, client);
+
+      await tester.pumpWidget(MaterialApp(
+        home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Snacks'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Retry'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('sync failed'), findsNothing);
+      final rows = await db.expensesForGroup('g1');
+      expect(rows.single.id, 'server-1');
+      expect(rows.single.pending, isFalse);
+      expect(rows.single.syncFailed, isFalse);
+    });
+
+    testWidgets('Delete removes the sync-failed expense from the list and the local db',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.cacheGroup(cachedGroup);
+      await db.insertPending(failedExpense());
+
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => throw Exception('not used')),
+      );
+      final outbox = Outbox(db, client);
+
+      await tester.pumpWidget(MaterialApp(
+        home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Snacks'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Snacks'), findsNothing);
+      expect(await db.expensesForGroup('g1'), isEmpty);
+    });
+  });
+
   // Regression coverage for issue #28: each expense row leads with its
   // category's icon (a banknote here, since this synced expense has no
   // category set and the offline test client never resolves a real

@@ -356,18 +356,84 @@ class _GroupScreenState extends State<GroupScreen> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text('\$${(e.amountCents / 100).toStringAsFixed(2)}'),
-              if (e.pending)
+              if (e.syncFailed)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline,
+                        size: 13, color: Theme.of(context).colorScheme.error),
+                    const SizedBox(width: 2),
+                    Text('sync failed',
+                        style: TextStyle(
+                            fontSize: 11, color: Theme.of(context).colorScheme.error)),
+                  ],
+                )
+              else if (e.pending)
                 const Text('syncing…', style: TextStyle(fontSize: 11)),
             ],
           ),
           // Pending (offline-added, not-yet-synced) rows have no server
           // id to fetch or edit yet -- and no connectivity story for
           // editing an in-flight create -- so editing is only offered
-          // once an expense has actually synced.
-          onTap: e.pending ? null : () => _openEditExpense(e),
+          // once an expense has actually synced. A sync-failed row is a
+          // special case of pending (issue #44): tapping it offers
+          // retry/delete instead of doing nothing, since it needs a
+          // person's attention rather than silently waiting for a flush
+          // that will never come (the outbox has already given up on
+          // it -- see Outbox.flush's own doc comment).
+          onTap: e.syncFailed
+              ? () => _showSyncFailureOptions(e)
+              : (e.pending ? null : () => _openEditExpense(e)),
         );
       },
     );
+  }
+
+  /// Retry/delete for a sync-failed expense (issue #44). Deliberately
+  /// doesn't offer "edit" -- this app is explicitly scoped to offline
+  /// *view + add* only, never offline edit (decisions/mobile-platform.md),
+  /// and a sync-failed row is still just a pending, never-reached-the-
+  /// server row; editing it in place would be exactly the offline-edit
+  /// feature that decision rules out. Retry re-queues it for the outbox;
+  /// Delete discards it locally without ever having synced.
+  Future<void> _showSyncFailureOptions(Expense e) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
+              title: const Text("Couldn't sync this expense"),
+              subtitle: e.lastError == null
+                  ? null
+                  : Text(e.lastError!, maxLines: 3, overflow: TextOverflow.ellipsis),
+            ),
+            ListTile(
+              leading: const Icon(Icons.refresh),
+              title: const Text('Retry'),
+              onTap: () => Navigator.of(context).pop('retry'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Delete'),
+              onTap: () => Navigator.of(context).pop('delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'retry':
+        await widget.db.retrySyncFailure(e.id);
+        await _loadFromCache();
+        await _syncThenRefresh();
+      case 'delete':
+        await widget.db.deleteFailedExpense(e.id);
+        await _loadFromCache();
+    }
   }
 
   /// Opens group settings (rename, currency, participants). Unlike the
