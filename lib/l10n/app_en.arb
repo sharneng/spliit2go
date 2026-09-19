@@ -1,0 +1,322 @@
+{
+  "@@locale": "en",
+  "commonCancel": "Cancel",
+  "commonRetry": "Retry",
+  "commonRequired": "Required",
+  "commonNoExpensesYet": "No expenses yet.",
+  "commonDelete": "Delete",
+  "groupListTitle": "Your groups",
+  "groupListJoinTooltip": "Join a group",
+  "groupListEmpty": "No groups yet.",
+  "groupListEmptyJoinButton": "Join a group",
+  "groupListLeaveTitle": "Leave group?",
+  "groupListLeaveBody": "This only removes \"{name}\" from this device -- it does not delete the group or affect anyone else in it.",
+  "@groupListLeaveBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "groupListLeaveConfirm": "Leave",
+  "joinGroupScreenTitle": "Join a group",
+  "joinGroupUrlInvalid": "That doesn''t look like a group URL -- it should look like https://spliit.app/groups/xxxxxxxxxxxxxxxxxxxxx",
+  "joinGroupJoinFailed": "Couldn''t join: {error}",
+  "@joinGroupJoinFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "joinGroupUrlLabel": "Group URL",
+  "joinGroupUrlHelper": "Paste the group''s URL, e.g. https://spliit.app/groups/xxxxx",
+  "joinGroupSubmitButton": "Join",
+  "groupScreenSearchTooltip": "Search",
+  "groupScreenActiveUserTooltip": "Active user",
+  "groupScreenSettingsTooltip": "Group settings",
+  "groupScreenSearchComingSoon": "Search is coming soon (issue #39).",
+  "groupScreenTabExpenses": "Expenses",
+  "groupScreenTabBalance": "Balance",
+  "groupScreenTabStats": "Stats",
+  "groupScreenTabActivities": "Activities",
+  "groupScreenServerError": "Couldn''t reach the server: {error}",
+  "@groupScreenServerError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "groupScreenSyncFailed": "sync failed",
+  "groupScreenSyncing": "syncing…",
+  "groupScreenSyncFailureTitle": "Couldn''t sync this expense",
+  "groupScreenEditNeedsConnection": "Editing an expense needs a connection.",
+  "groupScreenActiveUserDialogTitle": "Active user",
+  "groupScreenActiveUserNone": "None",
+  "groupSettingsTitle": "Group settings",
+  "groupSettingsSaveTooltip": "Save",
+  "groupSettingsNameRequired": "Group name is required.",
+  "groupSettingsSymbolRequired": "Enter at least one character.",
+  "groupSettingsNeedParticipant": "At least one participant is required.",
+  "groupSettingsParticipantNameRequired": "Every participant needs a name.",
+  "groupSettingsCantRemoveHasExpenses": "Can''t remove a participant who has expenses in this group.",
+  "groupSettingsSaveFailed": "Couldn''t save: {error}",
+  "@groupSettingsSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "groupSettingsNameLabel": "Group name",
+  "groupSettingsCurrencyLabel": "Main currency",
+  "groupSettingsSymbolLabel": "Currency symbol",
+  "groupSettingsSymbolHint": "$, €, £...",
+  "groupSettingsSymbolHelper": "We''ll use it to display amounts.",
+  "groupSettingsInfoLabel": "Group information",
+  "groupSettingsInfoHint": "What information is relevant to group participants?",
+  "groupSettingsParticipantsHeading": "Participants",
+  "groupSettingsAddParticipantTooltip": "Add participant",
+  "groupSettingsCantRemoveTooltip": "Can''t remove: has expenses in this group",
+  "groupSettingsRemoveTooltip": "Remove",
+  "expenseEditTitle": "Edit expense",
+  "expenseAddTitle": "Add expense",
+  "expenseTitleLabel": "Title",
+  "expenseAmountLabel": "Amount",
+  "expenseInvalidAmount": "Enter a valid amount",
+  "expenseDateLabel": "Date",
+  "expenseCategoryLabel": "Category",
+  "expensePaidByLabel": "Paid by",
+  "expensePaidInOtherCurrency": "Paid in a different currency",
+  "expenseGroupCurrency": "Group currency: {currency}",
+  "@expenseGroupCurrency": {
+    "placeholders": {
+      "currency": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseOriginalAmountLabel": "Original amount",
+  "expenseCurrencyLabel": "Currency",
+  "expenseCurrencySelectPlaceholder": "Select",
+  "expenseCurrencyConversionUnavailable": "Conversion unavailable",
+  "expenseIsReimbursement": "This is a reimbursement",
+  "expenseRepeatLabel": "Repeat",
+  "expenseRepeatNone": "Does not repeat",
+  "expenseRepeatDaily": "Daily",
+  "expenseRepeatWeekly": "Weekly",
+  "expenseRepeatMonthly": "Monthly",
+  "expensePaidForHeading": "Paid for",
+  "expenseSelectNone": "Select none",
+  "expenseSelectAll": "Select all",
+  "expenseSplitEvenly": "Evenly",
+  "expenseSplitShares": "Shares",
+  "expenseSplitPercent": "Percent",
+  "expenseSplitAmount": "Amount",
+  "expenseSaveDefaultSplit": "Save as default split",
+  "expenseNotesLabel": "Notes",
+  "expenseDocumentsPlaceholder": "Attach documents – not yet supported in this app",
+  "expenseSaveButton": "Save",
+  "expenseSavingButton": "Saving…",
+  "expenseCategorySearchLabel": "Search categories",
+  "expenseNoMatchingCategories": "No matching categories",
+  "expenseSelectAtLeastOne": "Select at least one participant",
+  "expenseEnterShares": "{name}: enter a number of shares",
+  "@expenseEnterShares": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseEnterPercentage": "{name}: enter a percentage",
+  "@expenseEnterPercentage": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "expensePercentageMismatch": "Percentages must add up to 100 (currently {current})",
+  "@expensePercentageMismatch": {
+    "placeholders": {
+      "current": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseEnterAmount": "{name}: enter an amount",
+  "@expenseEnterAmount": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseAmountMismatch": "Amounts must add up to the total (off by ${diff})",
+  "@expenseAmountMismatch": {
+    "placeholders": {
+      "diff": {
+        "type": "String"
+      }
+    }
+  },
+  "expensePercentOver": "{percent}% over 100%.",
+  "@expensePercentOver": {
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "expensePercentRemaining": "{percent}% still to allocate.",
+  "@expensePercentRemaining": {
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseAmountOver": "${amount} over the total.",
+  "@expenseAmountOver": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseAmountRemaining": "${amount} still to allocate.",
+  "@expenseAmountRemaining": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseHintEvenly": "Everyone selected pays an equal part.",
+  "expenseHintShares": "Give anyone paying a larger part more shares.",
+  "expenseHintPercentage": "Percentages must add up to 100.",
+  "expenseHintAmount": "Amounts must add up to the expense total.",
+  "expenseEditSaveFailed": "Couldn''t save: needs a connection to edit an expense ({error})",
+  "@expenseEditSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "statsTitle": "Stats",
+  "statsSectionSummary": "Summary",
+  "statsSectionTotals": "Totals",
+  "statsSectionByParticipant": "By participant",
+  "statsSectionByCategory": "By category",
+  "statsMetricExpenses": "Expenses",
+  "statsMetricAverageExpense": "Average expense",
+  "statsMetricLargestExpense": "Largest expense",
+  "statsMetricActiveSpan": "Active span",
+  "statsMetricGroupSpending": "Group spending",
+  "statsMetricYouPaid": "You paid",
+  "statsMetricYourShare": "Your share",
+  "statsPickActiveUserHint": "Pick an active user to see your personal totals.",
+  "statsParticipantPaidCount": "{count, plural, =1{Paid 1 expense} other{Paid {count} expenses}}",
+  "@statsParticipantPaidCount": {
+    "description": "Subtitle on a participant's stats row, e.g. 'Paid 3 expenses'.",
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "statsParticipantShare": "share {amount}",
+  "@statsParticipantShare": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "activityTitle": "Activity",
+  "activityEmpty": "There is not yet any activity in your group.",
+  "activityLoadMore": "Load more",
+  "activityOpenNeedsConnection": "Opening this expense needs a connection.",
+  "activityLoadFailed": "Couldn''t load activity: {error}",
+  "@activityLoadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "activitySomeone": "Someone",
+  "activityGroupSettingsModified": "Group settings were modified by {name}.",
+  "@activityGroupSettingsModified": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "activityExpenseCreated": "Expense \"{title}\" created by {name}.",
+  "@activityExpenseCreated": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "activityExpenseUpdated": "Expense \"{title}\" updated by {name}.",
+  "@activityExpenseUpdated": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "activityExpenseDeleted": "Expense \"{title}\" deleted by {name}.",
+  "@activityExpenseDeleted": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "activityToday": "Today",
+  "activityYesterday": "Yesterday",
+  "balancesTitle": "Balances",
+  "balancesExplainer": "This is the amount each participant paid or was paid for.",
+  "balancesSuggestedReimbursements": "Suggested reimbursements",
+  "balancesOwes": "{from} owes {to}",
+  "@balancesOwes": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "balancesMarkAsPaid": "Mark as paid  {amount}",
+  "@balancesMarkAsPaid": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "currencyPickerSearchHint": "Search currency...",
+  "currencyPickerNoResults": "No currency found",
+  "currencyPickerMostCommon": "Most common",
+  "currencyPickerOtherCurrencies": "Other currencies"
+}

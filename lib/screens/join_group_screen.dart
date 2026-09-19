@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
+import '../l10n/context_l10n.dart';
 import '../services/active_user.dart';
 import '../services/group_url.dart';
 import '../services/settings_service.dart';
@@ -59,8 +60,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
     if (!_formKey.currentState!.validate()) return;
     final parsed = parseGroupUrl(_urlController.text);
     if (parsed == null) {
-      setState(() => _error = 'That doesn\'t look like a group URL -- it should look like '
-          'https://spliit.app/groups/xxxxxxxxxxxxxxxxxxxxx');
+      setState(() => _error = context.l10n.joinGroupUrlInvalid);
       return;
     }
     final serverUrl = parsed.serverUrl;
@@ -93,7 +93,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
       Navigator.of(context).pop(group.id);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = "Couldn't join: $e");
+      setState(() => _error = context.l10n.joinGroupJoinFailed(e.toString()));
     } finally {
       if (mounted) setState(() => _joining = false);
     }
@@ -102,7 +102,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Join a group')),
+      appBar: AppBar(title: Text(context.l10n.joinGroupScreenTitle)),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Form(
@@ -116,12 +116,13 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
               ],
               TextFormField(
                 controller: _urlController,
-                decoration: const InputDecoration(
-                  labelText: 'Group URL',
-                  helperText: 'Paste the group\'s URL, e.g. https://spliit.app/groups/xxxxx',
+                decoration: InputDecoration(
+                  labelText: context.l10n.joinGroupUrlLabel,
+                  helperText: context.l10n.joinGroupUrlHelper,
                 ),
                 keyboardType: TextInputType.url,
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? context.l10n.commonRequired : null,
               ),
               const SizedBox(height: 24),
               FilledButton(
@@ -132,7 +133,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
                         height: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Join'),
+                    : Text(context.l10n.joinGroupSubmitButton),
               ),
             ],
           ),

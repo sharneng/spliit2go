@@ -5,6 +5,7 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
+import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/group_list_screen.dart';
 
@@ -24,6 +25,9 @@ void main() {
     addTearDown(db.close);
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: GroupListScreen(db: db, clientFactory: (_) => offlineClient()),
     ));
     await tester.pumpAndSettle();
@@ -46,6 +50,9 @@ void main() {
         serverUrl: 'https://example.test', at: DateTime.utc(2026, 9, 16, 10, 0, 1));
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: GroupListScreen(db: db, clientFactory: (_) => offlineClient()),
     ));
     await tester.pumpAndSettle();
@@ -68,6 +75,9 @@ void main() {
     await db.cacheGroup(const Group(id: 'gA', name: 'Banff Trip', currency: '\$', participants: []));
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: GroupListScreen(db: db, clientFactory: (_) => offlineClient()),
     ));
     await tester.pumpAndSettle();
@@ -88,6 +98,9 @@ void main() {
     );
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: GroupListScreen(db: db, clientFactory: (_) => client),
     ));
     await tester.pumpAndSettle();
@@ -108,6 +121,9 @@ void main() {
     await db.recordGroupOpened('gA', serverUrl: 'https://example.test');
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: GroupListScreen(db: db, clientFactory: (_) => offlineClient()),
     ));
     await tester.pumpAndSettle();
@@ -130,6 +146,9 @@ void main() {
     await db.recordGroupOpened('gA', serverUrl: 'https://example.test');
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: GroupListScreen(db: db, clientFactory: (_) => offlineClient()),
     ));
     await tester.pumpAndSettle();

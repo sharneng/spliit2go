@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/context_l10n.dart';
 import '../models/currency.dart';
 
 /// Opens Spliit's currency picker as a searchable modal bottom sheet --
@@ -85,24 +86,26 @@ class _CurrencyPickerState extends State<_CurrencyPicker> {
                 child: TextField(
                   controller: _searchController,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search),
-                    hintText: 'Search currency...',
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search),
+                    hintText: context.l10n.currencyPickerSearchHint,
                     isDense: true,
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
                   ),
                   onChanged: (v) => setState(() => _query = v),
                 ),
               ),
               Expanded(
                 child: empty
-                    ? const Center(child: Text('No currency found'))
+                    ? Center(child: Text(context.l10n.currencyPickerNoResults))
                     : ListView(
                         children: [
                           for (final c in custom) _tile(context, c),
-                          if (common.isNotEmpty) _header(context, 'Most common'),
+                          if (common.isNotEmpty)
+                            _header(context, context.l10n.currencyPickerMostCommon),
                           for (final c in common) _tile(context, c),
-                          if (other.isNotEmpty) _header(context, 'Other currencies'),
+                          if (other.isNotEmpty)
+                            _header(context, context.l10n.currencyPickerOtherCurrencies),
                           for (final c in other) _tile(context, c),
                         ],
                       ),

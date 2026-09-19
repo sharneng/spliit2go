@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
+import '../l10n/context_l10n.dart';
 import '../models/category.dart';
 import '../models/group.dart';
 import '../services/stats_calculator.dart';
@@ -130,26 +131,26 @@ class _StatsScreenState extends State<StatsScreen> {
   Widget build(BuildContext context) {
     final body = _loading ? const Center(child: CircularProgressIndicator()) : _body();
     if (widget.embedded) return body;
-    return Scaffold(appBar: AppBar(title: const Text('Stats')), body: body);
+    return Scaffold(appBar: AppBar(title: Text(context.l10n.statsTitle)), body: body);
   }
 
   Widget _body() {
     if (_summary.expenseCount == 0) {
-      return const Center(child: Text('No expenses yet.'));
+      return Center(child: Text(context.l10n.commonNoExpensesYet));
     }
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _sectionTitle(context, 'Summary'),
+        _sectionTitle(context, context.l10n.statsSectionSummary),
         _summaryCard(context),
         const SizedBox(height: 20),
-        _sectionTitle(context, 'Totals'),
+        _sectionTitle(context, context.l10n.statsSectionTotals),
         _totalsCard(context),
         const SizedBox(height: 20),
-        _sectionTitle(context, 'By participant'),
+        _sectionTitle(context, context.l10n.statsSectionByParticipant),
         for (final p in _participants) _participantTile(context, p),
         const SizedBox(height: 20),
-        _sectionTitle(context, 'By category'),
+        _sectionTitle(context, context.l10n.statsSectionByCategory),
         for (final c in _categories) _categoryTile(context, c),
       ],
     );
@@ -167,15 +168,15 @@ class _StatsScreenState extends State<StatsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _metricRow('Expenses', '${_summary.expenseCount}'),
-            _metricRow('Average expense', _money(_summary.averageCents)),
+            _metricRow(context.l10n.statsMetricExpenses, '${_summary.expenseCount}'),
+            _metricRow(context.l10n.statsMetricAverageExpense, _money(_summary.averageCents)),
             _metricRow(
-              'Largest expense',
+              context.l10n.statsMetricLargestExpense,
               _summary.largestCents == null
                   ? '—'
                   : '${_money(_summary.largestCents!)} (${_summary.largestTitle})',
             ),
-            _metricRow('Active span', _activeSpan()),
+            _metricRow(context.l10n.statsMetricActiveSpan, _activeSpan()),
           ],
         ),
       ),
@@ -189,14 +190,16 @@ class _StatsScreenState extends State<StatsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _metricRow('Group spending', _money(_groupTotalCents)),
-            if (_yourPaidCents != null) _metricRow('You paid', _money(_yourPaidCents!)),
-            if (_yourShareCents != null) _metricRow('Your share', _money(_yourShareCents!)),
+            _metricRow(context.l10n.statsMetricGroupSpending, _money(_groupTotalCents)),
+            if (_yourPaidCents != null)
+              _metricRow(context.l10n.statsMetricYouPaid, _money(_yourPaidCents!)),
+            if (_yourShareCents != null)
+              _metricRow(context.l10n.statsMetricYourShare, _money(_yourShareCents!)),
             if (widget.activeUserId == null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  'Pick an active user to see your personal totals.',
+                  context.l10n.statsPickActiveUserHint,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
@@ -220,13 +223,14 @@ class _StatsScreenState extends State<StatsScreen> {
   Widget _participantTile(BuildContext context, ParticipantSpending p) {
     return ListTile(
       title: Text(p.name),
-      subtitle: Text('Paid ${p.paidCount} expense${p.paidCount == 1 ? '' : 's'}'),
+      subtitle: Text(context.l10n.statsParticipantPaidCount(p.paidCount)),
       trailing: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Text(_money(p.paidCents), style: const TextStyle(fontWeight: FontWeight.w600)),
-          Text('share ${_money(p.shareCents)}', style: Theme.of(context).textTheme.bodySmall),
+          Text(context.l10n.statsParticipantShare(_money(p.shareCents)),
+              style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
     );

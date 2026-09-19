@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
+import '../l10n/context_l10n.dart';
 import '../models/balance.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
@@ -164,11 +165,11 @@ class _BalancesScreenState extends State<BalancesScreen> {
               onRefresh: _load,
               child: ListView(
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                     child: Text(
-                      'This is the amount each participant paid or was paid for.',
-                      style: TextStyle(color: Colors.grey),
+                      context.l10n.balancesExplainer,
+                      style: const TextStyle(color: Colors.grey),
                     ),
                   ),
                   for (final b in _balances)
@@ -186,14 +187,14 @@ class _BalancesScreenState extends State<BalancesScreen> {
                     ),
                   if (_settlements.isNotEmpty) ...[
                     const Divider(),
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-                      child: Text('Suggested reimbursements',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                      child: Text(context.l10n.balancesSuggestedReimbursements,
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
                     ),
                     for (final s in _settlements)
                       ListTile(
-                        title: Text('${_name(s.fromId)} owes ${_name(s.toId)}'),
+                        title: Text(context.l10n.balancesOwes(_name(s.fromId), _name(s.toId))),
                         trailing: _settlingKey == '${s.fromId}->${s.toId}'
                             ? const SizedBox(
                                 width: 20,
@@ -202,19 +203,19 @@ class _BalancesScreenState extends State<BalancesScreen> {
                               )
                             : TextButton(
                                 onPressed: () => _openSettleUp(s),
-                                child: Text('Mark as paid  ${_money(s.amountCents)}'),
+                                child: Text(context.l10n.balancesMarkAsPaid(_money(s.amountCents))),
                               ),
                       ),
                   ],
                   if (_balances.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(child: Text('No expenses yet.')),
+                    Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Center(child: Text(context.l10n.commonNoExpensesYet)),
                     ),
                 ],
               ),
             );
     if (widget.embedded) return body;
-    return Scaffold(appBar: AppBar(title: const Text('Balances')), body: body);
+    return Scaffold(appBar: AppBar(title: Text(context.l10n.balancesTitle)), body: body);
   }
 }

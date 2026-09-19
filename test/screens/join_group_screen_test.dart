@@ -8,6 +8,7 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
+import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/screens/join_group_screen.dart';
 
 void main() {
@@ -42,6 +43,9 @@ void main() {
       {String url = 'https://example.test/groups/g1'}) async {
     String? popped;
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Builder(
         builder: (context) => ElevatedButton(
           onPressed: () async {
@@ -132,6 +136,9 @@ void main() {
     );
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: JoinGroupScreen(db: db, clientFactory: (_) => client),
     ));
     await tester.pumpAndSettle();

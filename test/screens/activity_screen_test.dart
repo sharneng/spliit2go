@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
+import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/activity_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
@@ -75,6 +76,9 @@ void main() {
     final outbox = Outbox(db, client);
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: ActivityScreen(client: client, db: db, outbox: outbox, group: group),
     ));
     await tester.pumpAndSettle();
@@ -92,6 +96,9 @@ void main() {
     final outbox = Outbox(db, client);
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: ActivityScreen(client: client, db: db, outbox: outbox, group: group),
     ));
     await tester.pumpAndSettle();
@@ -137,6 +144,9 @@ void main() {
     final outbox = Outbox(db, client);
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: ActivityScreen(client: client, db: db, outbox: outbox, group: group),
     ));
     await tester.pumpAndSettle();
@@ -179,6 +189,9 @@ void main() {
     final outbox = Outbox(db, client);
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: ActivityScreen(client: client, db: db, outbox: outbox, group: group),
     ));
     await tester.pumpAndSettle();
@@ -237,6 +250,9 @@ void main() {
     final outbox = Outbox(db, client);
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: ActivityScreen(client: client, db: db, outbox: outbox, group: group),
     ));
     await tester.pumpAndSettle();
@@ -311,6 +327,9 @@ void main() {
     final outbox = Outbox(db, client);
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: ActivityScreen(client: client, db: db, outbox: outbox, group: group),
     ));
     await tester.pumpAndSettle();

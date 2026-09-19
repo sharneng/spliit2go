@@ -9,6 +9,16 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  # No explicit version range: flutter_localizations (an SDK
+  # package) pins intl to an exact version tied to the installed
+  # Flutter SDK release, and that pin varies across stable
+  # versions/channels -- a caret range here (e.g. ^0.19.0) can
+  # conflict with whatever this checkout's Flutter actually
+  # requires. Letting pub resolve to flutter_localizations' own
+  # constraint is the standard approach for this pairing.
+  intl: any
   http: ^1.2.0
   drift: ^2.16.0
   sqlite3_flutter_libs: ^0.5.20
@@ -28,3 +38,4 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  generate: true

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/main.dart';
 import 'package:spliit2go/theme.dart';
 
@@ -18,6 +19,9 @@ void main() {
   testWidgets('paints a full-bleed backdrop in the active theme\'s own background color',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: spliit2goLightTheme,
       builder: spliit2goAppBuilder,
       home: const Scaffold(body: Text('content')),
@@ -30,6 +34,9 @@ void main() {
   testWidgets('the backdrop tracks dark mode too, not just the light theme',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: spliit2goLightTheme,
       darkTheme: spliit2goDarkTheme,
       themeMode: ThemeMode.dark,
@@ -44,6 +51,9 @@ void main() {
   testWidgets('the backdrop sits behind a SafeArea that insets the bottom only',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: spliit2goLightTheme,
       builder: spliit2goAppBuilder,
       home: const Scaffold(body: Text('content')),

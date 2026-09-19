@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'api/spliit_client.dart';
 import 'db/app_database.dart';
 import 'db/connection.dart';
+import 'l10n/app_localizations.dart';
 import 'screens/group_list_screen.dart';
 import 'screens/group_screen.dart';
 import 'services/settings_service.dart';
@@ -21,6 +23,14 @@ class Spliit2GoApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'spliit2go',
+      // i18n phase 1 (issue #37/#48): infra only -- app_en.arb is the
+      // only shipped locale for now, so this doesn't change what any
+      // user sees yet. The delegates/supportedLocales still have to be
+      // wired up here regardless, since AppLocalizations.of(context)
+      // (used at every replaced Text() call site) resolves through
+      // whatever Localizations ancestor MaterialApp installs.
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       // Issue #25: MaterialApp's own default `themeMode` is already
       // ThemeMode.system -- the app was never actually opted into
       // "always light," that setting simply had nothing to switch to.

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
+import '../l10n/context_l10n.dart';
 import '../sync/outbox.dart';
 import 'group_screen.dart';
 import 'join_group_screen.dart';
@@ -87,11 +88,11 @@ class _GroupListScreenState extends State<GroupListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Your groups'),
+        title: Text(context.l10n.groupListTitle),
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
-            tooltip: 'Join a group',
+            tooltip: context.l10n.groupListJoinTooltip,
             onPressed: _joinAnother,
           ),
         ],
@@ -111,9 +112,9 @@ class _GroupListScreenState extends State<GroupListScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('No groups yet.'),
+              Text(context.l10n.groupListEmpty),
               const SizedBox(height: 12),
-              FilledButton(onPressed: _joinAnother, child: const Text('Join a group')),
+              FilledButton(onPressed: _joinAnother, child: Text(context.l10n.groupListEmptyJoinButton)),
             ],
           ),
         ),
@@ -135,19 +136,16 @@ class _GroupListScreenState extends State<GroupListScreen> {
           confirmDismiss: (_) => showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('Leave group?'),
-              content: Text(
-                'This only removes "${row.name}" from this device -- it does not delete '
-                'the group or affect anyone else in it.',
-              ),
+              title: Text(context.l10n.groupListLeaveTitle),
+              content: Text(context.l10n.groupListLeaveBody(row.name)),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
+                  child: Text(context.l10n.commonCancel),
                 ),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Leave'),
+                  child: Text(context.l10n.groupListLeaveConfirm),
                 ),
               ],
             ),

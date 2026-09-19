@@ -3,6 +3,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
+import '../l10n/context_l10n.dart';
 import '../models/category.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
@@ -198,17 +199,17 @@ class _GroupScreenState extends State<GroupScreen> {
           if (_tabIndex == 0)
             IconButton(
               icon: const Icon(Icons.search),
-              tooltip: 'Search',
+              tooltip: context.l10n.groupScreenSearchTooltip,
               onPressed: _group == null ? null : _searchPlaceholder,
             ),
           IconButton(
             icon: const Icon(Icons.person_outline),
-            tooltip: 'Active user',
+            tooltip: context.l10n.groupScreenActiveUserTooltip,
             onPressed: _group == null ? null : _pickActiveUser,
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Group settings',
+            tooltip: context.l10n.groupScreenSettingsTooltip,
             onPressed: _group == null ? null : _openGroupSettings,
           ),
         ],
@@ -233,23 +234,24 @@ class _GroupScreenState extends State<GroupScreen> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tabIndex,
         onDestinationSelected: (i) => setState(() => _tabIndex = i),
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long),
-            label: 'Expenses',
+            icon: const Icon(Icons.receipt_long_outlined),
+            selectedIcon: const Icon(Icons.receipt_long),
+            label: context.l10n.groupScreenTabExpenses,
           ),
           NavigationDestination(
-            icon: Icon(Icons.account_balance_wallet_outlined),
-            selectedIcon: Icon(Icons.account_balance_wallet),
-            label: 'Balance',
+            icon: const Icon(Icons.account_balance_wallet_outlined),
+            selectedIcon: const Icon(Icons.account_balance_wallet),
+            label: context.l10n.groupScreenTabBalance,
           ),
           NavigationDestination(
-            icon: Icon(Icons.bar_chart_outlined),
-            selectedIcon: Icon(Icons.bar_chart),
-            label: 'Stats',
+            icon: const Icon(Icons.bar_chart_outlined),
+            selectedIcon: const Icon(Icons.bar_chart),
+            label: context.l10n.groupScreenTabStats,
           ),
-          NavigationDestination(icon: Icon(Icons.history), label: 'Activities'),
+          NavigationDestination(
+              icon: const Icon(Icons.history), label: context.l10n.groupScreenTabActivities),
         ],
       ),
     );
@@ -316,7 +318,7 @@ class _GroupScreenState extends State<GroupScreen> {
   /// nothing.
   void _searchPlaceholder() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Search is coming soon (issue #39).')),
+      SnackBar(content: Text(context.l10n.groupScreenSearchComingSoon)),
     );
   }
 
@@ -330,12 +332,12 @@ class _GroupScreenState extends State<GroupScreen> {
           const SizedBox(height: 80),
           Icon(Icons.cloud_off, size: 48, color: Theme.of(context).colorScheme.outline),
           const SizedBox(height: 12),
-          Center(child: Text('Couldn\'t reach the server: $_error')),
+          Center(child: Text(context.l10n.groupScreenServerError(_error!))),
         ],
       );
     }
     if (_expenses.isEmpty) {
-      return const Center(child: Text('No expenses yet.'));
+      return Center(child: Text(context.l10n.commonNoExpensesYet));
     }
     return ListView.builder(
       itemCount: _expenses.length,
@@ -363,13 +365,13 @@ class _GroupScreenState extends State<GroupScreen> {
                     Icon(Icons.error_outline,
                         size: 13, color: Theme.of(context).colorScheme.error),
                     const SizedBox(width: 2),
-                    Text('sync failed',
+                    Text(context.l10n.groupScreenSyncFailed,
                         style: TextStyle(
                             fontSize: 11, color: Theme.of(context).colorScheme.error)),
                   ],
                 )
               else if (e.pending)
-                const Text('syncing…', style: TextStyle(fontSize: 11)),
+                Text(context.l10n.groupScreenSyncing, style: const TextStyle(fontSize: 11)),
             ],
           ),
           // Pending (offline-added, not-yet-synced) rows have no server
@@ -405,19 +407,19 @@ class _GroupScreenState extends State<GroupScreen> {
           children: [
             ListTile(
               leading: Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
-              title: const Text("Couldn't sync this expense"),
+              title: Text(context.l10n.groupScreenSyncFailureTitle),
               subtitle: e.lastError == null
                   ? null
                   : Text(e.lastError!, maxLines: 3, overflow: TextOverflow.ellipsis),
             ),
             ListTile(
               leading: const Icon(Icons.refresh),
-              title: const Text('Retry'),
+              title: Text(context.l10n.commonRetry),
               onTap: () => Navigator.of(context).pop('retry'),
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline),
-              title: const Text('Delete'),
+              title: Text(context.l10n.commonDelete),
               onTap: () => Navigator.of(context).pop('delete'),
             ),
           ],
@@ -492,7 +494,7 @@ class _GroupScreenState extends State<GroupScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Editing an expense needs a connection.')),
+        SnackBar(content: Text(context.l10n.groupScreenEditNeedsConnection)),
       );
       return;
     }
@@ -559,7 +561,7 @@ class _GroupScreenState extends State<GroupScreen> {
     final selected = await showDialog<String>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: const Text('Active user'),
+        title: Text(context.l10n.groupScreenActiveUserDialogTitle),
         children: [
           SimpleDialogOption(
             onPressed: () => Navigator.of(context).pop(_noneSentinel),
@@ -567,7 +569,7 @@ class _GroupScreenState extends State<GroupScreen> {
               children: [
                 if (_activeUserId == null) const Icon(Icons.check, size: 18),
                 if (_activeUserId == null) const SizedBox(width: 8),
-                const Text('None'),
+                Text(context.l10n.groupScreenActiveUserNone),
               ],
             ),
           ),

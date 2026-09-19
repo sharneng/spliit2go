@@ -31,6 +31,20 @@ echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) -- running local CI for $cur..."
   dart run build_runner build --delete-conflicting-outputs
   build_status=$?
   echo "--- build_runner exit: $build_status ---"
+  # flutter gen-l10n (issue #37 phase 1): `flutter analyze` does NOT
+  # trigger pubspec.yaml's `flutter.generate: true` localization codegen
+  # the way `flutter test`/`flutter run`/`flutter build` do (analyze
+  # never goes through flutter_tools' KernelSnapshot build-system
+  # target, which is what GenerateLocalizationsTarget hangs off of) --
+  # without this, analyze would fail every file that imports
+  # lib/l10n/app_localizations.dart with "target of URI doesn't exist"
+  # on a checkout where flutter test hasn't already generated it once.
+  # Same gap this script's own comment already called out for
+  # build_runner/app_database.g.dart, one layer up.
+  echo "--- flutter gen-l10n ---"
+  flutter gen-l10n
+  gen_l10n_status=$?
+  echo "--- flutter gen-l10n exit: $gen_l10n_status ---"
   echo "--- flutter analyze ---"
   flutter analyze
   analyze_status=$?
@@ -43,6 +57,6 @@ echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) -- running local CI for $cur..."
     echo "--- coverage summary ---"
     lcov --summary coverage/lcov.info
   fi
-  echo "=== done: $(date -u +%Y-%m-%dT%H:%M:%SZ) -- build:$build_status analyze:$analyze_status test:$test_status ==="
+  echo "=== done: $(date -u +%Y-%m-%dT%H:%M:%SZ) -- build:$build_status gen_l10n:$gen_l10n_status analyze:$analyze_status test:$test_status ==="
 ) > "$LOG" 2>&1
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) -- done, see $LOG"

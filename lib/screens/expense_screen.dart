@@ -8,9 +8,11 @@ import '../models/currency.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
 import '../models/default_split.dart';
+import '../l10n/context_l10n.dart';
 import '../services/active_user.dart';
 import '../services/expense_shares.dart';
 import '../sync/outbox.dart';
+import '../utils/decimal_input.dart';
 import '../widgets/currency_picker.dart';
 import '../widgets/category_icon.dart';
 
@@ -323,7 +325,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// so the live footer/preview never disagree with what Save would
   /// actually do.
   double? _typedValue(Participant p) =>
-      double.tryParse(_splitControllers[p.id]!.text.trim());
+      parseFlexibleDecimal(_splitControllers[p.id]!.text.trim());
 
   /// Rounded basis points (percentage x 100) for [p]'s typed value --
   /// the exact integer [_buildPaidFor] sends on the wire, and the same
@@ -365,7 +367,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       return (10000 - totalBasisPoints) / 100;
     }
     if (_splitMode == SplitMode.byAmount) {
-      final amount = double.tryParse(_amountController.text.trim());
+      final amount = parseFlexibleDecimal(_amountController.text.trim());
       if (amount == null) return null;
       var total = 0.0;
       for (final p in _includedParticipants) {
@@ -399,7 +401,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// [_showsLivePreview] is false or the amount field isn't parseable yet.
   Map<String, int>? _livePreviewAmounts() {
     if (!_showsLivePreview) return null;
-    final amount = double.tryParse(_amountController.text.trim());
+    final amount = parseFlexibleDecimal(_amountController.text.trim());
     if (amount == null) return null;
     final amountCents = (amount * 100).round();
     final paidFor = _splitMode == SplitMode.evenly
@@ -419,14 +421,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// never disagree about what counts as a blocking problem.
   String? _splitValidationError() {
     final included = _includedParticipants;
-    if (included.isEmpty) return 'Select at least one participant';
+    if (included.isEmpty) return context.l10n.expenseSelectAtLeastOne;
     if (_splitMode == SplitMode.evenly) return null;
 
     if (_splitMode == SplitMode.byShares) {
       for (final p in included) {
         final value = _typedValue(p);
         if (value == null || value <= 0) {
-          return '${p.name}: enter a number of shares';
+          return context.l10n.expenseEnterShares(p.name);
         }
       }
       return null;
@@ -436,27 +438,27 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       var totalBasisPoints = 0;
       for (final p in included) {
         final bp = _percentageBasisPoints(p);
-        if (bp == null || bp < 0) return '${p.name}: enter a percentage';
+        if (bp == null || bp < 0) return context.l10n.expenseEnterPercentage(p.name);
         totalBasisPoints += bp;
       }
       if (totalBasisPoints != 10000) {
-        return 'Percentages must add up to 100 '
-            '(currently ${_trimTrailingZeros(totalBasisPoints / 100)})';
+        return context.l10n
+            .expensePercentageMismatch(_trimTrailingZeros(totalBasisPoints / 100));
       }
       return null;
     }
 
     // byAmount
-    final amountCents = ((double.tryParse(_amountController.text.trim()) ?? 0) * 100).round();
+    final amountCents = ((parseFlexibleDecimal(_amountController.text.trim()) ?? 0) * 100).round();
     var totalCents = 0;
     for (final p in included) {
-      final value = double.tryParse(_splitControllers[p.id]!.text.trim());
-      if (value == null || value < 0) return '${p.name}: enter an amount';
+      final value = parseFlexibleDecimal(_splitControllers[p.id]!.text.trim());
+      if (value == null || value < 0) return context.l10n.expenseEnterAmount(p.name);
       totalCents += (value * 100).round();
     }
     if (totalCents != amountCents) {
       final diff = ((amountCents - totalCents) / 100).toStringAsFixed(2);
-      return 'Amounts must add up to the total (off by \$$diff)';
+      return context.l10n.expenseAmountMismatch(diff);
     }
     return null;
   }
@@ -476,24 +478,29 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final magnitude = unallocated.abs();
       if (_splitMode == SplitMode.byPercentage) {
         final formatted = _trimTrailingZeros(magnitude);
-        return over ? '$formatted% over 100%.' : '$formatted% still to allocate.';
+        return over
+            ? context.l10n.expensePercentOver(formatted)
+            : context.l10n.expensePercentRemaining(formatted);
       }
+      final formattedAmount = magnitude.toStringAsFixed(2);
       return over
-          ? '\$${magnitude.toStringAsFixed(2)} over the total.'
-          : '\$${magnitude.toStringAsFixed(2)} still to allocate.';
+          ? context.l10n.expenseAmountOver(formattedAmount)
+          : context.l10n.expenseAmountRemaining(formattedAmount);
     }
     return switch (_splitMode) {
-      SplitMode.evenly => 'Everyone selected pays an equal part.',
-      SplitMode.byShares => 'Give anyone paying a larger part more shares.',
-      SplitMode.byPercentage => 'Percentages must add up to 100.',
-      SplitMode.byAmount => 'Amounts must add up to the expense total.',
+      SplitMode.evenly => context.l10n.expenseHintEvenly,
+      SplitMode.byShares => context.l10n.expenseHintShares,
+      SplitMode.byPercentage => context.l10n.expenseHintPercentage,
+      SplitMode.byAmount => context.l10n.expenseHintAmount,
     };
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.isEditing ? 'Edit expense' : 'Add expense')),
+      appBar: AppBar(
+          title:
+              Text(widget.isEditing ? context.l10n.expenseEditTitle : context.l10n.expenseAddTitle)),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Form(
@@ -503,18 +510,19 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             children: [
               TextFormField(
                 controller: _titleController,
-                decoration: const InputDecoration(labelText: 'Title'),
-                validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                decoration: InputDecoration(labelText: context.l10n.expenseTitleLabel),
+                validator: (v) => (v == null || v.isEmpty) ? context.l10n.commonRequired : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _amountController,
-                decoration: const InputDecoration(labelText: 'Amount', prefixText: '\$'),
+                decoration:
+                    InputDecoration(labelText: context.l10n.expenseAmountLabel, prefixText: '\$'),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 onChanged: (_) => setState(() {}), // amount feeds the by-amount hint below
                 validator: (v) {
-                  final parsed = double.tryParse(v ?? '');
-                  if (parsed == null || parsed <= 0) return 'Enter a valid amount';
+                  final parsed = parseFlexibleDecimal(v ?? '');
+                  if (parsed == null || parsed <= 0) return context.l10n.expenseInvalidAmount;
                   return null;
                 },
               ),
@@ -522,7 +530,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               InkWell(
                 onTap: _pickDate,
                 child: InputDecorator(
-                  decoration: const InputDecoration(labelText: 'Date'),
+                  decoration: InputDecoration(labelText: context.l10n.expenseDateLabel),
                   child: Text(_formatDate(_date)),
                 ),
               ),
@@ -530,7 +538,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               InkWell(
                 onTap: _pickCategory,
                 child: InputDecorator(
-                  decoration: const InputDecoration(labelText: 'Category'),
+                  decoration: InputDecoration(labelText: context.l10n.expenseCategoryLabel),
                   child: Row(
                     children: [
                       CategoryIconGlyph(category: _selectedCategory, size: 24),
@@ -543,19 +551,19 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: _paidBy,
-                decoration: const InputDecoration(labelText: 'Paid by'),
+                decoration: InputDecoration(labelText: context.l10n.expensePaidByLabel),
                 items: widget.group.participants
                     .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name)))
                     .toList(),
                 onChanged: (v) => setState(() => _paidBy = v),
-                validator: (v) => v == null ? 'Required' : null,
+                validator: (v) => v == null ? context.l10n.commonRequired : null,
               ),
               const SizedBox(height: 12),
               CheckboxListTile(
                 value: _paidInOtherCurrency,
                 onChanged: (v) => setState(() => _paidInOtherCurrency = v ?? false),
-                title: const Text('Paid in a different currency'),
-                subtitle: Text('Group currency: ${widget.group.currency}'),
+                title: Text(context.l10n.expensePaidInOtherCurrency),
+                subtitle: Text(context.l10n.expenseGroupCurrency(widget.group.currency)),
                 controlAffinity: ListTileControlAffinity.leading,
                 contentPadding: EdgeInsets.zero,
               ),
@@ -566,12 +574,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     Expanded(
                       child: TextFormField(
                         controller: _originalAmountController,
-                        decoration: const InputDecoration(labelText: 'Original amount'),
+                        decoration:
+                            InputDecoration(labelText: context.l10n.expenseOriginalAmountLabel),
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         validator: (v) {
                           if (!_paidInOtherCurrency) return null;
-                          final parsed = double.tryParse(v ?? '');
-                          if (parsed == null || parsed <= 0) return 'Enter a valid amount';
+                          final parsed = parseFlexibleDecimal(v ?? '');
+                          if (parsed == null || parsed <= 0) return context.l10n.expenseInvalidAmount;
                           return null;
                         },
                       ),
@@ -584,20 +593,20 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                               onTap: _pickOriginalCurrency,
                               child: InputDecorator(
                                 decoration: InputDecoration(
-                                  labelText: 'Currency',
+                                  labelText: context.l10n.expenseCurrencyLabel,
                                   errorText: _originalCurrencyError,
                                 ),
                                 child: Text(
                                   _originalCurrencyController.text.isEmpty
-                                      ? 'Select'
+                                      ? context.l10n.expenseCurrencySelectPlaceholder
                                       : currencyByCode(_originalCurrencyController.text).toString(),
                                 ),
                               ),
                             )
                           : InputDecorator(
-                              decoration: const InputDecoration(
-                                labelText: 'Currency',
-                                helperText: 'Conversion unavailable',
+                              decoration: InputDecoration(
+                                labelText: context.l10n.expenseCurrencyLabel,
+                                helperText: context.l10n.expenseCurrencyConversionUnavailable,
                               ),
                               child: Text(widget.group.currency),
                             ),
@@ -609,26 +618,31 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               CheckboxListTile(
                 value: _isReimbursement,
                 onChanged: (v) => setState(() => _isReimbursement = v ?? false),
-                title: const Text('This is a reimbursement'),
+                title: Text(context.l10n.expenseIsReimbursement),
                 controlAffinity: ListTileControlAffinity.leading,
                 contentPadding: EdgeInsets.zero,
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<RecurrenceRule>(
                 initialValue: _recurrenceRule,
-                decoration: const InputDecoration(labelText: 'Repeat'),
-                items: const [
-                  DropdownMenuItem(value: RecurrenceRule.none, child: Text('Does not repeat')),
-                  DropdownMenuItem(value: RecurrenceRule.daily, child: Text('Daily')),
-                  DropdownMenuItem(value: RecurrenceRule.weekly, child: Text('Weekly')),
-                  DropdownMenuItem(value: RecurrenceRule.monthly, child: Text('Monthly')),
+                decoration: InputDecoration(labelText: context.l10n.expenseRepeatLabel),
+                items: [
+                  DropdownMenuItem(
+                      value: RecurrenceRule.none, child: Text(context.l10n.expenseRepeatNone)),
+                  DropdownMenuItem(
+                      value: RecurrenceRule.daily, child: Text(context.l10n.expenseRepeatDaily)),
+                  DropdownMenuItem(
+                      value: RecurrenceRule.weekly, child: Text(context.l10n.expenseRepeatWeekly)),
+                  DropdownMenuItem(
+                      value: RecurrenceRule.monthly,
+                      child: Text(context.l10n.expenseRepeatMonthly)),
                 ],
                 onChanged: (v) => setState(() => _recurrenceRule = v ?? RecurrenceRule.none),
               ),
               const SizedBox(height: 24),
               Row(
                 children: [
-                  Text('Paid for', style: Theme.of(context).textTheme.titleMedium),
+                  Text(context.l10n.expensePaidForHeading, style: Theme.of(context).textTheme.titleMedium),
                   const Spacer(),
                   // Always offers the opposite of the current state --
                   // issue #29 section 2 (spliit-ios: "with everyone
@@ -636,16 +650,23 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   // to do").
                   TextButton(
                     onPressed: _toggleSelectAll,
-                    child: Text(_allIncluded ? 'Select none' : 'Select all'),
+                    child: Text(_allIncluded
+                        ? context.l10n.expenseSelectNone
+                        : context.l10n.expenseSelectAll),
                   ),
                 ],
               ),
               SegmentedButton<SplitMode>(
-                segments: const [
-                  ButtonSegment(value: SplitMode.evenly, label: Text('Evenly')),
-                  ButtonSegment(value: SplitMode.byShares, label: Text('Shares')),
-                  ButtonSegment(value: SplitMode.byPercentage, label: Text('Percent')),
-                  ButtonSegment(value: SplitMode.byAmount, label: Text('Amount')),
+                segments: [
+                  ButtonSegment(
+                      value: SplitMode.evenly, label: Text(context.l10n.expenseSplitEvenly)),
+                  ButtonSegment(
+                      value: SplitMode.byShares, label: Text(context.l10n.expenseSplitShares)),
+                  ButtonSegment(
+                      value: SplitMode.byPercentage,
+                      label: Text(context.l10n.expenseSplitPercent)),
+                  ButtonSegment(
+                      value: SplitMode.byAmount, label: Text(context.l10n.expenseSplitAmount)),
                 ],
                 selected: {_splitMode},
                 // The selected segment is already highlighted -- with 4
@@ -679,7 +700,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   value: _saveDefaultSplittingOptions,
                   onChanged: (v) =>
                       setState(() => _saveDefaultSplittingOptions = v ?? false),
-                  title: const Text('Save as default split'),
+                  title: Text(context.l10n.expenseSaveDefaultSplit),
                   controlAffinity: ListTileControlAffinity.leading,
                   contentPadding: EdgeInsets.zero,
                 ),
@@ -695,7 +716,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _notesController,
-                decoration: const InputDecoration(labelText: 'Notes'),
+                decoration: InputDecoration(labelText: context.l10n.expenseNotesLabel),
                 maxLines: 3,
                 maxLength: 5000, // matches Spliit's EXPENSE_NOTES_MAX
               ),
@@ -708,7 +729,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 ),
               FilledButton(
                 onPressed: _saving ? null : _save,
-                child: Text(_saving ? 'Saving…' : 'Save'),
+                child: Text(_saving ? context.l10n.expenseSavingButton : context.l10n.expenseSaveButton),
               ),
             ],
           ),
@@ -734,7 +755,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Attach documents – not yet supported in this app',
+              context.l10n.expenseDocumentsPlaceholder,
               style: TextStyle(color: Theme.of(context).disabledColor),
             ),
           ),
@@ -867,7 +888,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       SplitMode.byAmount => included
           .map((p) => ExpenseShare(
               participantId: p.id,
-              shares: (double.parse(_splitControllers[p.id]!.text.trim()) * 100).round()))
+              shares: (parseFlexibleDecimal(_splitControllers[p.id]!.text.trim())! * 100).round()))
           .toList(),
     };
   }
@@ -882,11 +903,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     if (_paidInOtherCurrency &&
         _hasGroupCurrencyCode &&
         _originalCurrencyController.text.trim().isEmpty) {
-      setState(() => _originalCurrencyError = 'Required');
+      setState(() => _originalCurrencyError = context.l10n.commonRequired);
       return;
     }
 
-    final amountCents = (double.parse(_amountController.text) * 100).round();
+    final amountCents = (parseFlexibleDecimal(_amountController.text)! * 100).round();
     final paidFor = _buildPaidFor(amountCents);
     if (paidFor == null) return;
 
@@ -894,7 +915,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     String? originalCurrency;
     double? conversionRate;
     if (_paidInOtherCurrency) {
-      final originalAmount = double.parse(_originalAmountController.text.trim());
+      final originalAmount = parseFlexibleDecimal(_originalAmountController.text.trim())!;
       originalAmountCents = (originalAmount * 100).round();
       // No code to send when the group's own currency has none to
       // convert against (see _hasGroupCurrencyCode) -- the field is
@@ -1016,7 +1037,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _saveError = "Couldn't save: needs a connection to edit an expense ($e)";
+        _saveError = context.l10n.expenseEditSaveFailed(e.toString());
       });
     }
   }
@@ -1079,16 +1100,16 @@ class _CategoryPickerState extends State<_CategoryPicker> {
                 child: TextField(
                   controller: _searchController,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Search categories',
-                    prefixIcon: Icon(Icons.search),
+                  decoration: InputDecoration(
+                    labelText: context.l10n.expenseCategorySearchLabel,
+                    prefixIcon: const Icon(Icons.search),
                   ),
                   onChanged: (v) => setState(() => _query = v),
                 ),
               ),
               Expanded(
                 child: sections.isEmpty
-                    ? const Center(child: Text('No matching categories'))
+                    ? Center(child: Text(context.l10n.expenseNoMatchingCategories))
                     : ListView(
                         children: [
                           for (final section in sections) ...[

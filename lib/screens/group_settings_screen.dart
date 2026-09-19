@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
+import '../l10n/context_l10n.dart';
 import '../models/currency.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
@@ -167,19 +168,19 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     final names = [for (final p in _participants) p.controller.text.trim()];
 
     if (name.isEmpty) {
-      setState(() => _error = 'Group name is required.');
+      setState(() => _error = context.l10n.groupSettingsNameRequired);
       return;
     }
     if (isCustom && currencySymbol.isEmpty) {
-      setState(() => _error = 'Enter at least one character.');
+      setState(() => _error = context.l10n.groupSettingsSymbolRequired);
       return;
     }
     if (names.isEmpty) {
-      setState(() => _error = 'At least one participant is required.');
+      setState(() => _error = context.l10n.groupSettingsNeedParticipant);
       return;
     }
     if (names.any((n) => n.isEmpty)) {
-      setState(() => _error = 'Every participant needs a name.');
+      setState(() => _error = context.l10n.groupSettingsParticipantNameRequired);
       return;
     }
     // Belt-and-braces alongside the disabled remove button (issue #46):
@@ -190,8 +191,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     final removedIds = {for (final p in widget.group.participants) p.id}
         .difference({for (final p in _participants) p.id});
     if (removedIds.any(_participantIdsWithExpenses.contains)) {
-      setState(() => _error =
-          "Can't remove a participant who has expenses in this group.");
+      setState(() => _error = context.l10n.groupSettingsCantRemoveHasExpenses);
       return;
     }
 
@@ -217,7 +217,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
       Navigator.of(context).pop(fresh);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = "Couldn't save: $e");
+      setState(() => _error = context.l10n.groupSettingsSaveFailed(e.toString()));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -228,7 +228,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     final isCustom = _selectedCurrency.code.isEmpty;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Group settings'),
+        title: Text(context.l10n.groupSettingsTitle),
         actions: [
           _saving
               ? const Padding(
@@ -241,7 +241,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                 )
               : IconButton(
                   icon: const Icon(Icons.check),
-                  tooltip: 'Save',
+                  tooltip: context.l10n.groupSettingsSaveTooltip,
                   onPressed: _save,
                 ),
         ],
@@ -255,13 +255,13 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
           ],
           TextField(
             controller: _nameController,
-            decoration: const InputDecoration(labelText: 'Group name'),
+            decoration: InputDecoration(labelText: context.l10n.groupSettingsNameLabel),
           ),
           const SizedBox(height: 12),
           InkWell(
             onTap: _pickCurrency,
             child: InputDecorator(
-              decoration: const InputDecoration(labelText: 'Main currency'),
+              decoration: InputDecoration(labelText: context.l10n.groupSettingsCurrencyLabel),
               child: Row(
                 children: [
                   if (_selectedCurrency.flagEmoji.isNotEmpty) ...[
@@ -278,10 +278,10 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
             const SizedBox(height: 12),
             TextField(
               controller: _customSymbolController,
-              decoration: const InputDecoration(
-                labelText: 'Currency symbol',
-                hintText: '\$, €, £...',
-                helperText: "We'll use it to display amounts.",
+              decoration: InputDecoration(
+                labelText: context.l10n.groupSettingsSymbolLabel,
+                hintText: context.l10n.groupSettingsSymbolHint,
+                helperText: context.l10n.groupSettingsSymbolHelper,
               ),
               maxLength: 5,
             ),
@@ -289,9 +289,9 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
           const SizedBox(height: 12),
           TextField(
             controller: _informationController,
-            decoration: const InputDecoration(
-              labelText: 'Group information',
-              hintText: 'What information is relevant to group participants?',
+            decoration: InputDecoration(
+              labelText: context.l10n.groupSettingsInfoLabel,
+              hintText: context.l10n.groupSettingsInfoHint,
               alignLabelWithHint: true,
             ),
             minLines: 2,
@@ -301,11 +301,12 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Text('Participants', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(context.l10n.groupSettingsParticipantsHeading,
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
               const Spacer(),
               IconButton(
                 icon: const Icon(Icons.person_add_outlined),
-                tooltip: 'Add participant',
+                tooltip: context.l10n.groupSettingsAddParticipantTooltip,
                 onPressed: _addParticipant,
               ),
             ],
@@ -330,8 +331,8 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                     // rather than as a row that's simply missing a
                     // control.
                     tooltip: _hasExpenses(_participants[i])
-                        ? "Can't remove: has expenses in this group"
-                        : 'Remove',
+                        ? context.l10n.groupSettingsCantRemoveTooltip
+                        : context.l10n.groupSettingsRemoveTooltip,
                     onPressed:
                         _hasExpenses(_participants[i]) ? null : () => _removeParticipant(i),
                   ),

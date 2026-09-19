@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
+import '../l10n/context_l10n.dart';
 import '../models/activity.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
@@ -73,7 +74,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = "Couldn't load activity: $e");
+      setState(() => _error = context.l10n.activityLoadFailed(e.toString()));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -83,11 +84,11 @@ class _ActivityScreenState extends State<ActivityScreen> {
   /// a participant who's since been removed from the group (or was
   /// never resolvable) shows as "Someone" rather than a blank or an id.
   String _participantName(String? id) {
-    if (id == null) return 'Someone';
+    if (id == null) return context.l10n.activitySomeone;
     for (final p in widget.group.participants) {
       if (p.id == id) return p.name;
     }
-    return 'Someone';
+    return context.l10n.activitySomeone;
   }
 
   /// Plain-text equivalents of messages/en-US.json's Activity section
@@ -97,13 +98,13 @@ class _ActivityScreenState extends State<ActivityScreen> {
     final name = _participantName(a.participantId);
     switch (a.activityType) {
       case ActivityType.updateGroup:
-        return 'Group settings were modified by $name.';
+        return context.l10n.activityGroupSettingsModified(name);
       case ActivityType.createExpense:
-        return 'Expense "${a.data ?? ''}" created by $name.';
+        return context.l10n.activityExpenseCreated(a.data ?? '', name);
       case ActivityType.updateExpense:
-        return 'Expense "${a.data ?? ''}" updated by $name.';
+        return context.l10n.activityExpenseUpdated(a.data ?? '', name);
       case ActivityType.deleteExpense:
-        return 'Expense "${a.data ?? ''}" deleted by $name.';
+        return context.l10n.activityExpenseDeleted(a.data ?? '', name);
     }
   }
 
@@ -119,8 +120,8 @@ class _ActivityScreenState extends State<ActivityScreen> {
     final day = DateTime(t.year, t.month, t.day);
     final today = DateTime(now.year, now.month, now.day);
     final diff = today.difference(day).inDays;
-    if (diff == 0) return 'Today';
-    if (diff == 1) return 'Yesterday';
+    if (diff == 0) return context.l10n.activityToday;
+    if (diff == 1) return context.l10n.activityYesterday;
     return '${t.year.toString().padLeft(4, '0')}-${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')}';
   }
 
@@ -140,7 +141,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Opening this expense needs a connection.')),
+        SnackBar(content: Text(context.l10n.activityOpenNeedsConnection)),
       );
       return;
     }
@@ -162,7 +163,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
   Widget build(BuildContext context) {
     final body = _body();
     if (widget.embedded) return body;
-    return Scaffold(appBar: AppBar(title: const Text('Activity')), body: body);
+    return Scaffold(appBar: AppBar(title: Text(context.l10n.activityTitle)), body: body);
   }
 
   Widget _body() {
@@ -178,14 +179,14 @@ class _ActivityScreenState extends State<ActivityScreen> {
             children: [
               Text(_error!, textAlign: TextAlign.center),
               const SizedBox(height: 12),
-              TextButton(onPressed: _loadMore, child: const Text('Retry')),
+              TextButton(onPressed: _loadMore, child: Text(context.l10n.commonRetry)),
             ],
           ),
         ),
       );
     }
     if (_activities.isEmpty) {
-      return const Center(child: Text('There is not yet any activity in your group.'));
+      return Center(child: Text(context.l10n.activityEmpty));
     }
 
     // Flattened header+item rows, computed fresh whenever the list
@@ -239,7 +240,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
           children: [
             Text(_error!, textAlign: TextAlign.center),
             const SizedBox(height: 8),
-            TextButton(onPressed: _loadMore, child: const Text('Retry')),
+            TextButton(onPressed: _loadMore, child: Text(context.l10n.commonRetry)),
           ],
         ),
       );
@@ -253,7 +254,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
     if (_hasMore) {
       return Padding(
         padding: const EdgeInsets.all(16),
-        child: Center(child: TextButton(onPressed: _loadMore, child: const Text('Load more'))),
+        child: Center(child: TextButton(onPressed: _loadMore, child: Text(context.l10n.activityLoadMore))),
       );
     }
     return const SizedBox(height: 16);

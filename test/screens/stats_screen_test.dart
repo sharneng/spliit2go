@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
+import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/stats_screen.dart';
@@ -112,6 +113,9 @@ void main() {
     final outbox = Outbox(db, client);
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: StatsScreen(client: client, db: db, outbox: outbox, group: group, activeUserId: 'alex'),
     ));
     await tester.pumpAndSettle();
@@ -147,6 +151,9 @@ void main() {
     final outbox = Outbox(db, client);
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: StatsScreen(client: client, db: db, outbox: outbox, group: group, activeUserId: null),
     ));
     await tester.pumpAndSettle();
@@ -167,6 +174,9 @@ void main() {
     final outbox = Outbox(db, client);
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: StatsScreen(client: client, db: db, outbox: outbox, group: group, activeUserId: null),
     ));
     await tester.pumpAndSettle();

@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
+import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/activity_screen.dart';
@@ -52,6 +53,9 @@ void main() {
       final outbox = Outbox(db, client);
 
       await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
       ));
       await tester.pumpAndSettle();
@@ -71,6 +75,9 @@ void main() {
       final outbox = Outbox(db, client);
 
       await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
       ));
       await tester.pumpAndSettle();
@@ -124,6 +131,9 @@ void main() {
       final outbox = Outbox(db, client);
 
       await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
       ));
       await tester.pumpAndSettle();
@@ -148,6 +158,9 @@ void main() {
       final outbox = Outbox(db, client);
 
       await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
       ));
       await tester.pumpAndSettle();
@@ -181,6 +194,9 @@ void main() {
       final outbox = Outbox(db, client);
 
       await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
       ));
       await tester.pumpAndSettle();
@@ -241,6 +257,9 @@ void main() {
       final outbox = Outbox(db, client);
 
       await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
       ));
       await tester.pumpAndSettle();
@@ -263,6 +282,9 @@ void main() {
       final outbox = Outbox(db, client);
 
       await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
       ));
       await tester.pumpAndSettle();
@@ -300,6 +322,9 @@ void main() {
       final outbox = Outbox(db, client);
 
       await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
       ));
       await tester.pumpAndSettle();
@@ -330,6 +355,9 @@ void main() {
       final outbox = Outbox(db, client);
 
       await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
       ));
       await tester.pumpAndSettle();
@@ -377,6 +405,9 @@ void main() {
     final outbox = Outbox(db, client);
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
     ));
     await tester.pumpAndSettle();
@@ -406,6 +437,9 @@ void main() {
       );
       final outbox = Outbox(db, client);
       await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         home: GroupScreen(client: client, db: db, outbox: outbox, groupId: 'g1'),
       ));
       await tester.pumpAndSettle();
