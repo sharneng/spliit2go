@@ -67,6 +67,14 @@ void main() {
     expect(find.text('Bea owes Alex'), findsOneWidget);
     expect(find.text('Cid owes Alex'), findsOneWidget);
     expect(find.textContaining('Mark as paid'), findsNWidgets(2));
+    // Drift's watch() stream (issue #47) schedules an internal
+    // debounce/reconnect Timer when a subscriber cancels, which
+    // happens when this widget is disposed. flutter_test's automatic
+    // end-of-test teardown doesn't give that Timer a chance to fire
+    // before its "no pending timers" invariant check, so we force
+    // disposal ourselves here and pump once more to drain it.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 
   testWidgets('marking a settlement as paid clears it once synced', (tester) async {
@@ -159,6 +167,9 @@ void main() {
     // Alex.
     expect(find.text('Bea owes Alex'), findsNothing);
     expect(find.text('Cid owes Alex'), findsOneWidget);
+    // See the first test above for why. (issue #47)
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 
   testWidgets('the settlement amount can be edited before saving (partial payment)',
@@ -190,5 +201,8 @@ void main() {
     // A partial $10 payment leaves $20 of the original $30 still owed --
     // Bea should still show up as owing Alex, just a smaller amount.
     expect(find.textContaining('owes Alex'), findsWidgets);
+    // See the first test above for why. (issue #47)
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 }

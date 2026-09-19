@@ -135,6 +135,14 @@ void main() {
     expect(find.text('Groceries'), findsWidgets);
     expect(find.text('Alex'), findsOneWidget);
     expect(find.text('Bea'), findsOneWidget);
+    // Drift's watch() stream (issue #47) schedules an internal
+    // debounce/reconnect Timer when a subscriber cancels, which
+    // happens when this widget is disposed. flutter_test's automatic
+    // end-of-test teardown doesn't give that Timer a chance to fire
+    // before its "no pending timers" invariant check, so we force
+    // disposal ourselves here and pump once more to drain it.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 
   testWidgets('falls back to an id-based category label when the fetch fails', (tester) async {
@@ -162,6 +170,9 @@ void main() {
     // No active user -- personal totals are hidden, with a hint instead.
     expect(find.text('Pick an active user to see your personal totals.'), findsOneWidget);
     expect(find.text('You paid'), findsNothing);
+    // See the first test above for why. (issue #47)
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 
   testWidgets('shows an empty state with no expenses', (tester) async {
@@ -182,5 +193,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No expenses yet.'), findsOneWidget);
+    // See the first test above for why. (issue #47)
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 }

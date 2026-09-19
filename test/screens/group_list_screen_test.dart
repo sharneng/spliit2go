@@ -112,6 +112,15 @@ void main() {
     expect(find.text('Banff Trip'), findsWidgets);
     final after = (await db.groupRow('gA'))!.lastOpenedAt!;
     expect(after.isAfter(before) || after.isAtSameMomentAs(before), isTrue);
+    // Drift's watch() stream (issue #47) schedules an internal
+    // debounce/reconnect Timer when a subscriber cancels, which
+    // happens when this widget is disposed (here: navigating into
+    // GroupScreen, which uses it). flutter_test's automatic end-of-test
+    // teardown doesn't give that Timer a chance to fire before its "no
+    // pending timers" invariant check, so we force disposal ourselves
+    // here and pump once more to drain it.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 
   testWidgets('leaving a group via dismiss removes it after confirmation', (tester) async {

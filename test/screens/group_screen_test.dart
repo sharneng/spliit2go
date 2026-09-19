@@ -62,6 +62,14 @@ void main() {
 
       final fab = tester.widget<FloatingActionButton>(find.byType(FloatingActionButton));
       expect(fab.onPressed, isNotNull);
+      // Drift's watch() stream (issue #47) schedules an internal
+      // debounce/reconnect Timer when a subscriber cancels, which
+      // happens when this widget is disposed. flutter_test's automatic
+      // end-of-test teardown doesn't give that Timer a chance to fire
+      // before its "no pending timers" invariant check, so we force
+      // disposal ourselves here and pump once more to drain it.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     },
   );
 
@@ -84,6 +92,9 @@ void main() {
 
       final fab = tester.widget<FloatingActionButton>(find.byType(FloatingActionButton));
       expect(fab.onPressed, isNull);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     },
   );
 
@@ -142,6 +153,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Edit expense'), findsOneWidget);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     });
 
     testWidgets('tapping a synced expense while offline shows an error, no navigation',
@@ -170,6 +184,9 @@ void main() {
 
       expect(find.text('Edit expense'), findsNothing);
       expect(find.textContaining('needs a connection'), findsOneWidget);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     });
 
     testWidgets('a still-pending (not yet synced) expense is not tappable', (tester) async {
@@ -203,6 +220,9 @@ void main() {
 
       final tile = tester.widget<ListTile>(find.widgetWithText(ListTile, 'Snacks'));
       expect(tile.onTap, isNull);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     });
   });
 
@@ -266,6 +286,9 @@ void main() {
 
       expect(find.text('sync failed'), findsOneWidget);
       expect(find.text('syncing…'), findsNothing);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     });
 
     testWidgets('tapping a sync-failed expense opens retry/delete options with the error message',
@@ -300,6 +323,9 @@ void main() {
       // own doc comment (this app is view+add only, never offline
       // edit).
       expect(find.text('Edit'), findsNothing);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     });
 
     testWidgets('Retry re-queues the expense and a subsequent flush can sync it',
@@ -339,6 +365,9 @@ void main() {
       expect(rows.single.id, 'server-1');
       expect(rows.single.pending, isFalse);
       expect(rows.single.syncFailed, isFalse);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     });
 
     testWidgets('Delete removes the sync-failed expense from the list and the local db',
@@ -369,6 +398,9 @@ void main() {
 
       expect(find.text('Snacks'), findsNothing);
       expect(await db.expensesForGroup('g1'), isEmpty);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     });
   });
 
@@ -419,6 +451,9 @@ void main() {
       ),
       findsOneWidget,
     );
+    // See the first test above for why. (issue #47)
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 
   group('bottom-nav tabs (issue #38)', () {
@@ -455,6 +490,9 @@ void main() {
       expect(find.text('Balance'), findsOneWidget);
       expect(find.text('Stats'), findsOneWidget);
       expect(find.text('Activities'), findsOneWidget);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     });
 
     testWidgets('the add button and search icon only show on the Expenses tab', (tester) async {
@@ -470,6 +508,9 @@ void main() {
 
       expect(find.byType(FloatingActionButton), findsNothing);
       expect(find.byIcon(Icons.search), findsNothing);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     });
 
     testWidgets('tapping Balance shows BalancesScreen embedded, without pushing a new route',
@@ -486,6 +527,9 @@ void main() {
       // titled with the group's name, not a second "Balances" AppBar.
       expect(find.text('Balances'), findsNothing);
       expect(find.text('Banff Trip'), findsOneWidget);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     });
 
     testWidgets('tapping Stats shows StatsScreen embedded, without pushing a new route',
@@ -499,6 +543,9 @@ void main() {
 
       expect(find.byType(StatsScreen), findsOneWidget);
       expect(find.text('Banff Trip'), findsOneWidget);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     });
 
     testWidgets('tapping Activities shows ActivityScreen embedded, without pushing a new route',
@@ -512,6 +559,9 @@ void main() {
 
       expect(find.byType(ActivityScreen), findsOneWidget);
       expect(find.text('Banff Trip'), findsOneWidget);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     });
 
     testWidgets('tapping the search icon on the Expenses tab shows the placeholder message',
@@ -524,6 +574,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Search is coming soon (issue #39).'), findsOneWidget);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     });
 
     testWidgets('switching back to Expenses shows the expense list again', (tester) async {
@@ -540,6 +593,9 @@ void main() {
 
       expect(find.byType(StatsScreen), findsNothing);
       expect(find.byType(FloatingActionButton), findsOneWidget);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     });
   });
 }
