@@ -50,6 +50,7 @@ void main() {
   });
 
   test('monogram matches iOS recorded FNV colors and Unicode initials', () {
+    expect(groupColorIndex(''), 5);
     expect(groupColorIndex('participant-1'), 0);
     expect(groupColorIndex('participant-2'), 1);
     expect(groupColorIndex('ana'), 5);

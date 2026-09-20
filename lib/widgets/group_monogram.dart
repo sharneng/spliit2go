@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../theme.dart';
 
 // Matches spliit-ios MonogramPalette; see THIRD_PARTY_NOTICES.md.
 int groupColorIndex(String id) {
@@ -25,21 +26,11 @@ class GroupMonogram extends StatelessWidget {
   const GroupMonogram({super.key, required this.id, required this.name});
   final String id;
   final String name;
-  static const colors = <Color>[
-    Color(0xff059669),
-    Color(0xff0891B2),
-    Color(0xff6366F1),
-    Color(0xffBE185D),
-    Color(0xffEA580C),
-    Color(0xffCA8A04),
-    Color(0xff4D7C0F),
-    Color(0xff7C3AED),
-  ];
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
         child: CircleAvatar(
           radius: 20,
-          backgroundColor: colors[groupColorIndex(id)],
+          backgroundColor: monogramPalette[groupColorIndex(id)],
           foregroundColor: Colors.white,
           child: Text(groupInitials(name),
               textScaler: TextScaler.noScaling,

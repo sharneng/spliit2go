@@ -1,18 +1,62 @@
+import 'dart:async';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/models/group.dart';
+import 'package:spliit2go/models/group_organization.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/screens/group_list_screen.dart';
 import 'package:spliit2go/services/settings_service.dart';
 
+class _FailingSortStore extends InMemorySharedPreferencesStore {
+  _FailingSortStore(this.throwsError)
+      : super.withData({'flutter.group_list_sort': 'lastOpened'});
+  final bool throwsError;
+  @override
+  Future<bool> setValue(String type, String key, Object value) async {
+    if (throwsError) throw StateError('disk unavailable');
+    return false;
+  }
+}
+
+class _DelayedSettings extends SettingsService {
+  final write = Completer<void>();
+  int reads = 0;
+  @override
+  Future<String?> groupListSort() async {
+    reads++;
+    return 'lastOpened';
+  }
+
+  @override
+  Future<void> setGroupListSort(String value) => write.future;
+}
+
+class _DelayedRemovalDatabase extends AppDatabase {
+  _DelayedRemovalDatabase() : super(NativeDatabase.memory());
+  final removal = Completer<void>();
+  int reads = 0;
+  @override
+  Future<List<GroupRow>> allJoinedGroups() {
+    reads++;
+    return super.allJoinedGroups();
+  }
+
+  @override
+  Future<void> leaveGroup(String id) async {
+    await removal.future;
+    await super.leaveGroup(id);
+  }
+}
+
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
-  Future<AppDatabase> seed() async {
-    final db = AppDatabase(NativeDatabase.memory());
+  Future<AppDatabase> seed({AppDatabase? database}) async {
+    final db = database ?? AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     for (final id in ['Alpha', 'Beta']) {
       await db.cacheGroup(Group(
@@ -29,7 +73,9 @@ void main() {
   }
 
   Future<void> pump(WidgetTester tester, AppDatabase db,
-      {Locale locale = const Locale('en'), double scale = 1}) async {
+      {Locale locale = const Locale('en'),
+      double scale = 1,
+      SettingsService? settings}) async {
     await tester.pumpWidget(MaterialApp(
         locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -38,7 +84,7 @@ void main() {
             data: MediaQuery.of(context)
                 .copyWith(textScaler: TextScaler.linear(scale)),
             child: child!),
-        home: GroupListScreen(db: db)));
+        home: GroupListScreen(db: db, settings: settings)));
     await tester.pumpAndSettle();
   }
 
@@ -49,7 +95,8 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('long press organizes groups exclusively and restores favorites',
+  testWidgets(
+      'long press switches exclusive states; unarchive returns to Active',
       (tester) async {
     final db = await seed();
     await pump(tester, db);
@@ -65,11 +112,95 @@ void main() {
     expect(find.text('Alpha'), findsOneWidget);
     expect((await db.mostRecentlyOpenedGroup())!.id, 'Beta');
     await action(tester, 'Alpha', 'Unarchive');
-    expect(find.text('Favorites'), findsOneWidget);
+    expect(find.text('Favorites'), findsNothing);
+    expect(
+        (await db.groupRow('Alpha'))!.organization, GroupOrganization.active);
     expect(find.text('Archived'), findsNothing);
+    await action(tester, 'Alpha', 'Favorite');
     await action(tester, 'Alpha', 'Unfavorite');
     expect(find.text('Favorites'), findsNothing);
+    await action(tester, 'Alpha', 'Archive');
+    await action(tester, 'Alpha', 'Favorite');
+    expect(find.text('Archived'), findsNothing);
+    expect(
+        (await db.groupRow('Alpha'))!.organization, GroupOrganization.favorite);
   });
+  for (final throwsError in [false, true]) {
+    testWidgets(
+        'failed sort save preserves selection, order, and reload ($throwsError)',
+        (tester) async {
+      SharedPreferences.resetStatic();
+      SharedPreferencesStorePlatform.instance = _FailingSortStore(throwsError);
+      addTearDown(() => SharedPreferences.setMockInitialValues({}));
+      final db = await seed();
+      await pump(tester, db);
+      await tester.tap(find.byTooltip('Sort groups'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.ancestor(
+          of: find.text('Creation date'),
+          matching: find
+              .byWidgetPredicate((widget) => widget is CheckedPopupMenuItem)));
+      await tester.pumpAndSettle();
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(tester.getTopLeft(find.text('Beta')).dy,
+          lessThan(tester.getTopLeft(find.text('Alpha')).dy));
+      await tester.tap(find.byTooltip('Sort groups'));
+      await tester.pumpAndSettle();
+      final checked = tester.widgetList<CheckedPopupMenuItem>(
+          find.byWidgetPredicate((widget) => widget is CheckedPopupMenuItem));
+      expect(checked.where((item) => item.checked).single.child,
+          isA<Text>().having((text) => text.data, 'selection', 'Last opened'));
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+      // Reopening must not pick up a failed write from the plugin's cache.
+      await pump(tester, db);
+      expect(await SettingsService().groupListSort(), 'lastOpened');
+      expect(tester.getTopLeft(find.text('Beta')).dy,
+          lessThan(tester.getTopLeft(find.text('Alpha')).dy));
+    });
+  }
+
+  testWidgets('sort completing after disposal causes no reload or UI access',
+      (tester) async {
+    final settings = _DelayedSettings();
+    final db = await seed();
+    await pump(tester, db, settings: settings);
+    await tester.tap(find.byTooltip('Sort groups'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.ancestor(
+        of: find.text('Creation date'),
+        matching: find
+            .byWidgetPredicate((widget) => widget is CheckedPopupMenuItem)));
+    await tester.pumpAndSettle();
+    final reads = settings.reads;
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+    settings.write.complete();
+    await tester.pumpAndSettle();
+    expect(settings.reads, reads);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'swipe removal finishing after disposal avoids another database read',
+      (tester) async {
+    final db = _DelayedRemovalDatabase();
+    await seed(database: db);
+    await pump(tester, db);
+    await tester.drag(find.text('Alpha'), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
+    await tester.pumpAndSettle();
+    final reads = db.reads;
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+    db.removal.complete();
+    await tester.pumpAndSettle();
+    expect(await db.groupRow('Alpha'), isNull);
+    expect(db.reads, reads);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('remove requires confirmation and cancel preserves group',
       (tester) async {
     final db = await seed();
@@ -92,7 +223,10 @@ void main() {
         lessThan(tester.getTopLeft(find.text('Alpha')).dy));
     await tester.tap(find.byTooltip('Sort groups'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Creation date'));
+    await tester.tap(find.ancestor(
+        of: find.text('Creation date'),
+        matching: find
+            .byWidgetPredicate((widget) => widget is CheckedPopupMenuItem)));
     await tester.pumpAndSettle();
     expect(await SettingsService().groupListSort(), 'created');
     expect(tester.getTopLeft(find.text('Alpha')).dy,

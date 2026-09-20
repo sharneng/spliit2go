@@ -1,26 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+/// Shared iOS-compatible identity colors; see THIRD_PARTY_NOTICES.md.
+const monogramPalette = <Color>[
+  Color(0xff059669),
+  Color(0xff0891B2),
+  Color(0xff6366F1),
+  Color(0xffBE185D),
+  Color(0xffEA580C),
+  Color(0xffCA8A04),
+  Color(0xff4D7C0F),
+  Color(0xff7C3AED),
+];
+
+ThemeData _appTheme(Brightness brightness) {
+  final theme = ThemeData(
+    useMaterial3: true,
+    colorSchemeSeed: Colors.teal,
+    brightness: brightness,
+  );
+  return theme.copyWith(
+    dividerTheme: DividerThemeData(
+      color: theme.colorScheme.outlineVariant,
+      thickness: 1,
+    ),
+  );
+}
+
 /// spliit2go's light theme -- Material 3, seeded from [Colors.teal].
 /// Paired with [spliit2goDarkTheme] below so the app actually has
 /// something to switch to when the system is in dark mode (issue #25;
 /// see the doc comment on [Spliit2GoApp]'s `MaterialApp` for why a
 /// `darkTheme` was the whole bug).
-ThemeData get spliit2goLightTheme => ThemeData(
-      useMaterial3: true,
-      colorSchemeSeed: Colors.teal,
-      brightness: Brightness.light,
-    );
+ThemeData get spliit2goLightTheme => _appTheme(Brightness.light);
 
 /// spliit2go's dark theme -- same Material 3 + teal seed as
 /// [spliit2goLightTheme], opposite [Brightness.dark], so system dark
 /// mode gets a genuinely dark version of this app's own look rather
 /// than a generic Material dark theme.
-ThemeData get spliit2goDarkTheme => ThemeData(
-      useMaterial3: true,
-      colorSchemeSeed: Colors.teal,
-      brightness: Brightness.dark,
-    );
+ThemeData get spliit2goDarkTheme => _appTheme(Brightness.dark);
 
 /// The system status/navigation bar styling for the given [theme]'s
 /// current brightness -- issue #24 follow-up: without this, Android
@@ -55,13 +73,15 @@ ThemeData get spliit2goDarkTheme => ThemeData(
 /// one.
 SystemUiOverlayStyle spliit2goSystemUiOverlayStyle(ThemeData theme) {
   final navBarIsLight =
-      ThemeData.estimateBrightnessForColor(theme.scaffoldBackgroundColor) == Brightness.light;
+      ThemeData.estimateBrightnessForColor(theme.scaffoldBackgroundColor) ==
+          Brightness.light;
   return SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: navBarIsLight ? Brightness.dark : Brightness.light,
     statusBarBrightness: navBarIsLight ? Brightness.light : Brightness.dark,
     systemNavigationBarColor: theme.scaffoldBackgroundColor,
-    systemNavigationBarIconBrightness: navBarIsLight ? Brightness.dark : Brightness.light,
+    systemNavigationBarIconBrightness:
+        navBarIsLight ? Brightness.dark : Brightness.light,
     systemNavigationBarDividerColor: Colors.transparent,
     // Without this, Android 10+ paints a translucent scrim over
     // whatever color we ask for "for legibility" -- which is exactly

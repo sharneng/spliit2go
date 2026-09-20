@@ -21,9 +21,17 @@ class SettingsService {
       (await SharedPreferences.getInstance()).getString('group_list_sort');
 
   Future<void> setGroupListSort(String value) async {
-    final saved = await (await SharedPreferences.getInstance())
-        .setString('group_list_sort', value);
-    if (!saved) throw StateError('Could not save group sort');
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      if (!await prefs.setString('group_list_sort', value)) {
+        throw StateError('Could not save group sort');
+      }
+    } catch (_) {
+      // The plugin updates its cache before attempting persistence. Restore
+      // the persisted view so a later screen reload cannot apply a failed write.
+      await prefs.reload();
+      rethrow;
+    }
   }
 
   Future<ThemeMode> themeMode() async {

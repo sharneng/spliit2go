@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
+import '../models/group_organization.dart';
 import '../l10n/context_l10n.dart';
 import '../services/date_span_calculator.dart';
 import '../services/group_list_order.dart';
@@ -40,6 +41,7 @@ final RouteObserver<PageRoute<void>> groupListRouteObserver =
 /// deliberately doesn't hold one client for everything.
 class GroupListScreen extends StatefulWidget {
   final AppDatabase db;
+  final SettingsService settings;
 
   /// Builds the SpliitClient for a tapped group's own serverUrl.
   /// Defaults to a real one; overridable so tests can inject a client
@@ -50,8 +52,10 @@ class GroupListScreen extends StatefulWidget {
   GroupListScreen(
       {super.key,
       required this.db,
-      SpliitClient Function(String)? clientFactory})
-      : clientFactory = clientFactory ?? ((url) => SpliitClient(baseUrl: url));
+      SpliitClient Function(String)? clientFactory,
+      SettingsService? settings})
+      : clientFactory = clientFactory ?? ((url) => SpliitClient(baseUrl: url)),
+        settings = settings ?? SettingsService();
 
   @override
   State<GroupListScreen> createState() => _GroupListScreenState();
@@ -61,7 +65,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
   List<GroupRow> _groups = [];
   bool _loading = true;
   GroupListSort _sort = GroupListSort.lastOpened;
-  final _settings = SettingsService();
+  SettingsService get _settings => widget.settings;
   int _loadVersion = 0;
 
   /// Each joined group's cached first-to-last expense date (issue #55),
@@ -112,6 +116,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     final version = ++_loadVersion;
     final sort = groupListSortFromTag(await _settings.groupListSort());
     final rows = await widget.db.allJoinedGroups();
@@ -228,15 +233,19 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
     final sections = [
       (
         context.l10n.groupListFavorites,
-        sorted.where((g) => g.isFavorite && !g.isArchived).toList()
+        sorted
+            .where((g) => g.organization == GroupOrganization.favorite)
+            .toList()
       ),
       (
         context.l10n.groupListActive,
-        sorted.where((g) => !g.isFavorite && !g.isArchived).toList()
+        sorted.where((g) => g.organization == GroupOrganization.active).toList()
       ),
       (
         context.l10n.groupListArchived,
-        sorted.where((g) => g.isArchived).toList()
+        sorted
+            .where((g) => g.organization == GroupOrganization.archived)
+            .toList()
       ),
     ];
     return ListView(
@@ -309,16 +318,18 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
-              leading: Icon(row.isFavorite ? Icons.star_border : Icons.star),
-              title: Text(row.isFavorite
+              leading: Icon((row.organization == GroupOrganization.favorite)
+                  ? Icons.star_border
+                  : Icons.star),
+              title: Text((row.organization == GroupOrganization.favorite)
                   ? context.l10n.groupListUnfavorite
                   : context.l10n.groupListFavorite),
               onTap: () => Navigator.pop(context, 'favorite')),
           ListTile(
-              leading: Icon(row.isArchived
+              leading: Icon((row.organization == GroupOrganization.archived)
                   ? Icons.unarchive_outlined
                   : Icons.archive_outlined),
-              title: Text(row.isArchived
+              title: Text((row.organization == GroupOrganization.archived)
                   ? context.l10n.groupListUnarchive
                   : context.l10n.groupListArchive),
               onTap: () => Navigator.pop(context, 'archive')),
@@ -335,11 +346,17 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
     try {
       switch (action) {
         case 'favorite':
-          await widget.db
-              .setGroupOrganization(row.id, favorite: !row.isFavorite);
+          await widget.db.setGroupOrganization(
+              row.id,
+              row.organization == GroupOrganization.favorite
+                  ? GroupOrganization.active
+                  : GroupOrganization.favorite);
         case 'archive':
-          await widget.db
-              .setGroupOrganization(row.id, archived: !row.isArchived);
+          await widget.db.setGroupOrganization(
+              row.id,
+              row.organization == GroupOrganization.archived
+                  ? GroupOrganization.active
+                  : GroupOrganization.archived);
         case 'remove':
           if (!await _confirmRemove(row)) return;
           await widget.db.leaveGroup(row.id);
