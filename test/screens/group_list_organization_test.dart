@@ -192,7 +192,7 @@ void main() {
     final db = _DelayedRemovalDatabase();
     await seed(database: db);
     await pump(tester, db);
-    await tester.drag(find.text('Alpha'), const Offset(-500, 0));
+    await tester.drag(find.text('Alpha'), const Offset(-400, 0));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(CustomSlidableAction, 'Remove'));
     await tester.pumpAndSettle();
@@ -243,7 +243,7 @@ void main() {
         date: DateTime(2026)));
     await pump(tester, db);
     Future<void> swipe(String label, bool start) async {
-      await tester.drag(find.text('Alpha'), Offset(start ? 500 : -500, 0));
+      await tester.drag(find.text('Alpha'), Offset(start ? 200 : -400, 0));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(CustomSlidableAction, label));
       await tester.pumpAndSettle();
@@ -261,6 +261,49 @@ void main() {
       expect((await db.groupRow('Alpha'))!.organization, step.$3);
     }
     expect(await db.pendingExpensesForGroup('Alpha'), hasLength(1));
+  });
+
+  testWidgets('full swipes toggle organization without removing the group',
+      (tester) async {
+    final db = await seed();
+    await pump(tester, db);
+    for (final step in [
+      (760.0, GroupOrganization.favorite),
+      (760.0, GroupOrganization.active),
+      (-760.0, GroupOrganization.archived),
+      (-760.0, GroupOrganization.active),
+    ]) {
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.text('Alpha')));
+      await gesture.moveBy(Offset(step.$1.sign * 30, 0));
+      await tester.pump();
+      await gesture.moveBy(Offset(step.$1 - step.$1.sign * 30, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect((await db.groupRow('Alpha'))!.organization, step.$2);
+      expect(find.byWidgetPredicate((w) => w is AlertDialog), findsNothing);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('menu width is consistent across organization states',
+      (tester) async {
+    final db = await seed();
+    await pump(tester, db);
+    final widths = <double>[];
+    for (final organization in GroupOrganization.values) {
+      await db.setGroupOrganization('Alpha', organization);
+      await tester.pumpWidget(const SizedBox());
+      await pump(tester, db);
+      await tester.longPress(find.text('Alpha'));
+      await tester.pumpAndSettle();
+      widths.add(tester.getSize(find.byType(PopupMenuItem<int>).first).width);
+      await tester.tapAt(const Offset(790, 590));
+      await tester.pumpAndSettle();
+    }
+    expect(widths.toSet(), hasLength(1));
+    expect(widths.first, greaterThanOrEqualTo(280));
   });
 
   for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {

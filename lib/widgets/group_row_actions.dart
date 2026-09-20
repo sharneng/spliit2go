@@ -27,7 +27,22 @@ class GroupRowActions extends StatefulWidget {
   State<GroupRowActions> createState() => _GroupRowActionsState();
 }
 
-class _GroupRowActionsState extends State<GroupRowActions> {
+class _GroupRowActionsState extends State<GroupRowActions>
+    with SingleTickerProviderStateMixin {
+  late final SlidableController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = SlidableController(this);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   Offset? _pressPosition;
   bool _menuOpen = false;
 
@@ -50,8 +65,8 @@ class _GroupRowActionsState extends State<GroupRowActions> {
             Offset.zero & overlay.size),
         // The popup route clamps the menu to safe screen edges and scrolls
         // when necessary. Text can wrap instead of truncating French labels.
-        constraints:
-            BoxConstraints(maxWidth: (overlay.size.width - 32).clamp(0, 320)),
+        constraints: BoxConstraints.tightFor(
+            width: (overlay.size.width - 32).clamp(0, 320)),
         items: [
           for (var i = 0; i < actions.length; i++)
             PopupMenuItem<int>(
@@ -113,21 +128,36 @@ class _GroupRowActionsState extends State<GroupRowActions> {
     );
   }
 
+  DismissiblePane _fullSwipe(GroupRowAction action) => DismissiblePane(
+        // Organization changes keep the row in the list. Close the pane before
+        // applying the action, then veto Slidable's permanent row dismissal.
+        confirmDismiss: () async {
+          await _controller.close();
+          if (mounted) action.onSelected();
+          return false;
+        },
+        onDismissed: () {},
+      );
+
   @override
   Widget build(BuildContext context) => Slidable(
+        key: ObjectKey(this),
+        controller: _controller,
         groupTag: 'groups',
         startActionPane: ActionPane(
             motion: const ScrollMotion(),
             extentRatio: 0.3,
+            dismissible: _fullSwipe(widget.actions[0]),
             children: [_swipeAction(widget.actions[0])]),
         endActionPane: ActionPane(
             motion: const ScrollMotion(),
             extentRatio: 0.6,
+            dismissible: _fullSwipe(widget.actions[1]),
             children: [
-              _swipeAction(widget.actions[1]),
-              _swipeAction(widget.actions[2])
+              _swipeAction(widget.actions[2]),
+              _swipeAction(widget.actions[1])
             ]),
-        // No DismissiblePane: a swipe reveals controls and never removes data.
+        // Full swipes only change organization; Remove remains an explicit tap.
         child: Listener(
             onPointerDown: (event) => _pressPosition = event.position,
             child: widget.builder(context, _openMenu)),

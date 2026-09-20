@@ -149,7 +149,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.drag(find.text('Banff Trip'), const Offset(-500, 0));
+    await tester.drag(find.text('Banff Trip'), const Offset(-400, 0));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(CustomSlidableAction, 'Remove'));
     await tester.pumpAndSettle();
@@ -241,7 +241,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.drag(find.text('Banff Trip'), const Offset(-500, 0));
+    await tester.drag(find.text('Banff Trip'), const Offset(-400, 0));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(CustomSlidableAction, 'Remove'));
     await tester.pumpAndSettle();
