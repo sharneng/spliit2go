@@ -106,6 +106,37 @@ void main() {
     expect(expense.paidFor.map((s) => s.participantId).toSet(), {'alex', 'bea'});
   });
 
+  testWidgets('comma total and split amounts persist as integer cents',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await pumpScreen(tester, db);
+    await fillCommonFields(tester, amount: '12,50');
+
+    // Two included participants, each paying half of the total.
+    await tester.ensureVisible(find.widgetWithText(CheckboxListTile, 'Cid'));
+    await tester.tap(find.widgetWithText(CheckboxListTile, 'Cid'));
+    await tester.pumpAndSettle();
+    await selectSplitMode(tester, 'Amount');
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(2), '6,25');
+    await tester.enterText(fields.at(3), '6,25');
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    // Offline creates are the persisted rows consumed by Outbox.flush.
+    final pending = await db.pendingExpensesForGroup(group.id);
+    expect(pending, hasLength(1));
+    final expense = db.rowToExpense(pending.single);
+    expect(expense.amountCents, 1250);
+    expect(expense.splitMode, SplitMode.byAmount);
+    expect(
+      {for (final share in expense.paidFor) share.participantId: share.shares},
+      {'alex': 625, 'bea': 625},
+    );
+  });
+
   testWidgets('by-amount split rejects amounts that don\'t add up to the total',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());

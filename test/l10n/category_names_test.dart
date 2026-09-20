@@ -4,6 +4,8 @@ import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/l10n/category_names.dart';
 import 'package:spliit2go/models/category.dart';
 
+import '../fixtures/category_seed_ids.dart';
+
 void main() {
   const fr = Locale('fr');
   const zh = Locale('zh');
@@ -46,11 +48,20 @@ void main() {
       expect(groceries.grouping, 'Food and Drink');
     });
 
-    test('every seed id 0..43 has both a French and a Chinese name', () {
-      for (var id = 0; id <= 43; id++) {
-        final c = Category(id: id, name: 'EN$id', grouping: 'G');
-        expect(categoryNameForLocale(fr, c), isNot('EN$id'), reason: 'fr id $id');
-        expect(categoryNameForLocale(zh, c), isNot('EN$id'), reason: 'zh id $id');
+    test('every seed id has a name in every shipped non-English locale', () {
+      expect(categorySeedIds, isNotEmpty);
+      expect(categorySeedIds.toSet(), hasLength(categorySeedIds.length));
+      for (final locale in AppLocalizations.supportedLocales) {
+        if (locale.languageCode == 'en') continue;
+        for (final id in categorySeedIds) {
+          // A sentinel distinguishes an actual map entry from the English
+          // fallback, even when a translation matches the real English name.
+          final fallback = '__untranslated_$id';
+          final category = Category(id: id, name: fallback, grouping: 'G');
+          final translated = categoryNameForLocale(locale, category);
+          expect(translated, isNot(fallback), reason: '$locale id $id');
+          expect(translated.trim(), isNotEmpty, reason: '$locale id $id');
+        }
       }
     });
   });
