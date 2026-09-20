@@ -20,35 +20,40 @@ Spliit has an official [iOS app](https://github.com/spliit-app/spliit-ios) but n
 - **Local storage:** [drift](https://pub.dev/packages/drift) (SQLite) holds the last-synced snapshot of groups/expenses/balances, plus a `pending` flag on locally-added expenses that haven't synced yet. See `lib/db/`.
 - **Sync:** `lib/sync/outbox.dart` — pending expenses are replayed against the API when connectivity returns. No merge logic: reads overwrite the local cache on each successful fetch, writes are append-only.
 
-Full reasoning for these choices is written up in the project's `decisions/mobile-platform.md` doc.
+Full reasoning for these choices, and for other design calls (multiple groups, date handling, the expense form, the split UX), is in [`docs/decisions/`](docs/decisions/README.md).
+
+## Features
+
+- **Groups:** join by server URL and group id, or by opening a spliit.app group link (Android App Links). A group list with swipe-to-leave (local only, never touches the server); each group keeps its own server URL and active user, so groups on different Spliit instances can coexist. The date span of each group's expenses is shown in the list.
+- **Expenses:** offline-first list (cache first, live fetch in the background, pull-to-refresh). Add and edit with all four split modes (evenly, shares, percentage, amount), per-participant live amount preview, categories with search, date, a different "paid in" currency, reimbursements, recurrence, notes, and a remembered per-group default split. Expenses added offline show a pending badge and sync automatically on reconnect; the outbox stops retrying an expense the server rejects and marks it failed.
+- **Balances:** who owes whom, computed on-device from the cached expenses (so it works offline and includes pending ones), with one-tap "mark as paid" reimbursements.
+- **Stats and Activity:** spending totals per participant and per category; the group's activity feed (online only).
+- **Group settings:** rename the group, change its currency, add, rename, or remove participants (online only).
+- **App settings:** light, dark, or system theme; language.
+- **Languages:** English, French, and Simplified Chinese, with locale-aware amounts and dates, switchable in the app without a restart.
 
 ## Status
 
-Working end to end as of 2026-09-16: builds, runs on a physical Android device, and has been tested live against a real Spliit instance — online add/view, offline add with automatic sync on reconnect, and a cold start while offline all confirmed working. See `decisions/mobile-platform.md` in the project docs for the full testing writeup, including the bugs that first pass found and fixed.
+An early, usable Android client, tested on a physical device against a real self-hosted Spliit instance. iOS builds from the same codebase but has not been set up. Feature and bug work is tracked in [GitHub issues](https://github.com/sharneng/spliit2go/issues) and the project board, which are the source of truth for what is done and what is next.
 
-- `SpliitClient` — fetch group/participants, fetch (paginated) expenses, fetch categories, create an expense or settlement.
-- `AppDatabase` (drift) — local cache of a group's expenses *and* group/participants, with a `pending` flag for offline-created expenses.
-- `Outbox` — replays pending expenses against the server once connectivity returns.
-- Screens — first-run server/group settings, a group's expense list (offline-first: cache shown immediately, live fetch in the background, pull-to-refresh), and an add-expense form (evenly split among all participants; writes locally first, syncs opportunistically).
+Not built yet:
 
-### Tests
+- Receipt attachments and AI receipt scan ([#5](https://github.com/sharneng/spliit2go/issues/5)); the expense form shows a disabled "Attach documents" row.
+- Share link / invite ([#3](https://github.com/sharneng/spliit2go/issues/3)), QR scanning when joining ([#41](https://github.com/sharneng/spliit2go/issues/41)).
+- CSV/JSON export ([#7](https://github.com/sharneng/spliit2go/issues/7)).
+- Expense search on the Expenses tab ([#39](https://github.com/sharneng/spliit2go/issues/39)).
+- Stats charts, projections, and a date-range selector; Stats is "all time" only.
+- More languages and right-to-left support ([#64](https://github.com/sharneng/spliit2go/issues/64), [#65](https://github.com/sharneng/spliit2go/issues/65)).
 
-`test/` covers the core logic without needing a device or a live server: `SpliitClient` response parsing (including both participant-reference shapes Spliit's API actually returns, per the regression noted below), `AppDatabase`'s group/expense caching, `Outbox` sync behavior, and a widget test for the add-button-stays-disabled-offline bug specifically. Run locally with:
+## Tests
+
+`test/` covers the core logic and the screens without needing a device or a live server: `SpliitClient` response parsing, `AppDatabase` caching and migrations, `Outbox` sync behavior, the balance and stats calculators, formatting and localization, and widget tests for each screen. Run locally with:
 
 ```
 flutter test --coverage
 ```
 
-CI (`.github/workflows/ci.yml`) runs `flutter analyze` and this test suite on every push and PR, and uploads the coverage report as a build artifact.
-
-Known gaps, in rough priority order:
-
-- Balances ("who owes whom") aren't fetched or shown yet, and offline balance display needs to account for pending expenses (see `decisions/mobile-platform.md`).
-- Add-expense only supports an even split across every participant — no per-person amounts, no excluding someone from a split, no settlements from the UI (the API layer supports all of these; the form doesn't expose them yet).
-- Single group only — no group list/switcher.
-- No retry limit or user-visible "failed to sync" state in the outbox if a pending expense keeps failing.
-
-Tasks (1) and (2) from the original project plan — a script to exercise the API, and a Splitwise CSV importer — are done, in the sibling `splitwise2spliit` (Python) project rather than here.
+CI (`.github/workflows/ci.yml`) runs `flutter analyze` and this test suite on every push and PR, and uploads the coverage report as a build artifact. See [SETUP.md](SETUP.md) for the optional local CI loop (`scripts/run_test`).
 
 ## License
 
