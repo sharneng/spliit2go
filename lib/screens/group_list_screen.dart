@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
@@ -10,6 +12,7 @@ import '../services/date_span_calculator.dart';
 import '../services/group_list_order.dart';
 import '../services/settings_service.dart';
 import '../widgets/group_monogram.dart';
+import '../widgets/group_row_actions.dart';
 import '../sync/outbox.dart';
 import '../utils/date_format.dart';
 import 'group_screen.dart';
@@ -156,11 +159,6 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
     }
   }
 
-  Future<void> _leaveGroup(GroupRow row) async {
-    await widget.db.leaveGroup(row.id);
-    await _load();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -248,7 +246,8 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
             .toList()
       ),
     ];
-    return ListView(
+    return SlidableAutoCloseBehavior(
+        child: ListView(
       padding: const EdgeInsets.only(bottom: 88),
       children: [
         for (final section in sections)
@@ -265,7 +264,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
             ],
           ],
       ],
-    );
+    ));
   }
 
   String _sortLabel(GroupListSort sort) => switch (sort) {
@@ -291,58 +290,45 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
   }
 
   Future<bool> _confirmRemove(GroupRow row) async =>
-      await showDialog<bool>(
+      await showAdaptiveDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => AlertDialog.adaptive(
           title: Text(context.l10n.groupListRemove),
           content: Text(context.l10n.groupListLeaveBody(row.name)),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: Text(context.l10n.commonCancel)),
-            TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: TextButton.styleFrom(
-                    foregroundColor: Theme.of(context).colorScheme.error),
-                child: Text(context.l10n.groupListRemove)),
-          ],
+          actions: _removeDialogActions(context),
         ),
       ) ??
       false;
 
-  Future<void> _showGroupMenu(GroupRow row) async {
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      builder: (context) => SafeArea(
-          child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-              leading: Icon((row.organization == GroupOrganization.favorite)
-                  ? Icons.star_border
-                  : Icons.star),
-              title: Text((row.organization == GroupOrganization.favorite)
-                  ? context.l10n.groupListUnfavorite
-                  : context.l10n.groupListFavorite),
-              onTap: () => Navigator.pop(context, 'favorite')),
-          ListTile(
-              leading: Icon((row.organization == GroupOrganization.archived)
-                  ? Icons.unarchive_outlined
-                  : Icons.archive_outlined),
-              title: Text((row.organization == GroupOrganization.archived)
-                  ? context.l10n.groupListUnarchive
-                  : context.l10n.groupListArchive),
-              onTap: () => Navigator.pop(context, 'archive')),
-          ListTile(
-              leading: const Icon(Icons.delete_outline),
-              textColor: Theme.of(context).colorScheme.error,
-              iconColor: Theme.of(context).colorScheme.error,
-              title: Text(context.l10n.groupListRemove),
-              onTap: () => Navigator.pop(context, 'remove')),
-        ],
-      )),
-    );
-    if (!mounted || action == null) return;
+  List<Widget> _removeDialogActions(BuildContext dialogContext) {
+    final platform = Theme.of(dialogContext).platform;
+    final cupertino =
+        platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
+    if (cupertino) {
+      return [
+        CupertinoDialogAction(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(dialogContext.l10n.commonCancel)),
+        CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(dialogContext.l10n.groupListRemove)),
+      ];
+    }
+    return [
+      TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: Text(dialogContext.l10n.commonCancel)),
+      TextButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          style: TextButton.styleFrom(
+              foregroundColor: Theme.of(dialogContext).colorScheme.error),
+          child: Text(dialogContext.l10n.groupListRemove)),
+    ];
+  }
+
+  Future<void> _performGroupAction(GroupRow row, String action) async {
+    if (!mounted) return;
     try {
       switch (action) {
         case 'favorite':
@@ -369,19 +355,46 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
 
   Widget _groupTile(GroupRow row) {
     final count = (jsonDecode(row.participantsJson) as List).length;
-    return Dismissible(
+    return GroupRowActions(
       key: ValueKey(row.id),
-      direction: DismissDirection.endToStart,
-      background: Container(
-          color: Theme.of(context).colorScheme.error,
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Icon(Icons.delete_outline,
-              color: Theme.of(context).colorScheme.onError)),
-      confirmDismiss: (_) => _confirmRemove(row),
-      onDismissed: (_) => _leaveGroup(row),
-      child: ListTile(
-        leading: GroupMonogram(id: row.id, name: row.name),
+      actions: [
+        GroupRowAction(
+            label: row.organization == GroupOrganization.favorite
+                ? context.l10n.groupListUnfavorite
+                : context.l10n.groupListFavorite,
+            icon: row.organization == GroupOrganization.favorite
+                ? Icons.star_border
+                : Icons.star,
+            onSelected: () => _performGroupAction(row, 'favorite')),
+        GroupRowAction(
+            label: row.organization == GroupOrganization.archived
+                ? context.l10n.groupListUnarchive
+                : context.l10n.groupListArchive,
+            icon: row.organization == GroupOrganization.archived
+                ? Icons.unarchive_outlined
+                : Icons.archive_outlined,
+            onSelected: () => _performGroupAction(row, 'archive')),
+        GroupRowAction(
+            label: context.l10n.groupListRemove,
+            icon: Icons.delete_outline,
+            destructive: true,
+            onSelected: () => _performGroupAction(row, 'remove')),
+      ],
+      builder: (context, openMenu) => ListTile(
+        leading: Semantics(
+            button: true,
+            label: context.l10n.groupListActions(row.name),
+            child: Tooltip(
+                message: context.l10n.groupListActions(row.name),
+                child: InkResponse(
+                    onTap: openMenu,
+                    radius: 24,
+                    child: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: Center(
+                            child:
+                                GroupMonogram(id: row.id, name: row.name)))))),
         title: Text(row.name),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
@@ -404,7 +417,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
           ]),
         ),
         onTap: () => _openGroup(row),
-        onLongPress: () => _showGroupMenu(row),
+        onLongPress: openMenu,
       ),
     );
   }

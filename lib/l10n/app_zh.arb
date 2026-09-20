@@ -160,5 +160,6 @@
   "groupListSortLast": "末笔花费日期",
   "groupListSortCreated": "创建日期",
   "groupListSortOpened": "最近打开",
-  "groupListParticipantCount": "{count} 位成员"
+  "groupListParticipantCount": "{count} 位成员",
+  "groupListActions": "{name}的操作"
 }
