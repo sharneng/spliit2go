@@ -335,5 +335,26 @@
         "type": "int"
       }
     }
+  },
+  "groupListFavorites": "Favorites",
+  "groupListActive": "Active",
+  "groupListArchived": "Archived",
+  "groupListFavorite": "Favorite",
+  "groupListUnfavorite": "Unfavorite",
+  "groupListArchive": "Archive",
+  "groupListUnarchive": "Unarchive",
+  "groupListRemove": "Remove",
+  "groupListSort": "Sort groups",
+  "groupListSortFirst": "First expense date",
+  "groupListSortLast": "Last expense date",
+  "groupListSortCreated": "Creation date",
+  "groupListSortOpened": "Last opened",
+  "groupListParticipantCount": "{count, plural, =1{1 participant} other{{count} participants}}",
+  "@groupListParticipantCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

@@ -146,5 +146,19 @@
   "appSettingsSaveError": "无法保存你的设置，请重试。",
   "appSettingsLanguage": "语言",
   "appSettingsLanguageSystem": "系统默认",
-  "categoryFallbackName": "类别 {id}"
+  "categoryFallbackName": "类别 {id}",
+  "groupListFavorites": "收藏",
+  "groupListActive": "活跃",
+  "groupListArchived": "已归档",
+  "groupListFavorite": "收藏",
+  "groupListUnfavorite": "取消收藏",
+  "groupListArchive": "归档",
+  "groupListUnarchive": "取消归档",
+  "groupListRemove": "移除",
+  "groupListSort": "群组排序",
+  "groupListSortFirst": "首笔花费日期",
+  "groupListSortLast": "末笔花费日期",
+  "groupListSortCreated": "创建日期",
+  "groupListSortOpened": "最近打开",
+  "groupListParticipantCount": "{count} 位成员"
 }

@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import '../models/default_split.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
+import '../models/group_organization.dart';
 
 part 'app_database.g.dart';
 
@@ -34,7 +35,8 @@ class Expenses extends Table {
   IntColumn get category => integer().withDefault(const Constant(0))();
   TextColumn get notes => text().withDefault(const Constant(''))();
   DateTimeColumn get date => dateTime()();
-  BoolColumn get isReimbursement => boolean().withDefault(const Constant(false))();
+  BoolColumn get isReimbursement =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get recurrenceRule => text().withDefault(const Constant('NONE'))();
 
   /// Set together only when the expense was entered in a currency other
@@ -88,6 +90,9 @@ class Expenses extends Table {
 /// only ever read back whole, never queried into.
 @DataClassName('GroupRow')
 class Groups extends Table {
+  DateTimeColumn get createdAt => dateTime().nullable()();
+  TextColumn get organization =>
+      textEnum<GroupOrganization>().withDefault(const Constant('active'))();
   TextColumn get id => text()();
   TextColumn get name => text()();
   TextColumn get currency => text()();
@@ -149,7 +154,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -192,6 +197,24 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(expenses, expenses.retryCount);
             await m.addColumn(expenses, expenses.lastError);
             await m.addColumn(expenses, expenses.syncFailed);
+          }
+          if (from < 8) {
+            await m.addColumn(groups, groups.createdAt);
+          }
+          if (from < 9) {
+            await m.addColumn(groups, groups.organization);
+            if (from == 8) {
+              // The first PR #69 build persisted independent flags. Preserve
+              // its visible section, with Archived taking precedence.
+              await customStatement("""
+                UPDATE groups SET organization = CASE
+                  WHEN is_archived = 1 THEN 'archived'
+                  WHEN is_favorite = 1 THEN 'favorite'
+                  ELSE 'active' END
+              """);
+              // Rebuild from the current schema to remove the obsolete flags.
+              await m.alterTable(TableMigration(groups));
+            }
           }
         },
       );
@@ -242,7 +265,9 @@ class AppDatabase extends _$AppDatabase {
   Future<List<ExpenseRow>> pendingExpensesForGroup(String groupId) {
     return (select(expenses)
           ..where((e) =>
-              e.pending.equals(true) & e.groupId.equals(groupId) & e.syncFailed.equals(false)))
+              e.pending.equals(true) &
+              e.groupId.equals(groupId) &
+              e.syncFailed.equals(false)))
         .get();
   }
 
@@ -336,12 +361,14 @@ class AppDatabase extends _$AppDatabase {
   /// Overwrites the cached (non-pending) rows for a group with a fresh
   /// fetch from the server. Pending rows are left untouched -- they're
   /// only cleared by the outbox once the server confirms them.
-  Future<void> replaceServerExpenses(String groupId, List<Expense> fresh) async {
+  Future<void> replaceServerExpenses(
+      String groupId, List<Expense> fresh) async {
     await transaction(() async {
       await (delete(expenses)
             ..where((e) => e.groupId.equals(groupId) & e.pending.equals(false)))
           .go();
-      await batch((b) => b.insertAll(expenses, fresh.map(toCompanion).toList()));
+      await batch(
+          (b) => b.insertAll(expenses, fresh.map(toCompanion).toList()));
     });
   }
 
@@ -371,17 +398,26 @@ class AppDatabase extends _$AppDatabase {
         pending: Value(e.pending),
       );
 
-  /// Overwrites the cached group info (name, currency, participants).
-  /// Called after every successful fetchGroup(), same pattern as
-  /// replaceServerExpenses -- no merge logic, just last-fetch-wins.
+  /// Device-local organization, never sent to the server or changed by refresh.
+  Future<void> setGroupOrganization(
+          String id, GroupOrganization organization) =>
+      (update(groups)..where((g) => g.id.equals(id))).write(
+        GroupsCompanion(organization: Value(organization)),
+      );
+
+  /// Refreshes server data while leaving device-local preferences untouched.
   Future<void> cacheGroup(Group g) {
     return into(groups).insertOnConflictUpdate(GroupsCompanion.insert(
       id: g.id,
+      // Omit an unknown timestamp on refresh, preserving a previously known one.
+      createdAt:
+          g.createdAt == null ? const Value.absent() : Value(g.createdAt),
       name: g.name,
       currency: g.currency,
       information: Value(g.information),
       currencyCode: Value(g.currencyCode),
-      participantsJson: Value(jsonEncode(g.participants.map((p) => p.toJson()).toList())),
+      participantsJson:
+          Value(jsonEncode(g.participants.map((p) => p.toJson()).toList())),
     ));
   }
 
@@ -393,6 +429,7 @@ class AppDatabase extends _$AppDatabase {
     if (row == null) return null;
     return Group(
       id: row.id,
+      createdAt: row.createdAt,
       name: row.name,
       information: row.information,
       currency: row.currency,
@@ -417,6 +454,7 @@ class AppDatabase extends _$AppDatabase {
       if (row == null) return null;
       return Group(
         id: row.id,
+        createdAt: row.createdAt,
         name: row.name,
         information: row.information,
         currency: row.currency,
@@ -434,7 +472,8 @@ class AppDatabase extends _$AppDatabase {
   /// only ever returns the [Group] model. Null if this group has never
   /// been cached.
   Future<GroupRow?> groupRow(String groupId) {
-    return (select(groups)..where((g) => g.id.equals(groupId))).getSingleOrNull();
+    return (select(groups)..where((g) => g.id.equals(groupId)))
+        .getSingleOrNull();
   }
 
   /// Every group this device has joined, most-recently-opened first --
@@ -454,10 +493,12 @@ class AppDatabase extends _$AppDatabase {
 
   /// The single most-recently-opened group, or null if none has ever
   /// been opened (fresh install, or every group has been left) -- what
-  /// main.dart's launch-straight-in fast path reads.
+  /// main.dart's launch-straight-in fast path reads. Archived groups are excluded.
   Future<GroupRow?> mostRecentlyOpenedGroup() {
     return (select(groups)
-          ..where((g) => g.lastOpenedAt.isNotNull())
+          ..where((g) =>
+              g.lastOpenedAt.isNotNull() &
+              g.organization.equals(GroupOrganization.archived.name).not())
           ..orderBy([(g) => OrderingTerm.desc(g.lastOpenedAt)])
           ..limit(1))
         .getSingleOrNull();
@@ -480,9 +521,12 @@ class AppDatabase extends _$AppDatabase {
   /// made back-to-back in the same test can tie, which is exactly the
   /// kind of flakiness this parameter exists to avoid without changing
   /// how it's actually called in the app itself.
-  Future<void> recordGroupOpened(String groupId, {required String serverUrl, DateTime? at}) {
+  Future<void> recordGroupOpened(String groupId,
+      {required String serverUrl, DateTime? at}) {
     return (update(groups)..where((g) => g.id.equals(groupId))).write(
-      GroupsCompanion(serverUrl: Value(serverUrl), lastOpenedAt: Value(at ?? DateTime.now())),
+      GroupsCompanion(
+          serverUrl: Value(serverUrl),
+          lastOpenedAt: Value(at ?? DateTime.now())),
     );
   }
 
@@ -502,7 +546,8 @@ class AppDatabase extends _$AppDatabase {
   /// succeeded -- a split remembered from a save the server rejected
   /// would go on prefilling expenses that never happened.
   Future<void> setDefaultSplit(String groupId, DefaultSplit? split) {
-    return (update(groups)..where((g) => g.id.equals(groupId))).write(GroupsCompanion(
+    return (update(groups)..where((g) => g.id.equals(groupId)))
+        .write(GroupsCompanion(
       defaultSplitMode: Value(split?.splitMode.wireValue),
       defaultSplitSharesJson:
           Value(split?.shares == null ? null : jsonEncode(split!.shares)),

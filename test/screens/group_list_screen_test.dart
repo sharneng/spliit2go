@@ -141,19 +141,19 @@ void main() {
     await tester.drag(find.text('Banff Trip'), const Offset(-500, 0));
     await tester.pumpAndSettle();
 
-    expect(find.text('Leave group?'), findsOneWidget);
-    await tester.tap(find.widgetWithText(TextButton, 'Leave'));
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
     await tester.pumpAndSettle();
 
     expect(find.text('No groups yet.'), findsOneWidget);
     expect(await db.groupRow('gA'), isNull);
   });
 
-  // Issue #55: date span shown right after the currency symbol.
+  // Issue #55: date span shown next to participant metadata.
   // Local, date-only DateTimes -- see date_span_calculator_test.dart's
   // expense() helper comment: a DateTime.utc(...) fixture doesn't survive
   // AppDatabase's drift round-trip intact on a machine west of UTC.
-  testWidgets("shows each group's date span after its currency symbol", (tester) async {
+  testWidgets("shows each group's date span without a currency symbol", (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     await db.cacheGroup(const Group(id: 'gA', name: 'Banff Trip', currency: '\$', participants: []));
@@ -187,7 +187,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('\$  Jan 2, 2026 – Jun 15, 2026'), findsOneWidget);
+    expect(find.text('Jan 2, 2026 – Jun 15, 2026'), findsOneWidget);
   });
 
   testWidgets('shows the em-dash placeholder for a group with no cached expenses', (tester) async {
@@ -204,7 +204,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('\$  —'), findsOneWidget);
+    expect(find.text('—'), findsOneWidget);
   });
 
   testWidgets('cancelling the leave confirmation keeps the group', (tester) async {

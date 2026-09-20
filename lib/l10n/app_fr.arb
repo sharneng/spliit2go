@@ -146,5 +146,19 @@
   "appSettingsSaveError": "Impossible d'enregistrer votre réglage. Veuillez réessayer.",
   "appSettingsLanguage": "Langue",
   "appSettingsLanguageSystem": "Par défaut du système",
-  "categoryFallbackName": "Catégorie {id}"
+  "categoryFallbackName": "Catégorie {id}",
+  "groupListFavorites": "Favoris",
+  "groupListActive": "Actifs",
+  "groupListArchived": "Archivés",
+  "groupListFavorite": "Ajouter aux favoris",
+  "groupListUnfavorite": "Retirer des favoris",
+  "groupListArchive": "Archiver",
+  "groupListUnarchive": "Désarchiver",
+  "groupListRemove": "Retirer",
+  "groupListSort": "Trier les groupes",
+  "groupListSortFirst": "Première dépense",
+  "groupListSortLast": "Dernière dépense",
+  "groupListSortCreated": "Date de création",
+  "groupListSortOpened": "Dernière ouverture",
+  "groupListParticipantCount": "{count, plural, =1{1 participant} other{{count} participants}}"
 }

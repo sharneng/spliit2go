@@ -109,6 +109,7 @@ class SpliitClient {
     return Group(
       id: _asId(g['id']),
       name: g['name'] as String,
+      createdAt: DateTime.tryParse(g['createdAt'] as String? ?? ''),
       information: g['information'] as String?,
       currency: g['currency'] as String,
       currencyCode: g['currencyCode'] as String?,
