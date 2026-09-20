@@ -88,6 +88,9 @@ class Expenses extends Table {
 /// only ever read back whole, never queried into.
 @DataClassName('GroupRow')
 class Groups extends Table {
+  DateTimeColumn get createdAt => dateTime().nullable()();
+  BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
+  BoolColumn get isArchived => boolean().withDefault(const Constant(false))();
   TextColumn get id => text()();
   TextColumn get name => text()();
   TextColumn get currency => text()();
@@ -149,7 +152,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -192,6 +195,11 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(expenses, expenses.retryCount);
             await m.addColumn(expenses, expenses.lastError);
             await m.addColumn(expenses, expenses.syncFailed);
+          }
+          if (from < 8) {
+            await m.addColumn(groups, groups.createdAt);
+            await m.addColumn(groups, groups.isFavorite);
+            await m.addColumn(groups, groups.isArchived);
           }
         },
       );
@@ -371,12 +379,19 @@ class AppDatabase extends _$AppDatabase {
         pending: Value(e.pending),
       );
 
-  /// Overwrites the cached group info (name, currency, participants).
-  /// Called after every successful fetchGroup(), same pattern as
-  /// replaceServerExpenses -- no merge logic, just last-fetch-wins.
+  /// Device-local organization, never sent to the server or changed by refresh.
+  Future<void> setGroupOrganization(String id, {bool? favorite, bool? archived}) =>
+      (update(groups)..where((g) => g.id.equals(id))).write(GroupsCompanion(
+        isFavorite: favorite == null ? const Value.absent() : Value(favorite),
+        isArchived: archived == null ? const Value.absent() : Value(archived),
+      ));
+
+  /// Refreshes server data while leaving device-local preferences untouched.
   Future<void> cacheGroup(Group g) {
     return into(groups).insertOnConflictUpdate(GroupsCompanion.insert(
       id: g.id,
+      // Omit an unknown timestamp on refresh, preserving a previously known one.
+      createdAt: g.createdAt == null ? const Value.absent() : Value(g.createdAt),
       name: g.name,
       currency: g.currency,
       information: Value(g.information),
@@ -393,6 +408,7 @@ class AppDatabase extends _$AppDatabase {
     if (row == null) return null;
     return Group(
       id: row.id,
+      createdAt: row.createdAt,
       name: row.name,
       information: row.information,
       currency: row.currency,
@@ -417,6 +433,7 @@ class AppDatabase extends _$AppDatabase {
       if (row == null) return null;
       return Group(
         id: row.id,
+        createdAt: row.createdAt,
         name: row.name,
         information: row.information,
         currency: row.currency,
@@ -454,10 +471,10 @@ class AppDatabase extends _$AppDatabase {
 
   /// The single most-recently-opened group, or null if none has ever
   /// been opened (fresh install, or every group has been left) -- what
-  /// main.dart's launch-straight-in fast path reads.
+  /// main.dart's launch-straight-in fast path reads. Archived groups are excluded.
   Future<GroupRow?> mostRecentlyOpenedGroup() {
     return (select(groups)
-          ..where((g) => g.lastOpenedAt.isNotNull())
+          ..where((g) => g.lastOpenedAt.isNotNull() & g.isArchived.equals(false))
           ..orderBy([(g) => OrderingTerm.desc(g.lastOpenedAt)])
           ..limit(1))
         .getSingleOrNull();

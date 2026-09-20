@@ -4,6 +4,7 @@
 // via RouteAware.didPopNext and GroupSettingsScreen via a single
 // watchExpensesForGroup subscription.
 import 'package:drift/native.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
@@ -45,6 +46,7 @@ void main() {
   // symbols, but a bare unit test has to initialize them itself.
   setUpAll(() => initializeDateFormatting('en'));
   setUp(() async {
+    SharedPreferences.setMockInitialValues({});
     db = AppDatabase(NativeDatabase.memory());
     await db.cacheGroup(group);
     await db.recordGroupOpened('g1', serverUrl: 'https://example.test');
@@ -64,7 +66,7 @@ void main() {
     final nav = GlobalKey<NavigatorState>();
     await tester.pumpWidget(app(GroupListScreen(db: db), key: nav));
     await tester.pumpAndSettle();
-    expect(find.text('€  Jan 2, 2026'), findsOneWidget);
+    expect(find.text('Jan 2, 2026'), findsOneWidget);
     // Models _Root opening the last-used group outside the list's tap handler.
     nav.currentState!.push(MaterialPageRoute<void>(
         builder: (_) =>
@@ -73,7 +75,7 @@ void main() {
     await db.insertPending(expense('e2', DateTime(2026, 6, 15)));
     nav.currentState!.pop();
     await tester.pumpAndSettle();
-    expect(find.text('€  Jan 2, 2026 – Jun 15, 2026'), findsOneWidget);
+    expect(find.text('Jan 2, 2026 – Jun 15, 2026'), findsOneWidget);
     // Same drift-stream-cancel/pending-Timer workaround GroupScreen's own
     // tests already use (group_screen_test.dart): cancelling a
     // watchExpensesForGroup subscription in dispose() schedules a

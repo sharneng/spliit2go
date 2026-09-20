@@ -17,6 +17,15 @@ class SettingsService {
   static const _keyThemeMode = 'theme_mode';
   static const _keyPreferredLocaleTag = 'preferred_locale_tag';
 
+  Future<String?> groupListSort() async =>
+      (await SharedPreferences.getInstance()).getString('group_list_sort');
+
+  Future<void> setGroupListSort(String value) async {
+    final saved = await (await SharedPreferences.getInstance())
+        .setString('group_list_sort', value);
+    if (!saved) throw StateError('Could not save group sort');
+  }
+
   Future<ThemeMode> themeMode() async {
     final value =
         (await SharedPreferences.getInstance()).getString(_keyThemeMode);

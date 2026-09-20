@@ -9,6 +9,20 @@ import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 
 void main() {
+  test('fetchGroup reads server creation time and tolerates an absent timestamp', () async {
+    for (final created in ['2025-02-03T04:05:06.000Z', null]) {
+      final client = SpliitClient(baseUrl: 'https://example.test',
+        httpClient: MockClient((_) async => http.Response(jsonEncode([
+          {'result': {'data': {'json': {'group': {
+            'id': 'g', 'name': 'Trip', 'currency': r'$', 'participants': [],
+            if (created != null) 'createdAt': created,
+          }}}}}
+        ]), 200)));
+      final group = await client.fetchGroup('g');
+      expect(group.createdAt, created == null ? isNull : DateTime.parse(created));
+    }
+  });
+
   group('SpliitClient.fetchCategories', () {
     test('parses categories with their grouping', () async {
       final body = jsonEncode([

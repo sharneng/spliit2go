@@ -2,6 +2,9 @@ class Group {
   final String id;
   final String name;
 
+  /// Server creation timestamp; unknown for older cached groups.
+  final DateTime? createdAt;
+
   /// Free-text notes about the group -- the web app calls this field
   /// "Group information" (its Android/iOS counterparts call it "Notes";
   /// issue #23). Null/empty when unset.
@@ -25,6 +28,7 @@ class Group {
   const Group({
     required this.id,
     required this.name,
+    this.createdAt,
     this.information,
     required this.currency,
     this.currencyCode,
