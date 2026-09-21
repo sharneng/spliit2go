@@ -243,7 +243,7 @@ void main() {
         date: DateTime(2026)));
     await pump(tester, db);
     Future<void> swipe(String label, bool start) async {
-      await tester.drag(find.text('Alpha'), Offset(start ? 200 : -400, 0));
+      await tester.drag(find.text('Alpha'), Offset(start ? 200 : -300, 0));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(CustomSlidableAction, label));
       await tester.pumpAndSettle();
@@ -268,10 +268,10 @@ void main() {
     final db = await seed();
     await pump(tester, db);
     for (final step in [
-      (760.0, GroupOrganization.favorite),
-      (760.0, GroupOrganization.active),
-      (-760.0, GroupOrganization.archived),
-      (-760.0, GroupOrganization.active),
+      (460.0, GroupOrganization.favorite),
+      (460.0, GroupOrganization.active),
+      (-460.0, GroupOrganization.archived),
+      (-460.0, GroupOrganization.active),
     ]) {
       final gesture =
           await tester.startGesture(tester.getCenter(find.text('Alpha')));
@@ -287,7 +287,7 @@ void main() {
     }
   });
 
-  testWidgets('menu width is consistent across organization states',
+  testWidgets('menus size to content with comfortable horizontal padding',
       (tester) async {
     final db = await seed();
     await pump(tester, db);
@@ -299,11 +299,14 @@ void main() {
       await tester.longPress(find.text('Alpha'));
       await tester.pumpAndSettle();
       widths.add(tester.getSize(find.byType(PopupMenuItem<int>).first).width);
+      for (final item in tester
+          .widgetList<PopupMenuItem<int>>(find.byType(PopupMenuItem<int>))) {
+        expect(item.padding, const EdgeInsets.symmetric(horizontal: 20));
+      }
       await tester.tapAt(const Offset(790, 590));
       await tester.pumpAndSettle();
     }
-    expect(widths.toSet(), hasLength(1));
-    expect(widths.first, greaterThanOrEqualTo(280));
+    expect(widths.every((width) => width < 320), isTrue);
   });
 
   for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {

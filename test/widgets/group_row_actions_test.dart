@@ -1,10 +1,68 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/l10n/context_l10n.dart';
 import 'package:spliit2go/widgets/group_row_actions.dart';
 
 void main() {
+  for (final direction in [-1.0, 1.0]) {
+    for (final reverse in [false, true]) {
+      testWidgets(
+          'halfway swipe $direction reverses=$reverse with boundary haptics',
+          (tester) async {
+        final haptics = <MethodCall>[];
+        tester.binding.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          if (call.method == 'HapticFeedback.vibrate') haptics.add(call);
+          return null;
+        });
+        addTearDown(() => tester.binding.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null));
+        final actions = <int>[];
+        await tester.pumpWidget(MaterialApp(
+            home: Scaffold(
+                body: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+              width: 320,
+              child: GroupRowActions(
+                actions: [
+                  for (var i = 0; i < 3; i++)
+                    GroupRowAction(
+                        label: ['Favorite', 'Archive', 'Remove'][i],
+                        icon: Icons.star,
+                        onSelected: () => actions.add(i))
+                ],
+                builder: (_, __) =>
+                    const SizedBox(height: 80, child: Text('Row')),
+              )),
+        ))));
+        final gesture = await tester.startGesture(const Offset(160, 40));
+        await gesture.moveBy(Offset(direction * 25, 0));
+        await tester.pump();
+        await gesture.moveBy(Offset(direction * 175, 0));
+        await tester.pump();
+        expect(actions, isEmpty);
+        expect(haptics, hasLength(1));
+        if (reverse) {
+          await gesture.moveBy(Offset(-direction * 70, 0));
+          await tester.pump();
+          expect(haptics, hasLength(2));
+        }
+        await gesture.up();
+        await tester.pumpAndSettle();
+        expect(actions, reverse ? isEmpty : equals([direction > 0 ? 0 : 1]));
+        // Retraction/opening animations must not add haptics or actions.
+        expect(haptics, hasLength(reverse ? 2 : 1));
+        expect(
+            haptics.every(
+                (c) => c.arguments == 'HapticFeedbackType.selectionClick'),
+            isTrue);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
   for (final locale in [
     const Locale('en'),
     const Locale('fr'),
