@@ -356,5 +356,13 @@
         "type": "int"
       }
     }
+  },
+  "groupListActions": "Actions for {name}",
+  "@groupListActions": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   }
 }

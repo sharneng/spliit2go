@@ -160,5 +160,6 @@
   "groupListSortLast": "Dernière dépense",
   "groupListSortCreated": "Date de création",
   "groupListSortOpened": "Dernière ouverture",
-  "groupListParticipantCount": "{count, plural, =1{1 participant} other{{count} participants}}"
+  "groupListParticipantCount": "{count, plural, =1{1 participant} other{{count} participants}}",
+  "groupListActions": "Actions pour {name}"
 }
