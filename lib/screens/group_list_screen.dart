@@ -356,7 +356,9 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
   Widget _groupTile(GroupRow row) {
     final count = (jsonDecode(row.participantsJson) as List).length;
     return GroupRowActions(
-      key: ValueKey(row.id),
+      // Include organization in the key so transitioning to 'favorite' or 'archived'
+      // creates a brand-new widget; the dismissed widget is truly removed from the tree:
+      key: ValueKey('${row.id}_${row.organization.name}'),
       actions: [
         GroupRowAction(
             label: row.organization == GroupOrganization.favorite
