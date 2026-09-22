@@ -53,7 +53,7 @@ Not built yet:
 flutter test --coverage
 ```
 
-CI (`.github/workflows/ci.yml`) runs `flutter analyze` and this test suite on every push and PR, and uploads the coverage report as a build artifact. See [SETUP.md](SETUP.md) for the optional local CI loop (`scripts/run_test`).
+CI (`.github/workflows/ci.yml`) runs `flutter analyze` and this test suite on every push and PR, and uploads the coverage report as a build artifact. See [SETUP.md](SETUP.md) to run the same checks locally (`scripts/run_test`).
 
 ## License
 

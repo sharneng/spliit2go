@@ -31,7 +31,15 @@ The local database (`lib/db/`) uses drift, which needs codegen for the `.g.dart`
 dart run build_runner build --delete-conflicting-outputs
 ```
 
-## 5. Run
+## 5. Generate localization code
+
+The app's strings (`lib/l10n/app_*.arb`) are compiled to a generated `AppLocalizations` class by `flutter gen-l10n` (config in `l10n.yaml`, triggered automatically by `pubspec.yaml`'s `flutter.generate: true`). `flutter run`/`flutter test`/`flutter build` all run this for you as part of their own build, but `flutter analyze` does not — so if you run analyze (or open the project in an editor) before ever running or testing the app, generate it explicitly first or every file importing `app_localizations.dart` fails with "target of URI doesn't exist":
+
+```
+flutter gen-l10n
+```
+
+## 6. Run
 
 ```
 flutter run
@@ -55,26 +63,17 @@ cp -r /tmp/spliit2go_scaffold/ios ./ios
 
 Leave `lib/`, `pubspec.yaml`, `android/`, and the docs as they are — don't let the scaffold's versions overwrite them.
 
-## Optional: local CI on every commit
+## Running checks locally
 
-`.githooks/post-commit` `touch`es `build/trigger` after every commit -- cheap enough to run from any shell that made the commit without needing Flutter itself in that shell. A Terminal watching that file with [fswatch](https://github.com/emcrisostomo/fswatch) (`brew install fswatch`) then runs the real build/test with your actual Flutter install. This is what lets an agent working in a shell without Flutter on its `PATH` commit changes and have them actually get built and tested, without you manually kicking anything off or relaying output back.
-
-One-time setup per clone:
+`scripts/run_test` runs the full check CI runs -- `dart run build_runner build`, `flutter gen-l10n`, `flutter analyze`, `flutter test --coverage`, in that order -- and logs the result to `.flutter-ci.log` (gitignored) at the repo root:
 
 ```
-git config core.hooksPath .githooks
-mkdir -p build && touch build/trigger   # fswatch needs the path to exist first
+scripts/run_test
 ```
 
-Then, in a Terminal tab (where `flutter doctor` already works), leave this running while you're working on this project:
+Each step is bounded by [`timeout`](https://www.gnu.org/software/coreutils/timeout) (or `gtimeout`, e.g. `brew install coreutils`) if either is on `PATH`, so a genuine hang in one step (seen once, issue #55: a Flutter-test/drift interaction left a dangling `Timer`) fails loudly in the log instead of hanging indefinitely. Without `timeout`/`gtimeout` installed, steps just run unbounded. A killed step's exit status is `124`.
 
-```
-fswatch -o build/trigger | while read; do scripts/run_test; done
-```
-
-Each trigger runs `flutter analyze` + `flutter test --coverage` once and overwrites `.flutter-ci.log` (gitignored) at the repo root. Stop the loop with Ctrl-C or by closing the tab. `scripts/run_test` can also be run by hand any time.
-
-Each step inside `scripts/run_test` is bounded by [`timeout`](https://www.gnu.org/software/coreutils/timeout) (or `gtimeout`, e.g. `brew install coreutils`) if either is on `PATH` -- a genuine hang in one step (seen once, issue #55) otherwise wedges this whole loop indefinitely, since nothing watching `.flutter-ci.log` from outside that process can detect or recover from a stuck one, only a human at this terminal can. Without `timeout`/`gtimeout` installed, steps run unbounded as before.
+An earlier version of this repo also had a `.githooks/post-commit` hook and an `fswatch` loop to run this automatically after every commit -- a workaround for an early sandboxed environment that couldn't run Flutter itself at all, and so needed a side channel to trigger a real Flutter install elsewhere. That doesn't apply to a normal local setup, Claude Code, or Codex -- all three can just run `scripts/run_test` (or the individual `flutter`/`dart` commands above) directly, so that indirection has been removed.
 
 ### Android group links (#45)
 

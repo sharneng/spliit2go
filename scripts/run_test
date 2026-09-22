@@ -1,7 +1,7 @@
 #!/bin/sh
-# One-shot: runs `flutter analyze` + `flutter test --coverage` and logs
-# the result to .flutter-ci.log at the repo root. Meant to be called by
-# the fswatch loop in SETUP.md, not run standalone (though it's fine to).
+# One-shot: runs build_runner, flutter gen-l10n, flutter analyze, and
+# flutter test --coverage, and logs the result to .flutter-ci.log at
+# the repo root. Meant to be run directly (see SETUP.md).
 #
 # Deliberately NOT `set -e`: flutter analyze/test exit non-zero on any
 # lint warning or failing test -- that's exactly what we want captured
@@ -18,14 +18,13 @@ if ! command -v flutter >/dev/null 2>&1; then
 fi
 
 # Each step below is guarded by `timeout` so a genuine hang (seen once,
-# issue #55 -- a Flutter-test/drift interaction left a dangling Timer
-# and stalled the whole fswatch loop indefinitely, with no way for
-# Claude to detect or recover it over the device bridge) fails loudly
-# in the log instead of wedging this terminal until someone notices and
-# manually interrupts it. `timeout` isn't POSIX/built into macOS by
-# default; if it's missing, steps just run unbounded as before (same
-# risk as pre-#55, not a new failure mode) rather than erroring out.
-# A killed step's exit status comes back as 124 by convention.
+# issue #55 -- a Flutter-test/drift interaction left a dangling Timer)
+# fails loudly in the log instead of wedging whoever's waiting on this
+# script -- a human, an editor task, or an agent -- indefinitely.
+# `timeout` isn't POSIX/built into macOS by default; if it's missing,
+# steps just run unbounded as before (same risk as pre-#55, not a new
+# failure mode) rather than erroring out. A killed step's exit status
+# comes back as 124 by convention.
 if command -v timeout >/dev/null 2>&1; then
   RUN_TIMEOUT="timeout"
 elif command -v gtimeout >/dev/null 2>&1; then
