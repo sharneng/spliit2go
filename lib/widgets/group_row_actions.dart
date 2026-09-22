@@ -40,7 +40,7 @@ class _GroupRowActionsState extends State<GroupRowActions>
     final armed = _controller.ratio.abs() >= _actionThreshold;
     if (armed != _armed) {
       _armed = armed;
-      HapticFeedback.selectionClick();
+      HapticFeedback.mediumImpact();
     }
   }
 

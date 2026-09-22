@@ -65,7 +65,7 @@ void main() {
 
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('SPLIIT2GO'), findsOneWidget);
+    expect(find.text('Spliit2Go'), findsOneWidget);
     await tester.tap(find.byType(FloatingActionButton));
     await tester.pumpAndSettle();
     expect(find.byType(JoinGroupScreen), findsOneWidget);

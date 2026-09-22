@@ -170,7 +170,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
           const Flexible(
               child: FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: Text('SPLIIT2GO',
+                  child: Text('Spliit2Go',
                       style: TextStyle(fontWeight: FontWeight.w700)))),
         ]),
         actions: [

@@ -57,7 +57,7 @@ void main() {
         expect(haptics, hasLength(reverse ? 2 : 1));
         expect(
             haptics.every(
-                (c) => c.arguments == 'HapticFeedbackType.selectionClick'),
+                (c) => c.arguments == 'HapticFeedbackType.mediumImpact'),
             isTrue);
         expect(tester.takeException(), isNull);
       });

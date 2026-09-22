@@ -417,7 +417,7 @@ void main() {
               date: DateTime(year, 12, 31)),
       ]);
       await pump(tester, db, locale: locale, scale: 1.5);
-      expect(find.text('SPLIIT2GO'), findsOneWidget);
+      expect(find.text('Spliit2Go'), findsOneWidget);
       expect(find.text(r'$'), findsNothing);
       expect(tester.takeException(), isNull);
     });
