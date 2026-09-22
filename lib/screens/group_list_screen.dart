@@ -70,6 +70,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
   GroupListSort _sort = GroupListSort.lastOpened;
   SettingsService get _settings => widget.settings;
   int _loadVersion = 0;
+  final Map<String, int> _dismissVersions = {};
 
   /// Each joined group's cached first-to-last expense date (issue #55),
   /// keyed by [GroupRow.id] -- loaded alongside [_groups] rather than
@@ -329,6 +330,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
 
   Future<void> _performGroupAction(GroupRow row, String action) async {
     if (!mounted) return;
+    _dismissVersions[row.id] = (_dismissVersions[row.id] ?? 0) + 1;
     try {
       switch (action) {
         case 'favorite':
@@ -347,16 +349,18 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
           if (!await _confirmRemove(row)) return;
           await widget.db.leaveGroup(row.id);
       }
-      if (mounted) await _load();
     } catch (_) {
       _showSaveError();
+    } finally {
+      if (mounted) await _load(); // Always rebuild with the fresh key
     }
   }
 
   Widget _groupTile(GroupRow row) {
     final count = (jsonDecode(row.participantsJson) as List).length;
     return GroupRowActions(
-      key: ValueKey(row.id),
+      // Guarantees a fresh widget identity whenever onDismissed runs:
+      key: ValueKey('${row.id}_${_dismissVersions[row.id] ?? 0}'),
       actions: [
         GroupRowAction(
             label: row.organization == GroupOrganization.favorite

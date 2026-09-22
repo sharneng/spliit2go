@@ -149,16 +149,11 @@ class _GroupRowActionsState extends State<GroupRowActions>
   }
 
   DismissiblePane _fullSwipe(GroupRowAction action) => DismissiblePane(
-        dismissThreshold: _actionThreshold,
-        // Organization changes keep the row in the list. Close the pane before
-        // applying the action, then veto Slidable's permanent row dismissal.
-        confirmDismiss: () async {
-          await _controller.close(duration: const Duration(milliseconds: 120));
-          if (mounted) action.onSelected();
-          return false;
-        },
-        onDismissed: () {},
-      );
+    dismissThreshold: _actionThreshold,
+    onDismissed: () {
+      action.onSelected(); // Runs synchronously in onDismissed!
+    },
+  );
 
   @override
   Widget build(BuildContext context) => Listener(
