@@ -17,14 +17,14 @@ Spliit has an official [iOS app](https://github.com/spliit-app/spliit-ios) but n
 ## Architecture
 
 - **API:** Spliit's backend exposes tRPC only (no REST layer), at `{baseURL}/api/trpc` with the superjson transformer, using tRPC's batch wire format for every call. Rather than importing Spliit's server-side types for end-to-end type inference, `lib/api/spliit_client.dart` talks to it as plain HTTP+JSON and maps responses into this app's own DTOs (`lib/models/`). This keeps the client decoupled from Spliit's internal schema — an upstream change breaks one mapping function here, not the whole app. The request/response shapes are ported from [splitwise2spliit](../splitwise2spliit)'s Python client, which has already exercised this API end-to-end (group fetch, paginated expense list, expense create with even/uneven splits and settlements) importing real Splitwise data — not guessed from the server source alone.
-- **Local storage:** [drift](https://pub.dev/packages/drift) (SQLite) holds the last-synced snapshot of groups/expenses/balances, plus a `pending` flag on locally-added expenses that haven't synced yet. See `lib/db/`.
+- **Local storage:** [drift](https://pub.dev/packages/drift) (SQLite) holds the last-synced snapshot of groups and expenses, plus a `pending` flag on locally-added expenses that haven't synced yet. See `lib/db/`. Balances aren't stored — they're computed on-device from the cached expenses each time (`lib/services/balance_calculator.dart`), which is what keeps them correct offline and inclusive of pending ones.
 - **Sync:** `lib/sync/outbox.dart` — pending expenses are replayed against the API when connectivity returns. No merge logic: reads overwrite the local cache on each successful fetch, writes are append-only.
 
 Full reasoning for these choices, and for other design calls (multiple groups, date handling, the expense form, the split UX), is in [`docs/decisions/`](docs/decisions/README.md).
 
 ## Features
 
-- **Groups:** join by server URL and group id, or by opening a spliit.app group link (Android App Links). A group list with swipe-to-leave (local only, never touches the server); each group keeps its own server URL and active user, so groups on different Spliit instances can coexist. The date span of each group's expenses is shown in the list.
+- **Groups:** join by server URL and group id, or by opening a spliit.app group link (Android App Links). Each group keeps its own server URL and active user, so groups on different Spliit instances can coexist; the list shows each group's date span and is sortable (first/last expense date, creation date, last opened). The list is organized into Favorites, Active, and Archived sections (hidden when empty); swipe a row for Favorite/Archive/Remove actions, or long-press (or tap the monogram) for the same actions as a menu. A full swipe favorites or archives a group outright, native-style; Remove always needs an explicit tap and confirmation, and only removes the group from this device, never the server.
 - **Expenses:** offline-first list (cache first, live fetch in the background, pull-to-refresh). Add and edit with all four split modes (evenly, shares, percentage, amount), per-participant live amount preview, categories with search, date, a different "paid in" currency, reimbursements, recurrence, notes, and a remembered per-group default split. Expenses added offline show a pending badge and sync automatically on reconnect; the outbox stops retrying an expense the server rejects and marks it failed.
 - **Balances:** who owes whom, computed on-device from the cached expenses (so it works offline and includes pending ones), with one-tap "mark as paid" reimbursements.
 - **Stats and Activity:** spending totals per participant and per category; the group's activity feed (online only).
@@ -53,7 +53,7 @@ Not built yet:
 flutter test --coverage
 ```
 
-CI (`.github/workflows/ci.yml`) runs `flutter analyze` and this test suite on every push and PR, and uploads the coverage report as a build artifact. See [SETUP.md](SETUP.md) for the optional local CI loop (`scripts/run_test`).
+CI (`.github/workflows/ci.yml`) runs `flutter analyze` and this test suite on every push and PR, and uploads the coverage report as a build artifact. See [SETUP.md](SETUP.md) to run the same checks locally (`scripts/run_test`).
 
 ## License
 
