@@ -26,6 +26,17 @@ class _FailingSortStore extends InMemorySharedPreferencesStore {
   }
 }
 
+/// Mock database that simulates a database failure on setGroupOrganization.
+class _FailingOrganizationDatabase extends AppDatabase {
+  _FailingOrganizationDatabase() : super(NativeDatabase.memory());
+
+  @override
+  Future<void> setGroupOrganization(
+      String id, GroupOrganization organization) async {
+    throw StateError('Database write failed');
+  }
+}
+
 class _DelayedSettings extends SettingsService {
   final write = Completer<void>();
   int reads = 0;
@@ -130,6 +141,50 @@ void main() {
     expect(
         (await db.groupRow('Alpha'))!.organization, GroupOrganization.favorite);
   });
+
+  testWidgets(
+      'failed full swipe displays error, restores row, and does not crash on reload',
+      (tester) async {
+    final db = _FailingOrganizationDatabase();
+    await seed(database: db);
+    await pump(tester, db);
+
+    // Initial state: Alpha is under Active.
+    expect(find.text('Active'), findsOneWidget);
+    expect(find.text('Favorites'), findsNothing);
+
+    // 1. Perform a full swipe right to trigger Favorite:
+    final gesture =
+        await tester.startGesture(tester.getCenter(find.text('Alpha')));
+    await gesture.moveBy(const Offset(30, 0));
+    await tester.pump();
+    await gesture.moveBy(const Offset(430, 0)); // Crosses threshold
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    // 2. The database write threw an error: verify SnackBar is shown.
+    expect(find.byType(SnackBar), findsOneWidget);
+
+    // 3. Verify Alpha did NOT transition to Favorites because the write failed.
+    expect(find.text('Favorites'), findsNothing);
+    expect(find.text('Alpha'), findsOneWidget);
+
+    // 4. Trigger another reload (the exact scenario Juno identified:
+    // sorting, navigating, or refreshing after a failed dismissal).
+    await tester.tap(find.byTooltip('Sort groups'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.ancestor(
+        of: find.text('Creation date'),
+        matching: find
+            .byWidgetPredicate((widget) => widget is CheckedPopupMenuItem)));
+    await tester.pumpAndSettle();
+
+    // 5. Critical assertion: verify no "A dismissed Slidable widget is still part of the tree" exception was thrown.
+    expect(tester.takeException(), isNull);
+    expect(find.text('Alpha'), findsOneWidget);
+  });
+
   for (final throwsError in [false, true]) {
     testWidgets(
         'failed sort save preserves selection, order, and reload ($throwsError)',
