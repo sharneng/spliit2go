@@ -29,13 +29,14 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  Future<void> openGroup(WidgetTester tester, AppDatabase db) async {
+  Future<void> openGroup(WidgetTester tester, AppDatabase db,
+      {Locale locale = const Locale('en')}) async {
     final client = SpliitClient(
       baseUrl: 'https://example.test',
       httpClient: MockClient((req) async => throw Exception('offline')),
     );
     await tester.pumpWidget(MaterialApp(
-      locale: const Locale('en'),
+      locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: GroupScreen(
@@ -53,6 +54,25 @@ void main() {
 
   Future<String?> stored(AppDatabase db) async =>
       (await db.groupRow('g1'))?.activeParticipantId;
+
+  Expense coffee() => Expense(
+        id: 'e1',
+        groupId: 'g1',
+        title: 'Coffee',
+        amountCents: 500,
+        paidBy: 'alex',
+        paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
+        date: DateTime.utc(2026, 9, 16),
+      );
+
+  // A narrow phone at double system text size (#87 review).
+  void useNarrowLargeText(WidgetTester tester) {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+  }
 
   testWidgets('asks once for a group never asked before; a pick is saved and seeds the default name',
       (tester) async {
@@ -181,17 +201,7 @@ void main() {
     await db.cacheGroup(group);
     await db.setActiveParticipant('g1', nobodyParticipantId);
     // Stats shows an empty state, without the hint, until there's an expense.
-    await db.replaceServerExpenses('g1', [
-      Expense(
-        id: 'e1',
-        groupId: 'g1',
-        title: 'Coffee',
-        amountCents: 500,
-        paidBy: 'alex',
-        paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
-        date: DateTime.utc(2026, 9, 16),
-      ),
-    ]);
+    await db.replaceServerExpenses('g1', [coffee()]);
 
     await openGroup(tester, db);
     await tester.tap(find.text('Stats'));
@@ -212,4 +222,51 @@ void main() {
     expect(find.text(statsHint), findsNothing);
     await closeGroup(tester);
   });
+
+  testWidgets('French at double text size on a narrow phone: the prompt wraps long labels (#87 review)',
+      (tester) async {
+    useNarrowLargeText(tester);
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.cacheGroup(const Group(id: 'g1', name: 'Banff', currency: '\$', participants: [
+      Participant(id: 'alex', name: 'Alex'),
+      Participant(id: 'bart', name: 'Bartholomew Montgomery-Fitzgerald'),
+    ]));
+
+    await openGroup(tester, db, locale: const Locale('fr'));
+    expect(find.text('Qui êtes-vous ?'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(tester.getRect(find.text('Je ne suis pas dans la liste')).right,
+        lessThanOrEqualTo(360));
+    await closeGroup(tester);
+  });
+
+  // The Stats button shows the same picker with the current choice
+  // checked. Rendered directly: at this size the Stats tab behind it has
+  // its own, separate layout overflow.
+  for (final checkedId in [nobodyParticipantId, 'bart']) {
+    testWidgets('French at double text size on a narrow phone: the picker with "$checkedId" checked fits (#87 review)',
+        (tester) async {
+      useNarrowLargeText(tester);
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('fr'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ActiveUserPicker(
+          participants: const [
+            Participant(id: 'alex', name: 'Alex'),
+            Participant(id: 'bart', name: 'Bartholomew Montgomery-Fitzgerald'),
+          ],
+          checkedId: checkedId,
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byIcon(Icons.check), findsOneWidget);
+      for (final label in ['Je ne suis pas dans la liste', 'Bartholomew Montgomery-Fitzgerald']) {
+        expect(tester.getRect(find.text(label)).right, lessThanOrEqualTo(360));
+      }
+    });
+  }
 }

@@ -631,34 +631,11 @@ class _GroupScreenState extends State<GroupScreen> {
   /// group, on this phone". On the first ask, dismissing counts as
   /// "Nobody" so it's never asked again; from Stats it changes nothing.
   Future<void> _pickActiveUser({required bool firstAsk}) async {
-    final nobodyChecked = !firstAsk && _activeUserId == null;
     final selected = await showDialog<String>(
       context: context,
-      builder: (context) => SimpleDialog(
-        title: Text(context.l10n.groupScreenActiveUserDialogTitle),
-        children: [
-          for (final p in _group!.participants)
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(context).pop(p.id),
-              child: Row(
-                children: [
-                  if (_activeUserId == p.id) const Icon(Icons.check, size: 18),
-                  if (_activeUserId == p.id) const SizedBox(width: 8),
-                  Text(p.name),
-                ],
-              ),
-            ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.of(context).pop(nobodyParticipantId),
-            child: Row(
-              children: [
-                if (nobodyChecked) const Icon(Icons.check, size: 18),
-                if (nobodyChecked) const SizedBox(width: 8),
-                Text(context.l10n.groupScreenActiveUserNone),
-              ],
-            ),
-          ),
-        ],
+      builder: (context) => ActiveUserPicker(
+        participants: _group!.participants,
+        checkedId: firstAsk ? null : _activeUserId ?? nobodyParticipantId,
       ),
     );
     if (selected == null && !firstAsk) return;
@@ -674,5 +651,44 @@ class _GroupScreenState extends State<GroupScreen> {
       }
     }
     if (mounted) setState(() => _activeUserId = newId);
+  }
+}
+
+/// The "Who are you?" dialog: pops a participant's id, or
+/// [nobodyParticipantId] for "Nobody" (listed last).
+class ActiveUserPicker extends StatelessWidget {
+  const ActiveUserPicker({super.key, required this.participants, this.checkedId});
+
+  final List<Participant> participants;
+
+  /// The option to show checked: a participant's id, [nobodyParticipantId],
+  /// or null for none.
+  final String? checkedId;
+
+  @override
+  Widget build(BuildContext context) {
+    return SimpleDialog(
+      title: Text(context.l10n.groupScreenActiveUserDialogTitle),
+      children: [
+        for (final p in participants) _option(context, p.id, p.name),
+        _option(context, nobodyParticipantId, context.l10n.groupScreenActiveUserNone),
+      ],
+    );
+  }
+
+  Widget _option(BuildContext context, String id, String label) {
+    return SimpleDialogOption(
+      onPressed: () => Navigator.of(context).pop(id),
+      child: Row(
+        children: [
+          if (checkedId == id) ...[
+            const Icon(Icons.check, size: 18),
+            const SizedBox(width: 8),
+          ],
+          // Flexible so a long label wraps at large text sizes.
+          Flexible(child: Text(label)),
+        ],
+      ),
+    );
   }
 }
