@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
+import 'package:spliit2go/main.dart' show spliit2goAppBuilder;
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/activity_screen.dart';
@@ -498,19 +499,26 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
     });
 
-    testWidgets('the add button and search icon only show on the Expenses tab', (tester) async {
+    testWidgets('the add button only shows on the Expenses tab; search is in the bottom bar on every tab (#84)',
+        (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       await pumpGroupScreen(tester, db);
 
+      final searchInAppBar =
+          find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.search));
       expect(find.byType(FloatingActionButton), findsOneWidget);
       expect(find.byIcon(Icons.search), findsOneWidget);
+      expect(searchInAppBar, findsNothing);
 
-      await tester.tap(find.text('Balance'));
-      await tester.pumpAndSettle();
+      for (final tab in ['Balance', 'Stats', 'Activities']) {
+        await tester.tap(find.text(tab));
+        await tester.pumpAndSettle();
 
-      expect(find.byType(FloatingActionButton), findsNothing);
-      expect(find.byIcon(Icons.search), findsNothing);
+        expect(find.byType(FloatingActionButton), findsNothing);
+        expect(find.byIcon(Icons.search), findsOneWidget);
+        expect(searchInAppBar, findsNothing);
+      }
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
@@ -577,6 +585,143 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Search is coming soon (issue #39).'), findsOneWidget);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('tapping the search icon on another tab shows the placeholder message too (#84)',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpGroupScreen(tester, db);
+
+      await tester.tap(find.text('Stats'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.search));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Search is coming soon (issue #39).'), findsOneWidget);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    NavigationDestinationLabelBehavior labelBehavior(WidgetTester tester) =>
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).labelBehavior!;
+
+    testWidgets('tab labels show when they fit beside the search button (#84)', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpGroupScreen(tester, db);
+
+      expect(labelBehavior(tester), NavigationDestinationLabelBehavior.alwaysShow);
+      final screenHeight = tester.getSize(find.byType(GroupScreen)).height;
+      expect(tester.getTopLeft(find.byType(NavigationBar)).dy,
+          screenHeight - tester.getSize(find.byType(NavigationBar)).height,
+          reason: 'the bottom bar must stay at its own height, not take over the screen');
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('tab labels hide, but stay as tooltips, when a label is too wide for its tab (#84)',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpGroupScreen(tester, db);
+
+      expect(labelBehavior(tester), NavigationDestinationLabelBehavior.alwaysHide);
+      expect(find.byTooltip('Stats'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.bar_chart_outlined));
+      await tester.pumpAndSettle();
+      expect(find.byType(StatsScreen), findsOneWidget);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    // Landscape on a phone with a side cutout and a home indicator.
+    void useLandscapeWithInsets(WidgetTester tester) {
+      tester.view.physicalSize = const Size(844, 390);
+      tester.view.devicePixelRatio = 1;
+      tester.view.padding = const FakeViewPadding(left: 47, right: 47, bottom: 21);
+      addTearDown(tester.view.reset);
+    }
+
+    Future<void> pumpWithBuilder(WidgetTester tester, AppDatabase db,
+        {Locale locale = const Locale('en'), TransitionBuilder? builder}) async {
+      await db.cacheGroup(cachedGroup);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => throw Exception('offline')),
+      );
+      await tester.pumpWidget(MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: builder,
+        home: GroupScreen(
+            client: client, db: db, outbox: Outbox(db, client, groupId: 'g1'), groupId: 'g1'),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    void expectBottomBarInsideSafeArea(WidgetTester tester) {
+      final search = tester.getRect(find.byIcon(Icons.search));
+      final bar = tester.getRect(find.byType(NavigationBar));
+      expect(bar.left, 47, reason: 'tabs start at the safe edge, not doubly inset');
+      expect(search.right, lessThanOrEqualTo(844 - 47));
+      expect(bar.bottom, 390 - 21);
+      expect(search.top, greaterThanOrEqualTo(bar.top));
+      expect(search.bottom, lessThanOrEqualTo(bar.bottom));
+    }
+
+    testWidgets('the whole bottom bar, search included, stays inside safe-area insets (#84 review)',
+        (tester) async {
+      useLandscapeWithInsets(tester);
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpWithBuilder(tester, db);
+
+      expectBottomBarInsideSafeArea(tester);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('inside the app-wide SafeArea too, the insets are not applied twice (#84 review)',
+        (tester) async {
+      useLandscapeWithInsets(tester);
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpWithBuilder(tester, db, builder: spliit2goAppBuilder);
+
+      expectBottomBarInsideSafeArea(tester);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('French at double text size on a narrow phone hides labels without overflowing (#84 review)',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpWithBuilder(tester, db, locale: const Locale('fr'));
+
+      expect(tester.takeException(), isNull);
+      expect(labelBehavior(tester), NavigationDestinationLabelBehavior.alwaysHide);
+      expect(find.byTooltip('Statistiques'), findsOneWidget);
+      expect(tester.getRect(find.byIcon(Icons.search)).right, lessThanOrEqualTo(360));
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
