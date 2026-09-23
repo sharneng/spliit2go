@@ -30,9 +30,9 @@ class DateSpan {
 /// "2026-01-02 -- 2026-01-02" instead of collapsing to a single date
 /// (caught in review of this feature -- see issue #55).
 ///
-/// Null if [rows] is empty -- a group with no cached expenses at all
-/// (a just-joined group whose expenses haven't been fetched down yet,
-/// or a genuinely brand-new group with zero expenses).
+/// Null if [rows] is empty -- a group with zero expenses, or one joined
+/// before joining started caching expenses (issue #81) and not opened
+/// since.
 DateSpan? computeDateSpan(List<ExpenseRow> rows) {
   if (rows.isEmpty) return null;
   DateTime dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
