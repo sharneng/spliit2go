@@ -495,19 +495,26 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
     });
 
-    testWidgets('the add button and search icon only show on the Expenses tab', (tester) async {
+    testWidgets('the add button only shows on the Expenses tab; search is in the bottom bar on every tab (#84)',
+        (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       await pumpGroupScreen(tester, db);
 
+      final searchInAppBar =
+          find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.search));
       expect(find.byType(FloatingActionButton), findsOneWidget);
       expect(find.byIcon(Icons.search), findsOneWidget);
+      expect(searchInAppBar, findsNothing);
 
-      await tester.tap(find.text('Balance'));
-      await tester.pumpAndSettle();
+      for (final tab in ['Balance', 'Stats', 'Activities']) {
+        await tester.tap(find.text(tab));
+        await tester.pumpAndSettle();
 
-      expect(find.byType(FloatingActionButton), findsNothing);
-      expect(find.byIcon(Icons.search), findsNothing);
+        expect(find.byType(FloatingActionButton), findsNothing);
+        expect(find.byIcon(Icons.search), findsOneWidget);
+        expect(searchInAppBar, findsNothing);
+      }
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
@@ -574,6 +581,61 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Search is coming soon (issue #39).'), findsOneWidget);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('tapping the search icon on another tab shows the placeholder message too (#84)',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpGroupScreen(tester, db);
+
+      await tester.tap(find.text('Stats'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.search));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Search is coming soon (issue #39).'), findsOneWidget);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    NavigationDestinationLabelBehavior labelBehavior(WidgetTester tester) =>
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).labelBehavior!;
+
+    testWidgets('tab labels show when they fit beside the search button (#84)', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpGroupScreen(tester, db);
+
+      expect(labelBehavior(tester), NavigationDestinationLabelBehavior.alwaysShow);
+      final screenHeight = tester.getSize(find.byType(GroupScreen)).height;
+      expect(tester.getTopLeft(find.byType(NavigationBar)).dy,
+          screenHeight - tester.getSize(find.byType(NavigationBar)).height,
+          reason: 'the bottom bar must stay at its own height, not take over the screen');
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('tab labels hide, but stay as tooltips, when a label is too wide for its tab (#84)',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpGroupScreen(tester, db);
+
+      expect(labelBehavior(tester), NavigationDestinationLabelBehavior.alwaysHide);
+      expect(find.byTooltip('Stats'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.bar_chart_outlined));
+      await tester.pumpAndSettle();
+      expect(find.byType(StatsScreen), findsOneWidget);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
