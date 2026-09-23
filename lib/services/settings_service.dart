@@ -91,7 +91,8 @@ class SettingsService {
   /// see [resolveActiveParticipant] in lib/services/active_user.dart and
   /// decisions/multi-group-design.md, decision 2. Never synced to the
   /// server; purely a local convenience, same as the per-group choice it
-  /// helps seed.
+  /// helps seed. Set from the first person picked in "Who are you?"
+  /// (issue #85), or by the legacy single-group migration.
   Future<String?> defaultActiveUserName() async =>
       (await SharedPreferences.getInstance())
           .getString(_keyDefaultActiveUserName);

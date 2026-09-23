@@ -73,3 +73,12 @@ Fix: `_Root` now always shows `GroupListScreen` as `home:` (the app's one true r
 Net effect: same one-tap-to-last-group experience for the common case, but the list is always the stable thing you land back on, however you got into a group screen (last-used auto-open, or tapping a row).
 
 Verified: `flutter analyze` clean, all 68 tests still passing (no new tests needed — this was a navigation-structure change, not new behavior; `_Root` remains untested in isolation, a pre-existing limitation noted above).
+
+## Active-user prompt (2026-09-23, issue #85)
+
+Until #85, `GroupScreen` never actually asked (step 3 above): an unresolved group just had no active user, and a person icon in the top bar let you pick one. That icon is gone; instead:
+
+- **Ask at most once per group, ever.** Opening a group that has never had an active user (stored `null`) and no default-name match shows "Who are you?", listing its participants plus **Nobody**. Groups with no participants aren't asked.
+- **"Nobody" is stored, not `null`.** Choosing Nobody, or dismissing the dialog, stores the marker `nobodyParticipantId` (`'#nobody'`, never a real Spliit nanoid) in the existing `activeParticipantId` column, so "asked, nobody" differs from "never asked" without a schema change. A stored id whose participant has left the group is also treated as nobody (after a default-name match attempt) rather than asking again.
+- **The first pick seeds the default name** — the "not in v1" item above. A fresh install never had a default name (only the legacy migration set one), so every group would otherwise ask once, including each group moved to a new device.
+- **Changing it later:** with nobody set, the Stats tab's "Pick an active user…" hint is a button that opens the same picker. Changing an already-chosen person is deferred to the Stats screen cleanup (spliit-ios does it there too). The group-settings checkbox originally proposed in #83 was dropped: the active user is device-only, while group settings saves to the server.

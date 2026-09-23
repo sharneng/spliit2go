@@ -20,7 +20,10 @@ void main() {
   // GroupScreen's _resolveActiveUser awaits
   // SettingsService.defaultActiveUserName() -> SharedPreferences.
   // getInstance(); without this it hangs forever in a widget test.
-  SharedPreferences.setMockInitialValues({});
+  // "Ken" auto-matches every group here, so the one-time "Who are you?"
+  // prompt (issue #85, tested in group_screen_active_user_test.dart)
+  // stays out of the way.
+  SharedPreferences.setMockInitialValues({'default_active_user_name': 'Ken'});
 
   // Every request throws, simulating no connectivity -- matches what a
   // real network failure looks like to SpliitClient's callers.
