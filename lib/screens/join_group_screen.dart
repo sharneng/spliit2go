@@ -23,6 +23,10 @@ import '../services/settings_service.dart';
 /// Requires connectivity: joining means confirming a real group exists
 /// and caching its actual data, not just remembering an id someone
 /// typed, so there's no offline path here the way add-expense has one.
+///
+/// Joining caches the group's expenses too, and fails if they can't be
+/// fetched: a joined group must be viewable offline right away
+/// (issue #81).
 class JoinGroupScreen extends StatefulWidget {
   final AppDatabase db;
   final String? initialUrl;
@@ -78,8 +82,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
     try {
       final client = widget.clientFactory(serverUrl);
       final group = await client.fetchGroup(groupId);
-      await widget.db.cacheGroup(group);
-      await widget.db.recordGroupOpened(group.id, serverUrl: serverUrl);
+      final expenses = await client.fetchExpenses(group.id);
 
       // Seed this group's active participant the same way GroupScreen
       // resolves it on open, so it's not left unresolved right after
@@ -90,9 +93,18 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
         defaultActiveUserName: defaultName,
         participants: group.participants,
       );
-      if (resolution case ActiveParticipantAutoMatched(:final participantId)) {
-        await widget.db.setActiveParticipant(group.id, participantId);
-      }
+
+      // One transaction so a failed write can't leave a joined group
+      // without its expenses.
+      await widget.db.transaction(() async {
+        await widget.db.cacheGroup(group);
+        await widget.db.replaceServerExpenses(group.id, expenses);
+        await widget.db.recordGroupOpened(group.id, serverUrl: serverUrl);
+        if (resolution
+            case ActiveParticipantAutoMatched(:final participantId)) {
+          await widget.db.setActiveParticipant(group.id, participantId);
+        }
+      });
 
       if (!mounted) return;
       Navigator.of(context).pop(group.id);
