@@ -200,18 +200,6 @@ class _GroupScreenState extends State<GroupScreen> {
       appBar: AppBar(
         title: Text(_group?.name ?? 'spliit2go'),
         actions: [
-          // Only on the Expenses tab -- there's nothing to search on the
-          // other three, same reasoning spliit-ios's own search tab
-          // uses (it only ever searches expenses). Just a placeholder
-          // for now (issue #38 explicitly deferred the real search
-          // feature to issue #39): tapping it says so rather than doing
-          // nothing with no feedback at all.
-          if (_tabIndex == 0)
-            IconButton(
-              icon: const Icon(Icons.search),
-              tooltip: context.l10n.groupScreenSearchTooltip,
-              onPressed: _group == null ? null : _searchPlaceholder,
-            ),
           IconButton(
             icon: const Icon(Icons.person_outline),
             tooltip: context.l10n.groupScreenActiveUserTooltip,
@@ -241,30 +229,104 @@ class _GroupScreenState extends State<GroupScreen> {
       // screen, spliit-ios style (GroupDetailView.swift's own TabView:
       // Expenses/Balances/Stats, plus a fourth tab -- Information there,
       // Activities here, per what was actually asked for in this issue).
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tabIndex,
-        onDestinationSelected: (i) => setState(() => _tabIndex = i),
-        destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.receipt_long_outlined),
-            selectedIcon: const Icon(Icons.receipt_long),
-            label: context.l10n.groupScreenTabExpenses,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.account_balance_wallet_outlined),
-            selectedIcon: const Icon(Icons.account_balance_wallet),
-            label: context.l10n.groupScreenTabBalance,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.bar_chart_outlined),
-            selectedIcon: const Icon(Icons.bar_chart),
-            label: context.l10n.groupScreenTabStats,
-          ),
-          NavigationDestination(
-              icon: const Icon(Icons.history), label: context.l10n.groupScreenTabActivities),
-        ],
+      bottomNavigationBar: _bottomBar(context),
+    );
+  }
+
+  static const _searchSlotWidth = 64.0;
+
+  /// The tabs plus a separate round search button at the right end, on
+  /// every tab, like spliit-ios (issue #84) -- search opens its own
+  /// screen rather than being a tab.
+  Widget _bottomBar(BuildContext context) {
+    final labels = [
+      context.l10n.groupScreenTabExpenses,
+      context.l10n.groupScreenTabBalance,
+      context.l10n.groupScreenTabStats,
+      context.l10n.groupScreenTabActivities,
+    ];
+    return ColoredBox(
+      color: NavigationBarTheme.of(context).backgroundColor ??
+          Theme.of(context).colorScheme.surfaceContainer,
+      // spliit2goAppBuilder already removes these insets app-wide; this
+      // keeps the whole row (search included) inside them on its own too.
+      child: SafeArea(
+        top: false,
+        child: LayoutBuilder(builder: (context, constraints) {
+          final tabWidth =
+              (constraints.maxWidth - _searchSlotWidth) / labels.length;
+          return Row(
+            children: [
+              Expanded(
+                child: NavigationBar(
+                  selectedIndex: _tabIndex,
+                  onDestinationSelected: (i) => setState(() => _tabIndex = i),
+                  // Hidden labels stay available as each tab's tooltip.
+                  labelBehavior: _labelsFit(context, labels, tabWidth)
+                      ? NavigationDestinationLabelBehavior.alwaysShow
+                      : NavigationDestinationLabelBehavior.alwaysHide,
+                  destinations: [
+                    NavigationDestination(
+                      icon: const Icon(Icons.receipt_long_outlined),
+                      selectedIcon: const Icon(Icons.receipt_long),
+                      label: labels[0],
+                    ),
+                    NavigationDestination(
+                      icon: const Icon(Icons.account_balance_wallet_outlined),
+                      selectedIcon: const Icon(Icons.account_balance_wallet),
+                      label: labels[1],
+                    ),
+                    NavigationDestination(
+                      icon: const Icon(Icons.bar_chart_outlined),
+                      selectedIcon: const Icon(Icons.bar_chart),
+                      label: labels[2],
+                    ),
+                    NavigationDestination(
+                        icon: const Icon(Icons.history), label: labels[3]),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: _searchSlotWidth,
+                child: Center(
+                  heightFactor: 1,
+                  child: IconButton.filledTonal(
+                    icon: const Icon(Icons.search),
+                    tooltip: context.l10n.groupScreenSearchTooltip,
+                    onPressed: _group == null ? null : _searchPlaceholder,
+                  ),
+                ),
+              ),
+            ],
+          );
+        }),
       ),
     );
+  }
+
+  /// NavigationBar never ellipsizes a label: one too wide for its tab
+  /// wraps mid-word ("Statistiq/ues" in French on a narrow phone), so
+  /// labels are measured up front and hidden if any doesn't fit.
+  bool _labelsFit(BuildContext context, List<String> labels, double tabWidth) {
+    final style = NavigationBarTheme.of(context)
+            .labelTextStyle
+            ?.resolve({WidgetState.selected}) ??
+        Theme.of(context).textTheme.labelMedium;
+    // NavigationBar caps label text scaling at 1.3 (its private
+    // _kMaxLabelTextScaleFactor); measure the same way.
+    final scaler = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3);
+    for (final label in labels) {
+      final painter = TextPainter(
+        text: TextSpan(text: label, style: style),
+        textDirection: Directionality.of(context),
+        textScaler: scaler,
+        maxLines: 1,
+      )..layout();
+      final width = painter.width;
+      painter.dispose();
+      if (width > tabWidth - 8) return false;
+    }
+    return true;
   }
 
   /// This tab's content, resolved fresh on every switch rather than kept
