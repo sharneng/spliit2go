@@ -73,6 +73,9 @@ class Expenses extends Table {
   /// shows it as needing the user's attention (retry or delete) instead.
   BoolColumn get syncFailed => boolean().withDefault(const Constant(false))();
 
+  /// See [Expense.createdAt]: the tiebreak between same-day expenses.
+  DateTimeColumn get createdAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -154,7 +157,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -216,14 +219,43 @@ class AppDatabase extends _$AppDatabase {
               await m.alterTable(TableMigration(groups));
             }
           }
+          if (from < 10) {
+            // Filled by the next refresh; see Expenses.createdAt.
+            await m.addColumn(expenses, expenses.createdAt);
+          }
         },
       );
 
+  /// Spliit's own list order (issue #88): calendar day, then creation
+  /// time, both newest first, with an unknown creation time last. By
+  /// calendar day rather than the stored value, because an expense added
+  /// offline keeps the time of day it was entered while fetched ones sit
+  /// at midnight. Sorted here, not in SQL, to use the same local calendar
+  /// as the date sections.
+  static List<ExpenseRow> _newestFirst(List<ExpenseRow> rows) {
+    int day(DateTime d) => d.year * 10000 + d.month * 100 + d.day;
+    return rows
+      ..sort((a, b) {
+        final byDay = day(b.date).compareTo(day(a.date));
+        if (byDay != 0) return byDay;
+        final (ca, cb) = (a.createdAt, b.createdAt);
+        if (ca != null && cb != null) {
+          final byCreation = cb.compareTo(ca);
+          if (byCreation != 0) return byCreation;
+        } else if (ca != cb) {
+          return ca == null ? 1 : -1;
+        }
+        // Deterministic from here on; Dart's sort isn't stable.
+        final byTime = b.date.compareTo(a.date);
+        return byTime != 0 ? byTime : a.id.compareTo(b.id);
+      });
+  }
+
   Future<List<ExpenseRow>> expensesForGroup(String groupId) {
     return (select(expenses)
-          ..where((e) => e.groupId.equals(groupId))
-          ..orderBy([(e) => OrderingTerm.desc(e.date)]))
-        .get();
+          ..where((e) => e.groupId.equals(groupId)))
+        .get()
+        .then(_newestFirst);
   }
 
   /// Same query as [expensesForGroup], as a live [Stream] instead of a
@@ -237,9 +269,9 @@ class AppDatabase extends _$AppDatabase {
   /// mutation.
   Stream<List<ExpenseRow>> watchExpensesForGroup(String groupId) {
     return (select(expenses)
-          ..where((e) => e.groupId.equals(groupId))
-          ..orderBy([(e) => OrderingTerm.desc(e.date)]))
-        .watch();
+          ..where((e) => e.groupId.equals(groupId)))
+        .watch()
+        .map(_newestFirst);
   }
 
   Future<List<ExpenseRow>> pendingExpenses() {
@@ -396,6 +428,7 @@ class AppDatabase extends _$AppDatabase {
         originalCurrency: Value(e.originalCurrency),
         conversionRate: Value(e.conversionRate),
         pending: Value(e.pending),
+        createdAt: Value(e.createdAt),
       );
 
   /// Device-local organization, never sent to the server or changed by refresh.
@@ -606,5 +639,6 @@ class AppDatabase extends _$AppDatabase {
         pending: row.pending,
         syncFailed: row.syncFailed,
         lastError: row.lastError,
+        createdAt: row.createdAt,
       );
 }

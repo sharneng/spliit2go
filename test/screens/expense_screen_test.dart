@@ -86,6 +86,9 @@ void main() {
     expect(expense.splitMode, SplitMode.evenly);
     expect(expense.paidFor.map((s) => s.participantId).toSet(), {'alex', 'bea', 'cid'});
     expect(expense.paidFor.every((s) => s.shares == 1), isTrue);
+    // Orders it among same-day expenses until a refresh brings the
+    // server's own creation time (#88).
+    expect(expense.createdAt, isNotNull);
   });
 
   testWidgets('excluding a participant leaves them out of paidFor', (tester) async {

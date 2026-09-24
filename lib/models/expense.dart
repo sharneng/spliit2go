@@ -147,6 +147,12 @@ class Expense {
   /// the API, which was never queued in the first place).
   final String? lastError;
 
+  /// When the expense was created: the server's timestamp, or this
+  /// device's clock for one added offline and not yet refreshed. Orders
+  /// same-day expenses newest-created first, as Spliit's own list does
+  /// (issue #88). Null only for rows cached before it was stored.
+  final DateTime? createdAt;
+
   const Expense({
     required this.id,
     required this.groupId,
@@ -166,5 +172,6 @@ class Expense {
     this.pending = false,
     this.syncFailed = false,
     this.lastError,
+    this.createdAt,
   });
 }

@@ -1009,6 +1009,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       originalCurrency: originalCurrency,
       conversionRate: conversionRate,
       pending: true,
+      createdAt: DateTime.now(),
     );
 
     // Written locally first -- this succeeds regardless of connectivity,

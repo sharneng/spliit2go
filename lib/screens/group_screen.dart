@@ -10,6 +10,7 @@ import '../models/category.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
 import '../services/active_user.dart';
+import '../services/expense_date_group.dart';
 import '../services/settings_service.dart';
 import '../sync/outbox.dart';
 import '../utils/date_format.dart';
@@ -401,10 +402,21 @@ class _GroupScreenState extends State<GroupScreen> {
     if (_expenses.isEmpty) {
       return Center(child: Text(context.l10n.commonNoExpensesYet));
     }
+    // Section headers interleaved with expenses (issue #88), still built
+    // lazily: each row is an ExpenseDateGroup header or an Expense.
+    final rows = <Object>[
+      for (final (group, expenses) in groupExpensesByDate(
+        _expenses,
+        today: DateTime.now(),
+        firstWeekday: firstWeekdayFor(View.of(context).platformDispatcher.locale),
+      )) ...[group, ...expenses],
+    ];
     return ListView.builder(
-      itemCount: _expenses.length,
+      itemCount: rows.length,
       itemBuilder: (context, i) {
-        final e = _expenses[i];
+        final row = rows[i];
+        if (row is ExpenseDateGroup) return _sectionHeader(row);
+        final e = row as Expense;
         return ListTile(
           leading: CategoryIconGlyph(category: _categoryFor(e.category)),
           title: Text(e.title),
@@ -451,6 +463,39 @@ class _GroupScreenState extends State<GroupScreen> {
               : (e.pending ? null : () => _openEditExpense(e)),
         );
       },
+    );
+  }
+
+  /// Small bold capitals in a muted color, like spliit-ios's
+  /// DateBucketHeader, so it reads as a divider rather than an entry.
+  /// Screen readers get the words in their natural case, as a heading.
+  Widget _sectionHeader(ExpenseDateGroup group) {
+    final l10n = context.l10n;
+    final title = switch (group) {
+      ExpenseDateGroup.upcoming => l10n.groupScreenSectionUpcoming,
+      ExpenseDateGroup.thisWeek => l10n.groupScreenSectionThisWeek,
+      ExpenseDateGroup.earlierThisMonth => l10n.groupScreenSectionEarlierThisMonth,
+      ExpenseDateGroup.lastMonth => l10n.groupScreenSectionLastMonth,
+      ExpenseDateGroup.earlierThisYear => l10n.groupScreenSectionEarlierThisYear,
+      ExpenseDateGroup.lastYear => l10n.groupScreenSectionLastYear,
+      ExpenseDateGroup.older => l10n.groupScreenSectionOlder,
+    };
+    final theme = Theme.of(context);
+    return Semantics(
+      header: true,
+      label: title,
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+        child: Text(
+          title.toUpperCase(),
+          style: theme.textTheme.labelMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.72,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
     );
   }
 

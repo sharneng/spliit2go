@@ -746,4 +746,52 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
     });
   });
+
+  group('date sections (issue #88)', () {
+    // Relative to the real today, so each lands in the same section
+    // whatever day the tests run.
+    Expense dated(String title, DateTime date) => Expense(
+        id: title,
+        groupId: 'g1',
+        title: title,
+        amountCents: 100,
+        paidBy: 'p1',
+        paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+        date: date);
+
+    testWidgets('expenses sit under their date headings, in display order', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.cacheGroup(const Group(
+          id: 'g1', name: 'Banff Trip', currency: '\$', participants: [Participant(id: 'p1', name: 'Ken')]));
+      final now = DateTime.now();
+      await db.replaceServerExpenses('g1', [
+        dated('Long ago', DateTime(now.year - 3, 1, 1)),
+        dated('Tomorrow', DateTime(now.year, now.month, now.day + 1)),
+        dated('Today', DateTime(now.year, now.month, now.day)),
+      ]);
+      final client = offlineClient();
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: GroupScreen(client: client, db: db, outbox: Outbox(db, client, groupId: 'g1'), groupId: 'g1'),
+      ));
+      await tester.pumpAndSettle();
+
+      double top(String text) => tester.getTopLeft(find.text(text)).dy;
+      final order = ['UPCOMING', 'Tomorrow', 'THIS WEEK', 'Today', 'OLDER', 'Long ago'];
+      for (var i = 1; i < order.length; i++) {
+        expect(top(order[i]), greaterThan(top(order[i - 1])), reason: '${order[i]} after ${order[i - 1]}');
+      }
+      expect(find.text('EARLIER THIS MONTH'), findsNothing, reason: 'empty sections are skipped');
+      // Read as a heading, in its natural case.
+      expect(find.bySemanticsLabel('This week'), findsOneWidget);
+      semantics.dispose();
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+  });
 }
