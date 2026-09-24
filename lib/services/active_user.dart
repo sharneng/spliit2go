@@ -104,3 +104,24 @@ ActiveParticipantResolution resolveActiveParticipant({
       ? const ActiveParticipantNeedsPrompt()
       : const ActiveParticipantNobody();
 }
+
+/// Who to credit in Spliit's activity log for a change made on this
+/// device (issue #92): the group's stored active participant, if they're
+/// still in the group. Null otherwise -- never asked, "Nobody"
+/// ([nobodyParticipantId], which must never reach the server), or someone
+/// who has since left -- and the client then sends Spliit's own `'None'`.
+///
+/// Deliberately the stored choice only, not [resolveActiveParticipant]'s
+/// name auto-match: GroupScreen persists an auto-match as soon as it
+/// makes one, so by the time anyone saves an expense the stored value is
+/// already the answer, and crediting a guess that was never saved would
+/// disagree with the rest of the UI.
+String? activityParticipantId({
+  required String? storedActiveParticipantId,
+  required List<Participant> participants,
+}) {
+  if (storedActiveParticipantId == null) return null;
+  return participants.any((p) => p.id == storedActiveParticipantId)
+      ? storedActiveParticipantId
+      : null;
+}

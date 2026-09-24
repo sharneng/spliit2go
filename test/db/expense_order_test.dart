@@ -78,6 +78,8 @@ void main() {
     final old = AppDatabase(NativeDatabase(file));
     await old.replaceServerExpenses('g1', [expense('e1', DateTime(2026, 9, 20))]);
     await old.customStatement('ALTER TABLE expenses DROP COLUMN created_at');
+    await old.customStatement(
+        'ALTER TABLE expenses DROP COLUMN added_by_participant_id');
     await old.customStatement('PRAGMA user_version = 9');
     await old.close();
 

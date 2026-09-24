@@ -327,10 +327,21 @@ class SpliitClient {
     };
   }
 
+  /// The `participantId` Spliit records in its activity log for a
+  /// create/update (issue #92) -- who made the change. Spliit-web sends
+  /// the group's active user, or the literal `'None'` when the user
+  /// declined to pick one; this does the same, so a null [participantId]
+  /// (no active user on this device) is logged unattributed exactly as
+  /// before. Upstream stores it as a plain string, not a foreign key, so
+  /// an id for someone who has since left the group can't fail the write.
+  static String _activityParticipant(String? participantId) =>
+      participantId ?? 'None';
+
   /// Creates an expense (or, with [isReimbursement], a settlement payment)
   /// on the server. Called either immediately (online) or later by the
   /// outbox once connectivity returns (see lib/sync/outbox.dart) -- this
-  /// method itself has no offline logic.
+  /// method itself has no offline logic. [participantId] is who to credit
+  /// in Spliit's activity log (see [_activityParticipant]).
   Future<String> createExpense({
     required String groupId,
     required String title,
@@ -347,6 +358,7 @@ class SpliitClient {
     int? originalAmountCents,
     String? originalCurrency,
     double? conversionRate,
+    String? participantId,
   }) async {
     final expenseFormValues = _expenseFormValues(
       title: title,
@@ -371,7 +383,7 @@ class SpliitClient {
         'json': {
           'groupId': groupId,
           'expenseFormValues': expenseFormValues,
-          'participantId': 'None',
+          'participantId': _activityParticipant(participantId),
         },
         'meta': {
           'values': {
@@ -413,6 +425,9 @@ class SpliitClient {
   /// fetch the expense fresh with [fetchExpense] immediately before
   /// showing the edit form, rather than editing a possibly-stale locally
   /// cached copy -- not a real guarantee.
+  ///
+  /// [participantId] is who to credit in Spliit's activity log (see
+  /// [_activityParticipant]).
   Future<String> updateExpense({
     required String groupId,
     required String expenseId,
@@ -430,6 +445,7 @@ class SpliitClient {
     int? originalAmountCents,
     String? originalCurrency,
     double? conversionRate,
+    String? participantId,
   }) async {
     final expenseFormValues = _expenseFormValues(
       title: title,
@@ -455,7 +471,7 @@ class SpliitClient {
           'groupId': groupId,
           'expenseId': expenseId,
           'expenseFormValues': expenseFormValues,
-          'participantId': 'None',
+          'participantId': _activityParticipant(participantId),
         },
         'meta': {
           'values': {

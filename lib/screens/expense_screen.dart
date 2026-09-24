@@ -1014,11 +1014,26 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
     // Written locally first -- this succeeds regardless of connectivity,
     // which is the entire point. The outbox (triggered by the caller
-    // after this returns) is what attempts the real sync.
-    await widget.db.insertPending(expense);
+    // after this returns) is what attempts the real sync. Who added it is
+    // captured now, not when the outbox replays it (issue #92).
+    await widget.db.insertPending(expense,
+        addedByParticipantId: await _activityParticipant());
     await _rememberDefaultSplitIfRequested(paidFor);
 
     if (mounted) Navigator.of(context).pop(true);
+  }
+
+  /// Who to credit in Spliit's activity log for this save (issue #92):
+  /// the group's active user as stored right now, via
+  /// [activityParticipantId]. Read from the db rather than taken as a
+  /// constructor param, so every way into this screen (the expense list,
+  /// Balances' "mark as paid", Activity) attributes the same way.
+  Future<String?> _activityParticipant() async {
+    final row = await widget.db.groupRow(widget.group.id);
+    return activityParticipantId(
+      storedActiveParticipantId: row?.activeParticipantId,
+      participants: widget.group.participants,
+    );
   }
 
   /// Online-only (see class doc comment): no local pending row, no
@@ -1051,6 +1066,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         originalAmountCents: originalAmountCents,
         originalCurrency: originalCurrency,
         conversionRate: conversionRate,
+        participantId: await _activityParticipant(),
       );
       await _rememberDefaultSplitIfRequested(paidFor);
       if (mounted) Navigator.of(context).pop(true);

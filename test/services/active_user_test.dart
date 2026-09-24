@@ -117,4 +117,26 @@ void main() {
       'alex',
     );
   });
+
+  // Issue #92: who to credit in Spliit's activity log.
+  group('activityParticipantId', () {
+    String? credit(String? stored) => activityParticipantId(
+        storedActiveParticipantId: stored, participants: participants);
+
+    test('credits the stored active participant', () {
+      expect(credit('bea'), 'bea');
+    });
+
+    test('credits nobody when never asked', () {
+      expect(credit(null), isNull);
+    });
+
+    test('never sends the Nobody placeholder to the server', () {
+      expect(credit(nobodyParticipantId), isNull);
+    });
+
+    test('credits nobody when the stored participant has left', () {
+      expect(credit('someone-who-left'), isNull);
+    });
+  });
 }

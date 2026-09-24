@@ -76,6 +76,16 @@ class Expenses extends Table {
   /// See [Expense.createdAt]: the tiebreak between same-day expenses.
   DateTimeColumn get createdAt => dateTime().nullable()();
 
+  /// Who to credit in Spliit's activity log when [Outbox.flush] replays
+  /// this pending row (issue #92): the group's active participant at the
+  /// moment the expense was added, captured then rather than looked up at
+  /// replay time, since the active user can change while a row waits
+  /// offline. Null for no active user, and for rows queued before this
+  /// column existed; both are sent as Spliit's unattributed `'None'`.
+  /// Only meaningful on pending rows -- a sync concern, so it isn't on
+  /// the [Expense] model.
+  TextColumn get addedByParticipantId => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -157,7 +167,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -222,6 +232,11 @@ class AppDatabase extends _$AppDatabase {
           if (from < 10) {
             // Filled by the next refresh; see Expenses.createdAt.
             await m.addColumn(expenses, expenses.createdAt);
+          }
+          if (from < 11) {
+            // See Expenses.addedByParticipantId (issue #92). Rows already
+            // queued keep null and replay unattributed, as they would have.
+            await m.addColumn(expenses, expenses.addedByParticipantId);
           }
         },
       );
@@ -407,8 +422,11 @@ class AppDatabase extends _$AppDatabase {
   /// Inserts a locally-created expense as pending, to be replayed by the
   /// outbox. [localId] should be a locally-generated unique id (a uuid) --
   /// it's replaced with the server's real id once synced.
-  Future<void> insertPending(Expense e) {
-    return into(expenses).insert(toCompanion(e));
+  /// [addedByParticipantId] is who to credit when it's replayed; see
+  /// [Expenses.addedByParticipantId].
+  Future<void> insertPending(Expense e, {String? addedByParticipantId}) {
+    return into(expenses).insert(toCompanion(e)
+        .copyWith(addedByParticipantId: Value(addedByParticipantId)));
   }
 
   ExpensesCompanion toCompanion(Expense e) => ExpensesCompanion.insert(
