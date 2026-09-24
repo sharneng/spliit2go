@@ -192,6 +192,12 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   /// Set once the sheet starts closing through [_close].
   bool _closing = false;
 
+  /// A close asked for while the Delete confirmation covered the sheet,
+  /// with the action to close with. Popping then would close the dialog
+  /// instead, so it waits for the confirmation to end (see [_delete]).
+  bool _closeDeferred = false;
+  _SheetAction? _deferredAction;
+
   /// What to close with when the row disappears because of our own
   /// Delete or Discard, rather than a plain dismissal.
   _SheetAction? _closeWith;
@@ -219,6 +225,8 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     if (!mounted || _closing) return;
     if (row != null) {
       _cached = true;
+      // Back after going away mid-confirmation: nothing to close after all.
+      _closeDeferred = false;
       setState(() {
         _expense = widget.db.rowToExpense(row);
         _loading = false;
@@ -240,19 +248,30 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     }
   }
 
-  /// Pops the sheet with [action], unless it's already closing. That
-  /// includes a close the sheet didn't start: a barrier tap, swipe or Back
-  /// pops the route directly, and the sheet stays mounted through its
-  /// closing animation, so a late Edit fetch, Retry or row change can still
-  /// land here. Its route is no longer current by then, and popping anyway
-  /// would take the screen underneath with it (PR #95 review). [mounted]
-  /// alone can't tell.
+  /// Pops the sheet with [action], unless it's already closing -- and
+  /// only ever the sheet, never the route above or below it:
+  /// - **Dismissed** (a barrier tap, swipe or Back popped its route
+  ///   directly): the sheet stays mounted through its closing animation,
+  ///   so a late Edit fetch, Retry or row change can still land here. Its
+  ///   route is no longer active, and popping anyway would take the screen
+  ///   underneath with it (PR #95 review). [mounted] alone can't tell.
+  /// - **Covered** by the Delete confirmation: still active, just not
+  ///   current, and popping would close the dialog instead. The close
+  ///   waits for the confirmation to end (PR #96 review).
   void _close([_SheetAction? action]) {
     if (_closing) return;
-    _closing = true;
-    if (ModalRoute.of(context)?.isCurrent ?? false) {
-      Navigator.of(context).pop(action);
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isActive) {
+      _closing = true;
+      return;
     }
+    if (!route.isCurrent) {
+      _closeDeferred = true;
+      _deferredAction = action;
+      return;
+    }
+    _closing = true;
+    Navigator.of(context).pop(action);
   }
 
   /// Activity cache miss: load the expense from the server instead. It's
@@ -307,7 +326,16 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   }
 
   Future<void> _delete(Expense e) async {
-    if (!await _confirmDelete(e.title) || !mounted) return;
+    final confirmed = await _confirmDelete(e.title);
+    if (!mounted) return;
+    if (_closeDeferred) {
+      // The expense went away while the confirmation was up (a refresh
+      // found it deleted). Close now, and don't send a delete for it.
+      _closeDeferred = false;
+      _close(_deferredAction);
+      return;
+    }
+    if (!confirmed) return;
     setState(() {
       _busy = true;
       _running = _ServerAction.delete;

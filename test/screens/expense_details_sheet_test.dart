@@ -778,6 +778,78 @@ void main() {
       await closeTree(tester);
     });
 
+    // PR #96 review (Ezra): the Delete confirmation covers the sheet
+    // without dismissing it. If the expense goes away meanwhile, the sheet
+    // must close once the confirmation ends -- not pop the dialog, not
+    // stay stuck showing a deleted expense, and not send the delete.
+    Finder inDialog(Finder f) =>
+        find.descendant(of: find.byWidgetPredicate((w) => w is AlertDialog), matching: f);
+
+    Future<(_PopCounter, AppDatabase, List<String>)> confirmWhileItGoes(
+        WidgetTester tester) async {
+      final deletes = <String>[];
+      final (pops, db) = await openFromCaller(tester, serverClient((req) async {
+        if (req.url.toString().contains('groups.expenses.delete')) deletes.add(req.body);
+        return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+      }));
+      await tester.tap(inSheet(find.widgetWithText(OutlinedButton, 'Delete')));
+      await tester.pumpAndSettle();
+      expect(inDialog(find.text('Delete this expense?')), findsOneWidget);
+
+      await tester.runAsync(() => db.replaceServerExpenses('g1', [])); // a refresh
+      await tester.pumpAndSettle();
+      // Still confirming: the dialog is untouched.
+      expect(inDialog(find.text('Delete this expense?')), findsOneWidget);
+      return (pops, db, deletes);
+    }
+
+    testWidgets('the expense going away during confirmation, then Cancel: the sheet closes',
+        (tester) async {
+      final (pops, db, deletes) = await confirmWhileItGoes(tester);
+      addTearDown(db.close);
+
+      await tester.tap(inDialog(find.text('Cancel')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.text('open'), findsOneWidget); // the caller is still there
+      expect(pops.count, 2); // the dialog, then the sheet
+      expect(deletes, isEmpty);
+      await closeTree(tester);
+    });
+
+    testWidgets('the expense going away during confirmation, then Delete: nothing is sent, '
+        'the sheet closes', (tester) async {
+      final (pops, db, deletes) = await confirmWhileItGoes(tester);
+      addTearDown(db.close);
+
+      await tester.tap(inDialog(find.text('Delete')));
+      await tester.pumpAndSettle();
+
+      expect(deletes, isEmpty);
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('open'), findsOneWidget);
+      expect(pops.count, 2);
+      await closeTree(tester);
+    });
+
+    testWidgets('the expense coming back before Cancel keeps the sheet open', (tester) async {
+      final (pops, db, deletes) = await confirmWhileItGoes(tester);
+      addTearDown(db.close);
+
+      await tester.runAsync(() => db.replaceServerExpenses('g1', [dinner()]));
+      await tester.pumpAndSettle();
+      await tester.tap(inDialog(find.text('Cancel')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(inSheet(find.text('Dinner')), findsOneWidget);
+      expect(pops.count, 1); // just the dialog
+      expect(deletes, isEmpty);
+      await closeTree(tester);
+    });
+
     testWidgets('the expense disappearing mid-dismissal pops nothing more', (tester) async {
       final (pops, db) = await openFromCaller(tester, offlineClient);
       addTearDown(db.close);
