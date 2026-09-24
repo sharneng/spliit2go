@@ -121,8 +121,10 @@ class _BalancesScreenState extends State<BalancesScreen> {
     final synced = await widget.outbox.flush();
     if (synced > 0) {
       try {
+        final generation = widget.db.expensesGeneration(widget.group.id);
         final fresh = await widget.client.fetchExpenses(widget.group.id);
-        await widget.db.replaceServerExpenses(widget.group.id, fresh);
+        await widget.db.replaceServerExpenses(widget.group.id, fresh,
+            fetchedAtGeneration: generation);
       } catch (_) {
         // Synced but the follow-up refresh failed -- rare (would need
         // the server to accept the write yet the very next request to

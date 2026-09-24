@@ -180,5 +180,9 @@
   "expenseDetailsPending": "等待同步。同步到服务器后即可编辑。",
   "expenseDetailsFailedHint": "重试以再次发送，或从此设备上舍弃。舍弃后无法恢复。",
   "expenseDetailsNotFound": "此消费已不存在。",
-  "expenseDetailsLoadFailed": "无法加载此消费。"
+  "expenseDetailsLoadFailed": "无法加载此消费。",
+  "expenseDetailsNeedsConnection": "编辑或删除消费需要网络连接。",
+  "expenseDeleteConfirmTitle": "删除此消费？",
+  "expenseDeleteConfirmBody": "“{title}”将为群组中的所有人删除，且无法恢复。",
+  "expenseDeleteFailed": "无法删除此消费。请检查网络连接后重试。"
 }

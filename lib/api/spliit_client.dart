@@ -490,6 +490,42 @@ class SpliitClient {
     return data is Map<String, dynamic> ? (data['expenseId'] as String? ?? expenseId) : expenseId;
   }
 
+  /// Deletes an expense on the server (issue #90), for everyone in the
+  /// group. Online-only, like [updateExpense]; [participantId] is who to
+  /// credit in Spliit's activity log (see [_activityParticipant]).
+  ///
+  /// Verified against upstream (`delete.procedure.ts` and `deleteExpense`
+  /// in `src/lib/api.ts`, `cc79621`): it takes `{expenseId, groupId,
+  /// participantId?}` and returns `{}`. It logs the DELETE_EXPENSE
+  /// activity *before* deleting, and the deletion throws if the expense
+  /// is already gone, outside any transaction. So a delete whose response
+  /// was lost errors if retried even though the expense is gone (and
+  /// logs a second "deleted" entry) -- callers should check with
+  /// [fetchExpense] before treating a failure as real.
+  Future<void> deleteExpense({
+    required String groupId,
+    required String expenseId,
+    String? participantId,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/trpc/groups.expenses.delete?batch=1');
+    final body = {
+      '0': {
+        'json': {
+          'groupId': groupId,
+          'expenseId': expenseId,
+          'participantId': _activityParticipant(participantId),
+        },
+      }
+    };
+    final res = await _http.post(
+      uri,
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    _checkOk(res);
+    _unwrapBatch(jsonDecode(res.body));
+  }
+
   /// Applies a full group-settings edit -- name, information, currency
   /// (both the display [currency] symbol and, when it's one of Spliit's
   /// 34 known currencies, its [currencyCode] -- see

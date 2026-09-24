@@ -180,5 +180,9 @@
   "expenseDetailsPending": "En attente de synchronisation. Vous pourrez la modifier une fois qu'elle aura atteint le serveur.",
   "expenseDetailsFailedHint": "Réessayez pour l'envoyer à nouveau, ou abandonnez-la sur cet appareil. Cette action est irréversible.",
   "expenseDetailsNotFound": "Cette dépense n'est plus disponible.",
-  "expenseDetailsLoadFailed": "Impossible de charger cette dépense."
+  "expenseDetailsLoadFailed": "Impossible de charger cette dépense.",
+  "expenseDetailsNeedsConnection": "Modifier ou supprimer une dépense nécessite une connexion.",
+  "expenseDeleteConfirmTitle": "Supprimer cette dépense ?",
+  "expenseDeleteConfirmBody": "« {title} » sera supprimée pour tous les membres du groupe. Cette action est irréversible.",
+  "expenseDeleteFailed": "Impossible de supprimer cette dépense. Vérifiez votre connexion et réessayez."
 }

@@ -1068,6 +1068,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         conversionRate: conversionRate,
         participantId: await _activityParticipant(),
       );
+      // A refresh fetched before this edit mustn't write the old copy
+      // back over it (issue #90).
+      widget.db.markExpensesChanged(widget.group.id);
       await _rememberDefaultSplitIfRequested(paidFor);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {

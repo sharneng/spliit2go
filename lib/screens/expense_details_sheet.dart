@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../api/spliit_client.dart';
@@ -11,6 +12,7 @@ import '../models/category.dart';
 import '../models/currency.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
+import '../services/active_user.dart';
 import '../services/expense_shares.dart';
 import '../sync/outbox.dart';
 import '../utils/date_format.dart';
@@ -34,17 +36,19 @@ import 'expense_screen.dart';
 /// available" and connection problems inside the sheet.
 ///
 /// What the sheet offers depends on the expense's state:
-/// - **Synced:** Edit. Fetches the expense fresh first (Spliit has no
-///   edit-conflict protection, see docs/decisions/expense-form-
-///   completion.md), then opens the existing form. Disabled while the
-///   phone reports no connection, with the reason shown in the sheet.
+/// - **Synced:** Edit and Delete, both disabled while the phone reports
+///   no connection, with the reason shown in the sheet. Edit fetches the
+///   expense fresh first (Spliit has no edit-conflict protection, see
+///   docs/decisions/expense-form-completion.md), then opens the existing
+///   form. Delete asks for confirmation, deletes on the server for the
+///   whole group, and only then removes the local copy.
 /// - **Pending:** view only, until it reaches the server.
 /// - **Sync failed:** Retry, or Discard this device's copy (the expense
 ///   never reached the server). Both are local, so both work offline.
 ///
 /// Returns true when something changed that the caller should sync or
-/// refresh for: an edit was saved, a failed expense was requeued, or one
-/// was discarded.
+/// refresh for: an edit was saved, the expense was deleted, a failed one
+/// was requeued, or one was discarded.
 Future<bool> showExpenseDetails(
   BuildContext context, {
   required String expenseId,
@@ -122,12 +126,15 @@ class _Edit extends _SheetAction {
   const _Edit(this.fresh);
 }
 
-/// A local change the caller should sync for (retry or discard).
+/// A change the caller should sync or refresh for (delete, retry or
+/// discard).
 class _Changed extends _SheetAction {
   const _Changed();
 }
 
 enum _LoadProblem { notFound, failed }
+
+enum _ServerAction { edit, delete }
 
 class _ExpenseDetailsSheet extends StatefulWidget {
   final String expenseId;
@@ -169,17 +176,30 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   /// Null until the platform reports: unknown, so Edit stays enabled.
   bool? _online;
 
-  /// An Edit fetch, Retry or Discard is in flight.
+  /// An Edit fetch, Delete, Retry or Discard is in flight. Every action
+  /// is disabled meanwhile, so none can run twice.
   bool _busy = false;
 
-  /// Why the last Edit couldn't open, shown under the button.
-  String? _editError;
+  /// Which server action is running, for its button's spinner.
+  _ServerAction? _running;
+
+  /// Why the last Edit or Delete didn't go through, shown under them.
+  String? _actionError;
+
+  /// An Activity cache-miss fetch is in flight.
+  bool _fetching = false;
 
   /// Set once the sheet starts closing through [_close].
   bool _closing = false;
 
+  /// A close asked for while the Delete confirmation covered the sheet,
+  /// with the action to close with. Popping then would close the dialog
+  /// instead, so it waits for the confirmation to end (see [_delete]).
+  bool _closeDeferred = false;
+  _SheetAction? _deferredAction;
+
   /// What to close with when the row disappears because of our own
-  /// Discard, rather than a plain dismissal.
+  /// Delete or Discard, rather than a plain dismissal.
   _SheetAction? _closeWith;
 
   @override
@@ -205,6 +225,8 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     if (!mounted || _closing) return;
     if (row != null) {
       _cached = true;
+      // Back after going away mid-confirmation: nothing to close after all.
+      _closeDeferred = false;
       setState(() {
         _expense = widget.db.rowToExpense(row);
         _loading = false;
@@ -212,6 +234,10 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       });
     } else if (_cached) {
       _close(_closeWith);
+    } else if (_expense != null || _fetching) {
+      // Showing (or loading) the server's copy of an uncached expense.
+      // Drift re-emits on every write to the table, not just this row, so
+      // this is a refresh or sync elsewhere, not a reason to fetch again.
     } else if (widget.fetchIfMissing) {
       _fetchFromServer();
     } else {
@@ -222,19 +248,30 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     }
   }
 
-  /// Pops the sheet with [action], unless it's already closing. That
-  /// includes a close the sheet didn't start: a barrier tap, swipe or Back
-  /// pops the route directly, and the sheet stays mounted through its
-  /// closing animation, so a late Edit fetch, Retry or row change can still
-  /// land here. Its route is no longer current by then, and popping anyway
-  /// would take the screen underneath with it (PR #95 review). [mounted]
-  /// alone can't tell.
+  /// Pops the sheet with [action], unless it's already closing -- and
+  /// only ever the sheet, never the route above or below it:
+  /// - **Dismissed** (a barrier tap, swipe or Back popped its route
+  ///   directly): the sheet stays mounted through its closing animation,
+  ///   so a late Edit fetch, Retry or row change can still land here. Its
+  ///   route is no longer active, and popping anyway would take the screen
+  ///   underneath with it (PR #95 review). [mounted] alone can't tell.
+  /// - **Covered** by the Delete confirmation: still active, just not
+  ///   current, and popping would close the dialog instead. The close
+  ///   waits for the confirmation to end (PR #96 review).
   void _close([_SheetAction? action]) {
     if (_closing) return;
-    _closing = true;
-    if (ModalRoute.of(context)?.isCurrent ?? false) {
-      Navigator.of(context).pop(action);
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isActive) {
+      _closing = true;
+      return;
     }
+    if (!route.isCurrent) {
+      _closeDeferred = true;
+      _deferredAction = action;
+      return;
+    }
+    _closing = true;
+    Navigator.of(context).pop(action);
   }
 
   /// Activity cache miss: load the expense from the server instead. It's
@@ -242,6 +279,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   Future<void> _fetchFromServer() async {
     setState(() {
       _loading = true;
+      _fetching = true;
       _problem = null;
     });
     try {
@@ -260,13 +298,16 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
             ? _LoadProblem.notFound
             : _LoadProblem.failed;
       });
+    } finally {
+      _fetching = false;
     }
   }
 
   Future<void> _edit() async {
     setState(() {
       _busy = true;
-      _editError = null;
+      _running = _ServerAction.edit;
+      _actionError = null;
     });
     try {
       final fresh = await widget.client
@@ -276,11 +317,121 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _editError = e is SpliitApiException && e.isNotFound
+        _running = null;
+        _actionError = e is SpliitApiException && e.isNotFound
             ? context.l10n.expenseDetailsNotFound
             : context.l10n.groupScreenEditNeedsConnection;
       });
     }
+  }
+
+  Future<void> _delete(Expense e) async {
+    final confirmed = await _confirmDelete(e.title);
+    if (!mounted) return;
+    if (_closeDeferred) {
+      // The expense went away while the confirmation was up (a refresh
+      // found it deleted). Close now, and don't send a delete for it.
+      _closeDeferred = false;
+      _close(_deferredAction);
+      return;
+    }
+    if (!confirmed) return;
+    setState(() {
+      _busy = true;
+      _running = _ServerAction.delete;
+      _actionError = null;
+    });
+    final deleted = await _deleteOnServer();
+    if (deleted) {
+      // Only now, with the server confirming, does the local copy go --
+      // even if the sheet was dismissed meanwhile, or the expense list
+      // would keep showing it until some later refresh. Its disappearance
+      // closes an open sheet (see _onRow); one never cached (opened from
+      // Activity) is closed below.
+      _closeWith = const _Changed();
+      await widget.db.removeDeletedExpense(widget.group.id, widget.expenseId);
+      if (mounted) _close(const _Changed());
+      return;
+    }
+    if (!mounted) return;
+    // Nothing changed locally: the cached copy stays, as it should.
+    setState(() {
+      _busy = false;
+      _running = null;
+      _actionError = context.l10n.expenseDeleteFailed;
+    });
+  }
+
+  /// Deletes the expense on the server; true once it's gone. A failure is
+  /// double-checked, because upstream errors when deleting an expense
+  /// that's already gone -- a retry after a lost response, or someone
+  /// else deleting it first (see [SpliitClient.deleteExpense]). If the
+  /// server then says it doesn't exist, the delete worked.
+  Future<bool> _deleteOnServer() async {
+    try {
+      await widget.client.deleteExpense(
+        groupId: widget.group.id,
+        expenseId: widget.expenseId,
+        participantId: await _activityParticipant(),
+      );
+      return true;
+    } catch (_) {
+      try {
+        await widget.client
+            .fetchExpense(groupId: widget.group.id, expenseId: widget.expenseId);
+        return false; // still there: the delete really failed
+      } catch (e) {
+        return e is SpliitApiException && e.isNotFound;
+      }
+    }
+  }
+
+  /// Who to credit in Spliit's activity log (issue #92), the same way
+  /// ExpenseScreen does for an edit.
+  Future<String?> _activityParticipant() async {
+    final row = await widget.db.groupRow(widget.group.id);
+    return activityParticipantId(
+      storedActiveParticipantId: row?.activeParticipantId,
+      participants: widget.group.participants,
+    );
+  }
+
+  /// Asks before deleting: it's for everyone in the group and can't be
+  /// undone. Adaptive, like leaving a group (GroupListScreen).
+  Future<bool> _confirmDelete(String title) async {
+    final confirmed = await showAdaptiveDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final l10n = dialogContext.l10n;
+        final platform = Theme.of(dialogContext).platform;
+        final cupertino = platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
+        return AlertDialog.adaptive(
+          title: Text(l10n.expenseDeleteConfirmTitle),
+          content: Text(l10n.expenseDeleteConfirmBody(title)),
+          actions: cupertino
+              ? [
+                  CupertinoDialogAction(
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: Text(l10n.commonCancel)),
+                  CupertinoDialogAction(
+                      isDestructiveAction: true,
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      child: Text(l10n.commonDelete)),
+                ]
+              : [
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: Text(l10n.commonCancel)),
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      style: TextButton.styleFrom(
+                          foregroundColor: Theme.of(dialogContext).colorScheme.error),
+                      child: Text(l10n.commonDelete)),
+                ],
+        );
+      },
+    );
+    return confirmed ?? false;
   }
 
   Future<void> _retry() async {
@@ -476,18 +627,27 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     }
     if (e.pending) return [Text(l10n.expenseDetailsPending, style: muted)];
     final offline = _online == false;
-    final message = _editError ?? (offline ? l10n.groupScreenEditNeedsConnection : null);
+    final message = _actionError ?? (offline ? l10n.expenseDetailsNeedsConnection : null);
+    Widget icon(_ServerAction action, IconData data) => _running == action
+        ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+        : Icon(data);
     return [
-      Align(
-        alignment: AlignmentDirectional.centerStart,
-        child: FilledButton.tonalIcon(
-          onPressed: _busy || offline ? null : _edit,
-          icon: _busy
-              ? const SizedBox.square(
-                  dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.edit_outlined),
-          label: Text(l10n.expenseDetailsEdit),
-        ),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          FilledButton.tonalIcon(
+            onPressed: _busy || offline ? null : _edit,
+            icon: icon(_ServerAction.edit, Icons.edit_outlined),
+            label: Text(l10n.expenseDetailsEdit),
+          ),
+          OutlinedButton.icon(
+            onPressed: _busy || offline ? null : () => _delete(e),
+            style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error),
+            icon: icon(_ServerAction.delete, Icons.delete_outline),
+            label: Text(l10n.commonDelete),
+          ),
+        ],
       ),
       if (message != null) ...[
         const SizedBox(height: 4),
