@@ -205,4 +205,118 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
   });
+
+  // Issue #99: a "You" section above everyone's balances, like spliit-ios.
+  // (No group() wrapper: the `group` fixture above hides it.)
+  const hint = 'Pick yourself once and this group is read from where you '
+      'stand: your own balance first, and your name already filled in on a new expense.';
+
+  Future<void> pumpBalances(WidgetTester tester, AppDatabase db,
+      {String? activeUserId, VoidCallback? onPickActiveUser}) async {
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async => http.Response('offline', 500)),
+    );
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: BalancesScreen(
+        client: client,
+        db: db,
+        outbox: Outbox(db, client, groupId: 'g1'),
+        group: group,
+        activeUserId: activeUserId,
+        onPickActiveUser: onPickActiveUser,
+      ),
+    ));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> teardown(WidgetTester tester) async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  }
+
+  Text amountText(WidgetTester tester, String amount) => tester
+      .widgetList<Text>(find.text(amount))
+      .firstWhere((t) => t.style?.fontWeight == FontWeight.bold);
+
+  testWidgets('with nobody picked: "You · Nobody" and why to pick, no amount',
+      (tester) async {
+    final db = await dbWithEvenExpense();
+    addTearDown(db.close);
+    await pumpBalances(tester, db);
+
+    expect(find.widgetWithText(ListTile, 'You'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Nobody'), findsOneWidget);
+    expect(find.text(hint), findsOneWidget);
+    expect(find.text('You are owed'), findsNothing);
+    expect(find.text('You owe'), findsNothing);
+    expect(find.textContaining('(you)'), findsNothing);
+    await teardown(tester);
+  });
+
+  testWidgets('owed: says so, the amount unsigned in green, and marks your row',
+      (tester) async {
+    final db = await dbWithEvenExpense();
+    addTearDown(db.close);
+    await pumpBalances(tester, db, activeUserId: 'alex');
+
+    expect(find.text('You are owed'), findsOneWidget);
+    // Alex's own row shows $60.00 too; the You amount is the bold headline.
+    expect(amountText(tester, '\$60.00').style!.color, Colors.green.shade700);
+    expect(find.widgetWithText(ListTile, 'Alex'), findsOneWidget); // the You row
+    expect(find.text('Alex (you)'), findsOneWidget);
+    expect(find.text(hint), findsNothing);
+    await teardown(tester);
+  });
+
+  testWidgets('owing: says so, the amount unsigned in the error color', (tester) async {
+    final db = await dbWithEvenExpense();
+    addTearDown(db.close);
+    await pumpBalances(tester, db, activeUserId: 'bea');
+
+    expect(find.text('You owe'), findsOneWidget);
+    // Bea's row says -$30.00; the You headline drops the sign.
+    final headline = find.byWidgetPredicate((w) =>
+        w is Text && w.data == '\$30.00' && w.style?.fontWeight == FontWeight.bold);
+    expect(headline, findsOneWidget);
+    expect(tester.widget<Text>(headline).style!.color,
+        Theme.of(tester.element(headline)).colorScheme.error);
+    expect(find.text('Bea (you)'), findsOneWidget);
+    await teardown(tester);
+  });
+
+  testWidgets('settled up when your balance is zero', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await pumpBalances(tester, db, activeUserId: 'cid');
+
+    expect(find.text('You’re settled up'), findsOneWidget);
+    await teardown(tester);
+  });
+
+  testWidgets('an active user no longer in the group reads as Nobody', (tester) async {
+    final db = await dbWithEvenExpense();
+    addTearDown(db.close);
+    await pumpBalances(tester, db, activeUserId: 'gone');
+
+    expect(find.widgetWithText(ListTile, 'Nobody'), findsOneWidget);
+    expect(find.text(hint), findsOneWidget);
+    await teardown(tester);
+  });
+
+  testWidgets('tapping the You row opens the picker', (tester) async {
+    final db = await dbWithEvenExpense();
+    addTearDown(db.close);
+    var picks = 0;
+    await pumpBalances(tester, db, activeUserId: 'alex', onPickActiveUser: () => picks++);
+
+    await tester.tap(find.widgetWithText(ListTile, 'You'));
+    await tester.pump();
+
+    expect(picks, 1);
+    await teardown(tester);
+  });
 }

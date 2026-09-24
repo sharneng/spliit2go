@@ -315,6 +315,13 @@
   "activityYesterday": "Yesterday",
   "balancesTitle": "Balances",
   "balancesExplainer": "This is the amount each participant paid or was paid for.",
+  "balancesYouSection": "You",
+  "balancesYouLabel": "You",
+  "balancesYouNobody": "Nobody",
+  "balancesYouAreOwed": "You are owed",
+  "balancesYouOwe": "You owe",
+  "balancesYouSettled": "You’re settled up",
+  "balancesYouHint": "Pick yourself once and this group is read from where you stand: your own balance first, and your name already filled in on a new expense.",
   "balancesSuggestedReimbursements": "Suggested reimbursements",
   "balancesOwes": "{from} owes {to}",
   "@balancesOwes": {
