@@ -50,13 +50,25 @@ class ActiveParticipantAutoMatched extends ActiveParticipantResolution {
   const ActiveParticipantAutoMatched(this.participantId);
 }
 
-/// No stored choice and no unambiguous name match (no default name set
-/// yet, no participant matches it, or more than one does). Callers
-/// should prompt -- the existing "Active user" picker dialog, scoped to
-/// this group -- and persist whatever's picked.
+/// Never asked for this group, and no unambiguous name match (no default
+/// name set yet, no participant matches it, or more than one does).
+/// Callers should ask once and persist the answer -- a participant's id,
+/// or [nobodyParticipantId] for "Nobody" or a dismissed prompt.
 class ActiveParticipantNeedsPrompt extends ActiveParticipantResolution {
   const ActiveParticipantNeedsPrompt();
 }
+
+/// Already asked, and there's no active participant: "Nobody" was chosen,
+/// or the chosen participant has left the group and the default name
+/// matches no one. Don't ask again (issue #85).
+class ActiveParticipantNobody extends ActiveParticipantResolution {
+  const ActiveParticipantNobody();
+}
+
+/// Stored as a group's active participant for "Nobody", so it differs
+/// from null ("never asked") without a schema change (issue #85). Spliit
+/// ids are nanoids, which never contain '#'.
+const nobodyParticipantId = '#nobody';
 
 /// Decides how to resolve a group's active participant from what's
 /// already stored, without touching AppDatabase or SharedPreferences
@@ -65,15 +77,17 @@ class ActiveParticipantNeedsPrompt extends ActiveParticipantResolution {
 ///
 /// A name match is case-insensitive exact match, deliberately simple --
 /// this is a convenience to skip a prompt, not an identity system, and
-/// an ambiguous or partial match falling through to
-/// [ActiveParticipantNeedsPrompt] (rather than guessing) is the safe
-/// failure mode: worst case is one extra prompt, never defaulting
-/// "Paid by" to the wrong person.
+/// treating an ambiguous or partial match as no match (rather than
+/// guessing) is the safe failure mode: worst case is one prompt, never
+/// defaulting "Paid by" to the wrong person.
 ActiveParticipantResolution resolveActiveParticipant({
   required String? storedActiveParticipantId,
   required String? defaultActiveUserName,
   required List<Participant> participants,
 }) {
+  if (storedActiveParticipantId == nobodyParticipantId) {
+    return const ActiveParticipantNobody();
+  }
   if (storedActiveParticipantId != null &&
       participants.any((p) => p.id == storedActiveParticipantId)) {
     return ActiveParticipantAlreadySet(storedActiveParticipantId);
@@ -86,5 +100,7 @@ ActiveParticipantResolution resolveActiveParticipant({
       return ActiveParticipantAutoMatched(matches.single.id);
     }
   }
-  return const ActiveParticipantNeedsPrompt();
+  return storedActiveParticipantId == null
+      ? const ActiveParticipantNeedsPrompt()
+      : const ActiveParticipantNobody();
 }

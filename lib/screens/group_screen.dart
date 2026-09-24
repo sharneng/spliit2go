@@ -201,11 +201,6 @@ class _GroupScreenState extends State<GroupScreen> {
         title: Text(_group?.name ?? 'spliit2go'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.person_outline),
-            tooltip: context.l10n.groupScreenActiveUserTooltip,
-            onPressed: _group == null ? null : _pickActiveUser,
-          ),
-          IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: context.l10n.groupScreenSettingsTooltip,
             onPressed: _group == null ? null : _openGroupSettings,
@@ -362,6 +357,7 @@ class _GroupScreenState extends State<GroupScreen> {
           outbox: widget.outbox,
           group: _group!,
           activeUserId: _activeUserId,
+          onPickActiveUser: () => _pickActiveUser(firstAsk: false),
           embedded: true,
         );
       case 3:
@@ -589,11 +585,9 @@ class _GroupScreenState extends State<GroupScreen> {
   /// db-backed cache/refresh update to [_group] (via [_groupSub]) rather
   /// than being threaded through each individual load path (issue #47):
   /// participants can change, and this group's own stored choice or the
-  /// device's default name might newly apply. Never prompts on its own:
-  /// an unresolved result just leaves [_activeUserId] null, same as
-  /// "nothing set yet" always meant -- resolveDefaultPaidBy in
-  /// add-expense already falls back to the first participant, and the
-  /// person icon still lets you pick explicitly.
+  /// device's default name might newly apply. Asks "Who are you?" at
+  /// most once per group, ever (issue #85): the answer, even a dismissal,
+  /// is stored, so later resolutions never land on NeedsPrompt again.
   Future<void> _resolveActiveUser() async {
     if (_group == null) return;
     final row = await widget.db.groupRow(widget.groupId);
@@ -609,57 +603,92 @@ class _GroupScreenState extends State<GroupScreen> {
       case ActiveParticipantAutoMatched(:final participantId):
         await widget.db.setActiveParticipant(widget.groupId, participantId);
         if (mounted) setState(() => _activeUserId = participantId);
+      case ActiveParticipantNobody():
+        if (mounted) setState(() => _activeUserId = null);
       case ActiveParticipantNeedsPrompt():
-        break;
+        await _askWhoYouAre();
     }
+  }
+
+  // Every group emission (refresh, sync) re-resolves. One landing after
+  // the dialog closes but before its answer is saved would otherwise ask
+  // again.
+  bool _asked = false;
+
+  Future<void> _askWhoYouAre() async {
+    if (_asked || !mounted || _group!.participants.isEmpty) return;
+    // Not while anything is on top, including the dialog itself; a later
+    // emission or visit asks instead.
+    if (ModalRoute.of(context)?.isCurrent == false) return;
+    _asked = true;
+    await _pickActiveUser(firstAsk: true);
   }
 
   /// Which participant "you" are on this device, for *this* group --
   /// see [_resolveActiveUser] above. Mirrors the web app's own
   /// per-device setting; there's no account system to tie it to
   /// anything more meaningful than "the last person picked for this
-  /// group, on this phone".
-  // showDialog returns null both when the dialog is dismissed without a
-  // choice (tap outside, back button) *and* if "None" popped a literal
-  // null -- those need to mean different things (dismiss = no change,
-  // "None" = explicitly clear it), so "None" pops this sentinel instead
-  // and null is only ever "dismissed, do nothing".
-  static const _noneSentinel = '';
-
-  Future<void> _pickActiveUser() async {
+  /// group, on this phone". On the first ask, dismissing counts as
+  /// "Nobody" so it's never asked again; from Stats it changes nothing.
+  Future<void> _pickActiveUser({required bool firstAsk}) async {
     final selected = await showDialog<String>(
       context: context,
-      builder: (context) => SimpleDialog(
-        title: Text(context.l10n.groupScreenActiveUserDialogTitle),
+      builder: (context) => ActiveUserPicker(
+        participants: _group!.participants,
+        checkedId: firstAsk ? null : _activeUserId ?? nobodyParticipantId,
+      ),
+    );
+    if (selected == null && !firstAsk) return;
+    final stored = selected ?? nobodyParticipantId;
+    await widget.db.setActiveParticipant(widget.groupId, stored);
+    final newId = stored == nobodyParticipantId ? null : stored;
+    // A new device never has a default name, so seed it from the first
+    // pick: later groups with that name then match without asking.
+    if (newId != null && await _settings.defaultActiveUserName() == null) {
+      final picked = _group!.participants.where((p) => p.id == newId);
+      if (picked.isNotEmpty) {
+        await _settings.setDefaultActiveUserName(picked.first.name);
+      }
+    }
+    if (mounted) setState(() => _activeUserId = newId);
+  }
+}
+
+/// The "Who are you?" dialog: pops a participant's id, or
+/// [nobodyParticipantId] for "Nobody" (listed last).
+class ActiveUserPicker extends StatelessWidget {
+  const ActiveUserPicker({super.key, required this.participants, this.checkedId});
+
+  final List<Participant> participants;
+
+  /// The option to show checked: a participant's id, [nobodyParticipantId],
+  /// or null for none.
+  final String? checkedId;
+
+  @override
+  Widget build(BuildContext context) {
+    return SimpleDialog(
+      title: Text(context.l10n.groupScreenActiveUserDialogTitle),
+      children: [
+        for (final p in participants) _option(context, p.id, p.name),
+        _option(context, nobodyParticipantId, context.l10n.groupScreenActiveUserNone),
+      ],
+    );
+  }
+
+  Widget _option(BuildContext context, String id, String label) {
+    return SimpleDialogOption(
+      onPressed: () => Navigator.of(context).pop(id),
+      child: Row(
         children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.of(context).pop(_noneSentinel),
-            child: Row(
-              children: [
-                if (_activeUserId == null) const Icon(Icons.check, size: 18),
-                if (_activeUserId == null) const SizedBox(width: 8),
-                Text(context.l10n.groupScreenActiveUserNone),
-              ],
-            ),
-          ),
-          for (final p in _group!.participants)
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(context).pop(p.id),
-              child: Row(
-                children: [
-                  if (_activeUserId == p.id) const Icon(Icons.check, size: 18),
-                  if (_activeUserId == p.id) const SizedBox(width: 8),
-                  Text(p.name),
-                ],
-              ),
-            ),
+          if (checkedId == id) ...[
+            const Icon(Icons.check, size: 18),
+            const SizedBox(width: 8),
+          ],
+          // Flexible so a long label wraps at large text sizes.
+          Flexible(child: Text(label)),
         ],
       ),
     );
-    if (selected == null) return; // dismissed without choosing
-    final newId = selected == _noneSentinel ? null : selected;
-    if (newId == _activeUserId) return;
-    await widget.db.setActiveParticipant(widget.groupId, newId);
-    if (mounted) setState(() => _activeUserId = newId);
   }
 }

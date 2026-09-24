@@ -91,5 +91,30 @@ void main() {
       );
       expect(resolution, isA<ActiveParticipantNeedsPrompt>());
     });
+
+    test('a stored "Nobody" is final: no prompt, and a name match does not override it (#85)', () {
+      final resolution = resolveActiveParticipant(
+        storedActiveParticipantId: nobodyParticipantId,
+        defaultActiveUserName: 'Alex',
+        participants: participants,
+      );
+      expect(resolution, isA<ActiveParticipantNobody>());
+    });
+
+    test('a stale stored participant with no name match is nobody, not a new prompt (#85)', () {
+      final resolution = resolveActiveParticipant(
+        storedActiveParticipantId: 'someone-who-left',
+        defaultActiveUserName: 'Cid',
+        participants: participants,
+      );
+      expect(resolution, isA<ActiveParticipantNobody>());
+    });
+  });
+
+  test('resolveDefaultPaidBy treats the "Nobody" marker as no active user (#85)', () {
+    expect(
+      resolveDefaultPaidBy(activeUserId: nobodyParticipantId, participants: participants),
+      'alex',
+    );
   });
 }

@@ -40,6 +40,10 @@ class StatsScreen extends StatefulWidget {
   final Group group;
   final String? activeUserId;
 
+  /// Opens the "Who are you?" picker; when set, the hint shown with no
+  /// active user becomes a button that calls it (issue #85).
+  final VoidCallback? onPickActiveUser;
+
   /// See BalancesScreen's own doc comment on its identical field --
   /// same reasoning (issue #38): true embeds just the content, with no
   /// Scaffold/AppBar of its own, for use as one of GroupScreen's tab
@@ -53,6 +57,7 @@ class StatsScreen extends StatefulWidget {
     required this.outbox,
     required this.group,
     required this.activeUserId,
+    this.onPickActiveUser,
     this.embedded = false,
   });
 
@@ -214,10 +219,18 @@ class _StatsScreenState extends State<StatsScreen> {
             if (widget.activeUserId == null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  context.l10n.statsPickActiveUserHint,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+                child: widget.onPickActiveUser == null
+                    ? Text(
+                        context.l10n.statsPickActiveUserHint,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      )
+                    : TextButton(
+                        style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            alignment: AlignmentDirectional.centerStart),
+                        onPressed: widget.onPickActiveUser,
+                        child: Text(context.l10n.statsPickActiveUserHint),
+                      ),
               ),
           ],
         ),
