@@ -17,6 +17,7 @@ import '../utils/date_format.dart';
 import '../utils/money.dart';
 import '../widgets/category_icon.dart';
 import '../widgets/section_heading.dart';
+import 'expense_details_sheet.dart';
 import 'expense_screen.dart';
 import 'activity_screen.dart';
 import 'balances_screen.dart';
@@ -369,6 +370,9 @@ class _GroupScreenState extends State<GroupScreen> {
           db: widget.db,
           outbox: widget.outbox,
           group: _group!,
+          categories: _categories,
+          activeUserId: _activeUserId,
+          onExpensesChanged: _syncThenRefresh,
           embedded: true,
         );
       default:
@@ -450,18 +454,9 @@ class _GroupScreenState extends State<GroupScreen> {
                 Text(context.l10n.groupScreenSyncing, style: const TextStyle(fontSize: 11)),
             ],
           ),
-          // Pending (offline-added, not-yet-synced) rows have no server
-          // id to fetch or edit yet -- and no connectivity story for
-          // editing an in-flight create -- so editing is only offered
-          // once an expense has actually synced. A sync-failed row is a
-          // special case of pending (issue #44): tapping it offers
-          // retry/delete instead of doing nothing, since it needs a
-          // person's attention rather than silently waiting for a flush
-          // that will never come (the outbox has already given up on
-          // it -- see Outbox.flush's own doc comment).
-          onTap: e.syncFailed
-              ? () => _showSyncFailureOptions(e)
-              : (e.pending ? null : () => _openEditExpense(e)),
+          // Every row opens its details (issue #90), pending and failed
+          // ones included; the sheet decides what each state can do.
+          onTap: () => _openExpenseDetails(e),
         );
       },
     );
@@ -478,54 +473,6 @@ class _GroupScreenState extends State<GroupScreen> {
       ExpenseDateGroup.lastYear => l10n.dateSectionLastYear,
       ExpenseDateGroup.older => l10n.dateSectionOlder,
     });
-  }
-
-  /// Retry/delete for a sync-failed expense (issue #44). Deliberately
-  /// doesn't offer "edit" -- this app is explicitly scoped to offline
-  /// *view + add* only, never offline edit (decisions/mobile-platform.md),
-  /// and a sync-failed row is still just a pending, never-reached-the-
-  /// server row; editing it in place would be exactly the offline-edit
-  /// feature that decision rules out. Retry re-queues it for the outbox;
-  /// Delete discards it locally without ever having synced.
-  Future<void> _showSyncFailureOptions(Expense e) async {
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
-              title: Text(context.l10n.groupScreenSyncFailureTitle),
-              subtitle: e.lastError == null
-                  ? null
-                  : Text(e.lastError!, maxLines: 3, overflow: TextOverflow.ellipsis),
-            ),
-            ListTile(
-              leading: const Icon(Icons.refresh),
-              title: Text(context.l10n.commonRetry),
-              onTap: () => Navigator.of(context).pop('retry'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: Text(context.l10n.commonDelete),
-              onTap: () => Navigator.of(context).pop('delete'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (!mounted || action == null) return;
-    switch (action) {
-      case 'retry':
-        // No _loadFromCache() call needed (issue #47) -- [_expensesSub]
-        // already reflects retrySyncFailure's write by the time this
-        // await returns.
-        await widget.db.retrySyncFailure(e.id);
-        await _syncThenRefresh();
-      case 'delete':
-        await widget.db.deleteFailedExpense(e.id);
-    }
   }
 
   /// Opens group settings (rename, currency, participants).
@@ -566,44 +513,23 @@ class _GroupScreenState extends State<GroupScreen> {
     }
   }
 
-  /// Opens the edit flow for [e] (issue #17) -- online-only, matching
-  /// ExpenseScreen's edit mode (see its class doc comment for why:
-  /// Spliit's server has no conflict-prevention for edits at all).
-  ///
-  /// Fetches the expense fresh via [SpliitClient.fetchExpense] first,
-  /// rather than editing the possibly-stale locally cached [e] directly --
-  /// the smallest mitigation available for that missing server-side
-  /// protection is keeping the window between "what's shown" and "what's
-  /// on the server" as short as possible. If that fetch fails (most
-  /// commonly: offline), editing is refused with an explicit message
-  /// instead of silently falling back to the stale cached copy.
-  Future<void> _openEditExpense(Expense e) async {
-    late final Expense fresh;
-    try {
-      fresh = await widget.client.fetchExpense(groupId: widget.groupId, expenseId: e.id);
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.groupScreenEditNeedsConnection)),
-      );
-      return;
-    }
-    if (!mounted) return;
-
-    final edited = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => ExpenseScreen(
-          client: widget.client,
-          db: widget.db,
-          outbox: widget.outbox,
-          group: _group!,
-          existingExpense: fresh,
-        ),
-      ),
+  /// Opens [e]'s details sheet (issue #90) -- view first, with Edit,
+  /// Retry and Discard inside it (see showExpenseDetails). An edit saved
+  /// there, or a failed expense requeued, gets synced and refreshed.
+  Future<void> _openExpenseDetails(Expense e) async {
+    final group = _group;
+    if (group == null) return;
+    final changed = await showExpenseDetails(
+      context,
+      expenseId: e.id,
+      group: group,
+      db: widget.db,
+      client: widget.client,
+      outbox: widget.outbox,
+      categories: _categories,
+      activeUserId: _activeUserId,
     );
-    if (edited == true) {
-      _syncThenRefresh();
-    }
+    if (changed && mounted) _syncThenRefresh();
   }
 
   /// Resolves who "you" are in *this* group -- see resolveActiveParticipant

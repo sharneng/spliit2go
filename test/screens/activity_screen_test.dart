@@ -489,7 +489,9 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('tapping an activity with a surviving expense opens it', (tester) async {
+  // Issue #90: opens the details sheet, not the edit form. This expense
+  // isn't cached, so the sheet fetches it from the server.
+  testWidgets('tapping an activity with a surviving expense opens its details', (tester) async {
     final db = await newDb();
     addTearDown(db.close);
     final client = SpliitClient(
@@ -558,6 +560,13 @@ void main() {
     await tester.tap(find.text('Expense "Groceries" created by Alex.'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Groceries'), findsWidgets);
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.text('\$90.00'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Edit'), findsOneWidget);
+    expect(find.text('Edit expense'), findsNothing);
+
+    // The sheet watches the db (see group_screen_test's teardown note).
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 }

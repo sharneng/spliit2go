@@ -309,6 +309,42 @@ void main() {
 
       expect(await db.expensesForGroup('g1'), isEmpty);
     });
+
+    // Issue #90: the details sheet can be stale when Retry or Discard is
+    // tapped, so both only act on a row that's still pending and failed.
+    test('deleteFailedExpense leaves a row that is no longer failed alone', () async {
+      await db.insertPending(expense(id: 'local-1'));
+      expect(await db.deleteFailedExpense('local-1'), isFalse);
+      expect(await db.pendingExpensesForGroup('g1'), hasLength(1));
+
+      await db.markSynced(localId: 'local-1', serverId: '');
+      expect(await db.deleteFailedExpense('local-1'), isFalse);
+      expect(await db.expensesForGroup('g1'), hasLength(1));
+    });
+
+    test('retrySyncFailure leaves a row that is no longer failed alone', () async {
+      await db.insertPending(expense(id: 'local-1'));
+      await db.markSynced(localId: 'local-1', serverId: '');
+
+      expect(await db.retrySyncFailure('local-1'), isFalse);
+      final row = (await db.expensesForGroup('g1')).single;
+      expect(row.pending, isFalse);
+    });
+
+    test('watchExpense emits the row, its changes, and null once it is gone', () async {
+      final seen = <String?>[];
+      final sub = db.watchExpense('local-1').listen((row) => seen.add(row?.title));
+      addTearDown(sub.cancel);
+      Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 20));
+
+      await settle();
+      await db.insertPending(expense(id: 'local-1'));
+      await settle();
+      await db.markSynced(localId: 'local-1', serverId: 'server-1');
+      await settle();
+
+      expect(seen, [null, 'Coffee', null]);
+    });
   });
 
   group('multi-group support', () {

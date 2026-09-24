@@ -371,5 +371,31 @@
         "type": "String"
       }
     }
-  }
+  },
+  "expenseDetailsEdit": "Edit",
+  "expenseDetailsDiscard": "Discard",
+  "expenseDetailsYou": "{name} (you)",
+  "@expenseDetailsYou": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseDetailsReimbursement": "Reimbursement",
+  "expenseDetailsRepeatsDaily": "Repeats daily",
+  "expenseDetailsRepeatsWeekly": "Repeats weekly",
+  "expenseDetailsRepeatsMonthly": "Repeats monthly",
+  "expenseDetailsOriginalAmount": "Originally {amount}",
+  "@expenseDetailsOriginalAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseDetailsPending": "Waiting to sync. You can edit it once it reaches the server.",
+  "expenseDetailsFailedHint": "Retry to send it again, or discard it from this device. Discarding can't be undone.",
+  "expenseDetailsNotFound": "This expense is no longer available.",
+  "expenseDetailsLoadFailed": "Couldn't load this expense."
 }

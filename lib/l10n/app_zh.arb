@@ -168,5 +168,17 @@
   "groupListSortCreated": "创建日期",
   "groupListSortOpened": "最近打开",
   "groupListParticipantCount": "{count} 位成员",
-  "groupListActions": "{name}的操作"
+  "groupListActions": "{name}的操作",
+  "expenseDetailsEdit": "编辑",
+  "expenseDetailsDiscard": "舍弃",
+  "expenseDetailsYou": "{name}（你）",
+  "expenseDetailsReimbursement": "报销款",
+  "expenseDetailsRepeatsDaily": "每天重复",
+  "expenseDetailsRepeatsWeekly": "每周重复",
+  "expenseDetailsRepeatsMonthly": "每月重复",
+  "expenseDetailsOriginalAmount": "原始金额：{amount}",
+  "expenseDetailsPending": "等待同步。同步到服务器后即可编辑。",
+  "expenseDetailsFailedHint": "重试以再次发送，或从此设备上舍弃。舍弃后无法恢复。",
+  "expenseDetailsNotFound": "此消费已不存在。",
+  "expenseDetailsLoadFailed": "无法加载此消费。"
 }

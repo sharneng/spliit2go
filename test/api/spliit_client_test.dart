@@ -1152,4 +1152,30 @@ void main() {
       expect(sent()['participantId'], 'None');
     });
   });
+
+  // Issue #90: telling "deleted" apart from "couldn't reach the server".
+  group('SpliitApiException.isNotFound', () {
+    test('HTTP 404', () {
+      expect(SpliitApiException(404, 'whatever').isNotFound, isTrue);
+    });
+
+    test('tRPC NOT_FOUND embedded in a 200 batch response', () async {
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(
+            '[{"error":{"json":{"message":"Expense not found","code":-32004,'
+            '"data":{"code":"NOT_FOUND","httpStatus":404}}}}]',
+            200)),
+      );
+      await expectLater(
+        client.fetchExpense(groupId: 'g1', expenseId: 'gone'),
+        throwsA(isA<SpliitApiException>().having((e) => e.isNotFound, 'isNotFound', isTrue)),
+      );
+    });
+
+    test('other failures are not "not found"', () {
+      expect(SpliitApiException(500, 'server error').isNotFound, isFalse);
+      expect(SpliitApiException(400, '{"code":"BAD_REQUEST"}').isNotFound, isFalse);
+    });
+  });
 }

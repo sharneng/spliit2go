@@ -168,5 +168,17 @@
   "groupListSortCreated": "Date de création",
   "groupListSortOpened": "Dernière ouverture",
   "groupListParticipantCount": "{count, plural, =1{1 participant} other{{count} participants}}",
-  "groupListActions": "Actions pour {name}"
+  "groupListActions": "Actions pour {name}",
+  "expenseDetailsEdit": "Modifier",
+  "expenseDetailsDiscard": "Abandonner",
+  "expenseDetailsYou": "{name} (vous)",
+  "expenseDetailsReimbursement": "Remboursement",
+  "expenseDetailsRepeatsDaily": "Se répète chaque jour",
+  "expenseDetailsRepeatsWeekly": "Se répète chaque semaine",
+  "expenseDetailsRepeatsMonthly": "Se répète chaque mois",
+  "expenseDetailsOriginalAmount": "Montant d'origine : {amount}",
+  "expenseDetailsPending": "En attente de synchronisation. Vous pourrez la modifier une fois qu'elle aura atteint le serveur.",
+  "expenseDetailsFailedHint": "Réessayez pour l'envoyer à nouveau, ou abandonnez-la sur cet appareil. Cette action est irréversible.",
+  "expenseDetailsNotFound": "Cette dépense n'est plus disponible.",
+  "expenseDetailsLoadFailed": "Impossible de charger cette dépense."
 }
