@@ -43,6 +43,24 @@ void main() {
     expect((await db.watchExpensesForGroup('g1').first).map((r) => r.id), expected);
   });
 
+  test('an offline expense that kept its time of day still ties on the calendar day (#89 review)',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    // Fetched: dated at midnight, created at noon.
+    await db.replaceServerExpenses('g1', [
+      expense('server', DateTime(2026, 9, 23), createdAt: DateTime(2026, 9, 23, 12)),
+      expense('next-day', DateTime(2026, 9, 24), createdAt: DateTime(2026, 9, 24, 1)),
+    ]);
+    // Added offline earlier that morning, so its date carries 10:00.
+    await db.insertPending(expense('offline', DateTime(2026, 9, 23, 10),
+        createdAt: DateTime(2026, 9, 23, 10), pending: true));
+
+    const expected = ['next-day', 'server', 'offline'];
+    expect((await db.expensesForGroup('g1')).map((r) => r.id), expected);
+    expect((await db.watchExpensesForGroup('g1').first).map((r) => r.id), expected);
+  });
+
   test('createdAt round-trips through the cache', () async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);

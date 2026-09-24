@@ -104,18 +104,31 @@ void main() {
   });
 
   group('firstWeekdayFor (the phone region decides)', () {
-    test('uses the region when there is one', () {
+    test('uses the region', () {
       expect(firstWeekdayFor(const Locale('en', 'US')), DateTime.sunday);
       expect(firstWeekdayFor(const Locale('en', 'GB')), DateTime.monday);
       expect(firstWeekdayFor(const Locale('zh', 'TW')), DateTime.sunday);
       expect(firstWeekdayFor(const Locale('fr', 'CA')), DateTime.sunday);
+      expect(firstWeekdayFor(const Locale('ar', 'EG')), DateTime.saturday);
+      expect(firstWeekdayFor(const Locale('dv', 'MV')), DateTime.friday);
     });
 
-    test('falls back to the language, then to Monday', () {
+    test('the region wins over the language, whatever the pair (#89 review)', () {
+      expect(firstWeekdayFor(const Locale('zh', 'US')), DateTime.sunday);
+      expect(firstWeekdayFor(const Locale('en', 'FR')), DateTime.monday);
+      expect(firstWeekdayFor(const Locale('fr', 'FR')), DateTime.monday);
+      expect(firstWeekdayFor(const Locale('ja', 'JP')), DateTime.sunday);
+    });
+
+    test('a region CLDR does not single out starts on Monday', () {
+      // English alone would say Sunday.
+      expect(firstWeekdayFor(const Locale('en', 'NG')), DateTime.monday);
+    });
+
+    test('without a region, falls back to the language, then to Monday', () {
       expect(firstWeekdayFor(const Locale('fr')), DateTime.monday);
       expect(firstWeekdayFor(const Locale('en')), DateTime.sunday);
       expect(firstWeekdayFor(const Locale('xx')), DateTime.monday);
-      expect(firstWeekdayFor(const Locale('fr', 'XX')), DateTime.monday);
     });
   });
 }

@@ -74,14 +74,38 @@ List<(ExpenseDateGroup, List<Expense>)> groupExpensesByDate(
 }
 
 /// The first day of the week (a [DateTime.weekday]) where the phone is
-/// set up, from its locale's region: Sunday for en_US, Monday for en_GB
-/// or fr. Kenneth's call in #88, the same as spliit-ios; Monday when the
-/// locale is unknown, the same fallback as spliit-web.
+/// set up, decided by its region whatever the language: Sunday for en_US
+/// or zh_US, Monday for en_GB, en_FR or fr_FR. Kenneth's call in #88, the
+/// same as spliit-ios. Only a locale with no region falls back to its
+/// language's default (via intl: en means en_US, so Sunday), then to
+/// Monday, the same fallback as spliit-web.
 int firstWeekdayFor(Locale deviceLocale) {
-  final symbols = dateTimeSymbolMap();
-  final country = deviceLocale.countryCode;
-  final match = (country == null ? null : symbols['${deviceLocale.languageCode}_$country']) ??
-      symbols[deviceLocale.languageCode];
+  final region = deviceLocale.countryCode?.toUpperCase();
+  if (region != null && region.isNotEmpty) {
+    if (_sundayRegions.contains(region)) return DateTime.sunday;
+    if (_saturdayRegions.contains(region)) return DateTime.saturday;
+    if (_fridayRegions.contains(region)) return DateTime.friday;
+    return DateTime.monday;
+  }
+  final symbols = dateTimeSymbolMap()[deviceLocale.languageCode];
   // intl counts 0 = Monday .. 6 = Sunday.
-  return match is DateSymbols ? match.FIRSTDAYOFWEEK + 1 : DateTime.monday;
+  return symbols is DateSymbols ? symbols.FIRSTDAYOFWEEK + 1 : DateTime.monday;
 }
+
+// Unicode CLDR 48 week data (weekData/firstDay in
+// common/supplemental/supplementalData.xml); every region not listed
+// starts on Monday, CLDR's world default. Kept here rather than looked up
+// in intl, whose locale list misses most language/region pairs (zh_US,
+// en_FR) and keys a language's home region by the bare language (fr).
+const _fridayRegions = {'MV'};
+const _saturdayRegions = {
+  'AF', 'BH', 'DJ', 'DZ', 'EG', 'IQ', 'IR', 'JO', 'KW', 'LY', 'OM', 'QA', 'SD',
+  'SY',
+};
+const _sundayRegions = {
+  'AG', 'AS', 'BD', 'BR', 'BS', 'BT', 'BW', 'BZ', 'CA', 'CO', 'DM', 'DO', 'ET',
+  'GT', 'GU', 'HK', 'HN', 'ID', 'IL', 'IN', 'IS', 'JM', 'JP', 'KE', 'KH', 'KR',
+  'LA', 'MH', 'MM', 'MO', 'MT', 'MX', 'MZ', 'NI', 'NP', 'PA', 'PE', 'PH', 'PK',
+  'PR', 'PT', 'PY', 'SA', 'SG', 'SV', 'TH', 'TT', 'TW', 'UM', 'US', 'VE', 'VI',
+  'WS', 'YE', 'ZA', 'ZW',
+};

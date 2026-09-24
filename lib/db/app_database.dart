@@ -226,19 +226,36 @@ class AppDatabase extends _$AppDatabase {
         },
       );
 
-  /// Spliit's own list order: expense date, then creation time, both
-  /// newest first (issue #88).
-  static final _newestFirst = <OrderClauseGenerator<$ExpensesTable>>[
-    (e) => OrderingTerm.desc(e.date),
-    (e) => OrderingTerm(
-        expression: e.createdAt, mode: OrderingMode.desc, nulls: NullsOrder.last),
-  ];
+  /// Spliit's own list order (issue #88): calendar day, then creation
+  /// time, both newest first, with an unknown creation time last. By
+  /// calendar day rather than the stored value, because an expense added
+  /// offline keeps the time of day it was entered while fetched ones sit
+  /// at midnight. Sorted here, not in SQL, to use the same local calendar
+  /// as the date sections.
+  static List<ExpenseRow> _newestFirst(List<ExpenseRow> rows) {
+    int day(DateTime d) => d.year * 10000 + d.month * 100 + d.day;
+    return rows
+      ..sort((a, b) {
+        final byDay = day(b.date).compareTo(day(a.date));
+        if (byDay != 0) return byDay;
+        final (ca, cb) = (a.createdAt, b.createdAt);
+        if (ca != null && cb != null) {
+          final byCreation = cb.compareTo(ca);
+          if (byCreation != 0) return byCreation;
+        } else if (ca != cb) {
+          return ca == null ? 1 : -1;
+        }
+        // Deterministic from here on; Dart's sort isn't stable.
+        final byTime = b.date.compareTo(a.date);
+        return byTime != 0 ? byTime : a.id.compareTo(b.id);
+      });
+  }
 
   Future<List<ExpenseRow>> expensesForGroup(String groupId) {
     return (select(expenses)
-          ..where((e) => e.groupId.equals(groupId))
-          ..orderBy(_newestFirst))
-        .get();
+          ..where((e) => e.groupId.equals(groupId)))
+        .get()
+        .then(_newestFirst);
   }
 
   /// Same query as [expensesForGroup], as a live [Stream] instead of a
@@ -252,9 +269,9 @@ class AppDatabase extends _$AppDatabase {
   /// mutation.
   Stream<List<ExpenseRow>> watchExpensesForGroup(String groupId) {
     return (select(expenses)
-          ..where((e) => e.groupId.equals(groupId))
-          ..orderBy(_newestFirst))
-        .watch();
+          ..where((e) => e.groupId.equals(groupId)))
+        .watch()
+        .map(_newestFirst);
   }
 
   Future<List<ExpenseRow>> pendingExpenses() {
