@@ -175,8 +175,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   /// Why the last Edit couldn't open, shown under the button.
   String? _editError;
 
-  /// Set once the sheet starts closing, so a row update landing at the
-  /// same moment can't pop a second route.
+  /// Set once the sheet starts closing through [_close].
   bool _closing = false;
 
   /// What to close with when the row disappears because of our own
@@ -223,10 +222,19 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     }
   }
 
+  /// Pops the sheet with [action], unless it's already closing. That
+  /// includes a close the sheet didn't start: a barrier tap, swipe or Back
+  /// pops the route directly, and the sheet stays mounted through its
+  /// closing animation, so a late Edit fetch, Retry or row change can still
+  /// land here. Its route is no longer current by then, and popping anyway
+  /// would take the screen underneath with it (PR #95 review). [mounted]
+  /// alone can't tell.
   void _close([_SheetAction? action]) {
     if (_closing) return;
     _closing = true;
-    Navigator.of(context).pop(action);
+    if (ModalRoute.of(context)?.isCurrent ?? false) {
+      Navigator.of(context).pop(action);
+    }
   }
 
   /// Activity cache miss: load the expense from the server instead. It's

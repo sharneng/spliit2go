@@ -499,4 +499,90 @@ void main() {
       await closeTree(tester);
     });
   }
+
+  // PR #95 review (Ezra): dismissing the sheet (barrier, swipe, Back) pops
+  // it without the sheet's own close path. A late Edit fetch or row change
+  // landing during its closing animation must not pop a second route --
+  // in the app, that's GroupScreen itself.
+  group('a late callback after the sheet is dismissed', () {
+    Future<(_PopCounter, AppDatabase)> openFromCaller(
+        WidgetTester tester, SpliitClient client) async {
+      final pops = _PopCounter();
+      final db = await cachedDb();
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        navigatorObservers: [pops],
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (context) => Scaffold(
+                body: Center(
+                  child: TextButton(
+                    onPressed: () => showExpenseDetails(
+                      context,
+                      expenseId: 'e1',
+                      group: banff,
+                      db: db,
+                      client: client,
+                      outbox: Outbox(db, client, groupId: 'g1'),
+                      connectivity: const Stream.empty(),
+                    ),
+                    child: const Text('open'),
+                  ),
+                ),
+              ),
+            )),
+            child: const Text('caller'),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('caller'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      pops.count = 0;
+      return (pops, db);
+    }
+
+    testWidgets('an Edit fetch completing mid-dismissal pops nothing more', (tester) async {
+      final response = Completer<http.Response>();
+      final (pops, db) = await openFromCaller(tester, serverClient((_) => response.future));
+      addTearDown(db.close);
+
+      await tester.tap(inSheet(find.widgetWithText(FilledButton, 'Edit')));
+      await tester.pump();
+      await tester.tapAt(const Offset(20, 20)); // the modal barrier
+      await tester.pump(const Duration(milliseconds: 10));
+      response.complete(http.Response(expenseResponse(), 200));
+      await tester.pumpAndSettle();
+
+      expect(pops.count, 1);
+      expect(find.text('open'), findsOneWidget); // the caller is still there
+      expect(find.text('Edit expense'), findsNothing);
+      await closeTree(tester);
+    });
+
+    testWidgets('the expense disappearing mid-dismissal pops nothing more', (tester) async {
+      final (pops, db) = await openFromCaller(tester, offlineClient);
+      addTearDown(db.close);
+
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pump(const Duration(milliseconds: 10));
+      await tester.runAsync(() => db.replaceServerExpenses('g1', []));
+      await tester.pumpAndSettle();
+
+      expect(pops.count, 1);
+      expect(find.text('open'), findsOneWidget);
+      await closeTree(tester);
+    });
+  });
+}
+
+class _PopCounter extends NavigatorObserver {
+  int count = 0;
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => count++;
 }
