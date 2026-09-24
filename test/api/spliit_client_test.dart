@@ -209,6 +209,42 @@ void main() {
   });
 
   group('SpliitClient.fetchExpenses', () {
+    test('parses createdAt, and leaves it null when the server omits it (#88)', () async {
+      Map<String, dynamic> item(String id, {String? createdAt}) => {
+            'id': id,
+            'title': id,
+            'amount': 500,
+            'paidBy': {'id': 'p1', 'name': 'Ken'},
+            'paidFor': [
+              {'participant': {'id': 'p1', 'name': 'Ken'}, 'shares': 1},
+            ],
+            'expenseDate': '2026-09-16T00:00:00.000Z',
+            if (createdAt != null) 'createdAt': createdAt,
+          };
+      final body = jsonEncode([
+        {
+          'result': {
+            'data': {
+              'json': {
+                'expenses': [item('e1', createdAt: '2026-09-16T14:03:27.123Z'), item('e2')],
+                'hasMore': false,
+              },
+            },
+          },
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+
+      final expenses = await client.fetchExpenses('g1');
+
+      expect(expenses[0].createdAt!.isAtSameMomentAs(DateTime.utc(2026, 9, 16, 14, 3, 27, 123)),
+          isTrue);
+      expect(expenses[1].createdAt, isNull);
+    });
+
     // Regression test for the real bug found testing against a live
     // server on 2026-09-16: groups.expenses.list returns paidBy and each
     // paidFor entry's participant as an expanded {id, name} object, not

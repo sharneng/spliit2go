@@ -73,6 +73,9 @@ class Expenses extends Table {
   /// shows it as needing the user's attention (retry or delete) instead.
   BoolColumn get syncFailed => boolean().withDefault(const Constant(false))();
 
+  /// See [Expense.createdAt]: the tiebreak between same-day expenses.
+  DateTimeColumn get createdAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -154,7 +157,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -216,13 +219,25 @@ class AppDatabase extends _$AppDatabase {
               await m.alterTable(TableMigration(groups));
             }
           }
+          if (from < 10) {
+            // Filled by the next refresh; see Expenses.createdAt.
+            await m.addColumn(expenses, expenses.createdAt);
+          }
         },
       );
+
+  /// Spliit's own list order: expense date, then creation time, both
+  /// newest first (issue #88).
+  static final _newestFirst = <OrderClauseGenerator<$ExpensesTable>>[
+    (e) => OrderingTerm.desc(e.date),
+    (e) => OrderingTerm(
+        expression: e.createdAt, mode: OrderingMode.desc, nulls: NullsOrder.last),
+  ];
 
   Future<List<ExpenseRow>> expensesForGroup(String groupId) {
     return (select(expenses)
           ..where((e) => e.groupId.equals(groupId))
-          ..orderBy([(e) => OrderingTerm.desc(e.date)]))
+          ..orderBy(_newestFirst))
         .get();
   }
 
@@ -238,7 +253,7 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<ExpenseRow>> watchExpensesForGroup(String groupId) {
     return (select(expenses)
           ..where((e) => e.groupId.equals(groupId))
-          ..orderBy([(e) => OrderingTerm.desc(e.date)]))
+          ..orderBy(_newestFirst))
         .watch();
   }
 
@@ -396,6 +411,7 @@ class AppDatabase extends _$AppDatabase {
         originalCurrency: Value(e.originalCurrency),
         conversionRate: Value(e.conversionRate),
         pending: Value(e.pending),
+        createdAt: Value(e.createdAt),
       );
 
   /// Device-local organization, never sent to the server or changed by refresh.
@@ -606,5 +622,6 @@ class AppDatabase extends _$AppDatabase {
         pending: row.pending,
         syncFailed: row.syncFailed,
         lastError: row.lastError,
+        createdAt: row.createdAt,
       );
 }

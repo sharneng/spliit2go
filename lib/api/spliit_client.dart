@@ -163,6 +163,7 @@ class SpliitClient {
           originalAmountCents: (m['originalAmount'] as num?)?.round(),
           originalCurrency: m['originalCurrency'] as String?,
           conversionRate: m['conversionRate'] == null ? null : _asDouble(m['conversionRate']),
+          createdAt: m['createdAt'] == null ? null : _asDateTime(m['createdAt']),
         ));
       }
 
@@ -246,6 +247,7 @@ class SpliitClient {
       originalAmountCents: (m['originalAmount'] as num?)?.round(),
       originalCurrency: m['originalCurrency'] as String?,
       conversionRate: m['conversionRate'] == null ? null : _asDouble(m['conversionRate']),
+      createdAt: m['createdAt'] == null ? null : _asDateTime(m['createdAt']),
     );
   }
 

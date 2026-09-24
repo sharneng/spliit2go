@@ -39,6 +39,13 @@
   "groupScreenTabBalance": "Balance",
   "groupScreenTabStats": "Stats",
   "groupScreenTabActivities": "Activities",
+  "groupScreenSectionUpcoming": "Upcoming",
+  "groupScreenSectionThisWeek": "This week",
+  "groupScreenSectionEarlierThisMonth": "Earlier this month",
+  "groupScreenSectionLastMonth": "Last month",
+  "groupScreenSectionEarlierThisYear": "Earlier this year",
+  "groupScreenSectionLastYear": "Last year",
+  "groupScreenSectionOlder": "Older",
   "groupScreenServerError": "Couldn't reach the server: {error}",
   "@groupScreenServerError": {
     "placeholders": {
