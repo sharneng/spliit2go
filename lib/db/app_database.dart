@@ -423,17 +423,60 @@ class AppDatabase extends _$AppDatabase {
   Stream<ExpenseRow?> watchExpense(String id) =>
       (select(expenses)..where((e) => e.id.equals(id))).watchSingleOrNull();
 
+  /// Bumped for a group each time this device changes its expenses on
+  /// the server directly -- an edit or a delete (issue #90) -- so a
+  /// refresh that fetched before the change can't write its now-stale
+  /// list over it; see [replaceServerExpenses]. In memory only: it guards
+  /// refreshes in flight, which never outlive the process.
+  final Map<String, int> _expenseGenerations = {};
+
+  /// Read this before fetching a group's expenses, and pass it to
+  /// [replaceServerExpenses] as `fetchedAtGeneration`.
+  int expensesGeneration(String groupId) => _expenseGenerations[groupId] ?? 0;
+
+  /// Records that this device just changed [groupId]'s expenses on the
+  /// server, outside a refresh -- see [expensesGeneration].
+  void markExpensesChanged(String groupId) =>
+      _expenseGenerations[groupId] = expensesGeneration(groupId) + 1;
+
   /// Overwrites the cached (non-pending) rows for a group with a fresh
   /// fetch from the server. Pending rows are left untouched -- they're
   /// only cleared by the outbox once the server confirms them.
-  Future<void> replaceServerExpenses(
-      String groupId, List<Expense> fresh) async {
-    await transaction(() async {
+  ///
+  /// [fetchedAtGeneration] is the group's [expensesGeneration] from before
+  /// [fresh] was fetched. If this device has edited or deleted one of the
+  /// group's expenses since, [fresh] may predate that change -- a deleted
+  /// expense would come back -- so nothing is written and this returns
+  /// false (issue #90); the refresh that change triggers brings the
+  /// current list. Checked inside the transaction, so it can't interleave
+  /// with [removeDeletedExpense]'s. Omit it (joining a group, seeding
+  /// tests) to always write.
+  Future<bool> replaceServerExpenses(String groupId, List<Expense> fresh,
+      {int? fetchedAtGeneration}) {
+    return transaction(() async {
+      if (fetchedAtGeneration != null &&
+          fetchedAtGeneration != expensesGeneration(groupId)) {
+        return false;
+      }
       await (delete(expenses)
             ..where((e) => e.groupId.equals(groupId) & e.pending.equals(false)))
           .go();
       await batch(
           (b) => b.insertAll(expenses, fresh.map(toCompanion).toList()));
+      return true;
+    });
+  }
+
+  /// Removes an expense the server has confirmed deleted (issue #90), and
+  /// marks the group's expenses changed first, in the same transaction,
+  /// so a refresh already in flight can't bring it back (see
+  /// [replaceServerExpenses]). Only a synced row: a pending one never
+  /// reached the server.
+  Future<void> removeDeletedExpense(String groupId, String id) {
+    return transaction(() async {
+      markExpensesChanged(groupId);
+      await (delete(expenses)..where((e) => e.id.equals(id) & e.pending.equals(false)))
+          .go();
     });
   }
 

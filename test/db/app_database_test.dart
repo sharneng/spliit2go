@@ -506,4 +506,67 @@ void main() {
       expect(await db.defaultSplitFor('g2'), isNull);
     });
   });
+
+  // Issue #90: a refresh that fetched before this device edited or deleted
+  // an expense mustn't write its stale list over the change.
+  group('refresh guard', () {
+    Expense synced(String id) => Expense(
+          id: id,
+          groupId: 'g1',
+          title: id,
+          amountCents: 500,
+          paidBy: 'p1',
+          paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+          date: DateTime.utc(2026, 9, 16),
+        );
+
+    test('a refresh fetched before a delete does not bring it back', () async {
+      await db.replaceServerExpenses('g1', [synced('e1'), synced('e2')]);
+      final before = db.expensesGeneration('g1'); // refresh starts fetching
+
+      await db.removeDeletedExpense('g1', 'e1'); // delete lands meanwhile
+
+      final wrote = await db.replaceServerExpenses('g1', [synced('e1'), synced('e2')],
+          fetchedAtGeneration: before);
+      expect(wrote, isFalse);
+      expect((await db.expensesForGroup('g1')).map((e) => e.id), ['e2']);
+    });
+
+    test('a refresh fetched after the delete writes normally', () async {
+      await db.replaceServerExpenses('g1', [synced('e1'), synced('e2')]);
+      await db.removeDeletedExpense('g1', 'e1');
+
+      final wrote = await db.replaceServerExpenses('g1', [synced('e2'), synced('e3')],
+          fetchedAtGeneration: db.expensesGeneration('g1'));
+      expect(wrote, isTrue);
+      expect((await db.expensesForGroup('g1')).map((e) => e.id).toSet(), {'e2', 'e3'});
+    });
+
+    test('an edit marks the group changed the same way', () async {
+      final before = db.expensesGeneration('g1');
+      db.markExpensesChanged('g1');
+      expect(await db.replaceServerExpenses('g1', [synced('e1')], fetchedAtGeneration: before),
+          isFalse);
+    });
+
+    test('generations are per group', () async {
+      final other = db.expensesGeneration('g2');
+      db.markExpensesChanged('g1');
+      expect(db.expensesGeneration('g2'), other);
+    });
+
+    test('removeDeletedExpense leaves a pending expense alone', () async {
+      await db.insertPending(Expense(
+          id: 'local-1',
+          groupId: 'g1',
+          title: 'Snacks',
+          amountCents: 300,
+          paidBy: 'p1',
+          paidFor: const [],
+          date: DateTime.utc(2026, 9, 16),
+          pending: true));
+      await db.removeDeletedExpense('g1', 'local-1');
+      expect(await db.pendingExpensesForGroup('g1'), hasLength(1));
+    });
+  });
 }

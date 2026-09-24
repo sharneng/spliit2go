@@ -1029,5 +1029,8 @@ void main() {
     expect(captured!.url.toString(), contains('groups.expenses.update'));
     final sent = jsonDecode(captured!.body) as Map<String, dynamic>;
     expect(sent['0']['json']['participantId'], 'cid');
+    // Issue #90: a refresh fetched before this edit won't write the old
+    // copy back over it.
+    expect(db.expensesGeneration('g1'), 1);
   });
 }

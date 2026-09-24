@@ -1178,4 +1178,53 @@ void main() {
       expect(SpliitApiException(400, '{"code":"BAD_REQUEST"}').isNotFound, isFalse);
     });
   });
+
+  // Issue #90 part 2.
+  group('SpliitClient.deleteExpense', () {
+    test('posts to groups.expenses.delete with the ids and who to credit', () async {
+      http.Request? captured;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          captured = req;
+          return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+        }),
+      );
+
+      await client.deleteExpense(groupId: 'g1', expenseId: 'e1', participantId: 'p2');
+
+      expect(captured!.method, 'POST');
+      expect(captured!.url.toString(), contains('groups.expenses.delete'));
+      final sent = (jsonDecode(captured!.body) as Map<String, dynamic>)['0']['json'];
+      expect(sent, {'groupId': 'g1', 'expenseId': 'e1', 'participantId': 'p2'});
+    });
+
+    test('no active user is sent as None', () async {
+      http.Request? captured;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          captured = req;
+          return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+        }),
+      );
+      await client.deleteExpense(groupId: 'g1', expenseId: 'e1');
+      expect((jsonDecode(captured!.body) as Map<String, dynamic>)['0']['json']['participantId'],
+          'None');
+    });
+
+    test('throws on an HTTP error or an embedded tRPC error', () async {
+      for (final response in [
+        http.Response('server error', 500),
+        http.Response('[{"error":{"json":{"message":"boom","code":-32603}}}]', 200),
+      ]) {
+        final client = SpliitClient(
+          baseUrl: 'https://example.test',
+          httpClient: MockClient((_) async => response),
+        );
+        await expectLater(client.deleteExpense(groupId: 'g1', expenseId: 'e1'),
+            throwsA(isA<SpliitApiException>()));
+      }
+    });
+  });
 }

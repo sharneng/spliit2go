@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -252,6 +254,122 @@ void main() {
       expect(find.byType(BottomSheet), findsOneWidget);
       expect(find.textContaining('Waiting to sync'), findsOneWidget);
       expect(find.widgetWithText(FilledButton, 'Edit'), findsNothing);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    // Issue #90 part 2: Delete, end to end through the list.
+    String groupJson() =>
+        '[{"result":{"data":{"json":{"group":{"id":"g1","name":"Banff Trip",'
+        '"currency":"\$","participants":[{"id":"p1","name":"Ken"}]}}}}}]';
+    String listJson(List<String> titles) => '[{"result":{"data":{"json":{"expenses":['
+        '${titles.map((t) => '{"id":"$t","title":"$t","amount":500,"paidBy":"p1",'
+            '"paidFor":[{"participant":"p1","shares":1}],"splitMode":"EVENLY","category":0,'
+            '"notes":"","expenseDate":"2026-09-16T00:00:00.000Z","isReimbursement":false}').join(',')}'
+        '],"hasMore":false}}}}]';
+    Expense cached(String id) => Expense(
+          id: id,
+          groupId: 'g1',
+          title: id,
+          amountCents: 500,
+          paidBy: 'p1',
+          paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+          date: DateTime.utc(2026, 9, 16),
+        );
+
+    Future<void> deleteFromList(WidgetTester tester, String title) async {
+      await tester.tap(find.text(title));
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(
+          of: find.byType(BottomSheet), matching: find.widgetWithText(OutlinedButton, 'Delete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(
+          of: find.byWidgetPredicate((w) => w is AlertDialog), matching: find.text('Delete')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('Delete removes it from the list, credited to you, even when the refresh after fails',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.cacheGroup(cachedGroup);
+      await db.replaceServerExpenses('g1', [cached('Coffee'), cached('Tea')]);
+      http.Request? deleted;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          if (req.url.toString().contains('groups.expenses.delete')) {
+            deleted = req;
+            return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+          }
+          throw Exception('offline'); // every refresh fails
+        }),
+      );
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: GroupScreen(
+            client: client, db: db, outbox: Outbox(db, client, groupId: 'g1'), groupId: 'g1'),
+      ));
+      await tester.pumpAndSettle();
+
+      await deleteFromList(tester, 'Coffee');
+
+      expect((jsonDecode(deleted!.body) as Map)['0']['json']['participantId'], 'p1');
+      expect(find.text('Coffee'), findsNothing);
+      expect(find.text('Tea'), findsOneWidget);
+      expect((await db.expensesForGroup('g1')).map((e) => e.id), ['Tea']);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('a refresh already in flight when the delete lands does not bring it back',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.cacheGroup(cachedGroup);
+      await db.replaceServerExpenses('g1', [cached('Coffee'), cached('Tea')]);
+      final staleList = Completer<http.Response>();
+      var lists = 0;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          final url = req.url.toString();
+          if (url.contains('groups.expenses.delete')) {
+            return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+          }
+          if (url.contains('groups.expenses.list')) {
+            lists++;
+            // The first refresh fetched before the delete: held, then
+            // answers with the old list.
+            if (lists == 1) return staleList.future;
+            return http.Response(listJson(['Tea']), 200);
+          }
+          if (url.contains('groups.get')) return http.Response(groupJson(), 200);
+          throw Exception('offline');
+        }),
+      );
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: GroupScreen(
+            client: client, db: db, outbox: Outbox(db, client, groupId: 'g1'), groupId: 'g1'),
+      ));
+      await tester.pumpAndSettle();
+      expect(lists, 1); // the startup refresh is waiting on its list
+
+      await deleteFromList(tester, 'Coffee');
+      expect(lists, 2); // the delete's own refresh came and went
+
+      staleList.complete(http.Response(listJson(['Coffee', 'Tea']), 200));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Coffee'), findsNothing);
+      expect((await db.expensesForGroup('g1')).map((e) => e.id), ['Tea']);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));

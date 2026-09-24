@@ -162,10 +162,13 @@ class _GroupScreenState extends State<GroupScreen> {
   Future<void> _refresh() async {
     setState(() => _loading = true);
     try {
+      final generation = widget.db.expensesGeneration(widget.groupId);
       final group = await widget.client.fetchGroup(widget.groupId);
       final fresh = await widget.client.fetchExpenses(widget.groupId);
       await widget.db.cacheGroup(group);
-      await widget.db.replaceServerExpenses(widget.groupId, fresh);
+      // Skipped if an edit or delete landed while this was fetching (#90).
+      await widget.db.replaceServerExpenses(widget.groupId, fresh,
+          fetchedAtGeneration: generation);
       if (!mounted) return;
       setState(() => _error = null);
     } catch (e, st) {

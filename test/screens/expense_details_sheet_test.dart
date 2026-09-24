@@ -234,7 +234,7 @@ void main() {
     await closeTree(tester);
   });
 
-  testWidgets('known offline: Edit is disabled with the reason shown, until back online',
+  testWidgets('known offline: Edit and Delete are disabled with the reason shown, until back online',
       (tester) async {
     final db = await cachedDb();
     addTearDown(db.close);
@@ -246,13 +246,18 @@ void main() {
     await tester.pumpAndSettle();
     FilledButton edit() =>
         tester.widget<FilledButton>(inSheet(find.widgetWithText(FilledButton, 'Edit')));
+    OutlinedButton delete() =>
+        tester.widget<OutlinedButton>(inSheet(find.widgetWithText(OutlinedButton, 'Delete')));
+    const reason = 'Editing or deleting an expense needs a connection.';
     expect(edit().onPressed, isNull);
-    expect(inSheet(find.text('Editing an expense needs a connection.')), findsOneWidget);
+    expect(delete().onPressed, isNull);
+    expect(inSheet(find.text(reason)), findsOneWidget);
 
     online.add(true);
     await tester.pumpAndSettle();
     expect(edit().onPressed, isNotNull);
-    expect(inSheet(find.text('Editing an expense needs a connection.')), findsNothing);
+    expect(delete().onPressed, isNotNull);
+    expect(inSheet(find.text(reason)), findsNothing);
     await closeTree(tester);
   });
 
@@ -499,6 +504,215 @@ void main() {
       await closeTree(tester);
     });
   }
+
+  group('Delete (#90 part 2)', () {
+    const ok = '[{"result":{"data":{"json":{}}}}]';
+    // AlertDialog.adaptive builds a subclass, which byType wouldn't match.
+    Finder inDialog(Finder f) =>
+        find.descendant(of: find.byWidgetPredicate((w) => w is AlertDialog), matching: f);
+
+    Future<void> tapDelete(WidgetTester tester) async {
+      await tester.tap(inSheet(find.widgetWithText(OutlinedButton, 'Delete')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('asks first; Cancel changes nothing', (tester) async {
+      final db = await cachedDb();
+      addTearDown(db.close);
+      var calls = 0;
+      await openSheet(tester, db, client: serverClient((_) async {
+        calls++;
+        return http.Response(ok, 200);
+      }));
+
+      await tapDelete(tester);
+      expect(inDialog(find.text('Delete this expense?')), findsOneWidget);
+      expect(
+          inDialog(find.text('"Dinner" will be deleted for everyone in the group. '
+              "This can't be undone.")),
+          findsOneWidget);
+      await tester.tap(inDialog(find.text('Cancel')));
+      await tester.pumpAndSettle();
+
+      expect(calls, 0);
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(await tester.runAsync(() => db.expensesForGroup('g1')), hasLength(1));
+      await closeTree(tester);
+    });
+
+    testWidgets('confirmed: deletes on the server, credited to the active user, then locally',
+        (tester) async {
+      final db = await cachedDb();
+      addTearDown(db.close);
+      await db.cacheGroup(banff);
+      await db.setActiveParticipant('g1', 'bea');
+      http.Request? deleteRequest;
+      await openSheet(tester, db, client: serverClient((req) async {
+        if (req.url.toString().contains('groups.expenses.delete')) deleteRequest = req;
+        return http.Response(ok, 200);
+      }));
+
+      await tapDelete(tester);
+      await tester.tap(inDialog(find.text('Delete')));
+      await tester.pumpAndSettle();
+
+      final sent = (jsonDecode(deleteRequest!.body) as Map<String, dynamic>)['0']['json'];
+      expect(sent, {'groupId': 'g1', 'expenseId': 'e1', 'participantId': 'bea'});
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(result, isTrue);
+      expect(await tester.runAsync(() => db.expensesForGroup('g1')), isEmpty);
+      // A refresh already in flight can't bring it back.
+      expect(db.expensesGeneration('g1'), 1);
+      await closeTree(tester);
+    });
+
+    testWidgets('while it runs, nothing else can be tapped', (tester) async {
+      final db = await cachedDb();
+      addTearDown(db.close);
+      final response = Completer<http.Response>();
+      await openSheet(tester, db, client: serverClient((_) => response.future));
+
+      await tapDelete(tester);
+      await tester.tap(inDialog(find.text('Delete')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+          tester.widget<FilledButton>(inSheet(find.widgetWithText(FilledButton, 'Edit'))).onPressed,
+          isNull);
+      expect(
+          tester
+              .widget<OutlinedButton>(inSheet(find.widgetWithText(OutlinedButton, 'Delete')))
+              .onPressed,
+          isNull);
+      expect(inSheet(find.byType(CircularProgressIndicator)), findsOneWidget);
+
+      response.complete(http.Response(ok, 200));
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsNothing);
+      await closeTree(tester);
+    });
+
+    testWidgets('a failure keeps the expense and says so in the sheet', (tester) async {
+      final db = await cachedDb();
+      addTearDown(db.close);
+      await openSheet(tester, db, client: serverClient((req) async {
+        if (req.url.toString().contains('groups.expenses.delete')) {
+          return http.Response('server error', 500);
+        }
+        return http.Response(expenseResponse(), 200); // still there
+      }));
+
+      await tapDelete(tester);
+      await tester.tap(inDialog(find.text('Delete')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(inSheet(find.textContaining("Couldn't delete this expense.")), findsOneWidget);
+      expect(await tester.runAsync(() => db.expensesForGroup('g1')), hasLength(1));
+      expect(db.expensesGeneration('g1'), 0);
+      expect(
+          tester
+              .widget<OutlinedButton>(inSheet(find.widgetWithText(OutlinedButton, 'Delete')))
+              .onPressed,
+          isNotNull);
+      await closeTree(tester);
+    });
+
+    // Upstream errors when deleting an expense that's already gone (a
+    // retry after a lost response), so "not found" afterwards means done.
+    testWidgets('a failure for an expense that is already gone counts as deleted',
+        (tester) async {
+      final db = await cachedDb();
+      addTearDown(db.close);
+      await openSheet(tester, db, client: serverClient((req) async {
+        if (req.url.toString().contains('groups.expenses.delete')) {
+          return http.Response('internal error', 500);
+        }
+        return http.Response(notFound, 404);
+      }));
+
+      await tapDelete(tester);
+      await tester.tap(inDialog(find.text('Delete')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(result, isTrue);
+      expect(await tester.runAsync(() => db.expensesForGroup('g1')), isEmpty);
+      await closeTree(tester);
+    });
+
+    testWidgets('an expense opened from Activity, not cached, can be deleted', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await openSheet(tester, db, fetchIfMissing: true, client: serverClient((req) async {
+        if (req.url.toString().contains('groups.expenses.delete')) return http.Response(ok, 200);
+        return http.Response(expenseResponse(), 200);
+      }));
+
+      await tapDelete(tester);
+      await tester.tap(inDialog(find.text('Delete')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(result, isTrue);
+      await closeTree(tester);
+    });
+
+    testWidgets('dismissed while deleting: the local copy still goes once the server confirms',
+        (tester) async {
+      final db = await cachedDb();
+      addTearDown(db.close);
+      final response = Completer<http.Response>();
+      await openSheet(tester, db, client: serverClient((_) => response.future));
+
+      await tapDelete(tester);
+      await tester.tap(inDialog(find.text('Delete')));
+      await tester.pump();
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsNothing);
+
+      response.complete(http.Response(ok, 200));
+      await tester.pumpAndSettle();
+      expect(await tester.runAsync(() => db.expensesForGroup('g1')), isEmpty);
+      await closeTree(tester);
+    });
+  });
+
+  // PR #95 left this: drift re-emits on every write to the table, and the
+  // sheet refetched an uncached expense each time.
+  testWidgets('an expense loaded from the server isn\'t refetched on unrelated writes',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    var fetches = 0;
+    await openSheet(tester, db, fetchIfMissing: true, client: serverClient((_) async {
+      fetches++;
+      return http.Response(expenseResponse(), 200);
+    }));
+    expect(fetches, 1);
+
+    // One unrelated write. (A second write in the same runAsync would
+    // deadlock: the first one's stream refresh runs in the test's fake
+    // zone and holds drift's lock until the test pumps.)
+    await tester.runAsync(() async {
+      await db.insertPending(Expense(
+          id: 'other',
+          groupId: 'g1',
+          title: 'Other',
+          amountCents: 100,
+          paidBy: 'alex',
+          paidFor: const [],
+          date: DateTime(2026, 9, 16),
+          pending: true));
+    });
+    await tester.pumpAndSettle();
+
+    expect(fetches, 1);
+    expect(inSheet(find.text('Dinner')), findsOneWidget);
+    await closeTree(tester);
+  });
 
   // PR #95 review (Ezra): dismissing the sheet (barrier, swipe, Back) pops
   // it without the sheet's own close path. A late Edit fetch or row change

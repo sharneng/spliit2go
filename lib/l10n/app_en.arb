@@ -397,5 +397,16 @@
   "expenseDetailsPending": "Waiting to sync. You can edit it once it reaches the server.",
   "expenseDetailsFailedHint": "Retry to send it again, or discard it from this device. Discarding can't be undone.",
   "expenseDetailsNotFound": "This expense is no longer available.",
-  "expenseDetailsLoadFailed": "Couldn't load this expense."
+  "expenseDetailsLoadFailed": "Couldn't load this expense.",
+  "expenseDetailsNeedsConnection": "Editing or deleting an expense needs a connection.",
+  "expenseDeleteConfirmTitle": "Delete this expense?",
+  "expenseDeleteConfirmBody": "\"{title}\" will be deleted for everyone in the group. This can't be undone.",
+  "@expenseDeleteConfirmBody": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseDeleteFailed": "Couldn't delete this expense. Check your connection and try again."
 }
