@@ -355,4 +355,33 @@ void main() {
       expect(await db.expensesForGroup('g1'), isEmpty);
     });
   });
+
+  // Issue #92: a queued expense is credited to whoever was the active
+  // user when it was added, not whoever is active when it finally syncs.
+  group('activity attribution', () {
+    Future<Map<String, dynamic>> flushAndCapture() async {
+      http.Request? captured;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          captured = req;
+          return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+        }),
+      );
+      await Outbox(db, client, groupId: 'g1').flush();
+      return (jsonDecode(captured!.body) as Map<String, dynamic>)['0']['json']
+          as Map<String, dynamic>;
+    }
+
+    test('flush() credits the participant captured when the expense was added',
+        () async {
+      await db.insertPending(pendingExpense('local-1'), addedByParticipantId: 'p2');
+      expect((await flushAndCapture())['participantId'], 'p2');
+    });
+
+    test('flush() sends None for a row with nobody captured', () async {
+      await db.insertPending(pendingExpense('local-1'));
+      expect((await flushAndCapture())['participantId'], 'None');
+    });
+  });
 }

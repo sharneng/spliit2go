@@ -57,6 +57,8 @@ void main() {
       await old.customStatement('ALTER TABLE groups DROP COLUMN $column');
     }
     await old.customStatement('ALTER TABLE expenses DROP COLUMN created_at');
+    await old.customStatement(
+        'ALTER TABLE expenses DROP COLUMN added_by_participant_id');
     await old.customStatement('PRAGMA user_version = 7');
     await old.close();
     final db = AppDatabase(NativeDatabase(file));
@@ -94,6 +96,8 @@ void main() {
         date: DateTime(2026)));
     await old.customStatement('ALTER TABLE groups DROP COLUMN organization');
     await old.customStatement('ALTER TABLE expenses DROP COLUMN created_at');
+    await old.customStatement(
+        'ALTER TABLE expenses DROP COLUMN added_by_participant_id');
     await old.customStatement(
         'ALTER TABLE groups ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0');
     await old.customStatement(

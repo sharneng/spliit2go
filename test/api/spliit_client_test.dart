@@ -1086,4 +1086,70 @@ void main() {
       );
     });
   });
+
+  // Issue #92: who made a change goes in `participantId`, which Spliit
+  // records in its activity log. The group's active user when there is
+  // one, otherwise spliit-web's own 'None' (unattributed, as before).
+  group('activity attribution', () {
+    (SpliitClient, Map<String, dynamic> Function()) capturing() {
+      http.Request? captured;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          captured = req;
+          return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+        }),
+      );
+      return (
+        client,
+        () => (jsonDecode(captured!.body) as Map<String, dynamic>)['0']['json']
+            as Map<String, dynamic>,
+      );
+    }
+
+    Future<void> create(SpliitClient client, {String? participantId}) =>
+        client.createExpense(
+          groupId: 'g1',
+          title: 'Dinner',
+          amountCents: 1000,
+          paidBy: 'p1',
+          paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+          participantId: participantId,
+        );
+
+    Future<void> update(SpliitClient client, {String? participantId}) =>
+        client.updateExpense(
+          groupId: 'g1',
+          expenseId: 'e1',
+          title: 'Dinner',
+          amountCents: 1000,
+          paidBy: 'p1',
+          paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+          participantId: participantId,
+        );
+
+    test('create credits the given participant', () async {
+      final (client, sent) = capturing();
+      await create(client, participantId: 'p2');
+      expect(sent()['participantId'], 'p2');
+    });
+
+    test('create with no participant sends None', () async {
+      final (client, sent) = capturing();
+      await create(client);
+      expect(sent()['participantId'], 'None');
+    });
+
+    test('update credits the given participant', () async {
+      final (client, sent) = capturing();
+      await update(client, participantId: 'p2');
+      expect(sent()['participantId'], 'p2');
+    });
+
+    test('update with no participant sends None', () async {
+      final (client, sent) = capturing();
+      await update(client);
+      expect(sent()['participantId'], 'None');
+    });
+  });
 }

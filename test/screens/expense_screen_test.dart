@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +11,7 @@ import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/expense_screen.dart';
+import 'package:spliit2go/services/active_user.dart';
 import 'package:spliit2go/sync/outbox.dart';
 import 'package:spliit2go/widgets/category_icon.dart';
 
@@ -946,5 +949,85 @@ void main() {
     // itself (it's gone), and not Title/Amount either (the actual
     // symptom reported in issue #36).
     expect(tester.testTextInput.hasAnyClients, isFalse);
+  });
+
+  // Issue #92: saves credit the group's active user in Spliit's activity
+  // log -- captured on the pending row for an add, sent directly for an
+  // edit.
+  Future<void> addExpense(WidgetTester tester, AppDatabase db,
+      {required String? activeParticipant}) async {
+    await pumpScreen(tester, db);
+    await db.setActiveParticipant('g1', activeParticipant);
+    await fillCommonFields(tester, amount: '90');
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+      'activity attribution (#92): an added expense captures the active user',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await addExpense(tester, db, activeParticipant: 'bea');
+    expect((await db.pendingExpenses()).single.addedByParticipantId, 'bea');
+  });
+
+  testWidgets(
+      'activity attribution (#92): "Nobody" is never captured as a participant',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await addExpense(tester, db, activeParticipant: nobodyParticipantId);
+    expect((await db.pendingExpenses()).single.addedByParticipantId, isNull);
+  });
+
+  testWidgets('activity attribution (#92): an edit credits the active user',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.cacheGroup(group);
+    await db.setActiveParticipant('g1', 'cid');
+    http.Request? captured;
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async {
+        captured = req;
+        return http.Response(
+            '[{"result":{"data":{"json":{"expenseId":"e1"}}}}]', 200);
+      }),
+    );
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: ExpenseScreen(
+        client: client,
+        db: db,
+        outbox: Outbox(db, client, groupId: 'g1'),
+        group: group,
+        existingExpense: Expense(
+          id: 'e1',
+          groupId: 'g1',
+          title: 'Groceries',
+          amountCents: 9000,
+          paidBy: 'bea',
+          paidFor: const [
+            ExpenseShare(participantId: 'alex', shares: 1),
+            ExpenseShare(participantId: 'bea', shares: 1),
+          ],
+          date: DateTime.utc(2026, 9, 10),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(captured, isNotNull);
+    expect(captured!.url.toString(), contains('groups.expenses.update'));
+    final sent = jsonDecode(captured!.body) as Map<String, dynamic>;
+    expect(sent['0']['json']['participantId'], 'cid');
   });
 }
