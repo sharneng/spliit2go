@@ -66,3 +66,5 @@ At the time of this fix the add-expense screen had no date picker, so every expe
 ## Standing practice going forward
 
 Per Kenneth: for any future date-carrying field this app adds, check its actual semantics -- a real timestamp (where a true timezone conversion is correct) vs. a date-only value like this one (where it's actively wrong) -- against the schema or source before writing the parsing code, rather than assuming either way. This bug happened because the original implementation (ported from `splitwise2spliit`, which never displayed dates to a human in a different timezone) assumed "timestamp" without checking.
+
+See also [date-sections.md](date-sections.md) (issues #88, #91): the expense list groups by this calendar date, while activity-log times are real instants shown in local time.
