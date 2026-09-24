@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/sharneng/spliit2go/actions/workflows/ci.yml/badge.svg)](https://github.com/sharneng/spliit2go/actions/workflows/ci.yml)
 
-An unofficial, offline-capable mobile client for [Spliit](https://github.com/spliit-app/spliit), the open-source Splitwise alternative. Built with Flutter, Android first, with iOS to follow from the same codebase.
+An unofficial, offline-capable mobile client for [Spliit](https://github.com/spliit-app/spliit), the open-source Splitwise alternative. Built with Flutter for Android and iOS from one codebase; Android is the primary target.
 
 ## Why
 
@@ -18,23 +18,23 @@ Spliit has an official [iOS app](https://github.com/spliit-app/spliit-ios) but n
 
 - **API:** Spliit's backend exposes tRPC only (no REST layer), at `{baseURL}/api/trpc` with the superjson transformer, using tRPC's batch wire format for every call. Rather than importing Spliit's server-side types for end-to-end type inference, `lib/api/spliit_client.dart` talks to it as plain HTTP+JSON and maps responses into this app's own DTOs (`lib/models/`). This keeps the client decoupled from Spliit's internal schema — an upstream change breaks one mapping function here, not the whole app. The request/response shapes are ported from [splitwise2spliit](../splitwise2spliit)'s Python client, which has already exercised this API end-to-end (group fetch, paginated expense list, expense create with even/uneven splits and settlements) importing real Splitwise data — not guessed from the server source alone.
 - **Local storage:** [drift](https://pub.dev/packages/drift) (SQLite) holds the last-synced snapshot of groups and expenses, plus a `pending` flag on locally-added expenses that haven't synced yet. See `lib/db/`. Balances aren't stored — they're computed on-device from the cached expenses each time (`lib/services/balance_calculator.dart`), which is what keeps them correct offline and inclusive of pending ones.
-- **Sync:** `lib/sync/outbox.dart` — pending expenses are replayed against the API when connectivity returns. No merge logic: reads overwrite the local cache on each successful fetch, writes are append-only.
+- **Sync:** `lib/sync/outbox.dart` — pending expenses are replayed against the API when connectivity returns. No merge logic: reads overwrite the local cache on each successful fetch, writes are append-only. The one exception is this device's own edits and deletes, which happen online: a refresh that was already downloading when one landed skips its cache write, so it can't bring back a deleted expense or briefly revert an edit.
 
-Full reasoning for these choices, and for other design calls (multiple groups, date handling, the expense form, the split UX), is in [`docs/decisions/`](docs/decisions/README.md).
+Full reasoning for these choices, and for other design calls (multiple groups, date handling and date sections, the expense form, the split UX, the group list, expense details and delete), is in [`docs/decisions/`](docs/decisions/README.md).
 
 ## Features
 
-- **Groups:** join by server URL and group id, or by opening a spliit.app group link (Android App Links). Each group keeps its own server URL and active user, so groups on different Spliit instances can coexist; the list shows each group's date span and is sortable (first/last expense date, creation date, last opened). The list is organized into Favorites, Active, and Archived sections (hidden when empty); swipe a row for Favorite/Archive/Remove actions, or long-press (or tap the monogram) for the same actions as a menu. A full swipe favorites or archives a group outright, native-style; Remove always needs an explicit tap and confirmation, and only removes the group from this device, never the server.
+- **Groups:** join by pasting a group's link (from spliit.app or any self-hosted instance), or by opening a spliit.app group link (Android App Links). Each group keeps its own server URL and active user, so groups on different Spliit instances can coexist; the list shows each group's date span and is sortable (first/last expense date, creation date, last opened). The list is organized into Favorites, Active, and Archived sections (hidden when empty); swipe a row for Favorite/Archive/Remove actions, or long-press (or tap the monogram) for the same actions as a menu. A full swipe favorites or archives a group outright, native-style; Remove always needs an explicit tap and confirmation, and only removes the group from this device, never the server. Joining a group also caches its expenses, so it can be viewed offline straight away. Each group asks "Who are you?" once, unless the default participant name saved on this device (set by your first answer) matches exactly one participant; changes you make are credited to that person in Spliit's activity log.
 - **Expenses:** offline-first list (cache first, live fetch in the background, pull-to-refresh), grouped by date. Tap an expense to see its details, offline too: who paid, each person's share, notes; editing and deleting are explicit actions from there. Add and edit with all four split modes (evenly, shares, percentage, amount), per-participant live amount preview, categories with search, date, a different "paid in" currency, reimbursements, recurrence, notes, and a remembered per-group default split. Expenses added offline show a pending badge and sync automatically on reconnect; the outbox stops retrying an expense the server rejects and marks it failed, and its details offer Retry or Discard.
 - **Balances:** who owes whom, computed on-device from the cached expenses (so it works offline and includes pending ones), with one-tap "mark as paid" reimbursements.
-- **Stats and Activity:** spending totals per participant and per category; the group's activity feed (online only).
+- **Stats and Activity:** spending totals per participant and per category; the group's activity log in date sections, loading more as you scroll (online only), where tapping an entry opens that expense's details.
 - **Group settings:** rename the group, change its currency, add, rename, or remove participants (online only).
 - **App settings:** light, dark, or system theme; language.
 - **Languages:** English, French, and Simplified Chinese, with locale-aware amounts and dates, switchable in the app without a restart.
 
 ## Status
 
-An early, usable Android client, tested on a physical device against a real self-hosted Spliit instance. iOS builds from the same codebase but has not been set up. Feature and bug work is tracked in [GitHub issues](https://github.com/sharneng/spliit2go/issues) and the project board, which are the source of truth for what is done and what is next.
+An early, usable Android client, tested on a physical device against a real self-hosted Spliit instance. The iOS project is set up too ([#79](https://github.com/sharneng/spliit2go/issues/79)) and the app runs on the iOS simulator; it hasn't been tested on a physical iPhone. Feature and bug work is tracked in [GitHub issues](https://github.com/sharneng/spliit2go/issues) and the project board, which are the source of truth for what is done and what is next.
 
 Not built yet:
 

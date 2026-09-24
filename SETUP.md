@@ -7,7 +7,7 @@ git clone https://github.com/sharneng/spliit2go.git
 cd spliit2go
 ```
 
-`android/` is already committed. `ios/` isn't set up yet -- see "Adding iOS" below for when that work starts.
+Both platform folders, `android/` and `ios/`, are committed.
 
 ## 2. Install Flutter
 
@@ -45,23 +45,18 @@ flutter gen-l10n
 flutter run
 ```
 
-Point `SpliitClient` (see `lib/api/spliit_client.dart`) at your self-hosted Spliit instance's base URL — there's a placeholder constant at the top of the file.
+There's no server to configure in code. In the app, tap **+** and paste a group's link from Spliit, e.g. `https://spliit.app/groups/<groupId>` or the same link on your own instance; each group remembers its own server.
 
-## Adding iOS
+## iOS
 
-There's no `ios/` folder yet. Generate one from a scratch directory (not this repo), so `flutter create` doesn't try to overwrite `lib/` or `pubspec.yaml`:
-
-```
-flutter create --platforms=ios --org com.homexu.spliit2go --project-name spliit2go /tmp/spliit2go_scaffold
-```
-
-Then copy just the generated `ios/` folder into this repo:
+The iOS project (`ios/`, added in #79) needs Xcode. It uses the same bundle id as Android, `com.sharneng.spliit2go.spliit2go`, and targets iOS 15 or later. Plugins are integrated with Swift Package Manager, so there's no `Podfile` and no `pod install` step. To run it on a simulator:
 
 ```
-cp -r /tmp/spliit2go_scaffold/ios ./ios
+open -a Simulator
+flutter run
 ```
 
-Leave `lib/`, `pubspec.yaml`, `android/`, and the docs as they are — don't let the scaffold's versions overwrite them.
+Don't re-run `flutter create` on this repo. If you ever do, don't commit the `pubspec.lock` it rewrites: it re-resolves every package and silently downgrades unrelated transitive ones (found in #80). A plain `flutter pub get` leaves the lockfile alone.
 
 ## Running checks locally
 
