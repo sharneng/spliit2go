@@ -14,6 +14,7 @@ import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/activity_screen.dart';
 import 'package:spliit2go/screens/balances_screen.dart';
+import 'package:spliit2go/screens/expense_search_screen.dart';
 import 'package:spliit2go/screens/group_screen.dart';
 import 'package:spliit2go/screens/stats_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
@@ -722,7 +723,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
     });
 
-    testWidgets('tapping the search icon on the Expenses tab shows the placeholder message',
+    testWidgets('the search button opens search; Back returns to the Expenses tab (#39)',
         (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
@@ -731,13 +732,20 @@ void main() {
       await tester.tap(find.byIcon(Icons.search));
       await tester.pumpAndSettle();
 
-      expect(find.text('Search is coming soon (issue #39).'), findsOneWidget);
+      expect(find.byType(ExpenseSearchScreen), findsOneWidget);
+      expect(find.text('Search this group'), findsOneWidget);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ExpenseSearchScreen), findsNothing);
+      expect(find.byType(FloatingActionButton), findsOneWidget);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
     });
 
-    testWidgets('tapping the search icon on another tab shows the placeholder message too (#84)',
+    testWidgets('the search button opens search from another tab too, and Back keeps that tab (#39, #84)',
         (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
@@ -748,7 +756,12 @@ void main() {
       await tester.tap(find.byIcon(Icons.search));
       await tester.pumpAndSettle();
 
-      expect(find.text('Search is coming soon (issue #39).'), findsOneWidget);
+      expect(find.byType(ExpenseSearchScreen), findsOneWidget);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(StatsScreen), findsOneWidget);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
