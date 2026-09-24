@@ -10,14 +10,11 @@ import '../models/category.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
 import '../services/active_user.dart';
-import '../services/expense_date_group.dart';
 import '../services/settings_service.dart';
 import '../sync/outbox.dart';
-import '../utils/date_format.dart';
-import '../utils/money.dart';
-import '../widgets/category_icon.dart';
-import '../widgets/section_heading.dart';
+import '../widgets/expense_list.dart';
 import 'expense_details_sheet.dart';
+import 'expense_search_screen.dart';
 import 'expense_screen.dart';
 import 'activity_screen.dart';
 import 'balances_screen.dart';
@@ -294,7 +291,7 @@ class _GroupScreenState extends State<GroupScreen> {
                   child: IconButton.filledTonal(
                     icon: const Icon(Icons.search),
                     tooltip: context.l10n.groupScreenSearchTooltip,
-                    onPressed: _group == null ? null : _searchPlaceholder,
+                    onPressed: _group == null ? null : _openSearch,
                   ),
                 ),
               ),
@@ -383,13 +380,20 @@ class _GroupScreenState extends State<GroupScreen> {
     }
   }
 
-  /// Issue #38 explicitly scoped the real search feature to a separate
-  /// issue (#39) -- this button exists now so the affordance is in
-  /// place, but tapping it just says so instead of silently doing
-  /// nothing.
-  void _searchPlaceholder() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.l10n.groupScreenSearchComingSoon)),
+  /// Opens search (issue #39) over this group's cached expenses.
+  Future<void> _openSearch() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ExpenseSearchScreen(
+          group: _group!,
+          db: widget.db,
+          client: widget.client,
+          outbox: widget.outbox,
+          categories: _categories,
+          activeUserId: _activeUserId,
+          onExpensesChanged: _syncThenRefresh,
+        ),
+      ),
     );
   }
 
@@ -410,72 +414,12 @@ class _GroupScreenState extends State<GroupScreen> {
     if (_expenses.isEmpty) {
       return Center(child: Text(context.l10n.commonNoExpensesYet));
     }
-    // Section headers interleaved with expenses (issue #88), still built
-    // lazily: each row is an ExpenseDateGroup header or an Expense.
-    final rows = <Object>[
-      for (final (group, expenses) in groupExpensesByDate(
-        _expenses,
-        today: DateTime.now(),
-        firstWeekday: firstWeekdayFor(View.of(context).platformDispatcher.locale),
-      )) ...[group, ...expenses],
-    ];
-    return ListView.builder(
-      itemCount: rows.length,
-      itemBuilder: (context, i) {
-        final row = rows[i];
-        if (row is ExpenseDateGroup) return _sectionHeader(row);
-        final e = row as Expense;
-        return ListTile(
-          leading: CategoryIconGlyph(category: _categoryFor(e.category)),
-          title: Text(e.title),
-          // e.date is already a date-only value (year/month/day of the
-          // calendar day the expense happened on, not a real instant --
-          // see lib/services/date_only.dart) -- no .toLocal() here,
-          // that would perform a real timezone conversion on a value
-          // that was never one, and roll the date back a day west of
-          // UTC. See decisions/date-handling.md.
-          subtitle: Text(formatDate(e.date, locale: context.appLocale)),
-          trailing: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(formatMoney(e.amountCents, _group?.currency ?? '\$',
-                  locale: context.appLocale)),
-              if (e.syncFailed)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.error_outline,
-                        size: 13, color: Theme.of(context).colorScheme.error),
-                    const SizedBox(width: 2),
-                    Text(context.l10n.groupScreenSyncFailed,
-                        style: TextStyle(
-                            fontSize: 11, color: Theme.of(context).colorScheme.error)),
-                  ],
-                )
-              else if (e.pending)
-                Text(context.l10n.groupScreenSyncing, style: const TextStyle(fontSize: 11)),
-            ],
-          ),
-          // Every row opens its details (issue #90), pending and failed
-          // ones included; the sheet decides what each state can do.
-          onTap: () => _openExpenseDetails(e),
-        );
-      },
+    return ExpenseDateList(
+      expenses: _expenses,
+      currency: _group?.currency ?? '\$',
+      categoryFor: _categoryFor,
+      onTap: _openExpenseDetails,
     );
-  }
-
-  Widget _sectionHeader(ExpenseDateGroup group) {
-    final l10n = context.l10n;
-    return SectionHeading(switch (group) {
-      ExpenseDateGroup.upcoming => l10n.dateSectionUpcoming,
-      ExpenseDateGroup.thisWeek => l10n.dateSectionThisWeek,
-      ExpenseDateGroup.earlierThisMonth => l10n.dateSectionEarlierThisMonth,
-      ExpenseDateGroup.lastMonth => l10n.dateSectionLastMonth,
-      ExpenseDateGroup.earlierThisYear => l10n.dateSectionEarlierThisYear,
-      ExpenseDateGroup.lastYear => l10n.dateSectionLastYear,
-      ExpenseDateGroup.older => l10n.dateSectionOlder,
-    });
   }
 
   /// Opens group settings (rename, currency, participants).

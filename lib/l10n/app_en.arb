@@ -34,7 +34,19 @@
   "joinGroupSubmitButton": "Join",
   "groupScreenSearchTooltip": "Search",
   "groupScreenSettingsTooltip": "Group settings",
-  "groupScreenSearchComingSoon": "Search is coming soon (issue #39).",
+  "expenseSearchHint": "Search expenses",
+  "expenseSearchClear": "Clear search",
+  "expenseSearchPromptTitle": "Search this group",
+  "expenseSearchPromptBody": "Find an expense by its title.",
+  "expenseSearchNoMatchesTitle": "No matching expenses",
+  "expenseSearchNoMatchesBody": "No expense here has “{query}” in its title.",
+  "@expenseSearchNoMatchesBody": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
   "groupScreenTabExpenses": "Expenses",
   "groupScreenTabBalance": "Balance",
   "groupScreenTabStats": "Stats",
