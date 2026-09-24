@@ -102,7 +102,9 @@ void main() {
     },
   );
 
-  group('tap-to-edit (issue #17)', () {
+  // Issue #90: a tap opens the details sheet; editing (issue #17) is an
+  // explicit action inside it.
+  group('tap to view, then edit (issues #17, #90)', () {
     const cachedGroup = Group(
       id: 'g1',
       name: 'Banff Trip',
@@ -120,17 +122,19 @@ void main() {
           date: DateTime.utc(2026, 9, 16),
         );
 
-    testWidgets('tapping a synced expense fetches it fresh and opens the edit screen',
+    testWidgets('tapping a synced expense shows its details; Edit fetches it fresh and opens the form',
         (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       await db.cacheGroup(cachedGroup);
       await db.replaceServerExpenses('g1', [syncedExpense()]);
 
+      var fetches = 0;
       final client = SpliitClient(
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async {
           if (req.url.toString().contains('groups.expenses.get')) {
+            fetches++;
             return http.Response(
               '[{"result":{"data":{"json":{"expense":{'
               '"id":"e1","title":"Coffee","amount":500,"paidBy":"p1",'
@@ -156,13 +160,23 @@ void main() {
       await tester.tap(find.text('Coffee'));
       await tester.pumpAndSettle();
 
+      // Viewing reads the cache: nothing fetched yet, no edit form.
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(fetches, 0);
+      expect(find.text('Edit expense'), findsNothing);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Edit'));
+      await tester.pumpAndSettle();
+
+      expect(fetches, 1);
+      expect(find.byType(BottomSheet), findsNothing);
       expect(find.text('Edit expense'), findsOneWidget);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
     });
 
-    testWidgets('tapping a synced expense while offline shows an error, no navigation',
+    testWidgets('offline, the details still show and Edit explains itself inside the sheet',
         (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
@@ -185,15 +199,25 @@ void main() {
 
       await tester.tap(find.text('Coffee'));
       await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Edit'));
+      await tester.pumpAndSettle();
 
       expect(find.text('Edit expense'), findsNothing);
-      expect(find.textContaining('needs a connection'), findsOneWidget);
+      // Inside the sheet, not a SnackBar hidden behind it.
+      expect(
+          find.descendant(
+              of: find.byType(BottomSheet),
+              matching: find.text('Editing an expense needs a connection.')),
+          findsOneWidget);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
     });
 
-    testWidgets('a still-pending (not yet synced) expense is not tappable', (tester) async {
+    testWidgets('a still-pending (not yet synced) expense opens its details, without Edit',
+        (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       await db.cacheGroup(cachedGroup);
@@ -222,15 +246,20 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      final tile = tester.widget<ListTile>(find.widgetWithText(ListTile, 'Snacks'));
-      expect(tile.onTap, isNull);
+      await tester.tap(find.text('Snacks'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(find.textContaining('Waiting to sync'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Edit'), findsNothing);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
     });
   });
 
-  group('sync failure retry/delete (issue #44)', () {
+  // Issue #44's retry/delete, folded into the details sheet (issue #90).
+  group('sync failure retry/discard (issues #44, #90)', () {
     const cachedGroup = Group(
       id: 'g1',
       name: 'Banff Trip',
@@ -295,7 +324,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
     });
 
-    testWidgets('tapping a sync-failed expense opens retry/delete options with the error message',
+    testWidgets('a sync-failed expense opens its details with the error, Retry and Discard',
         (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
@@ -322,10 +351,9 @@ void main() {
       expect(find.text("Couldn't sync this expense"), findsOneWidget);
       expect(find.textContaining("participant doesn't exist"), findsOneWidget);
       expect(find.text('Retry'), findsOneWidget);
-      expect(find.text('Delete'), findsOneWidget);
-      // Deliberately no "edit" option -- see _showSyncFailureOptions's
-      // own doc comment (this app is view+add only, never offline
-      // edit).
+      expect(find.text('Discard'), findsOneWidget);
+      // Deliberately no Edit: it never reached the server, and this app
+      // is view+add only offline, never offline edit.
       expect(find.text('Edit'), findsNothing);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
@@ -374,7 +402,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
     });
 
-    testWidgets('Delete removes the sync-failed expense from the list and the local db',
+    testWidgets('Discard removes the sync-failed expense from the list and the local db',
         (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
@@ -397,9 +425,10 @@ void main() {
 
       await tester.tap(find.text('Snacks'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Delete'));
+      await tester.tap(find.text('Discard'));
       await tester.pumpAndSettle();
 
+      expect(find.byType(BottomSheet), findsNothing);
       expect(find.text('Snacks'), findsNothing);
       expect(await db.expensesForGroup('g1'), isEmpty);
       // See the first test above for why. (issue #47)

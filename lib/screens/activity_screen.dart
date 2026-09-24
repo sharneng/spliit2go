@@ -4,14 +4,14 @@ import '../api/spliit_client.dart';
 import '../db/app_database.dart';
 import '../l10n/context_l10n.dart';
 import '../models/activity.dart';
-import '../models/expense.dart';
+import '../models/category.dart';
 import '../models/group.dart';
 import '../services/activity_date_group.dart';
 import '../services/expense_date_group.dart' show firstWeekdayFor;
 import '../sync/outbox.dart';
 import '../utils/date_format.dart';
 import '../widgets/section_heading.dart';
-import 'expense_screen.dart';
+import 'expense_details_sheet.dart';
 
 /// The group's server-side activity log (issue #26) -- who changed what
 /// and when. Read-only and **online-only**: unlike expenses, activity
@@ -35,6 +35,16 @@ class ActivityScreen extends StatefulWidget {
   /// bodies.
   final bool embedded;
 
+  /// For the expense details sheet an entry opens (issue #90): category
+  /// names and who "you" are, both from GroupScreen, which already has
+  /// them.
+  final List<Category> categories;
+  final String? activeUserId;
+
+  /// Called after an expense opened from here was edited, so GroupScreen
+  /// can sync and refresh its cached expenses.
+  final VoidCallback? onExpensesChanged;
+
   /// The current local time, and the conversion of a server moment to
   /// the phone's local time. Overridable so tests can pin a time zone: a
   /// test machine running in UTC wouldn't prove the conversion.
@@ -50,6 +60,9 @@ class ActivityScreen extends StatefulWidget {
     required this.outbox,
     required this.group,
     this.embedded = false,
+    this.categories = const [],
+    this.activeUserId,
+    this.onExpensesChanged,
     this.now = DateTime.now,
     this.toLocal = _systemLocalTime,
   });
@@ -68,6 +81,10 @@ class _ActivityScreenState extends State<ActivityScreen> {
   bool _hasMore = true;
   bool _loading = false;
   String? _error;
+
+  /// Bumped by [_reload], so a page still loading from before it can't
+  /// land in the fresh list.
+  int _generation = 0;
 
   /// How close to the end of the list, in pixels, the next page starts
   /// loading -- early enough that it's usually there before it's needed.
@@ -94,9 +111,10 @@ class _ActivityScreenState extends State<ActivityScreen> {
       _loading = true;
       _error = null;
     });
+    final generation = _generation;
     try {
       final page = await widget.client.fetchActivities(groupId: widget.group.id, cursor: _cursor);
-      if (!mounted) return;
+      if (!mounted || generation != _generation) return;
       setState(() {
         // Pages can overlap when the log changes between requests. The
         // cursor still comes from the server, not from this count.
@@ -106,7 +124,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
         _cursor = page.nextCursor;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _generation) return;
       setState(() => _error = context.l10n.activityLoadFailed(e.toString()));
     } finally {
       if (mounted) {
@@ -173,35 +191,40 @@ class _ActivityScreenState extends State<ActivityScreen> {
     };
   }
 
-  /// Opens the activity's expense for editing -- same fetch-fresh-first
-  /// pattern as GroupScreen._openEditExpense, for the same reason (no
-  /// server-side conflict prevention on edits, see ExpenseScreen's doc
-  /// comment). A no-op if the expense has since been deleted
+  /// Opens the activity's expense in the details sheet (issue #90). The
+  /// cache may not have it yet, so the sheet fetches it from the server
+  /// when it doesn't. A no-op if the expense has since been deleted
   /// ([Activity.expenseExists] false) or is missing an id.
   Future<void> _openExpense(Activity a) async {
     if (!a.expenseExists || a.expenseId == null) return;
-    late final Expense fresh;
-    try {
-      fresh = await widget.client.fetchExpense(groupId: widget.group.id, expenseId: a.expenseId!);
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.activityOpenNeedsConnection)),
-      );
-      return;
-    }
-    if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ExpenseScreen(
-          client: widget.client,
-          db: widget.db,
-          outbox: widget.outbox,
-          group: widget.group,
-          existingExpense: fresh,
-        ),
-      ),
+    final changed = await showExpenseDetails(
+      context,
+      expenseId: a.expenseId!,
+      group: widget.group,
+      db: widget.db,
+      client: widget.client,
+      outbox: widget.outbox,
+      categories: widget.categories,
+      activeUserId: widget.activeUserId,
+      fetchIfMissing: true,
     );
+    if (!changed || !mounted) return;
+    widget.onExpensesChanged?.call();
+    // The change is now in the log itself.
+    _reload();
+  }
+
+  /// Starts the log over from its newest page.
+  void _reload() {
+    setState(() {
+      _generation++;
+      _activities.clear();
+      _seenIds.clear();
+      _cursor = 0;
+      _hasMore = true;
+      _error = null;
+    });
+    _loadMore();
   }
 
   @override

@@ -569,6 +569,14 @@ class SpliitApiException implements Exception {
   final String body;
   SpliitApiException(this.statusCode, this.body);
 
+  /// Whether the server said the thing asked for doesn't exist -- e.g.
+  /// `groups.expenses.get` for an expense someone has deleted, which
+  /// upstream throws as tRPC `NOT_FOUND` (issue #90). tRPC reports that as
+  /// HTTP 404, or as an error embedded in a 200 batch response; both
+  /// carry `NOT_FOUND` / JSON-RPC code -32004 in the body.
+  bool get isNotFound =>
+      statusCode == 404 || body.contains('NOT_FOUND') || body.contains('-32004');
+
   @override
   String toString() => 'SpliitApiException($statusCode): $body';
 }

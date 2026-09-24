@@ -385,25 +385,43 @@ class AppDatabase extends _$AppDatabase {
   /// deliberately left alone -- still useful context ("what went wrong
   /// last time") until the next attempt overwrites it (on another
   /// failure) or clears it (on success, via [markSynced]).
-  Future<void> retrySyncFailure(String id) {
-    return (update(expenses)..where((e) => e.id.equals(id))).write(
+  ///
+  /// Only touches a row that's still pending and failed (issue #90): the
+  /// expense details sheet can outlive the state it was opened in, so a
+  /// stale Retry must be a no-op, not a write to a row that has since
+  /// synced. Returns whether a row was requeued.
+  Future<bool> retrySyncFailure(String id) async {
+    final updated = await (update(expenses)..where((e) => _stillFailed(e, id))).write(
       const ExpensesCompanion(
         retryCount: Value(0),
         syncFailed: Value(false),
       ),
     );
+    return updated > 0;
   }
 
+  Expression<bool> _stillFailed(Expenses e, String id) =>
+      e.id.equals(id) & e.pending.equals(true) & e.syncFailed.equals(true);
+
   /// Discards a sync-failed row outright (issue #44) -- backs the
-  /// "Delete" action on a sync-failed expense. Only ever offered by the
-  /// UI for a row that's still [Expenses.pending] (never reached the
-  /// server), which is the only case this is safe for: deleting a row
-  /// that already synced would just make it reappear on the next
-  /// [replaceServerExpenses]-backed refresh, since the server still has
-  /// it.
-  Future<void> deleteFailedExpense(String id) {
-    return (delete(expenses)..where((e) => e.id.equals(id))).go();
+  /// "Discard" action on a sync-failed expense. Only safe for a row that
+  /// never reached the server: deleting a synced row locally would just
+  /// make it reappear on the next [replaceServerExpenses]-backed refresh,
+  /// since the server still has it. So the query itself insists the row
+  /// is still pending and failed (issue #90) rather than trusting the
+  /// caller -- the details sheet can be stale by the time Discard is
+  /// tapped. Returns whether a row was discarded.
+  Future<bool> deleteFailedExpense(String id) async {
+    final deleted = await (delete(expenses)..where((e) => _stillFailed(e, id))).go();
+    return deleted > 0;
   }
+
+  /// One expense row, live (issue #90): emits it now and again whenever
+  /// it changes, and null once it's gone -- deleted, discarded, or
+  /// replaced by the server's id when a pending expense syncs (see
+  /// [markSynced]). Backs the expense details sheet.
+  Stream<ExpenseRow?> watchExpense(String id) =>
+      (select(expenses)..where((e) => e.id.equals(id))).watchSingleOrNull();
 
   /// Overwrites the cached (non-pending) rows for a group with a fresh
   /// fetch from the server. Pending rows are left untouched -- they're
