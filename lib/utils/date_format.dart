@@ -32,6 +32,12 @@ String formatDate(DateTime d, {required Locale locale}) =>
 String formatTimeOfDay(DateTime t, {required Locale locale}) =>
     DateFormat.Hm(locale.toString()).format(t);
 
+/// [formatDate] and [formatTimeOfDay] together ("Sep 12, 2026 14:03"),
+/// joined the way [locale] joins them. Like both, formats [t]'s own
+/// fields: convert a real moment with `toLocal()` first.
+String formatDateTime(DateTime t, {required Locale locale}) =>
+    DateFormat.yMMMd(locale.toString()).add_Hm().format(t);
+
 /// Formats a [DateSpan] for display: '—' when null (no cached expenses
 /// to span yet), a single date when the span is exactly one day, or
 /// "first – last" otherwise.

@@ -16,6 +16,7 @@ import '../sync/outbox.dart';
 import '../utils/date_format.dart';
 import '../utils/money.dart';
 import '../widgets/category_icon.dart';
+import '../widgets/section_heading.dart';
 import 'expense_screen.dart';
 import 'activity_screen.dart';
 import 'balances_screen.dart';
@@ -466,37 +467,17 @@ class _GroupScreenState extends State<GroupScreen> {
     );
   }
 
-  /// Small bold capitals in a muted color, like spliit-ios's
-  /// DateBucketHeader, so it reads as a divider rather than an entry.
-  /// Screen readers get the words in their natural case, as a heading.
   Widget _sectionHeader(ExpenseDateGroup group) {
     final l10n = context.l10n;
-    final title = switch (group) {
-      ExpenseDateGroup.upcoming => l10n.groupScreenSectionUpcoming,
-      ExpenseDateGroup.thisWeek => l10n.groupScreenSectionThisWeek,
-      ExpenseDateGroup.earlierThisMonth => l10n.groupScreenSectionEarlierThisMonth,
-      ExpenseDateGroup.lastMonth => l10n.groupScreenSectionLastMonth,
-      ExpenseDateGroup.earlierThisYear => l10n.groupScreenSectionEarlierThisYear,
-      ExpenseDateGroup.lastYear => l10n.groupScreenSectionLastYear,
-      ExpenseDateGroup.older => l10n.groupScreenSectionOlder,
-    };
-    final theme = Theme.of(context);
-    return Semantics(
-      header: true,
-      label: title,
-      excludeSemantics: true,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-        child: Text(
-          title.toUpperCase(),
-          style: theme.textTheme.labelMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.72,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ),
-    );
+    return SectionHeading(switch (group) {
+      ExpenseDateGroup.upcoming => l10n.dateSectionUpcoming,
+      ExpenseDateGroup.thisWeek => l10n.dateSectionThisWeek,
+      ExpenseDateGroup.earlierThisMonth => l10n.dateSectionEarlierThisMonth,
+      ExpenseDateGroup.lastMonth => l10n.dateSectionLastMonth,
+      ExpenseDateGroup.earlierThisYear => l10n.dateSectionEarlierThisYear,
+      ExpenseDateGroup.lastYear => l10n.dateSectionLastYear,
+      ExpenseDateGroup.older => l10n.dateSectionOlder,
+    });
   }
 
   /// Retry/delete for a sync-failed expense (issue #44). Deliberately
