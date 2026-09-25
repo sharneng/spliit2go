@@ -99,6 +99,8 @@ void main() {
 
       final fab = tester.widget<FloatingActionButton>(find.byType(FloatingActionButton));
       expect(fab.onPressed, isNull);
+      // No group name yet: the title falls back to the app's name (#105).
+      expect(find.widgetWithText(AppBar, 'Spliit2Go'), findsOneWidget);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));

@@ -47,9 +47,13 @@ flutter run
 
 There's no server to configure in code. In the app, tap **+** and paste a group's link from Spliit, e.g. `https://spliit.app/groups/<groupId>` or the same link on your own instance; each group remembers its own server.
 
+## App identity
+
+Both platforms use the app id `com.sharneng.spliit2go` and the display name **Spliit2Go**; the version comes from `pubspec.yaml` (`1.0.0+1` is version 1.0.0, build 1). Every store upload needs a higher build number. The id is permanent once the app is published. Before #105 the id was `com.sharneng.spliit2go.spliit2go`: a build from before then is a different app to the phone, so it installs alongside the new one with its own data. Uninstall it, or re-join your groups in the new one.
+
 ## iOS
 
-The iOS project (`ios/`, added in #79) needs Xcode. It uses the same bundle id as Android, `com.sharneng.spliit2go.spliit2go`, and targets iOS 15 or later. Plugins are integrated with Swift Package Manager, so there's no `Podfile` and no `pod install` step. To run it on a simulator:
+The iOS project (`ios/`, added in #79) needs Xcode. It uses the same bundle id as Android, `com.sharneng.spliit2go`, targets iOS 15 or later, and is iPhone only (#105). Plugins are integrated with Swift Package Manager, so there's no `Podfile` and no `pod install` step. To run it on a simulator:
 
 ```
 open -a Simulator
@@ -80,16 +84,16 @@ URL entry, but are not registered as Android link domains.
 Automatic verified opening requires the **spliit.app domain owner** to serve
 `https://spliit.app/.well-known/assetlinks.json` with the
 `delegate_permission/common.handle_all_urls` relation, package name
-`com.sharneng.spliit2go.spliit2go`, and the SHA-256 fingerprint of the installed
+`com.sharneng.spliit2go`, and the SHA-256 fingerprint of the installed
 app's signing certificate. This repository cannot configure that domain. Until
 that association is published, users may need to enable spliit.app under Android
-Settings → Apps → spliit2go → Open by default → supported web addresses.
+Settings → Apps → Spliit2Go → Open by default → supported web addresses.
 
 For device testing, substitute a real group ID and exercise both a stopped and
 already-running app:
 
 ```sh
-adb shell am start -W -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d 'https://spliit.app/groups/GROUP_ID' com.sharneng.spliit2go.spliit2go
+adb shell am start -W -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d 'https://spliit.app/groups/GROUP_ID' com.sharneng.spliit2go
 ```
 
 This package-targeted command tests intent routing, not domain verification.

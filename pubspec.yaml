@@ -1,7 +1,7 @@
 name: spliit2go
 description: Unofficial, offline-capable Flutter client for Spliit.
 publish_to: 'none'
-version: 0.1.0
+version: 1.0.0+1
 
 environment:
   sdk: '>=3.3.0 <4.0.0'

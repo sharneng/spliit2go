@@ -34,7 +34,7 @@ Full reasoning for these choices, and for other design calls (multiple groups, d
 
 ## Status
 
-An early, usable Android client, tested on a physical device against a real self-hosted Spliit instance. The iOS project is set up too ([#79](https://github.com/sharneng/spliit2go/issues/79)) and the app runs on the iOS simulator; it hasn't been tested on a physical iPhone. Feature and bug work is tracked in [GitHub issues](https://github.com/sharneng/spliit2go/issues) and the project board, which are the source of truth for what is done and what is next.
+An early, usable Android client, tested on a physical device against a real self-hosted Spliit instance. The iOS app ([#79](https://github.com/sharneng/spliit2go/issues/79)) is iPhone only ([#105](https://github.com/sharneng/spliit2go/issues/105)) and has been tested on the simulator and a physical iPhone. Feature and bug work is tracked in [GitHub issues](https://github.com/sharneng/spliit2go/issues) and the project board, which are the source of truth for what is done and what is next.
 
 Not built yet:
 
