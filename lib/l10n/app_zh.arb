@@ -28,6 +28,7 @@
   "createGroupServerAddressLabel": "服务器地址",
   "createGroupServerInvalid": "这看起来不像网址。请尝试类似 spliit.example.com 的地址。",
   "createGroupFailed": "无法创建群组：{error}",
+  "createGroupLoadFailed": "群组已创建，但无法加载：{error}\n点按 ✓ 重试。群组链接（以备后用）：{link}",
   "createGroupSampleParticipant1": "John",
   "createGroupSampleParticipant2": "Jane",
   "createGroupSampleParticipant3": "Jack",

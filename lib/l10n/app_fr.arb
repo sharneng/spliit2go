@@ -28,6 +28,7 @@
   "createGroupServerAddressLabel": "Adresse du serveur",
   "createGroupServerInvalid": "Cela ne ressemble pas à une adresse web. Essayez par exemple spliit.example.com.",
   "createGroupFailed": "Impossible de créer le groupe : {error}",
+  "createGroupLoadFailed": "Le groupe a été créé mais n’a pas pu être chargé : {error}\nTouchez ✓ pour réessayer. Son lien, si besoin plus tard : {link}",
   "createGroupSampleParticipant1": "Jean",
   "createGroupSampleParticipant2": "Jeanne",
   "createGroupSampleParticipant3": "Jacques",

@@ -49,6 +49,17 @@
       }
     }
   },
+  "createGroupLoadFailed": "The group was created but couldn’t be loaded: {error}\nTap ✓ to try again. Its link, if you need it later: {link}",
+  "@createGroupLoadFailed": {
+    "placeholders": {
+      "link": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "createGroupSampleParticipant1": "John",
   "createGroupSampleParticipant2": "Jane",
   "createGroupSampleParticipant3": "Jack",

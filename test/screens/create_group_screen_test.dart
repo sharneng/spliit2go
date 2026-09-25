@@ -252,4 +252,48 @@ void main() {
     expect(find.textContaining('Couldn’t create the group'), findsOneWidget);
     expect(await tester.runAsync(() => db.allJoinedGroups()), isEmpty);
   });
+
+  // #116 review (Ezra): once groups.create succeeds the group exists, so a
+  // failed load afterwards must not lead to a second create on retry.
+  testWidgets('a failed load after a successful create retries the load, never a second create',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    var creates = 0;
+    var gets = 0;
+    SpliitClient factory(String serverUrl) => SpliitClient(
+          baseUrl: serverUrl,
+          httpClient: MockClient((req) async {
+            if (req.url.path.endsWith('groups.create')) {
+              creates++;
+              return http.Response(createdResponse('new1'), 200);
+            }
+            if (req.url.path.endsWith('groups.get')) {
+              gets++;
+              if (gets == 1) return http.Response('unavailable', 503);
+              return http.Response(groupResponse('new1', ['John', 'Jane', 'Jack']), 200);
+            }
+            return http.Response('unexpected', 500);
+          }),
+        );
+    final popped = await openCreate(tester, db, factory);
+
+    await enterName(tester, 'Road trip');
+    await tapCreate(tester);
+
+    expect(creates, 1);
+    expect(popped, isEmpty);
+    // Says the group exists, and gives its link so it isn't lost if the
+    // user leaves now.
+    expect(find.textContaining('was created but couldn’t be loaded'), findsOneWidget);
+    expect(find.textContaining('https://spliit.app/groups/new1'), findsOneWidget);
+
+    await tapCreate(tester);
+
+    expect(creates, 1);
+    expect(gets, 2);
+    expect(popped, ['new1']);
+    expect((await tester.runAsync(() => db.groupRow('new1')))?.serverUrl, 'https://spliit.app');
+  });
 }
+

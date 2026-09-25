@@ -123,6 +123,13 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   String? _server = defaultServerUrl;
   final _otherServerController = TextEditingController();
 
+  /// Creating only: set once `groups.create` has succeeded, so the group
+  /// exists on the server. If loading it back then fails, Create retries
+  /// only the load for this id, never a second `groups.create` that would
+  /// orphan the first group (#116 review). The form is locked meanwhile:
+  /// edits could no longer reach the created group.
+  ({String id, String serverUrl})? _created;
+
   bool _saving = false;
   String? _error;
 
@@ -352,10 +359,14 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   /// Creates the group on the chosen server, then stores it exactly as a
   /// join does (cacheJoinedGroup), with no expenses yet, and pops its id.
   /// Its participants' ids come from the server, so it's fetched back
-  /// first. Needs a connection, like joining.
+  /// first. Needs a connection, like joining. After a create that
+  /// succeeded but whose load failed, only the load is retried (see
+  /// [_created]).
   Future<void> _create(String name, String information, bool isCustom,
       String currencySymbol, List<String> names) async {
-    final serverUrl = _server ?? normalizeServerUrl(_otherServerController.text);
+    final serverUrl = _created?.serverUrl ??
+        _server ??
+        normalizeServerUrl(_otherServerController.text);
     if (serverUrl == null) {
       setState(() => _error = context.l10n.createGroupServerInvalid);
       return;
@@ -364,16 +375,21 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
       _saving = true;
       _error = null;
     });
+    final client = widget.clientFactory(serverUrl);
+    var created = _created;
     try {
-      final client = widget.clientFactory(serverUrl);
-      final groupId = await client.createGroup(
-        name: name,
-        information: information,
-        currency: currencySymbol,
-        currencyCode: isCustom ? null : _selectedCurrency.code,
-        participantNames: names,
-      );
-      final group = await client.fetchGroup(groupId);
+      if (created == null) {
+        final id = await client.createGroup(
+          name: name,
+          information: information,
+          currency: currencySymbol,
+          currencyCode: isCustom ? null : _selectedCurrency.code,
+          participantNames: names,
+        );
+        created = (id: id, serverUrl: serverUrl);
+        if (mounted) setState(() => _created = created);
+      }
+      final group = await client.fetchGroup(created.id);
       await cacheJoinedGroup(
         db: widget.db,
         group: group,
@@ -385,11 +401,20 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
       Navigator.of(context).pop(group.id);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = context.l10n.createGroupFailed(e.toString()));
+      setState(() => _error = created == null
+          ? context.l10n.createGroupFailed(e.toString())
+          : context.l10n.createGroupLoadFailed(
+              '${created.serverUrl}/groups/${created.id}', e.toString()));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
+
+  /// Locked, and dimmed, once a group has been created but not yet loaded
+  /// (see [_created]): only retrying the load is left to do.
+  Widget _lockable(Widget field) => _created == null
+      ? field
+      : IgnorePointer(child: Opacity(opacity: 0.5, child: field));
 
   Widget _serverField(BuildContext context) {
     final l10n = context.l10n;
@@ -461,9 +486,12 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           if (_error != null) ...[
-            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            // Selectable: after a create whose load failed it carries the
+            // new group's link (#116 review).
+            SelectableText(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             const SizedBox(height: 12),
           ],
+          for (final field in <Widget>[
           TextField(
             controller: _nameController,
             decoration: InputDecoration(labelText: context.l10n.groupSettingsNameLabel),
@@ -562,6 +590,8 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                 ],
               ),
             ),
+          ])
+            _lockable(field),
         ],
       ),
     );
