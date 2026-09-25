@@ -296,4 +296,110 @@ void main() {
     expect(find.byType(JoinGroupScreen), findsNothing);
     expect(servers, ['https://spliit.app']);
   });
+
+  // Issue #118: "Couldn't join: type 'Null' is not a subtype of type
+  // 'Map<String, dynamic>' in type cast" for a group the server doesn't have.
+  /// Everything [body] writes to debugPrint, where unexpected errors are
+  /// logged (#119 review).
+  Future<List<String>> captureLogs(Future<void> Function() body) async {
+    final lines = <String>[];
+    final original = debugPrint;
+    debugPrint = (message, {wrapWidth}) => lines.add(message ?? '');
+    try {
+      await body();
+    } finally {
+      debugPrint = original;
+    }
+    return lines;
+  }
+
+  SpliitClient answering(String body, {int status = 200}) => SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, status)),
+      );
+
+  // Issue #118: "Couldn't join: type 'Null' is not a subtype of type
+  // 'Map<String, dynamic>' in type cast" for a group the server doesn't have.
+  // A missing group is the user's to fix: guidance only, no log, no
+  // details (Kenneth and Ezra, #119 review).
+  testWidgets('a group the server doesn\'t have says so, with no log and no details (#118, #119)',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    String? popped;
+    final logs = await captureLogs(() async {
+      popped = await pushAndJoin(tester, db,
+          answering('[{"result":{"data":{"json":{"group":null}}}}]'));
+    });
+
+    expect(popped, isNull);
+    expect(find.text('No group with that link was found on example.test. Check the link and try again.'),
+        findsOneWidget);
+    expect(find.textContaining('is not a subtype'), findsNothing);
+    expect(find.text('Tap for details'), findsNothing);
+    expect(logs.where((l) => l.contains('Unexpected error')), isEmpty);
+  });
+
+  testWidgets('no connection says so, with no log and no details (#119)', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async => throw http.ClientException('Failed host lookup')),
+    );
+    late final String? popped;
+    final logs = await captureLogs(() async => popped = await pushAndJoin(tester, db, client));
+
+    expect(popped, isNull);
+    expect(find.text("Couldn't reach the server. Check your connection and try again."),
+        findsOneWidget);
+    expect(find.text('Tap for details'), findsNothing);
+    expect(logs.where((l) => l.contains('Unexpected error')), isEmpty);
+  });
+
+  testWidgets('a malformed response is unexpected: a short message, logged, details one tap away (#119)',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    late final String? popped;
+    final logs = await captureLogs(() async {
+      popped = await pushAndJoin(tester, db,
+          answering('[{"result":{"data":{"json":{"group":[]}}}}]'));
+    });
+
+    expect(popped, isNull);
+    // The raw exception stays out of the message.
+    expect(find.text("Couldn't join the group."), findsOneWidget);
+    expect(find.textContaining('SpliitResponseFormatException'), findsNothing);
+    expect(logs.where((l) => l.contains('SpliitResponseFormatException')), hasLength(1));
+
+    await tester.tap(find.text('Tap for details'));
+    await tester.pumpAndSettle();
+    expect(find.text('Error details'), findsOneWidget);
+    expect(find.textContaining('SpliitResponseFormatException'), findsOneWidget);
+    expect(find.textContaining('Joining https://example.test/groups/g1 failed.'), findsOneWidget);
+  });
+
+  testWidgets('a link pasted with a trailing period joins the right group (#118)', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final asked = <String>[];
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async {
+        asked.add(req.url.queryParameters['input'] ?? '');
+        if (req.url.path.endsWith('groups.expenses.list')) {
+          return http.Response(expensesResponse(), 200);
+        }
+        return http.Response(groupResponse(), 200);
+      }),
+    );
+
+    final popped = await pushAndJoin(tester, db, client,
+        url: 'Join us: https://example.test/groups/g1.');
+
+    expect(popped, 'g1');
+    expect(asked.first, contains('"groupId":"g1"'));
+  });
 }
+

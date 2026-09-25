@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:spliit2go/api/spliit_client.dart';
+import 'package:spliit2go/services/error_reporting.dart';
 import 'package:spliit2go/models/category.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
@@ -975,6 +976,39 @@ void main() {
       );
     });
   });
+
+  test('fetchGroup: an id the server doesn\'t have throws GroupNotFoundException (#118)', () async {
+    // What spliit.app answers for an unknown id (checked live): no error,
+    // just a null group. It used to surface as a type-cast error.
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient(
+          (req) async => http.Response('[{"result":{"data":{"json":{"group":null}}}}]', 200)),
+    );
+    await expectLater(
+      client.fetchGroup('nope'),
+      throwsA(isA<GroupNotFoundException>()
+          .having((e) => e.groupId, 'groupId', 'nope')
+          .having((e) => e.serverUrl, 'serverUrl', 'https://example.test')),
+    );
+  });
+
+  // #119 review: only the explicit `group: null` contract means "not
+  // found"; anything else is a malformed response, never the user's link.
+  for (final (label, body) in [
+    ('a list', '[{"result":{"data":{"json":{"group":[]}}}}]'),
+    ('a missing field', '[{"result":{"data":{"json":{}}}}]'),
+    ('a string', '[{"result":{"data":{"json":{"group":"g1"}}}}]'),
+  ]) {
+    test('fetchGroup: $label instead of a group is a malformed response, not a missing group (#119)',
+        () async {
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+      await expectLater(client.fetchGroup('g1'), throwsA(isA<SpliitResponseFormatException>()));
+    });
+  }
 
   group('SpliitClient.createGroup (#115)', () {
     test('posts groups.create with names only and returns the new id', () async {

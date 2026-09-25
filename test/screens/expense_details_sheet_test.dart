@@ -275,6 +275,47 @@ void main() {
     await closeTree(tester);
   });
 
+  // #119 review: Edit used to call every non-404 failure a connection
+  // problem, and drop the error.
+  testWidgets('Edit on a malformed response says so, logged, with details', (tester) async {
+    final db = await cachedDb();
+    addTearDown(db.close);
+    final logs = <String>[];
+    final original = debugPrint;
+    debugPrint = (message, {wrapWidth}) => logs.add(message ?? '');
+    // Restored in the test body: flutter_test checks debugPrint before
+    // tear-downs run.
+    try {
+      await openSheet(tester, db,
+          client: serverClient((_) async => http.Response('[{"result":{"data":{"json":{}}}}]', 200)));
+
+      await tester.tap(inSheet(find.widgetWithText(FilledButton, 'Edit')));
+      await tester.pumpAndSettle();
+
+      expect(inSheet(find.text("Couldn't open this expense for editing.")), findsOneWidget);
+      expect(inSheet(find.text('Editing an expense needs a connection.')), findsNothing);
+      expect(inSheet(find.text('Tap for details')), findsOneWidget);
+      expect(logs.where((l) => l.contains('Fetching expense e1 to edit')), hasLength(1));
+      await closeTree(tester);
+    } finally {
+      debugPrint = original;
+    }
+  });
+
+  testWidgets('Edit with no connection says so, with no details', (tester) async {
+    final db = await cachedDb();
+    addTearDown(db.close);
+    await openSheet(tester, db,
+        client: serverClient((_) async => throw http.ClientException('Failed host lookup')));
+
+    await tester.tap(inSheet(find.widgetWithText(FilledButton, 'Edit')));
+    await tester.pumpAndSettle();
+
+    expect(inSheet(find.text('Editing an expense needs a connection.')), findsOneWidget);
+    expect(inSheet(find.text('Tap for details')), findsNothing);
+    await closeTree(tester);
+  });
+
   testWidgets('a saved edit is reported as a change', (tester) async {
     tallView(tester);
     final db = await cachedDb();
@@ -608,7 +649,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(BottomSheet), findsOneWidget);
-      expect(inSheet(find.textContaining("Couldn't delete this expense.")), findsOneWidget);
+      // A server error is unexpected (#119 review): its own message, with
+      // details, rather than "check your connection".
+      expect(inSheet(find.text("Couldn't delete this expense.")), findsOneWidget);
+      expect(inSheet(find.text('Tap for details')), findsOneWidget);
       expect(await tester.runAsync(() => db.expensesForGroup('g1')), hasLength(1));
       expect(db.expensesGeneration('g1'), 0);
       expect(
@@ -616,6 +660,28 @@ void main() {
               .widget<OutlinedButton>(inSheet(find.widgetWithText(OutlinedButton, 'Delete')))
               .onPressed,
           isNotNull);
+      await closeTree(tester);
+    });
+
+    testWidgets('offline: the expense stays, "check your connection", no details (#119)',
+        (tester) async {
+      final db = await cachedDb();
+      addTearDown(db.close);
+      var fetches = 0;
+      await openSheet(tester, db, client: serverClient((req) async {
+        if (req.url.toString().contains('groups.expenses.get')) fetches++;
+        throw http.ClientException('Failed host lookup');
+      }));
+
+      await tapDelete(tester);
+      await tester.tap(inDialog(find.text('Delete')));
+      await tester.pumpAndSettle();
+
+      expect(fetches, 1); // still double-checked, as before
+      expect(inSheet(find.text("Couldn't delete this expense. Check your connection and try again.")),
+          findsOneWidget);
+      expect(inSheet(find.text('Tap for details')), findsNothing);
+      expect(await tester.runAsync(() => db.expensesForGroup('g1')), hasLength(1));
       await closeTree(tester);
     });
 

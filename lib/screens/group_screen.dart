@@ -22,6 +22,8 @@ import 'activity_screen.dart';
 import 'balances_screen.dart';
 import 'group_settings_screen.dart';
 import 'stats_screen.dart';
+import '../widgets/error_message.dart';
+import '../services/error_reporting.dart';
 
 /// A single group's expenses, offline-first -- reached by pushing on top
 /// of GroupListScreen (the app's actual root; see main.dart and
@@ -63,6 +65,7 @@ class _GroupScreenState extends State<GroupScreen> {
   List<Expense> _expenses = [];
   bool _loading = true;
   String? _error;
+  String? _errorDiagnostics;
   String? _activeUserId;
 
   // Live db subscriptions (issue #47) -- replace the old imperative
@@ -124,9 +127,15 @@ class _GroupScreenState extends State<GroupScreen> {
             _syncThenRefresh();
           }
         },
-        onError: (_) {},
+        onError: (Object e, StackTrace st) =>
+            ErrorReporter.instance.report(e, st, operation: 'Watching connectivity'),
       );
-    } catch (_) {}
+    } catch (e, st) {
+      // No plugin here (widget tests) is expected; anything else isn't.
+      if (!isMissingPlugin(e)) {
+        ErrorReporter.instance.report(e, st, operation: 'Watching connectivity');
+      }
+    }
   }
 
   @override
@@ -141,10 +150,11 @@ class _GroupScreenState extends State<GroupScreen> {
       final cats = await widget.client.fetchCategories();
       if (!mounted || cats.isEmpty) return;
       setState(() => _categories = cats);
-    } catch (_) {
+    } catch (e, st) {
       // Offline or the server's unreachable -- keep the General-only
       // fallback so the list still renders (with generic icons) without
-      // connectivity.
+      // connectivity. Anything else is logged (#119 review).
+      ErrorReporter.instance.report(e, st, operation: 'Loading categories');
     }
   }
 
@@ -186,9 +196,16 @@ class _GroupScreenState extends State<GroupScreen> {
       // terminal / `flutter logs`, since a bare exception message
       // alone isn't enough to tell a real "we're offline" from a real
       // parsing bug apart -- see github.com/sharneng/spliit2go/issues/14.
-      debugPrint('GroupScreen._refresh failed for group ${widget.groupId}: $e\n$st');
-      if (_expenses.isEmpty) {
-        setState(() => _error = e.toString());
+      final error = ErrorReporter.instance
+          .report(e, st, operation: 'Refreshing group ${widget.groupId}');
+      if (_expenses.isEmpty && mounted) {
+        setState(() {
+          _error = errorMessageFor(context, error,
+              unexpected: context.l10n.groupScreenServerError,
+              userMessage: (e) =>
+                  e is GroupNotFoundException ? context.l10n.groupScreenGroupGone : null);
+          _errorDiagnostics = error.diagnostics;
+        });
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -439,7 +456,13 @@ class _GroupScreenState extends State<GroupScreen> {
           const SizedBox(height: 80),
           Icon(Icons.cloud_off, size: 48, color: Theme.of(context).colorScheme.outline),
           const SizedBox(height: 12),
-          Center(child: Text(context.l10n.groupScreenServerError(_error!))),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: ErrorMessage(_error!,
+                  diagnostics: _errorDiagnostics, textAlign: TextAlign.center),
+            ),
+          ),
         ],
       );
     }

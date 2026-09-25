@@ -123,5 +123,42 @@ void main() {
       }
     });
   });
+
+  // Issue #118: links pasted from messages, with text around them.
+  group('parseGroupUrl inside other text', () {
+    const id = 'Lh7eRlfTFBoa_DVEL7mxO';
+    void expectDemo(String input) {
+      final parsed = parseGroupUrl(input);
+      expect(parsed, isNotNull, reason: input);
+      expect(parsed!.serverUrl, 'https://spliit.app', reason: input);
+      expect(parsed.groupId, id, reason: input);
+    }
+
+    test('drops punctuation after the id', () {
+      for (final end in ['.', ',', ')', '!', '?', '…', '"', '>']) {
+        expectDemo('https://spliit.app/groups/$id$end');
+      }
+    });
+
+    test('finds the link after a subject or a sentence', () {
+      expectDemo('Spliit2Go Demo Group https://spliit.app/groups/$id');
+      expectDemo('Spliit2Go Demo Group\nhttps://spliit.app/groups/$id');
+      expectDemo('Join my group: https://spliit.app/groups/$id.');
+      expectDemo('Join my group: https://spliit.app/groups/$id and add the hotel');
+    });
+
+    test('finds a link without a scheme among words', () {
+      expectDemo('here: spliit.app/groups/$id thanks');
+    });
+
+    test('a capitalized scheme still works', () {
+      expectDemo('Https://spliit.app/groups/$id');
+    });
+
+    test('text with no group link is still rejected', () {
+      expect(parseGroupUrl('Join my group tomorrow'), isNull);
+      expect(parseGroupUrl('https://spliit.app/groups/...'), isNull);
+    });
+  });
 }
 

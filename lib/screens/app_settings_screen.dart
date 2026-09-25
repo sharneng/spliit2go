@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../l10n/app_locales.dart';
 import '../l10n/context_l10n.dart';
 import '../services/app_settings.dart';
+import '../services/error_reporting.dart';
+import '../widgets/error_message.dart';
 
 /// App-wide preferences, separate from an individual group's settings.
 class AppSettingsScreen extends StatelessWidget {
@@ -78,11 +80,13 @@ class AppSettingsScreen extends StatelessWidget {
         onTap: () async {
           try {
             await onSelected();
-          } catch (_) {
+          } catch (e, st) {
+            // Saving a setting to the device's storage has no expected
+            // failure: logged, with details (#119 review).
+            final error = ErrorReporter.instance.report(e, st, operation: 'Saving an app setting');
             if (!context.mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(context.l10n.appSettingsSaveError)),
-            );
+            showErrorSnackBar(context, context.l10n.appSettingsSaveError,
+                diagnostics: error.diagnostics);
           }
         },
       );

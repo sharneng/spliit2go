@@ -1,5 +1,6 @@
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
+import '../services/error_reporting.dart';
 
 /// The entire sync engine. Because the app only supports offline *view*
 /// and *add* (never offline edit), there's no conflict resolution to do --
@@ -87,7 +88,10 @@ class Outbox {
         // that happened to be.
         await _db.markSynced(localId: row.id, serverId: serverId);
         synced++;
-      } catch (e) {
+      } catch (e, st) {
+        // Logged unless it's a connection problem (#119 review): a
+        // rejected or malformed sync is worth a trace.
+        ErrorReporter.instance.report(e, st, operation: 'Syncing expense ${row.id}');
         // Left pending either way -- the row still hasn't synced. But
         // whether it's retried automatically on the *next* flush
         // depends on what went wrong (issue #44):

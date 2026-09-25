@@ -12,6 +12,8 @@ import '../sync/outbox.dart';
 import '../utils/date_format.dart';
 import '../widgets/section_heading.dart';
 import 'expense_details_sheet.dart';
+import '../widgets/error_message.dart';
+import '../services/error_reporting.dart';
 
 /// The group's server-side activity log (issue #26) -- who changed what
 /// and when. Read-only and **online-only**: unlike expenses, activity
@@ -81,6 +83,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
   bool _hasMore = true;
   bool _loading = false;
   String? _error;
+  String? _errorDiagnostics;
 
   /// Bumped by [_reload], so a page still loading from before it can't
   /// land in the fresh list.
@@ -123,9 +126,14 @@ class _ActivityScreenState extends State<ActivityScreen> {
         _hasMore = page.hasMore && page.nextCursor > _cursor;
         _cursor = page.nextCursor;
       });
-    } catch (e) {
+    } catch (e, st) {
+      final error = ErrorReporter.instance
+          .report(e, st, operation: 'Loading activity for ${widget.group.id}');
       if (!mounted || generation != _generation) return;
-      setState(() => _error = context.l10n.activityLoadFailed(e.toString()));
+      setState(() {
+        _error = errorMessageFor(context, error, unexpected: context.l10n.activityLoadFailed);
+        _errorDiagnostics = error.diagnostics;
+      });
     } finally {
       if (mounted) {
         setState(() => _loading = false);
@@ -243,7 +251,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(_error!, textAlign: TextAlign.center),
+                ErrorMessage(_error!, diagnostics: _errorDiagnostics, textAlign: TextAlign.center),
                 const SizedBox(height: 12),
                 TextButton(onPressed: _loadMore, child: Text(context.l10n.commonRetry)),
               ],
@@ -298,7 +306,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Text(_error!, textAlign: TextAlign.center),
+            ErrorMessage(_error!, diagnostics: _errorDiagnostics, textAlign: TextAlign.center),
             const SizedBox(height: 8),
             TextButton(onPressed: _loadMore, child: Text(context.l10n.commonRetry)),
           ],
