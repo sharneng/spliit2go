@@ -208,13 +208,25 @@ class _BalancesScreenState extends State<BalancesScreen> {
               ),
               const Divider(height: 1, indent: 16, endIndent: 16),
             ],
+            // One row in the title, not a trailing widget: a trailing
+            // Text is unconstrained, and a long name at large text took
+            // the whole tile (#101 review). Here the name gets what's
+            // left beside the label and wraps.
             ListTile(
-              title: Text(l10n.balancesYouLabel,
-                  style: TextStyle(color: theme.colorScheme.primary)),
-              trailing: Text(
-                you?.name ?? l10n.balancesYouNobody,
-                style: theme.textTheme.bodyLarge
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              title: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(l10n.balancesYouLabel,
+                      style: TextStyle(color: theme.colorScheme.primary)),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      you?.name ?? l10n.balancesYouNobody,
+                      textAlign: TextAlign.end,
+                      style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                ],
               ),
               onTap: widget.onPickActiveUser,
             ),

@@ -8,6 +8,7 @@ import 'package:http/testing.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
+import 'package:spliit2go/main.dart' show spliit2goAppBuilder;
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/balances_screen.dart';
@@ -319,4 +320,69 @@ void main() {
     expect(picks, 1);
     await teardown(tester);
   });
+
+  // #101 review: a long name at large text on a narrow phone took the
+  // whole You row ("Trailing widget consumes the entire tile width").
+  for (final (label, locale) in [('English', const Locale('en')), ('French', const Locale('fr'))]) {
+    testWidgets('$label: a long name at double text size on a narrow phone keeps the You row readable (#101 review)',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      const longName = 'Alexandra Catherine Montgomery';
+      const longGroup = Group(
+        id: 'g1',
+        name: 'Banff Trip',
+        currency: '\$',
+        participants: [Participant(id: 'alex', name: longName)],
+      );
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response('offline', 500)),
+      );
+      var picks = 0;
+      await tester.pumpWidget(MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: spliit2goAppBuilder,
+        home: BalancesScreen(
+          client: client,
+          db: db,
+          outbox: Outbox(db, client, groupId: 'g1'),
+          group: longGroup,
+          activeUserId: 'alex',
+          onPickActiveUser: () => picks++,
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      final you = locale.languageCode == 'fr' ? 'Vous' : 'You';
+      final label = find.text(you);
+      final name = find.text(longName);
+      expect(label, findsOneWidget);
+      expect(name, findsOneWidget);
+      // Both get real room, side by side or stacked, inside the card.
+      final card = tester.getRect(find.byType(Card));
+      for (final f in [label, name]) {
+        final r = tester.getRect(f);
+        expect(r.width, greaterThan(40));
+        expect(r.left, greaterThanOrEqualTo(card.left));
+        expect(r.right, lessThanOrEqualTo(card.right));
+      }
+      expect(tester.getRect(label).overlaps(tester.getRect(name)), isFalse);
+
+      await tester.tap(label);
+      await tester.pump();
+      expect(picks, 1);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+  }
 }
