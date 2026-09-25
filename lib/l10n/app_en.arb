@@ -74,7 +74,9 @@
     }
   },
   "groupScreenSearchTooltip": "Search",
-  "groupScreenSettingsTooltip": "Group settings",
+  "groupScreenMenuTooltip": "Group actions",
+  "groupScreenMenuSettings": "Group settings",
+  "groupScreenMenuShare": "Share group",
   "expenseSearchHint": "Search expenses",
   "expenseSearchClear": "Clear search",
   "expenseSearchPromptTitle": "Search this group",

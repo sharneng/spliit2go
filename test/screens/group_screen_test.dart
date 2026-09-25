@@ -16,6 +16,7 @@ import 'package:spliit2go/screens/activity_screen.dart';
 import 'package:spliit2go/screens/balances_screen.dart';
 import 'package:spliit2go/screens/expense_search_screen.dart';
 import 'package:spliit2go/screens/group_screen.dart';
+import 'package:spliit2go/screens/group_settings_screen.dart';
 import 'package:spliit2go/screens/stats_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
 import 'package:spliit2go/widgets/category_icon.dart';
@@ -765,6 +766,85 @@ void main() {
 
       expect(find.byType(StatsScreen), findsOneWidget);
       // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    // Issue #3: a ⋯ menu in place of the settings button, like spliit-ios.
+    Future<List<(Uri, String?)>> pumpWithShare(WidgetTester tester, AppDatabase db,
+        {bool cacheGroup = true}) async {
+      if (cacheGroup) await db.cacheGroup(cachedGroup);
+      final shared = <(Uri, String?)>[];
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => throw Exception('offline')),
+      );
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: GroupScreen(
+          client: client,
+          db: db,
+          outbox: Outbox(db, client, groupId: 'g1'),
+          groupId: 'g1',
+          shareLink: (link, subject) async => shared.add((link, subject)),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      return shared;
+    }
+
+    testWidgets('the top bar has a ⋯ menu with Group settings and Share group (#3)', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpWithShare(tester, db);
+
+      expect(find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.settings_outlined)),
+          findsNothing);
+      await tester.tap(find.byTooltip('Group actions'));
+      await tester.pumpAndSettle();
+      expect(find.text('Group settings'), findsOneWidget);
+      expect(find.text('Share group'), findsOneWidget);
+
+      await tester.tap(find.text('Group settings'));
+      await tester.pumpAndSettle();
+      expect(find.byType(GroupSettingsScreen), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('Share group shares <server>/groups/<id> with the group name, offline too (#3)',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final shared = await pumpWithShare(tester, db);
+
+      await tester.tap(find.byTooltip('Group actions'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Share group'));
+      await tester.pumpAndSettle();
+
+      expect(shared, [(Uri.parse('https://example.test/groups/g1'), 'Banff Trip')]);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('before the group has ever loaded, settings is disabled but sharing still works (#3)',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final shared = await pumpWithShare(tester, db, cacheGroup: false);
+
+      await tester.tap(find.byTooltip('Group actions'));
+      await tester.pumpAndSettle();
+      final settings = tester.widget<PopupMenuItem<Object?>>(find.ancestor(
+          of: find.text('Group settings'), matching: find.byWidgetPredicate((w) => w is PopupMenuItem)));
+      expect(settings.enabled, isFalse);
+      await tester.tap(find.text('Share group'));
+      await tester.pumpAndSettle();
+
+      expect(shared, [(Uri.parse('https://example.test/groups/g1'), null)]);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
     });
