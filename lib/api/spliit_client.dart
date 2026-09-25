@@ -559,18 +559,13 @@ class SpliitClient {
     String? currencyCode,
     required List<Participant> participants,
   }) async {
-    final groupFormValues = {
-      'name': name,
-      'information': information ?? '',
-      'currency': currency,
-      // The server's groupFormSchema wants a 3-letter code or '' (not
-      // null) for "no code" -- see z.union([z.string().length(3)...,
-      // z.literal('')]) in schemas.ts.
-      'currencyCode': currencyCode ?? '',
-      'participants': participants
-          .map((p) => p.id.isEmpty ? {'name': p.name} : {'id': p.id, 'name': p.name})
-          .toList(),
-    };
+    final groupFormValues = _groupFormValues(
+      name: name,
+      information: information,
+      currency: currency,
+      currencyCode: currencyCode,
+      participants: participants,
+    );
 
     final uri = Uri.parse('$baseUrl/api/trpc/groups.update?batch=1');
     final body = {
@@ -589,6 +584,64 @@ class SpliitClient {
     _checkOk(res);
     _unwrapBatch(jsonDecode(res.body)); // throws SpliitApiException on an embedded error
   }
+
+  /// Creates a group on this server (issue #115): `groups.create`, which
+  /// takes the same `groupFormValues` as [updateGroup] and returns the new
+  /// group's id (spliit-web `src/trpc/routers/groups/create.procedure.ts`
+  /// @ cc796210). Every participant is new, so only names are sent; the
+  /// server assigns all ids, which [fetchGroup] then returns.
+  Future<String> createGroup({
+    required String name,
+    String? information,
+    required String currency,
+    String? currencyCode,
+    required List<String> participantNames,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/trpc/groups.create?batch=1');
+    final body = {
+      '0': {
+        'json': {
+          'groupFormValues': _groupFormValues(
+            name: name,
+            information: information,
+            currency: currency,
+            currencyCode: currencyCode,
+            participants: [for (final n in participantNames) Participant(id: '', name: n)],
+          ),
+        },
+      }
+    };
+    final res = await _http.post(
+      uri,
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    _checkOk(res);
+    final data = _unwrapBatch(jsonDecode(res.body)) as Map<String, dynamic>;
+    return _asId(data['groupId']);
+  }
+
+  /// The server's `groupFormSchema` shape, shared by [createGroup] and
+  /// [updateGroup].
+  Map<String, dynamic> _groupFormValues({
+    required String name,
+    String? information,
+    required String currency,
+    String? currencyCode,
+    required List<Participant> participants,
+  }) =>
+      {
+        'name': name,
+        'information': information ?? '',
+        'currency': currency,
+        // The server's groupFormSchema wants a 3-letter code or '' (not
+        // null) for "no code" -- see z.union([z.string().length(3)...,
+        // z.literal('')]) in schemas.ts.
+        'currencyCode': currencyCode ?? '',
+        'participants': participants
+            .map((p) => p.id.isEmpty ? {'name': p.name} : {'id': p.id, 'name': p.name})
+            .toList(),
+      };
 }
 
 /// One page of [SpliitClient.fetchActivities].

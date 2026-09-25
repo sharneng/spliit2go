@@ -71,4 +71,33 @@ void main() {
       expect(parseGroupUrl('not a url at all'), isNull);
     });
   });
+
+  // Issue #115: a server address typed for a new group.
+  group('normalizeServerUrl', () {
+    test('adds https and drops a trailing slash', () {
+      expect(normalizeServerUrl('spliit.example.com'), 'https://spliit.example.com');
+      expect(normalizeServerUrl(' https://spliit.app/ '), 'https://spliit.app');
+    });
+
+    test('keeps a sub-path, port and http', () {
+      expect(normalizeServerUrl('example.com/spliit/'), 'https://example.com/spliit');
+      expect(normalizeServerUrl('http://192.168.1.5:3000'), 'http://192.168.1.5:3000');
+      expect(normalizeServerUrl('http://localhost:3000'), 'http://localhost:3000');
+    });
+
+    test('drops a query and fragment', () {
+      expect(normalizeServerUrl('https://spliit.app/?x=1#y'), 'https://spliit.app');
+    });
+
+    test('rejects something that isn\'t an address', () {
+      expect(normalizeServerUrl(''), isNull);
+      expect(normalizeServerUrl('   '), isNull);
+      expect(normalizeServerUrl('not a server'), isNull);
+    });
+  });
+
+  test('serverDisplayName drops https only', () {
+    expect(serverDisplayName('https://spliit.app'), 'spliit.app');
+    expect(serverDisplayName('http://192.168.1.5:3000'), 'http://192.168.1.5:3000');
+  });
 }

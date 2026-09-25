@@ -32,6 +32,47 @@
   "joinGroupUrlLabel": "Group URL",
   "joinGroupUrlHelper": "Paste the group's URL, e.g. https://spliit.app/groups/xxxxx",
   "joinGroupSubmitButton": "Join",
+  "joinGroupOrCreate": "Don’t have a group link yet?",
+  "joinGroupCreateButton": "Create a new group",
+  "createGroupTitle": "Create group",
+  "createGroupSubmitTooltip": "Create",
+  "createGroupServerLabel": "Server",
+  "createGroupServerHelper": "Where this group is created. A group stays on the server it was made on.",
+  "createGroupServerOther": "Other server",
+  "createGroupServerAddressLabel": "Server address",
+  "createGroupServerInvalid": "That doesn’t look like a web address. Try something like spliit.example.com.",
+  "createGroupFailed": "Couldn’t create the group: {error}",
+  "@createGroupFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "createGroupLoadFailed": "The group was created but couldn’t be loaded: {error}\nTap ✓ to try again. Its link, if you need it later: {link}",
+  "@createGroupLoadFailed": {
+    "placeholders": {
+      "link": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "createGroupSampleParticipant1": "John",
+  "createGroupSampleParticipant2": "Jane",
+  "createGroupSampleParticipant3": "Jack",
+  "groupSettingsNameLength": "The group name must be 2 to 50 characters.",
+  "groupSettingsParticipantNameLength": "Participant names must be 2 to 50 characters.",
+  "groupSettingsDuplicateParticipant": "Two participants are named “{name}”. Each needs a different name.",
+  "@groupSettingsDuplicateParticipant": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "groupScreenSearchTooltip": "Search",
   "groupScreenSettingsTooltip": "Group settings",
   "expenseSearchHint": "Search expenses",

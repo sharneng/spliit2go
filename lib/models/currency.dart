@@ -1,3 +1,5 @@
+import 'dart:ui' show Locale;
+
 /// One of Spliit's supported currencies, or the "Custom" pseudo-entry
 /// ([Currency.custom], empty [code]) a group can use instead of a real
 /// ISO currency -- mirrors the web app's fixed `supportedCurrencyCodes`
@@ -97,3 +99,29 @@ Currency currencyByCode(String? code) {
   }
   return Currency.custom;
 }
+
+/// The currency a new group starts in (issue #115): the one the phone's
+/// region uses, like spliit-ios's `GroupFormDraft(newGroupIn:)`, when
+/// Spliit supports it; otherwise US dollars, spliit-web's default.
+///
+/// Decided by the region alone, so English on a Japanese phone gets yen.
+/// Every supported code but EUR starts with its country's ISO code (USD,
+/// JPY, CHF, ...); the euro's countries are listed, including Bulgaria
+/// (euro since 2026-01-01, so not BGN), and Liechtenstein uses francs.
+Currency defaultCurrencyFor(Locale locale) {
+  final region = locale.countryCode?.toUpperCase();
+  if (region == null || region.isEmpty) return currencyByCode('USD');
+  if (_euroRegions.contains(region)) return currencyByCode('EUR');
+  if (region == 'LI') return currencyByCode('CHF');
+  for (final c in supportedCurrencies) {
+    if (c.code != 'EUR' && c.code.startsWith(region)) return c;
+  }
+  return currencyByCode('USD');
+}
+
+const _euroRegions = {
+  'AT', 'BE', 'BG', 'CY', 'DE', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'IE',
+  'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PT', 'SI', 'SK',
+  // Outside the EU.
+  'AD', 'MC', 'SM', 'VA', 'ME', 'XK',
+};

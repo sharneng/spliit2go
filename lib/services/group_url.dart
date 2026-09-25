@@ -46,3 +46,28 @@
 
   return (serverUrl: serverUrl, groupId: groupId);
 }
+
+/// A Spliit server address as typed for a new group (issue #115), e.g.
+/// `spliit.example.com` or `https://example.com/spliit/`, as the server
+/// URL groups store: scheme added (`https://`) if missing, no trailing
+/// slash, query or fragment. Null if it has no host.
+String? normalizeServerUrl(String input) {
+  final trimmed = input.trim();
+  if (trimmed.isEmpty) return null;
+  var uri = Uri.tryParse(trimmed);
+  if (uri == null || uri.host.isEmpty) uri = Uri.tryParse('https://$trimmed');
+  if (uri == null || uri.host.isEmpty || !uri.host.contains('.') && uri.host != 'localhost') {
+    return null;
+  }
+  return Uri(
+    scheme: uri.scheme,
+    host: uri.host,
+    port: uri.hasPort ? uri.port : null,
+    pathSegments: uri.pathSegments.where((s) => s.isNotEmpty),
+  ).toString();
+}
+
+/// How a server URL reads in a list: without `https://`.
+String serverDisplayName(String serverUrl) =>
+    serverUrl.replaceFirst(RegExp(r'^https://'), '');
+

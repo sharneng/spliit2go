@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
 import '../l10n/context_l10n.dart';
+import '../models/expense.dart';
+import '../models/group.dart';
 import '../services/active_user.dart';
 import '../services/group_url.dart';
 import '../services/settings_service.dart';
+import 'group_settings_screen.dart';
 
 /// Joins a group: paste the group's full URL (the same one you'd get
 /// from the webapp's address bar or a share sheet, e.g.
@@ -84,27 +87,13 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
       final group = await client.fetchGroup(groupId);
       final expenses = await client.fetchExpenses(group.id);
 
-      // Seed this group's active participant the same way GroupScreen
-      // resolves it on open, so it's not left unresolved right after
-      // joining -- see resolveActiveParticipant.
-      final defaultName = await _settings.defaultActiveUserName();
-      final resolution = resolveActiveParticipant(
-        storedActiveParticipantId: null,
-        defaultActiveUserName: defaultName,
-        participants: group.participants,
+      await cacheJoinedGroup(
+        db: widget.db,
+        group: group,
+        expenses: expenses,
+        serverUrl: serverUrl,
+        settings: _settings,
       );
-
-      // One transaction so a failed write can't leave a joined group
-      // without its expenses.
-      await widget.db.transaction(() async {
-        await widget.db.cacheGroup(group);
-        await widget.db.replaceServerExpenses(group.id, expenses);
-        await widget.db.recordGroupOpened(group.id, serverUrl: serverUrl);
-        if (resolution
-            case ActiveParticipantAutoMatched(:final participantId)) {
-          await widget.db.setActiveParticipant(group.id, participantId);
-        }
-      });
 
       if (!mounted) return;
       Navigator.of(context).pop(group.id);
@@ -114,6 +103,19 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
     } finally {
       if (mounted) setState(() => _joining = false);
     }
+  }
+
+  Future<void> _createGroup() async {
+    final createdId = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => GroupSettingsScreen.create(
+          db: widget.db,
+          clientFactory: widget.clientFactory,
+        ),
+      ),
+    );
+    if (createdId == null || !mounted) return;
+    Navigator.of(context).pop(createdId);
   }
 
   @override
@@ -155,10 +157,52 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
                       )
                     : Text(context.l10n.joinGroupSubmitButton),
               ),
+              // Or start a group from scratch (issue #115): the group
+              // settings form in create mode. A created group is stored as
+              // joined, so this screen then closes the same way a join does.
+              const SizedBox(height: 32),
+              Text(context.l10n.joinGroupOrCreate,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.group_add_outlined),
+                label: Text(context.l10n.joinGroupCreateButton),
+                onPressed: _joining ? null : _createGroup,
+              ),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+/// Stores a group this device has just joined or created (issues #81,
+/// #115): the group, its expenses, which server it's on, and marks it
+/// opened so it shows in the group list. Its active participant is seeded
+/// the same way GroupScreen resolves it on open, so it's not left
+/// unresolved -- see resolveActiveParticipant. One transaction, so a
+/// failed write can't leave a group without its expenses.
+Future<void> cacheJoinedGroup({
+  required AppDatabase db,
+  required Group group,
+  required List<Expense> expenses,
+  required String serverUrl,
+  required SettingsService settings,
+}) async {
+  final defaultName = await settings.defaultActiveUserName();
+  final resolution = resolveActiveParticipant(
+    storedActiveParticipantId: null,
+    defaultActiveUserName: defaultName,
+    participants: group.participants,
+  );
+  await db.transaction(() async {
+    await db.cacheGroup(group);
+    await db.replaceServerExpenses(group.id, expenses);
+    await db.recordGroupOpened(group.id, serverUrl: serverUrl);
+    if (resolution case ActiveParticipantAutoMatched(:final participantId)) {
+      await db.setActiveParticipant(group.id, participantId);
+    }
+  });
 }

@@ -976,6 +976,55 @@ void main() {
     });
   });
 
+  group('SpliitClient.createGroup (#115)', () {
+    test('posts groups.create with names only and returns the new id', () async {
+      http.Request? captured;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          captured = req;
+          return http.Response('[{"result":{"data":{"json":{"groupId":"new123"}}}}]', 200);
+        }),
+      );
+
+      final id = await client.createGroup(
+        name: 'Road trip',
+        currency: '€',
+        currencyCode: 'EUR',
+        participantNames: const ['Ken', 'Lily'],
+      );
+
+      expect(id, 'new123');
+      expect(captured!.method, 'POST');
+      expect(captured!.url.toString(), 'https://example.test/api/trpc/groups.create?batch=1');
+      final sent = jsonDecode(captured!.body) as Map<String, dynamic>;
+      final json = (sent['0'] as Map<String, dynamic>)['json'] as Map<String, dynamic>;
+      expect(json.keys, ['groupFormValues']); // no groupId on create
+      expect(json['groupFormValues'], {
+        'name': 'Road trip',
+        'information': '',
+        'currency': '€',
+        'currencyCode': 'EUR',
+        'participants': [
+          {'name': 'Ken'},
+          {'name': 'Lily'},
+        ],
+      });
+    });
+
+    test('throws on an embedded tRPC error', () async {
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async =>
+            http.Response('[{"error":{"json":{"message":"min2","code":-32600}}}]', 200)),
+      );
+      expect(
+        client.createGroup(name: 'R', currency: '\$', participantNames: const ['Ken']),
+        throwsA(isA<SpliitApiException>()),
+      );
+    });
+  });
+
   group('SpliitClient.updateGroup', () {
     test('sends existing participants with their id and new ones without', () async {
       http.Request? captured;

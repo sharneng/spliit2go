@@ -92,3 +92,15 @@ Kenneth asked for spliit-ios's "You" section on Balances (`BalancesView.youSecti
 - **No "Say who you are" state.** spliit-ios has a third label for a group never asked. Here the prompt above stores Nobody even when dismissed, so the only unanswered group is one whose prompt hasn't shown yet; it shows "Nobody" too.
 - **"Nobody" in the row is its own short string** (Personne / 无): the picker's French and Chinese wording ("Je ne suis pas dans la liste", "我不在名单中") is too long for a row value.
 - **The name wraps beside the label** rather than sitting in `ListTile.trailing`, which has no width limit: a long name at large text took the whole row (Ezra, #101 review; regression test in `balances_screen_test.dart`).
+
+## Creating a group (2026-09-25, issue #115)
+
+The Join screen has a "Create a new group" button (Kenneth's ask on #115), which opens the group settings form in create mode, like spliit-ios's shared group editor (`GroupFormView` / `CreateGroupView` @ `80b2e98`). It calls `groups.create` (spliit-web `create.procedure.ts` @ `cc796210`), which takes the same form values as `groups.update` and returns the new group's id.
+
+- **A server picker**, since a group stays on the server it's made on: the servers this device already has groups on, most recently opened first, then spliit.app if it isn't one of them, then "Other server" for a typed address (`https` added if missing). The default is the most recently opened group's server, or spliit.app on a fresh install. spliit-ios offers the same list.
+- **Pre-filled like upstream:** the three sample participants spliit-web and spliit-ios start with (John, Jane, Jack; Jean, Jeanne, Jacques in French, as spliit-web translates them), and the phone region's currency (spliit-ios; spliit-web defaults to USD, which is the fallback here for a region Spliit has no currency for).
+- **Stored exactly like a join** (`cacheJoinedGroup`): the group is fetched back for its server-assigned participant ids, cached with no expenses, and marked opened, so it's in the list and viewable offline; the active participant is auto-matched against the device's default name as on join, and otherwise "Who are you?" asks on first open, as for any group.
+- **The server's name rules are checked on the phone,** in create and edit alike: group and participant names 2 to 50 characters, no two participants with the same name (spliit-web `groupFormSchema`). Before, only empty names were caught and anything else came back as the server's raw validation error.
+- Creating needs a connection, like joining; a failure keeps the form open with the error.
+- **A created group is never created twice** (Ezra, #116 review). Once `groups.create` succeeds the group exists, so if loading it back fails, the form keeps its id and server, locks the fields, shows its link (selectable, so it isn't lost if the user leaves), and Create retries only the load. Spliit has no way to pass a client-made group id, which would make create itself safe to retry; the server mints it (`randomId()` in `createGroup`).
+
