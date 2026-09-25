@@ -32,45 +32,6 @@ void main() {
         category: category,
       );
 
-  group('computeSpendingSummary', () {
-    test('an empty list summarizes to all zeros/nulls', () {
-      final summary = computeSpendingSummary([]);
-      expect(summary.expenseCount, 0);
-      expect(summary.totalCents, 0);
-      expect(summary.averageCents, 0);
-      expect(summary.largestTitle, isNull);
-      expect(summary.largestCents, isNull);
-      expect(summary.firstDate, isNull);
-      expect(summary.lastDate, isNull);
-    });
-
-    test('counts, averages, finds the largest, and spans the dates -- excluding reimbursements', () {
-      final expenses = [
-        evenExpense(id: 'e1', amountCents: 9000, paidBy: 'alex', date: DateTime.utc(2026, 9, 1), title: 'Groceries'),
-        evenExpense(id: 'e2', amountCents: 3000, paidBy: 'bea', date: DateTime.utc(2026, 9, 10), title: 'Coffee'),
-        Expense(
-          id: 'e3',
-          groupId: 'g1',
-          title: 'Bea paid Alex',
-          amountCents: 1500,
-          paidBy: 'bea',
-          paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
-          date: DateTime.utc(2026, 9, 15),
-          isReimbursement: true,
-        ),
-      ];
-
-      final summary = computeSpendingSummary(expenses);
-      expect(summary.expenseCount, 2);
-      expect(summary.totalCents, 12000);
-      expect(summary.averageCents, 6000);
-      expect(summary.largestTitle, 'Groceries');
-      expect(summary.largestCents, 9000);
-      expect(summary.firstDate, DateTime.utc(2026, 9, 1));
-      expect(summary.lastDate, DateTime.utc(2026, 9, 10));
-    });
-  });
-
   group('totalGroupSpendingCents', () {
     test('sums non-reimbursement expenses only', () {
       final expenses = [
@@ -135,25 +96,6 @@ void main() {
       expect(result[0].totalCents, 15000);
       expect(result[1].categoryId, 9);
       expect(result[1].totalCents, 12000);
-    });
-  });
-
-  group('activeUserPaidCents / activeUserShareCents', () {
-    test('return null when there is no active user', () {
-      final expenses = [evenExpense(id: 'e1', amountCents: 9000, paidBy: 'alex', date: DateTime.utc(2026, 9, 1))];
-      expect(activeUserPaidCents(null, expenses), isNull);
-      expect(activeUserShareCents(null, expenses), isNull);
-    });
-
-    test('compute the active user\'s paid total and share of spending', () {
-      final expenses = [
-        evenExpense(id: 'e1', amountCents: 9000, paidBy: 'alex', date: DateTime.utc(2026, 9, 1)),
-        evenExpense(id: 'e2', amountCents: 3000, paidBy: 'bea', date: DateTime.utc(2026, 9, 2)),
-      ];
-      expect(activeUserPaidCents('alex', expenses), 9000);
-      // Alex's share is a third of (9000 + 3000) = 4000.
-      expect(activeUserShareCents('alex', expenses), 4000);
-      expect(activeUserPaidCents('cid', expenses), 0);
     });
   });
 }

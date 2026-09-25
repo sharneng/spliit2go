@@ -6,15 +6,14 @@ import '../l10n/category_names.dart';
 import '../l10n/context_l10n.dart';
 import '../models/category.dart';
 import '../models/group.dart';
-import '../services/date_span_calculator.dart';
 import '../services/stats_calculator.dart';
 import '../sync/outbox.dart';
-import '../utils/date_format.dart';
 import '../utils/money.dart';
 
 /// A first pass at the web app's Stats tab (issue #27, split from #6
-/// alongside Activity -- see issue #26): summary totals, group/
-/// participant/category spending, computed entirely from a live
+/// alongside Activity -- see issue #26): the group's total spending
+/// ("The group", issue #103), then spending by participant and by
+/// category, computed entirely from a live
 /// [AppDatabase.watchExpensesForGroup] stream (issue #47) the same way
 /// Balances is (see stats_calculator.dart's doc comment). Works offline,
 /// reflects any pending unsynced expenses immediately, and -- since it's
@@ -38,11 +37,6 @@ class StatsScreen extends StatefulWidget {
   final AppDatabase db;
   final Outbox outbox;
   final Group group;
-  final String? activeUserId;
-
-  /// Opens the "Who are you?" picker; when set, the hint shown with no
-  /// active user becomes a button that calls it (issue #85).
-  final VoidCallback? onPickActiveUser;
 
   /// See BalancesScreen's own doc comment on its identical field --
   /// same reasoning (issue #38): true embeds just the content, with no
@@ -56,8 +50,6 @@ class StatsScreen extends StatefulWidget {
     required this.db,
     required this.outbox,
     required this.group,
-    required this.activeUserId,
-    this.onPickActiveUser,
     this.embedded = false,
   });
 
@@ -102,21 +94,6 @@ class _StatsScreenState extends State<StatsScreen> {
   String _categoryLabel(int categoryId) =>
       localizedCategoryLabel(context, categoryId, _categoryNames[categoryId]);
 
-  // Delegates to the shared formatDate/formatDateSpan helpers (issue
-  // #55), which also back GroupSettingsScreen's and GroupListScreen's
-  // own date-span display -- this screen's "active span" is a
-  // spending-only span (firstDate/lastDate already exclude
-  // reimbursements, see SpendingSummary's own doc comment), so it's
-  // wrapped in its own DateSpan here rather than sharing
-  // computeDateSpan's all-expenses-including-reimbursements semantics.
-  String _activeSpan(SpendingSummary summary) {
-    final first = summary.firstDate;
-    final last = summary.lastDate;
-    final locale = context.appLocale;
-    if (first == null || last == null) return formatDateSpan(null, locale: locale);
-    return formatDateSpan(DateSpan(first: first, last: last), locale: locale);
-  }
-
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<ExpenseRow>>(
@@ -128,13 +105,12 @@ class _StatsScreenState extends State<StatsScreen> {
           body = const Center(child: CircularProgressIndicator());
         } else {
           final expenses = rows.map(widget.db.rowToExpense).toList();
-          final summary = computeSpendingSummary(expenses);
           final groupTotal = totalGroupSpendingCents(expenses);
-          final yourPaid = activeUserPaidCents(widget.activeUserId, expenses);
-          final yourShare = activeUserShareCents(widget.activeUserId, expenses);
           final participants = computeParticipantSpending(widget.group.participants, expenses);
           final categories = computeCategorySpending(expenses);
-          body = _body(context, summary, groupTotal, yourPaid, yourShare, participants, categories);
+          // Settlements alone aren't spending: still the empty state.
+          final noSpending = expenses.every((e) => e.isReimbursement);
+          body = _body(context, noSpending, groupTotal, participants, categories);
         }
         if (widget.embedded) return body;
         return Scaffold(appBar: AppBar(title: Text(context.l10n.statsTitle)), body: body);
@@ -144,24 +120,19 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Widget _body(
     BuildContext context,
-    SpendingSummary summary,
+    bool noExpenses,
     int groupTotalCents,
-    int? yourPaidCents,
-    int? yourShareCents,
     List<ParticipantSpending> participants,
     List<CategorySpending> categories,
   ) {
-    if (summary.expenseCount == 0) {
+    if (noExpenses) {
       return Center(child: Text(context.l10n.commonNoExpensesYet));
     }
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _sectionTitle(context, context.l10n.statsSectionSummary),
-        _summaryCard(context, summary),
-        const SizedBox(height: 20),
-        _sectionTitle(context, context.l10n.statsSectionTotals),
-        _totalsCard(context, groupTotalCents, yourPaidCents, yourShareCents),
+        _sectionTitle(context, context.l10n.statsSectionGroup),
+        _groupCard(context, groupTotalCents),
         const SizedBox(height: 20),
         _sectionTitle(context, context.l10n.statsSectionByParticipant),
         for (final p in participants) _participantTile(context, p),
@@ -177,98 +148,79 @@ class _StatsScreenState extends State<StatsScreen> {
         child: Text(title, style: Theme.of(context).textTheme.titleMedium),
       );
 
-  Widget _summaryCard(BuildContext context, SpendingSummary summary) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _metricRow(context.l10n.statsMetricExpenses, '${summary.expenseCount}'),
-            _metricRow(context.l10n.statsMetricAverageExpense, _money(summary.averageCents)),
-            _metricRow(
-              context.l10n.statsMetricLargestExpense,
-              summary.largestCents == null
-                  ? '—'
-                  : '${_money(summary.largestCents!)} (${summary.largestTitle})',
-            ),
-            _metricRow(context.l10n.statsMetricActiveSpan, _activeSpan(summary)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _totalsCard(
-    BuildContext context,
-    int groupTotalCents,
-    int? yourPaidCents,
-    int? yourShareCents,
-  ) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _metricRow(context.l10n.statsMetricGroupSpending, _money(groupTotalCents)),
-            if (yourPaidCents != null)
-              _metricRow(context.l10n.statsMetricYouPaid, _money(yourPaidCents)),
-            if (yourShareCents != null)
-              _metricRow(context.l10n.statsMetricYourShare, _money(yourShareCents)),
-            if (widget.activeUserId == null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: widget.onPickActiveUser == null
-                    ? Text(
-                        context.l10n.statsPickActiveUserHint,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      )
-                    : TextButton(
-                        style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            alignment: AlignmentDirectional.centerStart),
-                        onPressed: widget.onPickActiveUser,
-                        child: Text(context.l10n.statsPickActiveUserHint),
-                      ),
+  /// One figure, like spliit-ios's StatsView "The group" section (issue
+  /// #103): the group's total, unsigned, under a label that says which
+  /// way it goes. Negative only if refunds outweigh spending, which
+  /// spliit-ios calls earnings. Replaces the old Summary and Totals cards.
+  Widget _groupCard(BuildContext context, int groupTotalCents) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Card(
+          margin: EdgeInsets.zero,
+          child: SizedBox(
+            width: double.infinity,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    groupTotalCents < 0
+                        ? context.l10n.statsGroupTotalEarnings
+                        : context.l10n.statsGroupTotalSpending,
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _money(groupTotalCents.abs()),
+                    style: theme.textTheme.headlineMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ],
               ),
-          ],
+            ),
+          ),
         ),
-      ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Text(
+            context.l10n.statsGroupFooter,
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _metricRow(String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label),
-            Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
-          ],
-        ),
-      );
-
+  // Rows are a label and an amount that share a line when they fit and
+  // stack when they don't, not ListTile.trailing: a trailing amount has
+  // no width limit, and in French at large text it took the whole tile
+  // (#103).
   Widget _participantTile(BuildContext context, ParticipantSpending p) {
+    final small = Theme.of(context).textTheme.bodySmall;
     return ListTile(
-      title: Text(p.name),
-      subtitle: Text(context.l10n.statsParticipantPaidCount(p.paidCount)),
-      trailing: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(_money(p.paidCents), style: const TextStyle(fontWeight: FontWeight.w600)),
-          Text(context.l10n.statsParticipantShare(_money(p.shareCents)),
-              style: Theme.of(context).textTheme.bodySmall),
-        ],
-      ),
+      title: _pair(Text(p.name),
+          Text(_money(p.paidCents), style: const TextStyle(fontWeight: FontWeight.w600))),
+      subtitle: _pair(Text(context.l10n.statsParticipantPaidCount(p.paidCount)),
+          Text(context.l10n.statsParticipantShare(_money(p.shareCents)), style: small)),
     );
   }
 
   Widget _categoryTile(BuildContext context, CategorySpending c) {
     return ListTile(
-      title: Text(_categoryLabel(c.categoryId)),
-      trailing: Text(_money(c.totalCents), style: const TextStyle(fontWeight: FontWeight.w600)),
+      title: _pair(Text(_categoryLabel(c.categoryId)),
+          Text(_money(c.totalCents), style: const TextStyle(fontWeight: FontWeight.w600))),
     );
   }
+
+  Widget _pair(Widget label, Widget amount) => Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 16,
+        children: [label, amount],
+      );
 }
