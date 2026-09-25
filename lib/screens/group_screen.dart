@@ -201,7 +201,7 @@ class _GroupScreenState extends State<GroupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_group?.name ?? 'spliit2go'),
+        title: Text(_group?.name ?? 'Spliit2Go'),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined),

@@ -7,7 +7,7 @@
          into a release manifest. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="spliit2go"
+        android:label="Spliit2Go"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

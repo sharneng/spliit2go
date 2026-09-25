@@ -44,7 +44,7 @@ class Spliit2GoApp extends StatelessWidget {
       child: ListenableBuilder(
         listenable: settings,
         builder: (context, _) => MaterialApp(
-          title: 'spliit2go',
+          title: 'Spliit2Go',
           // Lets GroupListScreen hear about routes popped back to it
           // that weren't pushed by its own _openGroup -- e.g. _Root's
           // own auto-open-last-group push right below -- so it can
