@@ -104,7 +104,11 @@ class SpliitClient {
     final res = await _http.get(uri);
     _checkOk(res);
     final data = _unwrapBatch(jsonDecode(res.body)) as Map<String, dynamic>;
-    final g = data['group'] as Map<String, dynamic>;
+    // Spliit answers an unknown id with `{group: null}`, not an error
+    // (spliit-web `getGroup` returns null; checked on spliit.app), which
+    // used to surface as a type-cast error (issue #118).
+    final g = data['group'];
+    if (g is! Map<String, dynamic>) throw GroupNotFoundException(baseUrl, groupId);
 
     return Group(
       id: _asId(g['id']),
@@ -651,6 +655,17 @@ class ActivityPage {
   final int nextCursor;
 
   const ActivityPage({required this.activities, required this.hasMore, required this.nextCursor});
+}
+
+/// The server has no group with this id: [SpliitClient.fetchGroup] got
+/// `{group: null}` (issue #118). Usually a mistyped or mangled link.
+class GroupNotFoundException implements Exception {
+  final String serverUrl;
+  final String groupId;
+  GroupNotFoundException(this.serverUrl, this.groupId);
+
+  @override
+  String toString() => 'GroupNotFoundException: no group "$groupId" on $serverUrl';
 }
 
 class SpliitApiException implements Exception {

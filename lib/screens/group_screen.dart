@@ -22,6 +22,7 @@ import 'activity_screen.dart';
 import 'balances_screen.dart';
 import 'group_settings_screen.dart';
 import 'stats_screen.dart';
+import '../widgets/error_message.dart';
 
 /// A single group's expenses, offline-first -- reached by pushing on top
 /// of GroupListScreen (the app's actual root; see main.dart and
@@ -63,6 +64,7 @@ class _GroupScreenState extends State<GroupScreen> {
   List<Expense> _expenses = [];
   bool _loading = true;
   String? _error;
+  ErrorDetails? _errorDetails;
   String? _activeUserId;
 
   // Live db subscriptions (issue #47) -- replace the old imperative
@@ -186,9 +188,12 @@ class _GroupScreenState extends State<GroupScreen> {
       // terminal / `flutter logs`, since a bare exception message
       // alone isn't enough to tell a real "we're offline" from a real
       // parsing bug apart -- see github.com/sharneng/spliit2go/issues/14.
-      debugPrint('GroupScreen._refresh failed for group ${widget.groupId}: $e\n$st');
+      final details = ErrorDetails.logged('GroupScreen._refresh for group ${widget.groupId}', e, st);
       if (_expenses.isEmpty) {
-        setState(() => _error = e.toString());
+        setState(() {
+          _error = e.toString();
+          _errorDetails = details;
+        });
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -439,7 +444,13 @@ class _GroupScreenState extends State<GroupScreen> {
           const SizedBox(height: 80),
           Icon(Icons.cloud_off, size: 48, color: Theme.of(context).colorScheme.outline),
           const SizedBox(height: 12),
-          Center(child: Text(context.l10n.groupScreenServerError(_error!))),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: ErrorMessage(context.l10n.groupScreenServerError(_error!),
+                  details: _errorDetails, textAlign: TextAlign.center),
+            ),
+          ),
         ],
       );
     }

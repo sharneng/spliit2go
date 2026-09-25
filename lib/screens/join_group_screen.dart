@@ -9,6 +9,7 @@ import '../services/active_user.dart';
 import '../services/group_url.dart';
 import '../services/settings_service.dart';
 import 'group_settings_screen.dart';
+import '../widgets/error_message.dart';
 
 /// Joins a group: paste the group's full URL (the same one you'd get
 /// from the webapp's address bar or a share sheet, e.g.
@@ -61,6 +62,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
 
   bool _joining = false;
   String? _error;
+  ErrorDetails? _errorDetails;
 
   @override
   void dispose() {
@@ -72,7 +74,10 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
     if (!_formKey.currentState!.validate()) return;
     final parsed = parseGroupUrl(_urlController.text);
     if (parsed == null) {
-      setState(() => _error = context.l10n.joinGroupUrlInvalid);
+      setState(() {
+        _error = context.l10n.joinGroupUrlInvalid;
+        _errorDetails = null;
+      });
       return;
     }
     final serverUrl = parsed.serverUrl;
@@ -81,6 +86,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
     setState(() {
       _joining = true;
       _error = null;
+      _errorDetails = null;
     });
     try {
       final client = widget.clientFactory(serverUrl);
@@ -97,9 +103,15 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
 
       if (!mounted) return;
       Navigator.of(context).pop(group.id);
-    } catch (e) {
+    } catch (e, st) {
+      final details = ErrorDetails.logged('Joining $serverUrl/groups/$groupId', e, st);
       if (!mounted) return;
-      setState(() => _error = context.l10n.joinGroupJoinFailed(e.toString()));
+      setState(() {
+        _error = e is GroupNotFoundException
+            ? context.l10n.joinGroupNotFound(serverDisplayName(serverUrl))
+            : context.l10n.joinGroupJoinFailed(e.toString());
+        _errorDetails = details;
+      });
     } finally {
       if (mounted) setState(() => _joining = false);
     }
@@ -130,9 +142,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (_error != null) ...[
-                Text(_error!,
-                    style:
-                        TextStyle(color: Theme.of(context).colorScheme.error)),
+                ErrorMessage(_error!, details: _errorDetails),
                 const SizedBox(height: 12),
               ],
               TextFormField(

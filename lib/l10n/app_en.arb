@@ -32,6 +32,18 @@
   "joinGroupUrlLabel": "Group URL",
   "joinGroupUrlHelper": "Paste the group's URL, e.g. https://spliit.app/groups/xxxxx",
   "joinGroupSubmitButton": "Join",
+  "joinGroupNotFound": "No group with that link was found on {server}. Check the link and try again.",
+  "@joinGroupNotFound": {
+    "placeholders": {
+      "server": {
+        "type": "String"
+      }
+    }
+  },
+  "errorTapForDetails": "Tap for details",
+  "errorDetailsTitle": "Error details",
+  "errorDetailsCopy": "Copy",
+  "errorDetailsCopied": "Copied",
   "joinGroupOrCreate": "Don’t have a group link yet?",
   "joinGroupCreateButton": "Create a new group",
   "createGroupTitle": "Create group",

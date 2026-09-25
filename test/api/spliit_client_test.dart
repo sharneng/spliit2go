@@ -976,6 +976,22 @@ void main() {
     });
   });
 
+  test('fetchGroup: an id the server doesn\'t have throws GroupNotFoundException (#118)', () async {
+    // What spliit.app answers for an unknown id (checked live): no error,
+    // just a null group. It used to surface as a type-cast error.
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient(
+          (req) async => http.Response('[{"result":{"data":{"json":{"group":null}}}}]', 200)),
+    );
+    await expectLater(
+      client.fetchGroup('nope'),
+      throwsA(isA<GroupNotFoundException>()
+          .having((e) => e.groupId, 'groupId', 'nope')
+          .having((e) => e.serverUrl, 'serverUrl', 'https://example.test')),
+    );
+  });
+
   group('SpliitClient.createGroup (#115)', () {
     test('posts groups.create with names only and returns the new id', () async {
       http.Request? captured;

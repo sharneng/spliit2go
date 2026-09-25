@@ -18,6 +18,7 @@ import '../utils/money.dart';
 import '../utils/decimal_input.dart';
 import '../widgets/currency_picker.dart';
 import '../widgets/category_icon.dart';
+import '../widgets/error_message.dart';
 
 /// Adds -- or, given [existingExpense], edits -- an expense. An expense
 /// with [Expense.isReimbursement] set is a settlement/"paid back"
@@ -111,6 +112,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   String? _paidBy;
   bool _saving = false;
   String? _saveError;
+  ErrorDetails? _saveErrorDetails;
 
   /// True once Save has been pressed at least once -- gates whether the
   /// "Paid for" footer shows a blocking validation error or the running
@@ -743,8 +745,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               if (_saveError != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(_saveError!,
-                      style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                  child: ErrorMessage(_saveError!, details: _saveErrorDetails),
                 ),
               FilledButton(
                 onPressed: _saving ? null : _save,
@@ -917,6 +918,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     setState(() {
       _hasAttemptedSave = true;
       _saveError = null;
+      _saveErrorDetails = null;
       _originalCurrencyError = null;
     });
     if (!_formKey.currentState!.validate()) return;
@@ -1073,10 +1075,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       widget.db.markExpensesChanged(widget.group.id);
       await _rememberDefaultSplitIfRequested(paidFor);
       if (mounted) Navigator.of(context).pop(true);
-    } catch (e) {
+    } catch (e, st) {
+      final details = ErrorDetails.logged('Saving an expense in ${widget.group.id}', e, st);
       if (!mounted) return;
       setState(() {
         _saving = false;
+        _saveErrorDetails = details;
         _saveError = context.l10n.expenseEditSaveFailed(e.toString());
       });
     }

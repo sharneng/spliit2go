@@ -296,4 +296,53 @@ void main() {
     expect(find.byType(JoinGroupScreen), findsNothing);
     expect(servers, ['https://spliit.app']);
   });
+
+  // Issue #118: "Couldn't join: type 'Null' is not a subtype of type
+  // 'Map<String, dynamic>' in type cast" for a group the server doesn't have.
+  testWidgets('a group the server doesn\'t have says so, with the full error one tap away (#118)',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient(
+          (req) async => http.Response('[{"result":{"data":{"json":{"group":null}}}}]', 200)),
+    );
+
+    final popped = await pushAndJoin(tester, db, client);
+
+    expect(popped, isNull);
+    expect(find.text('No group with that link was found on example.test. Check the link and try again.'),
+        findsOneWidget);
+    expect(find.textContaining('is not a subtype'), findsNothing);
+
+    await tester.tap(find.text('Tap for details'));
+    await tester.pumpAndSettle();
+    expect(find.text('Error details'), findsOneWidget);
+    expect(find.textContaining('GroupNotFoundException: no group "g1" on https://example.test'),
+        findsOneWidget);
+  });
+
+  testWidgets('a link pasted with a trailing period joins the right group (#118)', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final asked = <String>[];
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async {
+        asked.add(req.url.queryParameters['input'] ?? '');
+        if (req.url.path.endsWith('groups.expenses.list')) {
+          return http.Response(expensesResponse(), 200);
+        }
+        return http.Response(groupResponse(), 200);
+      }),
+    );
+
+    final popped = await pushAndJoin(tester, db, client,
+        url: 'Join us: https://example.test/groups/g1.');
+
+    expect(popped, 'g1');
+    expect(asked.first, contains('"groupId":"g1"'));
+  });
 }
+

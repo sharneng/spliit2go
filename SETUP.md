@@ -62,6 +62,10 @@ flutter run
 
 Don't re-run `flutter create` on this repo. If you ever do, don't commit the `pubspec.lock` it rewrites: it re-resolves every package and silently downgrades unrelated transitive ones (found in #80). A plain `flutter pub get` leaves the lockfile alone.
 
+## Diagnosing errors on a device
+
+An error shown on screen (joining, creating or saving a group, saving an expense, loading a group or its activity) says **Tap for details** when there's more behind it: the full error and stack trace, selectable, with a **Copy** button, so it can be pasted into an issue without a debugger attached (#118). The same text also goes to the debug log (`flutter run`, `flutter logs`, Xcode's console, or `adb logcat`).
+
 ## Running checks locally
 
 `scripts/run_test` runs the full check CI runs -- `dart run build_runner build`, `flutter gen-l10n`, `flutter analyze`, `flutter test --coverage`, in that order -- and logs the result to `.flutter-ci.log` (gitignored) at the repo root:
