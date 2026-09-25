@@ -13,4 +13,4 @@ The search button in the group screen's bottom bar (on every tab, since [#84](ht
 
 ## Verified
 
-Widget tests cover the matching rules and the screen (focus, live filtering including a pending expense, no-match text, Clear, results following a database delete, opening a result). On the iOS simulator with a real spliit.app group: case-insensitive Latin and Chinese queries, no-match, Clear, the details sheet, and Back. The on-screen keyboard opened on entry; dragging the results to dismiss it was not checked on a device.
+Widget tests cover the matching rules and the screen (focus, live filtering including a pending expense, no-match text, Clear, results following a database delete, opening a result). On the iOS simulator with a real spliit.app group: case-insensitive Latin and Chinese queries, no-match, Clear, the details sheet, and Back. The on-screen keyboard opened on entry there; dragging the results to dismiss it couldn't be checked on the simulator. Kenneth then tested on a physical device and reported the keyboard works as expected ([#98 comment](https://github.com/sharneng/spliit2go/pull/98#issuecomment-5819258210)).
