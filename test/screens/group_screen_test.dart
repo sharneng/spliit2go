@@ -191,7 +191,9 @@ void main() {
 
       final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw Exception('offline')),
+        // What the http client actually throws with no connection, which
+        // the shared policy (#119) reads as a connection problem.
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       final outbox = Outbox(db, client, groupId: 'g1');
 

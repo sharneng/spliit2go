@@ -16,9 +16,14 @@ import 'services/settings_service.dart';
 import 'services/app_settings.dart';
 import 'sync/outbox.dart';
 import 'theme.dart';
+import 'services/error_reporting.dart';
+import 'widgets/error_message.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Errors nothing caught, framework and async alike, go through the same
+  // reporter the screens use (issue #119 review).
+  installErrorHandlers(ErrorReporter.instance);
   final links = AppLinks();
   final settings = await AppSettings.load(SettingsService());
   runApp(Spliit2GoApp(
@@ -28,6 +33,10 @@ Future<void> main() async {
         initialLink: links.getInitialLink(),
       )));
 }
+
+/// The app's navigator, so the uncaught-error snack bar can open its
+/// details sheet from above the Navigator (see UncaughtErrorPresenter).
+final appNavigatorKey = GlobalKey<NavigatorState>();
 
 class Spliit2GoApp extends StatelessWidget {
   const Spliit2GoApp({super.key, required this.settings, this.home});
@@ -45,6 +54,7 @@ class Spliit2GoApp extends StatelessWidget {
         listenable: settings,
         builder: (context, _) => MaterialApp(
           title: 'Spliit2Go',
+          navigatorKey: appNavigatorKey,
           // Lets GroupListScreen hear about routes popped back to it
           // that weren't pushed by its own _openGroup -- e.g. _Root's
           // own auto-open-last-group push right below -- so it can
@@ -122,7 +132,11 @@ class Spliit2GoApp extends StatelessWidget {
           // brightness, so both the backdrop and the overlay style stay
           // correct across light and dark mode (issue #25) without needing
           // their own brightness plumbing.
-          builder: spliit2goAppBuilder,
+          builder: (context, child) => UncaughtErrorPresenter(
+            reporter: ErrorReporter.instance,
+            navigatorKey: appNavigatorKey,
+            child: spliit2goAppBuilder(context, child),
+          ),
         ),
       ),
     );
@@ -244,9 +258,10 @@ class _RootState extends State<AppRoot> {
   void initState() {
     super.initState();
     _linkSubscription =
-        widget.links?.listen(_receiveLink, onError: (Object error) {
-      // Invalid platform events should not prevent normal app navigation.
-      debugPrint('Unable to receive app link: $error');
+        widget.links?.listen(_receiveLink, onError: (Object error, StackTrace stack) {
+      // Invalid platform events should not prevent normal app navigation,
+      // but aren't expected either: logged (#119 review).
+      ErrorReporter.instance.report(error, stack, operation: 'Receiving an app link');
     });
     _start();
   }
@@ -255,8 +270,8 @@ class _RootState extends State<AppRoot> {
     try {
       final initial = await widget.initialLink;
       if (initial != null) _receiveLink(initial);
-    } catch (error) {
-      debugPrint('Unable to read initial app link: $error');
+    } catch (error, stack) {
+      ErrorReporter.instance.report(error, stack, operation: 'Reading the initial app link');
     }
     await _migrateLegacySingleGroup();
     final last = await _db.mostRecentlyOpenedGroup();

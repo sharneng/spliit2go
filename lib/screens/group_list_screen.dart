@@ -18,6 +18,8 @@ import '../utils/date_format.dart';
 import 'group_screen.dart';
 import 'app_settings_screen.dart';
 import 'join_group_screen.dart';
+import '../services/error_reporting.dart';
+import '../widgets/error_message.dart';
 
 /// Registered as a `MaterialApp.navigatorObservers` entry (main.dart) so
 /// [_GroupListScreenState] can hear about routes pushed *on top of* it by
@@ -279,15 +281,18 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
     try {
       await _settings.setGroupListSort(sort.name);
       if (mounted) await _load();
-    } catch (_) {
-      _showSaveError();
+    } catch (e, st) {
+      _showSaveError(e, st, 'Saving the group list sort');
     }
   }
 
-  void _showSaveError() {
+  /// Local storage failures have no expected cause: logged, with details
+  /// behind the snack bar (#119 review).
+  void _showSaveError(Object e, StackTrace st, String operation) {
+    final error = ErrorReporter.instance.report(e, st, operation: operation);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.appSettingsSaveError)));
+    showErrorSnackBar(context, context.l10n.appSettingsSaveError,
+        diagnostics: error.diagnostics);
   }
 
   Future<bool> _confirmRemove(GroupRow row) async =>
@@ -349,8 +354,8 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
           if (!await _confirmRemove(row)) return;
           await widget.db.leaveGroup(row.id);
       }
-    } catch (_) {
-      _showSaveError();
+    } catch (e, st) {
+      _showSaveError(e, st, 'Updating group ${row.id}');
     } finally {
       if (mounted) await _load(); // Always rebuild with the fresh key
     }

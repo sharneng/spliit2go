@@ -21,14 +21,7 @@
   "groupListLeaveConfirm": "Leave",
   "joinGroupScreenTitle": "Join a group",
   "joinGroupUrlInvalid": "That doesn't look like a group URL -- it should look like https://spliit.app/groups/xxxxxxxxxxxxxxxxxxxxx",
-  "joinGroupJoinFailed": "Couldn't join: {error}",
-  "@joinGroupJoinFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
+  "joinGroupJoinFailed": "Couldn't join the group.",
   "joinGroupUrlLabel": "Group URL",
   "joinGroupUrlHelper": "Paste the group's URL, e.g. https://spliit.app/groups/xxxxx",
   "joinGroupSubmitButton": "Join",
@@ -53,21 +46,11 @@
   "createGroupServerOther": "Other server",
   "createGroupServerAddressLabel": "Server address",
   "createGroupServerInvalid": "That doesn’t look like a web address. Try something like spliit.example.com.",
-  "createGroupFailed": "Couldn’t create the group: {error}",
-  "@createGroupFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
-  "createGroupLoadFailed": "The group was created but couldn’t be loaded: {error}\nTap ✓ to try again. Its link, if you need it later: {link}",
+  "createGroupFailed": "Couldn’t create the group.",
+  "createGroupLoadFailed": "The group was created but couldn’t be loaded.\nTap ✓ to try again. Its link, if you need it later: {link}",
   "@createGroupLoadFailed": {
     "placeholders": {
       "link": {
-        "type": "String"
-      },
-      "error": {
         "type": "String"
       }
     }
@@ -115,14 +98,7 @@
   "dateSectionEarlierThisYear": "Earlier this year",
   "dateSectionLastYear": "Last year",
   "dateSectionOlder": "Older",
-  "groupScreenServerError": "Couldn't reach the server: {error}",
-  "@groupScreenServerError": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
+  "groupScreenServerError": "Couldn't load this group.",
   "groupScreenSyncFailed": "sync failed",
   "groupScreenSyncing": "syncing…",
   "groupScreenSyncFailureTitle": "Couldn't sync this expense",
@@ -136,14 +112,7 @@
   "groupSettingsNeedParticipant": "At least one participant is required.",
   "groupSettingsParticipantNameRequired": "Every participant needs a name.",
   "groupSettingsCantRemoveHasExpenses": "Can't remove a participant who has expenses in this group.",
-  "groupSettingsSaveFailed": "Couldn't save: {error}",
-  "@groupSettingsSaveFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
+  "groupSettingsSaveFailed": "Couldn't save the group settings.",
   "groupSettingsNameLabel": "Group name",
   "groupSettingsCurrencyLabel": "Main currency",
   "groupSettingsDateSpanLabel": "Date span",
@@ -274,14 +243,7 @@
   "expenseHintShares": "Give anyone paying a larger part more shares.",
   "expenseHintPercentage": "Percentages must add up to 100.",
   "expenseHintAmount": "Amounts must add up to the expense total.",
-  "expenseEditSaveFailed": "Couldn't save: needs a connection to edit an expense ({error})",
-  "@expenseEditSaveFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
+  "expenseEditSaveFailed": "Couldn't save this expense.",
   "statsTitle": "Stats",
   "statsSectionGroup": "The group",
   "statsGroupTotalSpending": "Total group spending",
@@ -310,14 +272,7 @@
   "activityTitle": "Activity",
   "activityEmpty": "There is not yet any activity in your group.",
   "activityOpenNeedsConnection": "Opening this expense needs a connection.",
-  "activityLoadFailed": "Couldn't load activity: {error}",
-  "@activityLoadFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
+  "activityLoadFailed": "Couldn't load activity.",
   "activitySomeone": "Someone",
   "activityGroupSettingsModified": "Group settings were modified by {name}.",
   "@activityGroupSettingsModified": {
@@ -476,5 +431,11 @@
       }
     }
   },
-  "expenseDeleteFailed": "Couldn't delete this expense. Check your connection and try again."
+  "expenseDeleteFailed": "Couldn't delete this expense. Check your connection and try again.",
+  "errorConnection": "Couldn't reach the server. Check your connection and try again.",
+  "errorUnexpected": "Something went wrong.",
+  "errorDetailsAction": "Details",
+  "groupScreenGroupGone": "This group is no longer on the server.",
+  "expenseDetailsEditFailed": "Couldn't open this expense for editing.",
+  "expenseDeleteFailedUnexpected": "Couldn't delete this expense."
 }

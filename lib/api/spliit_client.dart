@@ -6,6 +6,7 @@ import '../models/category.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
 import '../services/date_only.dart';
+import '../services/error_reporting.dart';
 
 /// Talks to a self-hosted (or spliit.app) instance's tRPC API as plain
 /// HTTP+JSON, deliberately *not* using generated/inferred types from the
@@ -104,11 +105,16 @@ class SpliitClient {
     final res = await _http.get(uri);
     _checkOk(res);
     final data = _unwrapBatch(jsonDecode(res.body)) as Map<String, dynamic>;
-    // Spliit answers an unknown id with `{group: null}`, not an error
-    // (spliit-web `getGroup` returns null; checked on spliit.app), which
-    // used to surface as a type-cast error (issue #118).
+    // Spliit answers an unknown id with an explicit `{group: null}`, not
+    // an error (spliit-web `getGroup` returns null; checked on
+    // spliit.app), which used to surface as a type-cast error (issue
+    // #118). Only that contract means "not found": a missing or
+    // wrong-typed `group` is a malformed response (#119 review).
     final g = data['group'];
-    if (g is! Map<String, dynamic>) throw GroupNotFoundException(baseUrl, groupId);
+    if (g == null && data.containsKey('group')) throw GroupNotFoundException(baseUrl, groupId);
+    if (g is! Map<String, dynamic>) {
+      throw SpliitResponseFormatException('groups.get: expected a group object, got ${g.runtimeType}');
+    }
 
     return Group(
       id: _asId(g['id']),
@@ -659,7 +665,7 @@ class ActivityPage {
 
 /// The server has no group with this id: [SpliitClient.fetchGroup] got
 /// `{group: null}` (issue #118). Usually a mistyped or mangled link.
-class GroupNotFoundException implements Exception {
+class GroupNotFoundException implements UserError {
   final String serverUrl;
   final String groupId;
   GroupNotFoundException(this.serverUrl, this.groupId);

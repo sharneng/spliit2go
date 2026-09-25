@@ -19,6 +19,7 @@ import '../utils/decimal_input.dart';
 import '../widgets/currency_picker.dart';
 import '../widgets/category_icon.dart';
 import '../widgets/error_message.dart';
+import '../services/error_reporting.dart';
 
 /// Adds -- or, given [existingExpense], edits -- an expense. An expense
 /// with [Expense.isReimbursement] set is a settlement/"paid back"
@@ -112,7 +113,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   String? _paidBy;
   bool _saving = false;
   String? _saveError;
-  ErrorDetails? _saveErrorDetails;
+  String? _saveErrorDiagnostics;
 
   /// True once Save has been pressed at least once -- gates whether the
   /// "Paid for" footer shows a blocking validation error or the running
@@ -299,9 +300,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final cats = await widget.client.fetchCategories();
       if (!mounted || cats.isEmpty) return;
       setState(() => _categories = cats);
-    } catch (_) {
+    } catch (e, st) {
       // Offline or the server's unreachable -- keep the General-only
-      // fallback so the form still works without connectivity.
+      // fallback so the form still works without connectivity. Anything
+      // else is logged (#119 review).
+      ErrorReporter.instance.report(e, st, operation: 'Loading categories');
     }
   }
 
@@ -745,7 +748,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               if (_saveError != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: ErrorMessage(_saveError!, details: _saveErrorDetails),
+                  child: ErrorMessage(_saveError!, diagnostics: _saveErrorDiagnostics),
                 ),
               FilledButton(
                 onPressed: _saving ? null : _save,
@@ -918,7 +921,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     setState(() {
       _hasAttemptedSave = true;
       _saveError = null;
-      _saveErrorDetails = null;
+      _saveErrorDiagnostics = null;
       _originalCurrencyError = null;
     });
     if (!_formKey.currentState!.validate()) return;
@@ -951,22 +954,38 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
     setState(() => _saving = true);
 
-    if (widget.isEditing) {
-      await _saveEdit(
-        amountCents: amountCents,
-        paidFor: paidFor,
-        originalAmountCents: originalAmountCents,
-        originalCurrency: originalCurrency,
-        conversionRate: conversionRate,
-      );
-    } else {
-      await _saveNew(
-        amountCents: amountCents,
-        paidFor: paidFor,
-        originalAmountCents: originalAmountCents,
-        originalCurrency: originalCurrency,
-        conversionRate: conversionRate,
-      );
+    // One catch for both paths (#119 review): an edit's request, and a new
+    // expense's local database writes, which used to fail with the form
+    // stuck on "Saving…".
+    try {
+      if (widget.isEditing) {
+        await _saveEdit(
+          amountCents: amountCents,
+          paidFor: paidFor,
+          originalAmountCents: originalAmountCents,
+          originalCurrency: originalCurrency,
+          conversionRate: conversionRate,
+        );
+      } else {
+        await _saveNew(
+          amountCents: amountCents,
+          paidFor: paidFor,
+          originalAmountCents: originalAmountCents,
+          originalCurrency: originalCurrency,
+          conversionRate: conversionRate,
+        );
+      }
+    } catch (e, st) {
+      final error = ErrorReporter.instance.report(e, st,
+          operation: widget.isEditing
+              ? 'Saving expense ${widget.existingExpense!.id}'
+              : 'Adding an expense to ${widget.group.id}');
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _saveError = errorMessageFor(context, error, unexpected: context.l10n.expenseEditSaveFailed);
+        _saveErrorDiagnostics = error.diagnostics;
+      });
     }
   }
 
@@ -1050,40 +1069,30 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     String? originalCurrency,
     double? conversionRate,
   }) async {
-    try {
-      await widget.client.updateExpense(
-        groupId: widget.group.id,
-        expenseId: widget.existingExpense!.id,
-        title: _titleController.text.trim(),
-        amountCents: amountCents,
-        paidBy: _paidBy!,
-        paidFor: paidFor,
-        splitMode: _splitMode,
-        category: _category,
-        notes: _notesController.text.trim(),
-        date: _date,
-        isReimbursement: _isReimbursement,
-        recurrenceRule: _recurrenceRule,
-        saveDefaultSplittingOptions: _saveDefaultSplittingOptions,
-        originalAmountCents: originalAmountCents,
-        originalCurrency: originalCurrency,
-        conversionRate: conversionRate,
-        participantId: await _activityParticipant(),
-      );
-      // A refresh fetched before this edit mustn't write the old copy
-      // back over it (issue #90).
-      widget.db.markExpensesChanged(widget.group.id);
-      await _rememberDefaultSplitIfRequested(paidFor);
-      if (mounted) Navigator.of(context).pop(true);
-    } catch (e, st) {
-      final details = ErrorDetails.logged('Saving an expense in ${widget.group.id}', e, st);
-      if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _saveErrorDetails = details;
-        _saveError = context.l10n.expenseEditSaveFailed(e.toString());
-      });
-    }
+    await widget.client.updateExpense(
+      groupId: widget.group.id,
+      expenseId: widget.existingExpense!.id,
+      title: _titleController.text.trim(),
+      amountCents: amountCents,
+      paidBy: _paidBy!,
+      paidFor: paidFor,
+      splitMode: _splitMode,
+      category: _category,
+      notes: _notesController.text.trim(),
+      date: _date,
+      isReimbursement: _isReimbursement,
+      recurrenceRule: _recurrenceRule,
+      saveDefaultSplittingOptions: _saveDefaultSplittingOptions,
+      originalAmountCents: originalAmountCents,
+      originalCurrency: originalCurrency,
+      conversionRate: conversionRate,
+      participantId: await _activityParticipant(),
+    );
+    // A refresh fetched before this edit mustn't write the old copy
+    // back over it (issue #90).
+    widget.db.markExpensesChanged(widget.group.id);
+    await _rememberDefaultSplitIfRequested(paidFor);
+    if (mounted) Navigator.of(context).pop(true);
   }
 }
 

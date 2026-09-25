@@ -16,6 +16,7 @@ import '../utils/date_format.dart';
 import '../widgets/currency_picker.dart';
 import '../widgets/error_message.dart';
 import 'join_group_screen.dart' show cacheJoinedGroup;
+import '../services/error_reporting.dart';
 
 /// Group settings: rename the group, add or change its notes, change its
 /// currency, and add, rename, or remove participants -- mirrors the web
@@ -133,7 +134,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
 
   bool _saving = false;
   String? _error;
-  ErrorDetails? _errorDetails;
+  String? _errorDiagnostics;
 
   /// Participant ids (from [Group.participants]) that have at least one
   /// associated expense (paidBy or paidFor) in this group's local cache
@@ -313,7 +314,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     if (problem != null) {
       setState(() {
         _error = problem;
-        _errorDetails = null;
+        _errorDiagnostics = null;
       });
       return;
     }
@@ -330,7 +331,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     if (removedIds.any(_participantIdsWithExpenses.contains)) {
       setState(() {
         _error = context.l10n.groupSettingsCantRemoveHasExpenses;
-        _errorDetails = null;
+        _errorDiagnostics = null;
       });
       return;
     }
@@ -338,7 +339,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     setState(() {
       _saving = true;
       _error = null;
-      _errorDetails = null;
+      _errorDiagnostics = null;
     });
     try {
       final client = widget.client!;
@@ -358,11 +359,12 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
       if (!mounted) return;
       Navigator.of(context).pop(fresh);
     } catch (e, st) {
-      final details = ErrorDetails.logged('Saving group ${group.id}', e, st);
+      final error = ErrorReporter.instance.report(e, st, operation: 'Saving group ${group.id}');
       if (!mounted) return;
       setState(() {
-        _error = context.l10n.groupSettingsSaveFailed(e.toString());
-        _errorDetails = details;
+        _error = errorMessageFor(context, error,
+            unexpected: context.l10n.groupSettingsSaveFailed);
+        _errorDiagnostics = error.diagnostics;
       });
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -383,14 +385,14 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     if (serverUrl == null) {
       setState(() {
         _error = context.l10n.createGroupServerInvalid;
-        _errorDetails = null;
+        _errorDiagnostics = null;
       });
       return;
     }
     setState(() {
       _saving = true;
       _error = null;
-      _errorDetails = null;
+      _errorDiagnostics = null;
     });
     final client = widget.clientFactory(serverUrl);
     var created = _created;
@@ -417,14 +419,15 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
       if (!mounted) return;
       Navigator.of(context).pop(group.id);
     } catch (e, st) {
-      final details = ErrorDetails.logged('Creating a group on $serverUrl', e, st);
+      final error = ErrorReporter.instance.report(e, st, operation: 'Creating a group on $serverUrl');
       if (!mounted) return;
       setState(() {
+        // Once created, the message must carry the group's link whatever
+        // went wrong loading it (#116), so it isn't lost.
         _error = created == null
-            ? context.l10n.createGroupFailed(e.toString())
-            : context.l10n.createGroupLoadFailed(
-                '${created.serverUrl}/groups/${created.id}', e.toString());
-        _errorDetails = details;
+            ? errorMessageFor(context, error, unexpected: context.l10n.createGroupFailed)
+            : context.l10n.createGroupLoadFailed('${created.serverUrl}/groups/${created.id}');
+        _errorDiagnostics = error.diagnostics;
       });
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -508,13 +511,9 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
         children: [
           if (_error != null) ...[
             // After a create whose load failed it carries the new group's
-            // link (#116 review): selectable here when there are no
-            // details, and in the details sheet (message first) when there
-            // are.
-            if (_errorDetails == null)
-              SelectableText(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))
-            else
-              ErrorMessage(_error!, details: _errorDetails),
+            // link (#116 review): selectable, or in the details sheet
+            // (message first) when there are details.
+            ErrorMessage(_error!, diagnostics: _errorDiagnostics),
             const SizedBox(height: 12),
           ],
           for (final field in <Widget>[

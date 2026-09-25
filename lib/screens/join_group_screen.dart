@@ -10,6 +10,7 @@ import '../services/group_url.dart';
 import '../services/settings_service.dart';
 import 'group_settings_screen.dart';
 import '../widgets/error_message.dart';
+import '../services/error_reporting.dart';
 
 /// Joins a group: paste the group's full URL (the same one you'd get
 /// from the webapp's address bar or a share sheet, e.g.
@@ -62,7 +63,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
 
   bool _joining = false;
   String? _error;
-  ErrorDetails? _errorDetails;
+  String? _errorDiagnostics;
 
   @override
   void dispose() {
@@ -76,7 +77,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
     if (parsed == null) {
       setState(() {
         _error = context.l10n.joinGroupUrlInvalid;
-        _errorDetails = null;
+        _errorDiagnostics = null;
       });
       return;
     }
@@ -86,7 +87,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
     setState(() {
       _joining = true;
       _error = null;
-      _errorDetails = null;
+      _errorDiagnostics = null;
     });
     try {
       final client = widget.clientFactory(serverUrl);
@@ -104,13 +105,19 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
       if (!mounted) return;
       Navigator.of(context).pop(group.id);
     } catch (e, st) {
-      final details = ErrorDetails.logged('Joining $serverUrl/groups/$groupId', e, st);
+      // A link to a group that doesn't exist is the user's to fix: guidance
+      // only. Offline gets connection guidance; anything else is
+      // unexpected, logged, with details (#119 review).
+      final error = ErrorReporter.instance
+          .report(e, st, operation: 'Joining $serverUrl/groups/$groupId');
       if (!mounted) return;
       setState(() {
-        _error = e is GroupNotFoundException
-            ? context.l10n.joinGroupNotFound(serverDisplayName(serverUrl))
-            : context.l10n.joinGroupJoinFailed(e.toString());
-        _errorDetails = details;
+        _error = errorMessageFor(context, error,
+            unexpected: context.l10n.joinGroupJoinFailed,
+            userMessage: (e) => e is GroupNotFoundException
+                ? context.l10n.joinGroupNotFound(serverDisplayName(serverUrl))
+                : null);
+        _errorDiagnostics = error.diagnostics;
       });
     } finally {
       if (mounted) setState(() => _joining = false);
@@ -142,7 +149,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (_error != null) ...[
-                ErrorMessage(_error!, details: _errorDetails),
+                ErrorMessage(_error!, diagnostics: _errorDiagnostics),
                 const SizedBox(height: 12),
               ],
               TextFormField(

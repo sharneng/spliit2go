@@ -19,6 +19,8 @@ import '../utils/date_format.dart';
 import '../utils/money.dart';
 import '../widgets/category_icon.dart';
 import 'expense_screen.dart';
+import '../services/error_reporting.dart';
+import '../widgets/error_message.dart';
 
 /// What tapping an expense does, from both the expense list and the
 /// Activity tab (issue #90): a bottom sheet showing the expense's details,
@@ -109,7 +111,11 @@ Stream<bool> _deviceOnline() async* {
       !results.contains(ConnectivityResult.none);
   try {
     yield online(await connectivity.checkConnectivity());
-  } catch (_) {
+  } catch (e, st) {
+    // No plugin here (widget tests) is expected; anything else isn't.
+    if (!isMissingPlugin(e)) {
+      ErrorReporter.instance.report(e, st, operation: 'Checking connectivity');
+    }
     return;
   }
   yield* connectivity.onConnectivityChanged.map(online);
@@ -169,6 +175,9 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   bool _loading = true;
   _LoadProblem? _problem;
 
+  /// Diagnostics for an unexpected load or action failure (#119 review).
+  String? _problemDiagnostics;
+
   /// Whether the cache has held this expense since the sheet opened. Once
   /// it has, the row disappearing means the expense is gone.
   bool _cached = false;
@@ -185,6 +194,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
 
   /// Why the last Edit or Delete didn't go through, shown under them.
   String? _actionError;
+  String? _actionDiagnostics;
 
   /// An Activity cache-miss fetch is in flight.
   bool _fetching = false;
@@ -210,7 +220,8 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       (online) {
         if (mounted) setState(() => _online = online);
       },
-      onError: (_) {},
+      onError: (Object e, StackTrace st) =>
+          ErrorReporter.instance.report(e, st, operation: 'Watching connectivity'),
     );
   }
 
@@ -281,6 +292,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       _loading = true;
       _fetching = true;
       _problem = null;
+      _problemDiagnostics = null;
     });
     try {
       final expense = await widget.client
@@ -290,13 +302,18 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
         _expense = expense;
         _loading = false;
       });
-    } catch (e) {
+    } catch (e, st) {
+      // Deleted meanwhile is expected; anything else goes through the
+      // shared policy (logged and detailed only if unexpected).
+      final notFound = e is SpliitApiException && e.isNotFound;
+      final error = notFound
+          ? null
+          : ErrorReporter.instance.report(e, st, operation: 'Loading expense ${widget.expenseId}');
       if (!mounted || _cached) return;
       setState(() {
         _loading = false;
-        _problem = e is SpliitApiException && e.isNotFound
-            ? _LoadProblem.notFound
-            : _LoadProblem.failed;
+        _problem = notFound ? _LoadProblem.notFound : _LoadProblem.failed;
+        _problemDiagnostics = error?.diagnostics;
       });
     } finally {
       _fetching = false;
@@ -308,19 +325,29 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       _busy = true;
       _running = _ServerAction.edit;
       _actionError = null;
+      _actionDiagnostics = null;
     });
     try {
       final fresh = await widget.client
           .fetchExpense(groupId: widget.group.id, expenseId: widget.expenseId);
       if (mounted) _close(_Edit(fresh));
-    } catch (e) {
+    } catch (e, st) {
+      // Only a connection problem is a connection problem (#119 review);
+      // anything else unexpected is logged, with details.
+      final notFound = e is SpliitApiException && e.isNotFound;
+      final error = notFound
+          ? null
+          : ErrorReporter.instance.report(e, st, operation: 'Fetching expense ${widget.expenseId} to edit');
       if (!mounted) return;
       setState(() {
         _busy = false;
         _running = null;
-        _actionError = e is SpliitApiException && e.isNotFound
-            ? context.l10n.expenseDetailsNotFound
-            : context.l10n.groupScreenEditNeedsConnection;
+        _actionError = switch (error?.kind) {
+          null => context.l10n.expenseDetailsNotFound,
+          ErrorKind.connection => context.l10n.groupScreenEditNeedsConnection,
+          _ => context.l10n.expenseDetailsEditFailed,
+        };
+        _actionDiagnostics = error?.diagnostics;
       });
     }
   }
@@ -340,8 +367,9 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       _busy = true;
       _running = _ServerAction.delete;
       _actionError = null;
+      _actionDiagnostics = null;
     });
-    final deleted = await _deleteOnServer();
+    final (:deleted, :error) = await _deleteOnServer();
     if (deleted) {
       // Only now, with the server confirming, does the local copy go --
       // even if the sheet was dismissed meanwhile, or the expense list
@@ -358,7 +386,10 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     setState(() {
       _busy = false;
       _running = null;
-      _actionError = context.l10n.expenseDeleteFailed;
+      _actionError = error?.isUnexpected == true
+          ? context.l10n.expenseDeleteFailedUnexpected
+          : context.l10n.expenseDeleteFailed;
+      _actionDiagnostics = error?.diagnostics;
     });
   }
 
@@ -366,23 +397,32 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   /// double-checked, because upstream errors when deleting an expense
   /// that's already gone -- a retry after a lost response, or someone
   /// else deleting it first (see [SpliitClient.deleteExpense]). If the
-  /// server then says it doesn't exist, the delete worked.
-  Future<bool> _deleteOnServer() async {
+  /// server then says it doesn't exist, the delete worked. When it
+  /// didn't, [error] is the delete's own failure, reported through the
+  /// shared policy (#119 review); the check's failure is reported too.
+  Future<({bool deleted, ReportedError? error})> _deleteOnServer() async {
     try {
       await widget.client.deleteExpense(
         groupId: widget.group.id,
         expenseId: widget.expenseId,
         participantId: await _activityParticipant(),
       );
-      return true;
-    } catch (_) {
+      return (deleted: true, error: null);
+    } catch (deleteError, deleteStack) {
       try {
         await widget.client
             .fetchExpense(groupId: widget.group.id, expenseId: widget.expenseId);
-        return false; // still there: the delete really failed
-      } catch (e) {
-        return e is SpliitApiException && e.isNotFound;
+        // Still there: the delete really failed.
+      } catch (e, st) {
+        if (e is SpliitApiException && e.isNotFound) return (deleted: true, error: null);
+        ErrorReporter.instance
+            .report(e, st, operation: 'Checking whether expense ${widget.expenseId} was deleted');
       }
+      return (
+        deleted: false,
+        error: ErrorReporter.instance.report(deleteError, deleteStack,
+            operation: 'Deleting expense ${widget.expenseId}'),
+      );
     }
   }
 
@@ -492,7 +532,9 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     return [
       Padding(
         padding: const EdgeInsets.symmetric(vertical: 24),
-        child: Text(message, textAlign: TextAlign.center),
+        child: _problemDiagnostics == null
+            ? Text(message, textAlign: TextAlign.center)
+            : ErrorMessage(message, diagnostics: _problemDiagnostics, textAlign: TextAlign.center),
       ),
       if (_problem == _LoadProblem.failed)
         Center(
@@ -651,7 +693,10 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       ),
       if (message != null) ...[
         const SizedBox(height: 4),
-        Text(message, style: muted),
+        if (_actionDiagnostics != null)
+          ErrorMessage(message, diagnostics: _actionDiagnostics)
+        else
+          Text(message, style: muted),
       ],
     ];
   }

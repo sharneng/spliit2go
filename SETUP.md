@@ -64,7 +64,7 @@ Don't re-run `flutter create` on this repo. If you ever do, don't commit the `pu
 
 ## Diagnosing errors on a device
 
-An error shown on screen (joining, creating or saving a group, saving an expense, loading a group or its activity) says **Tap for details** when there's more behind it: the full error and stack trace, selectable, with a **Copy** button, so it can be pasted into an issue without a debugger attached (#118). The same text also goes to the debug log (`flutter run`, `flutter logs`, Xcode's console, or `adb logcat`).
+An unexpected error (a malformed response, a database failure, anything the app doesn't know how to explain) shows a short message with **Tap for details** under it, or a **Details** button on a snack bar: the operation, the error and the stack trace, selectable, with a **Copy** button, so it can be pasted into an issue without a debugger attached. The same text goes once to the debug log (`flutter run`, `flutter logs`, Xcode's console, or `adb logcat`). Known situations, such as a link to a group that doesn't exist or no connection, just explain themselves, with no details and no log. The policy is in [docs/decisions/error-handling.md](docs/decisions/error-handling.md) (#118, #119).
 
 ## Running checks locally
 

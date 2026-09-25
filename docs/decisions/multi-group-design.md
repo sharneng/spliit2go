@@ -116,7 +116,7 @@ Kenneth asked to follow spliit-ios's group toolbar: a ⋯ menu where the setting
 
 Joining on Android failed with "type 'Null' is not a subtype of type 'Map<String, dynamic>'". Spliit answers a group id it doesn't have with `{group: null}`, not an error (checked on spliit.app), and `fetchGroup` cast that straight to a map. The most likely way a good link became a bad id is text around it: a link at the end of a sentence kept its "." in the id, and a subject in front of the link ("Road trip https://…") became part of the server address.
 
-- `fetchGroup` throws `GroupNotFoundException` for `{group: null}`, and Join says "No group with that link was found on <server>".
+- `fetchGroup` throws `GroupNotFoundException` for an explicit `{group: null}`, and Join says "No group with that link was found on <server>".
 - `parseGroupUrl` takes the first `http(s)://` link out of surrounding text (or the word holding `/groups/` when there's no scheme), and ends the id at the first character a Spliit id can't contain (nanoids: letters, digits, `_`, `-`).
-- Kenneth asked for a way to see the full error on the phone: inline errors now offer **Tap for details** (the error and stack trace, copyable) and log the same to the debug console (`ErrorDetails` / `ErrorMessage` in `lib/widgets/error_message.dart`). See SETUP.md.
+- A missing group is a user error: guidance only, no log or details. Only the explicit `{group: null}` means missing; any other shape is a malformed response. Kenneth's question about seeing full errors on the phone became an app-wide policy: see [error-handling.md](error-handling.md).
 

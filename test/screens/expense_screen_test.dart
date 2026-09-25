@@ -1033,4 +1033,44 @@ void main() {
     // copy back over it.
     expect(db.expensesGeneration('g1'), 1);
   });
+
+  // #119 review: a new expense's local database write failing used to
+  // leave the form stuck on "Saving…" with nothing shown.
+  testWidgets('a database failure while adding is shown, logged, with details, and Save works again',
+      (tester) async {
+    final db = _FailingInsertDb();
+    addTearDown(db.close);
+    final logs = <String>[];
+    final original = debugPrint;
+    debugPrint = (message, {wrapWidth}) => logs.add(message ?? '');
+    // Restored in the test body: flutter_test checks debugPrint before
+    // tear-downs run.
+    try {
+      await pumpScreen(tester, db);
+      await fillCommonFields(tester, amount: '30');
+
+      final save = find.widgetWithText(FilledButton, 'Save');
+      await tester.ensureVisible(save);
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+
+      expect(find.text("Couldn't save this expense."), findsOneWidget);
+      expect(find.text('Tap for details'), findsOneWidget);
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Save')).onPressed,
+          isNotNull);
+      expect(logs.where((l) => l.contains('disk I/O error')), hasLength(1));
+    } finally {
+      debugPrint = original;
+    }
+  });
 }
+
+/// A database whose pending-expense write fails, as a full disk would.
+class _FailingInsertDb extends AppDatabase {
+  _FailingInsertDb() : super(NativeDatabase.memory());
+
+  @override
+  Future<void> insertPending(Expense e, {String? addedByParticipantId}) =>
+      Future.error(StateError('disk I/O error'));
+}
+

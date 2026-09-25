@@ -11,6 +11,7 @@ import '../sync/outbox.dart';
 import '../utils/money.dart';
 import '../widgets/section_heading.dart';
 import 'expense_screen.dart';
+import '../services/error_reporting.dart';
 
 /// Who-owes-whom for the group, plus one-tap "mark as paid" for the
 /// suggested settlements -- mirrors the web app's Balances tab.
@@ -136,11 +137,14 @@ class _BalancesScreenState extends State<BalancesScreen> {
         final fresh = await widget.client.fetchExpenses(widget.group.id);
         await widget.db.replaceServerExpenses(widget.group.id, fresh,
             fetchedAtGeneration: generation);
-      } catch (_) {
+      } catch (e, st) {
         // Synced but the follow-up refresh failed -- rare (would need
         // the server to accept the write yet the very next request to
         // fail), and nothing to do about it here; the next visit to
-        // GroupScreen's own refresh will reconcile it.
+        // GroupScreen's own refresh will reconcile it. Logged if it's
+        // anything but a connection problem (#119 review).
+        ErrorReporter.instance
+            .report(e, st, operation: 'Refreshing after settling up in ${widget.group.id}');
       }
     }
     if (!mounted) return;

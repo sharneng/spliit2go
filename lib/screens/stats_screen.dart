@@ -9,6 +9,7 @@ import '../models/group.dart';
 import '../services/stats_calculator.dart';
 import '../sync/outbox.dart';
 import '../utils/money.dart';
+import '../services/error_reporting.dart';
 
 /// A first pass at the web app's Stats tab (issue #27, split from #6
 /// alongside Activity -- see issue #26): the group's total spending
@@ -75,9 +76,11 @@ class _StatsScreenState extends State<StatsScreen> {
       final cats = await widget.client.fetchCategories();
       if (!mounted) return;
       setState(() => _categoryNames = {for (final c in cats) c.id: c});
-    } catch (_) {
+    } catch (e, st) {
       // Offline or unreachable -- category totals still show, just
-      // labeled by id via _categoryLabel's fallback.
+      // labeled by id via _categoryLabel's fallback. Anything else is
+      // logged (#119 review).
+      ErrorReporter.instance.report(e, st, operation: 'Loading category names');
     }
   }
 

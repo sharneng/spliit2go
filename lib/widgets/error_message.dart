@@ -2,44 +2,47 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../l10n/context_l10n.dart';
+import '../services/error_reporting.dart';
 
-/// What went wrong, in full, behind a short on-screen message (issue #118):
-/// the error and where it happened, so a problem seen on a phone can be
-/// reported without a debugger attached.
-class ErrorDetails {
-  final Object error;
-  final StackTrace? stackTrace;
+/// The message a screen shows for [error] (issue #118, #119 review): a
+/// connection failure always reads the same ("check your connection");
+/// a user error gets the screen's specific guidance ([userMessage]); and
+/// anything unexpected gets the screen's short [unexpected] message, never
+/// the raw exception text, which lives in the diagnostics instead.
+String errorMessageFor(
+  BuildContext context,
+  ReportedError error, {
+  required String unexpected,
+  String? Function(Object error)? userMessage,
+}) =>
+    switch (error.kind) {
+      ErrorKind.connection => context.l10n.errorConnection,
+      ErrorKind.user => userMessage?.call(error.error) ?? unexpected,
+      ErrorKind.unexpected => unexpected,
+    };
 
-  ErrorDetails(this.error, [this.stackTrace]);
-
-  /// Records [error] in the debug log too (`flutter run`, `flutter logs`,
-  /// Xcode or `adb logcat`), tagged with [where], and returns the details
-  /// to show.
-  factory ErrorDetails.logged(String where, Object error, [StackTrace? stackTrace]) {
-    debugPrint('$where failed: $error${stackTrace == null ? '' : '\n$stackTrace'}');
-    return ErrorDetails(error, stackTrace);
-  }
-
-  String get text => stackTrace == null ? '$error' : '$error\n\n$stackTrace';
-}
-
-/// A short error message in the error color. With [details], it's
-/// tappable and says so; a tap shows the full error and stack trace, which
-/// can be copied (issue #118).
+/// A short error message in the error color. With [diagnostics] (only
+/// unexpected errors have them), it's tappable and says so; a tap shows
+/// the message and diagnostics, which can be copied. Presentation only:
+/// what's shown and whether there are details is decided by
+/// [ErrorReporter] and the screen.
 class ErrorMessage extends StatelessWidget {
-  const ErrorMessage(this.message, {super.key, this.details, this.textAlign});
+  const ErrorMessage(this.message, {super.key, this.diagnostics, this.textAlign});
 
   final String message;
-  final ErrorDetails? details;
+  final String? diagnostics;
   final TextAlign? textAlign;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = theme.colorScheme.error;
-    final text = Text(message, style: TextStyle(color: color), textAlign: textAlign);
-    final details = this.details;
-    if (details == null) return text;
+    final diagnostics = this.diagnostics;
+    // Selectable when there's nothing behind it, so a message that carries
+    // something to copy (a created group's link, #116) still can be.
+    if (diagnostics == null) {
+      return SelectableText(message, style: TextStyle(color: color), textAlign: textAlign);
+    }
     final align = switch (textAlign) {
       TextAlign.center => CrossAxisAlignment.center,
       TextAlign.end || TextAlign.right => CrossAxisAlignment.end,
@@ -48,12 +51,12 @@ class ErrorMessage extends StatelessWidget {
     return Semantics(
       button: true,
       child: InkWell(
-        onTap: () => showErrorDetails(context, details, message: message),
+        onTap: () => showErrorDetails(context, diagnostics, message: message),
         child: Column(
           crossAxisAlignment: align,
           mainAxisSize: MainAxisSize.min,
           children: [
-            text,
+            Text(message, style: TextStyle(color: color), textAlign: textAlign),
             const SizedBox(height: 4),
             Text(
               context.l10n.errorTapForDetails,
@@ -71,9 +74,25 @@ class ErrorMessage extends StatelessWidget {
   }
 }
 
-/// The full error and stack trace in a sheet, selectable, with Copy.
-Future<void> showErrorDetails(BuildContext context, ErrorDetails details, {String? message}) {
-  final all = message == null ? details.text : '$message\n\n${details.text}';
+/// A snack bar for an error that has no place on the screen itself, with a
+/// Details action when the error is unexpected.
+void showErrorSnackBar(BuildContext context, String message, {String? diagnostics}) {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  if (messenger == null) return;
+  messenger.showSnackBar(SnackBar(
+    content: Text(message),
+    action: diagnostics == null
+        ? null
+        : SnackBarAction(
+            label: context.l10n.errorDetailsAction,
+            onPressed: () => showErrorDetails(context, diagnostics, message: message),
+          ),
+  ));
+}
+
+/// The message and diagnostics in a sheet, selectable, with Copy.
+Future<void> showErrorDetails(BuildContext context, String diagnostics, {String? message}) {
+  final all = message == null ? diagnostics : '$message\n\n$diagnostics';
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -128,4 +147,65 @@ Future<void> showErrorDetails(BuildContext context, ErrorDetails details, {Strin
       );
     },
   );
+}
+
+/// Shows errors nothing caught (see [installErrorHandlers]) as a snack
+/// bar with Details, after the frame they happened in, so a failure during
+/// a build isn't followed by another UI change inside that same build.
+/// Sits in MaterialApp.builder: under the ScaffoldMessenger, over the
+/// Navigator ([navigatorKey] gives the sheet a context inside it).
+class UncaughtErrorPresenter extends StatefulWidget {
+  const UncaughtErrorPresenter({
+    super.key,
+    required this.reporter,
+    required this.navigatorKey,
+    required this.child,
+  });
+
+  final ErrorReporter reporter;
+  final GlobalKey<NavigatorState> navigatorKey;
+  final Widget child;
+
+  @override
+  State<UncaughtErrorPresenter> createState() => _UncaughtErrorPresenterState();
+}
+
+class _UncaughtErrorPresenterState extends State<UncaughtErrorPresenter> {
+  @override
+  void initState() {
+    super.initState();
+    widget.reporter.uncaught.addListener(_onUncaught);
+  }
+
+  @override
+  void dispose() {
+    widget.reporter.uncaught.removeListener(_onUncaught);
+    super.dispose();
+  }
+
+  void _onUncaught() {
+    final error = widget.reporter.uncaught.value;
+    if (error == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final l10n = context.l10n;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+        content: Text(l10n.errorUnexpected),
+        action: SnackBarAction(
+          label: l10n.errorDetailsAction,
+          onPressed: () {
+            final sheetContext = widget.navigatorKey.currentState?.overlay?.context;
+            if (sheetContext != null) {
+              showErrorDetails(sheetContext, error.diagnostics!, message: l10n.errorUnexpected);
+            }
+          },
+        ),
+      ));
+    });
+    // A frame may not be coming on its own.
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
