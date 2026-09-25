@@ -244,6 +244,7 @@
   "expenseHintPercentage": "Percentages must add up to 100.",
   "expenseHintAmount": "Amounts must add up to the expense total.",
   "expenseEditSaveFailed": "Couldn't save this expense.",
+  "expenseDefaultSplitSaveFailed": "The expense was saved, but its split couldn't be saved as the default.",
   "statsTitle": "Stats",
   "statsSectionGroup": "The group",
   "statsGroupTotalSpending": "Total group spending",

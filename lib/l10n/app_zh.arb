@@ -139,6 +139,7 @@
   "expenseHintPercentage": "百分比之和必须为 100。",
   "expenseHintAmount": "金额之和必须等于消费总额。",
   "expenseEditSaveFailed": "无法保存此消费。",
+  "expenseDefaultSplitSaveFailed": "消费已保存，但无法将其分账设置保存为默认设置。",
   "statsTitle": "统计",
   "statsSectionGroup": "群组",
   "statsGroupTotalSpending": "群组总消费",

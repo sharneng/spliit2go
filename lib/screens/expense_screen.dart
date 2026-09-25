@@ -994,16 +994,29 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// prefilling future expenses (issue #29 section 7). No-op for a
   /// reimbursement (the toggle is hidden for one, but this is the real
   /// gate) or when the toggle wasn't checked.
+  ///
+  /// Never fails the save (#119 review): the expense is already saved, so
+  /// a failure here is reported in a snack bar and the form still closes.
+  /// Retrying the save would add the expense a second time, and the split
+  /// can be saved as the default with the next expense.
   Future<void> _rememberDefaultSplitIfRequested(List<ExpenseShare> paidFor) async {
     if (!_saveDefaultSplittingOptions || _isReimbursement) return;
-    await widget.db.setDefaultSplit(
-      widget.group.id,
-      DefaultSplit.remembering(
-        splitMode: _splitMode,
-        paidFor: paidFor,
-        allParticipants: widget.group.participants,
-      ),
-    );
+    try {
+      await widget.db.setDefaultSplit(
+        widget.group.id,
+        DefaultSplit.remembering(
+          splitMode: _splitMode,
+          paidFor: paidFor,
+          allParticipants: widget.group.participants,
+        ),
+      );
+    } catch (e, st) {
+      final error = ErrorReporter.instance
+          .report(e, st, operation: 'Saving the default split for ${widget.group.id}');
+      if (!mounted) return;
+      showErrorSnackBar(context, context.l10n.expenseDefaultSplitSaveFailed,
+          diagnostics: error.diagnostics);
+    }
   }
 
   Future<void> _saveNew({

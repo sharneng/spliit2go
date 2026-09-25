@@ -8,6 +8,7 @@ import 'package:http/testing.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
+import 'package:spliit2go/models/default_split.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/expense_screen.dart';
@@ -1063,6 +1064,123 @@ void main() {
       debugPrint = original;
     }
   });
+
+  // #119 review (Ezra, Kenneth): once the expense is saved, failing to
+  // remember its split as the default mustn't fail the save. Retrying
+  // would add the expense twice, so the form closes with a note.
+    /// Opens the form from a stub home, so its close can be seen.
+    Future<List<bool?>> openFrom(WidgetTester tester, AppDatabase db,
+        {SpliitClient? client, Expense? existing}) async {
+      client ??= SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => throw Exception('offline')),
+      );
+      await db.cacheGroup(group);
+      final popped = <bool?>[];
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                popped.add(await Navigator.of(context).push<bool>(MaterialPageRoute(
+                  builder: (_) => ExpenseScreen(
+                    client: client!,
+                    db: db,
+                    outbox: Outbox(db, client, groupId: 'g1'),
+                    group: group,
+                    existingExpense: existing,
+                  ),
+                )));
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      return popped;
+    }
+
+    Future<void> checkDefaultAndSave(WidgetTester tester) async {
+      final checkbox = find.widgetWithText(CheckboxListTile, 'Save as default split');
+      await tester.ensureVisible(checkbox);
+      await tester.tap(checkbox);
+      final save = find.widgetWithText(FilledButton, 'Save');
+      await tester.ensureVisible(save);
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+    }
+
+    const note = "The expense was saved, but its split couldn't be saved as the default.";
+
+    testWidgets('default split fails after adding: saved once, the form closes, and the note has Details', (tester) async {
+      final db = _FailingDefaultSplitDb();
+      addTearDown(db.close);
+      final logs = <String>[];
+      final original = debugPrint;
+      debugPrint = (message, {wrapWidth}) => logs.add(message ?? '');
+      try {
+        final popped = await openFrom(tester, db);
+        await fillCommonFields(tester, amount: '30');
+        await checkDefaultAndSave(tester);
+
+        expect(popped, [true]);
+        expect(find.byType(ExpenseScreen), findsNothing);
+        expect(await tester.runAsync(() => db.expensesForGroup('g1')), hasLength(1));
+        expect(await tester.runAsync(() => db.defaultSplitFor('g1')), isNull);
+        expect(find.text(note), findsOneWidget);
+        expect(logs.where((l) => l.contains('disk I/O error')), hasLength(1));
+
+        // Details still opens after the form that showed the note closed.
+        await tester.tap(find.text('Details'));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Saving the default split for g1 failed.'), findsOneWidget);
+      } finally {
+        debugPrint = original;
+      }
+    });
+
+    testWidgets('default split fails after editing: the form closes after the one update, with the note', (tester) async {
+      final db = _FailingDefaultSplitDb();
+      addTearDown(db.close);
+      var updates = 0;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          if (req.url.path.endsWith('groups.expenses.update')) updates++;
+          return http.Response('[{"result":{"data":{"json":{"expenseId":"e1"}}}}]', 200);
+        }),
+      );
+      final original = debugPrint;
+      debugPrint = (message, {wrapWidth}) {};
+      try {
+        final popped = await openFrom(tester, db,
+            client: client,
+            existing: Expense(
+              id: 'e1',
+              groupId: 'g1',
+              title: 'Groceries',
+              amountCents: 9000,
+              paidBy: 'bea',
+              paidFor: const [
+                ExpenseShare(participantId: 'alex', shares: 1),
+                ExpenseShare(participantId: 'bea', shares: 1),
+              ],
+              date: DateTime.utc(2026, 9, 10),
+            ));
+        await checkDefaultAndSave(tester);
+
+        expect(popped, [true]);
+        expect(updates, 1);
+        expect(find.text(note), findsOneWidget);
+      } finally {
+        debugPrint = original;
+      }
+    });
 }
 
 /// A database whose pending-expense write fails, as a full disk would.
@@ -1074,3 +1192,11 @@ class _FailingInsertDb extends AppDatabase {
       Future.error(StateError('disk I/O error'));
 }
 
+/// The expense saves; remembering its split as the default doesn't.
+class _FailingDefaultSplitDb extends AppDatabase {
+  _FailingDefaultSplitDb() : super(NativeDatabase.memory());
+
+  @override
+  Future<void> setDefaultSplit(String groupId, DefaultSplit? split) =>
+      Future.error(StateError('disk I/O error'));
+}

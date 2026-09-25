@@ -139,6 +139,7 @@
   "expenseHintPercentage": "Les pourcentages doivent totaliser 100.",
   "expenseHintAmount": "Les montants doivent totaliser le total de la dépense.",
   "expenseEditSaveFailed": "Impossible d’enregistrer cette dépense.",
+  "expenseDefaultSplitSaveFailed": "La dépense a été enregistrée, mais sa répartition n’a pas pu être enregistrée par défaut.",
   "statsTitle": "Statistiques",
   "statsSectionGroup": "Le groupe",
   "statsGroupTotalSpending": "Dépenses totales du groupe",

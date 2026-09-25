@@ -76,16 +76,25 @@ class ErrorMessage extends StatelessWidget {
 
 /// A snack bar for an error that has no place on the screen itself, with a
 /// Details action when the error is unexpected.
+/// The snack bar outlives a screen that closes right after showing it
+/// (the expense form, #119 review), so Details then opens the sheet from
+/// the navigator the screen was in.
 void showErrorSnackBar(BuildContext context, String message, {String? diagnostics}) {
   final messenger = ScaffoldMessenger.maybeOf(context);
   if (messenger == null) return;
+  final navigator = Navigator.maybeOf(context);
   messenger.showSnackBar(SnackBar(
     content: Text(message),
     action: diagnostics == null
         ? null
         : SnackBarAction(
             label: context.l10n.errorDetailsAction,
-            onPressed: () => showErrorDetails(context, diagnostics, message: message),
+            onPressed: () {
+              final sheetContext =
+                  context.mounted ? context : navigator?.overlay?.context;
+              if (sheetContext == null || !sheetContext.mounted) return;
+              showErrorDetails(sheetContext, diagnostics, message: message);
+            },
           ),
   ));
 }
