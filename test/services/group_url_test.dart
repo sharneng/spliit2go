@@ -100,4 +100,28 @@ void main() {
     expect(serverDisplayName('https://spliit.app'), 'spliit.app');
     expect(serverDisplayName('http://192.168.1.5:3000'), 'http://192.168.1.5:3000');
   });
+
+  // Issue #3: the link "Share group" sends.
+  group('groupShareLink', () {
+    test('is <server>/groups/<id>', () {
+      expect(groupShareLink('https://spliit.app', 'RrYePXN2GBpSMW1EPjpjH').toString(),
+          'https://spliit.app/groups/RrYePXN2GBpSMW1EPjpjH');
+    });
+
+    test('keeps a self-hosted sub-path and port', () {
+      expect(groupShareLink('https://example.com/spliit', 'abc').toString(),
+          'https://example.com/spliit/groups/abc');
+      expect(groupShareLink('http://192.168.1.5:3000', 'abc').toString(),
+          'http://192.168.1.5:3000/groups/abc');
+    });
+
+    test('reads back as the same group on the same server', () {
+      for (final server in ['https://spliit.app', 'https://example.com/spliit']) {
+        final parsed = parseGroupUrl(groupShareLink(server, 'abc').toString())!;
+        expect(parsed.serverUrl, server);
+        expect(parsed.groupId, 'abc');
+      }
+    });
+  });
 }
+

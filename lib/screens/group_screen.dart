@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
@@ -10,6 +11,7 @@ import '../models/category.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
 import '../services/active_user.dart';
+import '../services/group_url.dart';
 import '../services/settings_service.dart';
 import '../sync/outbox.dart';
 import '../widgets/expense_list.dart';
@@ -37,12 +39,17 @@ class GroupScreen extends StatefulWidget {
   final Outbox outbox;
   final String groupId;
 
+  /// Opens the system share sheet for a group's link (issue #3); tests
+  /// inject a recorder instead of the platform plugin.
+  final Future<void> Function(Uri link, String? subject) shareLink;
+
   const GroupScreen({
     super.key,
     required this.client,
     required this.db,
     required this.outbox,
     required this.groupId,
+    this.shareLink = shareWithSystemSheet,
   });
 
   @override
@@ -202,11 +209,36 @@ class _GroupScreenState extends State<GroupScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_group?.name ?? 'Spliit2Go'),
+        // A meatballs menu, like spliit-ios's group toolbar (issue #3):
+        // group settings, and sharing the group's link. Room for more
+        // later (a QR code).
         actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: context.l10n.groupScreenSettingsTooltip,
-            onPressed: _group == null ? null : _openGroupSettings,
+          PopupMenuButton<_GroupAction>(
+            icon: const Icon(Icons.more_horiz),
+            tooltip: context.l10n.groupScreenMenuTooltip,
+            onSelected: (action) => switch (action) {
+              _GroupAction.settings => _openGroupSettings(),
+              _GroupAction.share => _shareGroup(),
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: _GroupAction.settings,
+                enabled: _group != null,
+                child: ListTile(
+                  leading: const Icon(Icons.settings_outlined),
+                  title: Text(context.l10n.groupScreenMenuSettings),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: _GroupAction.share,
+                child: ListTile(
+                  leading: Icon(Icons.adaptive.share),
+                  title: Text(context.l10n.groupScreenMenuShare),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -440,6 +472,13 @@ class _GroupScreenState extends State<GroupScreen> {
     );
   }
 
+  /// Shares `<server>/groups/<id>` (issue #3): the link the web app gives
+  /// out, on this group's own server, so it opens for anyone, in a browser
+  /// or in the app. Works offline: it only needs what this screen was
+  /// opened with.
+  Future<void> _shareGroup() =>
+      widget.shareLink(groupShareLink(widget.client.baseUrl, widget.groupId), _group?.name);
+
   Future<void> _openAddExpense() async {
     final added = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
@@ -591,3 +630,13 @@ class ActiveUserPicker extends StatelessWidget {
     );
   }
 }
+
+enum _GroupAction { settings, share }
+
+/// The platform share sheet, via share_plus: the link as a URL, so iOS
+/// shows the page's preview; Android shares it as text. The group's name
+/// goes along as the subject, for email and the like.
+Future<void> shareWithSystemSheet(Uri link, String? subject) async {
+  await SharePlus.instance.share(ShareParams(uri: link, subject: subject));
+}
+

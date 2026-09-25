@@ -104,3 +104,11 @@ The Join screen has a "Create a new group" button (Kenneth's ask on #115), which
 - Creating needs a connection, like joining; a failure keeps the form open with the error.
 - **A created group is never created twice** (Ezra, #116 review). Once `groups.create` succeeds the group exists, so if loading it back fails, the form keeps its id and server, locks the fields, shows its link (selectable, so it isn't lost if the user leaves), and Create retries only the load. Spliit has no way to pass a client-made group id, which would make create itself safe to retry; the server mints it (`randomId()` in `createGroup`).
 
+## Sharing a group (2026-09-25, issue #3)
+
+Kenneth asked to follow spliit-ios's group toolbar: a ⋯ menu where the settings button was, with **Group settings** (a settings icon, rather than spliit-ios's "Edit group" with a pencil) and **Share group** (`GroupDetailView` @ `80b2e98`). A QR code is out of scope for the first release and can join the same menu later.
+
+- **The link is `<server>/groups/<id>`,** on the group's own server: the link spliit-ios shares and spliit-web gives out, so it opens for anyone, in a browser or in this app (paste it into Join), and `parseGroupUrl` reads it back (`groupShareLink` in `lib/services/group_url.dart`).
+- **The system share sheet,** via the `share_plus` plugin: the link goes as a URL, so iOS shows the page's preview, with the group's name as the subject; Android shares it as text.
+- **Works offline and before the group has loaded:** it only needs the group's id and server. Group settings stays disabled until the group is loaded, as the old button was.
+

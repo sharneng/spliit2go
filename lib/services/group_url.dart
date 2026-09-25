@@ -71,3 +71,13 @@ String? normalizeServerUrl(String input) {
 String serverDisplayName(String serverUrl) =>
     serverUrl.replaceFirst(RegExp(r'^https://'), '');
 
+/// The link that opens [groupId] on [serverUrl]: what "Share group" sends
+/// (issue #3), the same `<server>/groups/<id>` link spliit-ios shares and
+/// [parseGroupUrl] reads back.
+Uri groupShareLink(String serverUrl, String groupId) {
+  final server = Uri.parse(serverUrl);
+  return server.replace(
+    pathSegments: [...server.pathSegments.where((s) => s.isNotEmpty), 'groups', groupId],
+  );
+}
+
