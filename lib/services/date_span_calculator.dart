@@ -10,10 +10,9 @@ class DateSpan {
 }
 
 /// [DateSpan] across every one of [rows], including reimbursements/
-/// settlements -- unlike StatsScreen's spending-summary firstDate/
-/// lastDate (stats_calculator.dart's [SpendingSummary]), which
-/// deliberately excludes settlements as "not new spending" for a
-/// spending total. This is meant to answer "how long has this group
+/// settlements -- unlike the spending totals in stats_calculator.dart,
+/// which deliberately exclude settlements as "not new spending". This
+/// is meant to answer "how long has this group
 /// been active" rather than "how much have we spent", and a settlement
 /// is still a dated event in the group's history, so nothing here is
 /// filtered out -- issue #55 defines it plainly as "first expense date

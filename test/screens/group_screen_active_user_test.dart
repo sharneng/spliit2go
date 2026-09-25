@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
-import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/group_screen.dart';
 import 'package:spliit2go/services/active_user.dart';
@@ -25,7 +24,6 @@ void main() {
     ],
   );
   final prompt = find.text('Who are you?');
-  const statsHint = 'Pick an active user to see your personal totals.';
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
@@ -54,16 +52,6 @@ void main() {
 
   Future<String?> stored(AppDatabase db) async =>
       (await db.groupRow('g1'))?.activeParticipantId;
-
-  Expense coffee() => Expense(
-        id: 'e1',
-        groupId: 'g1',
-        title: 'Coffee',
-        amountCents: 500,
-        paidBy: 'alex',
-        paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
-        date: DateTime.utc(2026, 9, 16),
-      );
 
   // A narrow phone at double system text size (#87 review).
   void useNarrowLargeText(WidgetTester tester) {
@@ -194,35 +182,6 @@ void main() {
     await closeGroup(tester);
   });
 
-  testWidgets('with nobody set, the Stats hint opens the picker; dismissing it there changes nothing',
-      (tester) async {
-    final db = AppDatabase(NativeDatabase.memory());
-    addTearDown(db.close);
-    await db.cacheGroup(group);
-    await db.setActiveParticipant('g1', nobodyParticipantId);
-    // Stats shows an empty state, without the hint, until there's an expense.
-    await db.replaceServerExpenses('g1', [coffee()]);
-
-    await openGroup(tester, db);
-    await tester.tap(find.text('Stats'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text(statsHint));
-    await tester.pumpAndSettle();
-    expect(prompt, findsOneWidget);
-    await tester.tapAt(const Offset(5, 5));
-    await tester.pumpAndSettle();
-    expect(await stored(db), nobodyParticipantId);
-
-    await tester.tap(find.text(statsHint));
-    await tester.pumpAndSettle();
-    await tester.tap(find.descendant(of: find.byType(SimpleDialog), matching: find.text('Alex')));
-    await tester.pumpAndSettle();
-    expect(await stored(db), 'alex');
-    expect(find.text(statsHint), findsNothing);
-    await closeGroup(tester);
-  });
-
   testWidgets('the You row on Balances changes who you are, and the section follows (#99)',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
@@ -235,9 +194,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.widgetWithText(ListTile, 'Nobody'), findsOneWidget);
 
+    // Dismissing from here changes nothing (#85); moved from the Stats
+    // hint, which #103 removed.
     await tester.tap(find.widgetWithText(ListTile, 'You'));
     await tester.pumpAndSettle();
     expect(prompt, findsOneWidget);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    expect(await stored(db), nobodyParticipantId);
+
+    await tester.tap(find.widgetWithText(ListTile, 'You'));
+    await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byType(SimpleDialog), matching: find.text('Alex')));
     await tester.pumpAndSettle();
 

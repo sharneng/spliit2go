@@ -8,6 +8,7 @@ import 'package:http/testing.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
+import 'package:spliit2go/main.dart' show spliit2goAppBuilder;
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/stats_screen.dart';
@@ -26,10 +27,6 @@ void main() {
     ],
   );
 
-  // Amounts chosen so the summary "average" and the active user's
-  // "share" don't coincidentally land on the same figure (with exactly
-  // 2 participants splitting evenly, they otherwise always do) -- that
-  // would make the \$-amount text finders below ambiguous.
   Future<AppDatabase> dbWithExpenses() async {
     final db = AppDatabase(NativeDatabase.memory());
     await db.replaceServerExpenses('g1', [
@@ -80,9 +77,9 @@ void main() {
     return db;
   }
 
-  testWidgets('shows summary, totals, participant, and category sections', (tester) async {
+  testWidgets('shows the group total, participant, and category sections', (tester) async {
     // The Stats screen's ListView is taller than a default test
-    // viewport once summary + totals + participant + category sections
+    // viewport once the group + participant + category sections
     // are all populated, so widgets past the fold wouldn't otherwise be
     // built -- size the viewport generously instead of scrolling.
     tester.view.physicalSize = const Size(800, 3000);
@@ -116,21 +113,20 @@ void main() {
       locale: const Locale('en'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: StatsScreen(client: client, db: db, outbox: outbox, group: group, activeUserId: 'alex'),
+      home: StatsScreen(client: client, db: db, outbox: outbox, group: group),
     ));
     await tester.pumpAndSettle();
 
-    // total = 17000, count = 3 -> average = 5667 (rounded); group total
-    // 170.00; Alex paid only e1 (90.00); Alex's share across all three
-    // (split evenly between just Alex and Bea) = 4500 + 1500 + 2500 = 8500.
-    expect(find.text('3'), findsOneWidget); // expense count
-    expect(find.text('\$56.67'), findsOneWidget); // average
+    // #103: one "The group" figure replaces the old Summary and Totals
+    // cards.
+    expect(find.text('The group'), findsOneWidget);
+    expect(find.text('Total group spending'), findsOneWidget);
     expect(find.text('\$170.00'), findsOneWidget); // group total
-    // findsWidgets, not findsOneWidget: Alex is both the active user
-    // (totals card's "You paid") and a row in the participant list
-    // below, and those two show the same figure by construction.
-    expect(find.text('\$90.00'), findsWidgets); // You paid
-    expect(find.text('\$85.00'), findsOneWidget); // Your share
+    expect(find.text('Settling up is not spending, so reimbursements are left out of every figure here.'),
+        findsOneWidget);
+    for (final gone in ['Summary', 'Totals', 'Average expense', 'Largest expense', 'Active span', 'You paid', 'Your share']) {
+      expect(find.text(gone), findsNothing, reason: gone);
+    }
     // Category name resolved via the live fetch.
     expect(find.text('Groceries'), findsWidgets);
     expect(find.text('Alex'), findsOneWidget);
@@ -162,14 +158,11 @@ void main() {
       locale: const Locale('en'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: StatsScreen(client: client, db: db, outbox: outbox, group: group, activeUserId: null),
+      home: StatsScreen(client: client, db: db, outbox: outbox, group: group),
     ));
     await tester.pumpAndSettle();
 
     expect(find.text('Category 9'), findsOneWidget);
-    // No active user -- personal totals are hidden, with a hint instead.
-    expect(find.text('Pick an active user to see your personal totals.'), findsOneWidget);
-    expect(find.text('You paid'), findsNothing);
     // See the first test above for why. (issue #47)
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
@@ -188,7 +181,7 @@ void main() {
       locale: const Locale('en'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: StatsScreen(client: client, db: db, outbox: outbox, group: group, activeUserId: null),
+      home: StatsScreen(client: client, db: db, outbox: outbox, group: group),
     ));
     await tester.pumpAndSettle();
 
@@ -197,4 +190,90 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
   });
+
+  Future<void> pumpStats(WidgetTester tester, AppDatabase db,
+      {Locale locale = const Locale('en'), TransitionBuilder? builder}) async {
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async => http.Response('offline', 500)),
+    );
+    await tester.pumpWidget(MaterialApp(
+      locale: locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      builder: builder,
+      home: StatsScreen(client: client, db: db, outbox: Outbox(db, client, groupId: 'g1'), group: group),
+    ));
+    await tester.pumpAndSettle();
+  }
+
+  Expense expense(String id, int cents, {bool reimbursement = false}) => Expense(
+        id: id,
+        groupId: 'g1',
+        title: 'Expense $id',
+        amountCents: cents,
+        paidBy: 'alex',
+        paidFor: const [ExpenseShare(participantId: 'bea', shares: 1)],
+        isReimbursement: reimbursement,
+        date: DateTime.utc(2026, 9, 1),
+      );
+
+  Finder headline(String amount) => find.byWidgetPredicate(
+      (w) => w is Text && w.data == amount && w.style?.fontWeight == FontWeight.bold);
+
+  testWidgets('the group total leaves reimbursements out (#103)', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.replaceServerExpenses('g1', [expense('e1', 4000), expense('r1', 1500, reimbursement: true)]);
+    await pumpStats(tester, db);
+
+    expect(headline('\$40.00'), findsOneWidget);
+    expect(find.text('\$55.00'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+
+  testWidgets('a negative total reads as earnings, unsigned (#103)', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.replaceServerExpenses('g1', [expense('e1', 1000), expense('e2', -2500)]);
+    await pumpStats(tester, db);
+
+    expect(find.text('Total group earnings'), findsOneWidget);
+    expect(find.text('Total group spending'), findsNothing);
+    expect(headline('\$15.00'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+
+  testWidgets('only settlements: still the empty state', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.replaceServerExpenses('g1', [expense('r1', 1500, reimbursement: true)]);
+    await pumpStats(tester, db);
+
+    expect(find.text('No expenses yet.'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+
+  // The old Summary card overflowed on a phone (#103's first screenshot).
+  for (final (label, locale) in [('English', const Locale('en')), ('French', const Locale('fr'))]) {
+    testWidgets('$label at double text size on a narrow phone: the group section fits (#103)',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.replaceServerExpenses('g1', [expense('e1', 1307155)]);
+      await pumpStats(tester, db, locale: locale, builder: spliit2goAppBuilder);
+
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+  }
 }

@@ -63,13 +63,13 @@ void main() {
     expect(span.last, DateTime(2026, 6, 15));
   });
 
-  // Unlike SpendingSummary's firstDate/lastDate (stats_calculator.dart),
-  // which deliberately excludes reimbursements as "not new spending",
+  // Unlike the spending totals in stats_calculator.dart, which
+  // deliberately exclude reimbursements as "not new spending",
   // computeDateSpan counts every cached expense -- a settlement is still
   // a dated event in the group's history (issue #55 defines the span as
   // "first expense date to last expense date", with no carve-out for
   // reimbursements).
-  test('includes reimbursement expenses in the span, unlike the spending summary', () async {
+  test('includes reimbursement expenses in the span, unlike the spending totals', () async {
     await db.insertPending(expense('e1', DateTime(2026, 2, 1)));
     await db.insertPending(
         expense('e2', DateTime(2026, 8, 30), isReimbursement: true));
