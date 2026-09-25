@@ -223,6 +223,30 @@ void main() {
     await closeGroup(tester);
   });
 
+  testWidgets('the You row on Balances changes who you are, and the section follows (#99)',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.cacheGroup(group);
+    await db.setActiveParticipant('g1', nobodyParticipantId);
+
+    await openGroup(tester, db);
+    await tester.tap(find.text('Balance'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, 'Nobody'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(ListTile, 'You'));
+    await tester.pumpAndSettle();
+    expect(prompt, findsOneWidget);
+    await tester.tap(find.descendant(of: find.byType(SimpleDialog), matching: find.text('Alex')));
+    await tester.pumpAndSettle();
+
+    expect(await stored(db), 'alex');
+    expect(find.widgetWithText(ListTile, 'Nobody'), findsNothing);
+    expect(find.text('You’re settled up'), findsOneWidget);
+    await closeGroup(tester);
+  });
+
   testWidgets('French at double text size on a narrow phone: the prompt wraps long labels (#87 review)',
       (tester) async {
     useNarrowLargeText(tester);

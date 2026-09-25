@@ -350,6 +350,8 @@ class _GroupScreenState extends State<GroupScreen> {
           db: widget.db,
           outbox: widget.outbox,
           group: _group!,
+          activeUserId: _activeUserId,
+          onPickActiveUser: () => _pickActiveUser(firstAsk: false),
           embedded: true,
         );
       case 2:

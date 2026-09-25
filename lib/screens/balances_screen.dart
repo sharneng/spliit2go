@@ -9,6 +9,7 @@ import '../models/group.dart';
 import '../services/balance_calculator.dart';
 import '../sync/outbox.dart';
 import '../utils/money.dart';
+import '../widgets/section_heading.dart';
 import 'expense_screen.dart';
 
 /// Who-owes-whom for the group, plus one-tap "mark as paid" for the
@@ -43,6 +44,14 @@ class BalancesScreen extends StatefulWidget {
   /// been converted to a tab.
   final bool embedded;
 
+  /// Who "you" are in this group, or null for Nobody / not picked yet --
+  /// resolved by GroupScreen (see resolveActiveParticipant).
+  final String? activeUserId;
+
+  /// Opens the "Who are you?" picker from the You section (issue #99).
+  /// Null hides the row's tap target (e.g. a standalone screen).
+  final VoidCallback? onPickActiveUser;
+
   const BalancesScreen({
     super.key,
     required this.client,
@@ -50,6 +59,8 @@ class BalancesScreen extends StatefulWidget {
     required this.outbox,
     required this.group,
     this.embedded = false,
+    this.activeUserId,
+    this.onPickActiveUser,
   });
 
   @override
@@ -140,6 +151,101 @@ class _BalancesScreenState extends State<BalancesScreen> {
     // watchExpensesForGroup subscription) already reflect it.
   }
 
+  /// The active user's own position, above everyone's (issue #99), like
+  /// spliit-ios's BalancesView "You" section: which way the money goes
+  /// and how much, then a row saying who "you" are that opens the
+  /// picker. Unpicked, only that row shows, with a line on why to pick.
+  List<Widget> _youSection(BuildContext context, List<Balance> balances) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
+    final you = widget.group.participants
+        .where((p) => p.id == widget.activeUserId)
+        .firstOrNull;
+    final net = balances
+            .where((b) => b.participantId == you?.id)
+            .firstOrNull
+            ?.netCents ??
+        0;
+    return [
+      SectionHeading(l10n.balancesYouSection),
+      Card(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (you != null) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      net > 0
+                          ? l10n.balancesYouAreOwed
+                          : net < 0
+                              ? l10n.balancesYouOwe
+                              : l10n.balancesYouSettled,
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 4),
+                    // Unsigned: the line above already says which way.
+                    Text(
+                      formatMoney(net.abs(), widget.group.currency,
+                          locale: context.appLocale),
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: net > 0
+                            ? Colors.green.shade700
+                            : net < 0
+                                ? theme.colorScheme.error
+                                : null,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, indent: 16, endIndent: 16),
+            ],
+            // One row in the title, not a trailing widget: a trailing
+            // Text is unconstrained, and a long name at large text took
+            // the whole tile (#101 review). Here the name gets what's
+            // left beside the label and wraps.
+            ListTile(
+              title: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(l10n.balancesYouLabel,
+                      style: TextStyle(color: theme.colorScheme.primary)),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      you?.name ?? l10n.balancesYouNobody,
+                      textAlign: TextAlign.end,
+                      style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                ],
+              ),
+              onTap: widget.onPickActiveUser,
+            ),
+          ],
+        ),
+      ),
+      if (you == null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: Text(
+            l10n.balancesYouHint,
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ),
+      const SizedBox(height: 8),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<ExpenseRow>>(
@@ -162,6 +268,7 @@ class _BalancesScreenState extends State<BalancesScreen> {
             onRefresh: () async {},
             child: ListView(
               children: [
+                ..._youSection(context, balances),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                   child: Text(
@@ -171,7 +278,9 @@ class _BalancesScreenState extends State<BalancesScreen> {
                 ),
                 for (final b in balances)
                   ListTile(
-                    title: Text(_name(b.participantId)),
+                    title: Text(b.participantId == widget.activeUserId
+                        ? context.l10n.expenseDetailsYou(_name(b.participantId))
+                        : _name(b.participantId)),
                     trailing: Text(
                       formatMoney(b.netCents, widget.group.currency,
                           locale: context.appLocale),
