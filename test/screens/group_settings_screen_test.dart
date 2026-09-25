@@ -296,6 +296,38 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   });
 
+  testWidgets('editing checks the server\'s name rules too: a duplicate participant blocks save (#115)',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    var updateCalled = false;
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async {
+        if (req.url.toString().contains('groups.update')) updateCalled = true;
+        return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+      }),
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: GroupSettingsScreen(client: client, db: db, group: group),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Bea'), 'Alex');
+    await tester.tap(find.byIcon(Icons.check));
+    await tester.pumpAndSettle();
+
+    expect(updateCalled, isFalse);
+    expect(find.text('Two participants are named “Alex”. Each needs a different name.'),
+        findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+
   testWidgets('a group with no currencyCode shows Custom, prefilled with its symbol (issue #23)',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());

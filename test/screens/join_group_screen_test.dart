@@ -245,4 +245,55 @@ void main() {
     expect(requested, isFalse);
     expect(find.textContaining("doesn't look like a group URL"), findsOneWidget);
   });
+
+  testWidgets('"Create a new group" opens the create form; creating closes Join with the new id (#115)',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final servers = <String>[];
+    final client = SpliitClient(
+      baseUrl: 'https://spliit.app',
+      httpClient: MockClient((req) async {
+        if (req.url.path.endsWith('groups.create')) {
+          return http.Response('[{"result":{"data":{"json":{"groupId":"g1"}}}}]', 200);
+        }
+        return http.Response(groupResponse(), 200);
+      }),
+    );
+    String? popped;
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Builder(
+        builder: (context) => ElevatedButton(
+          onPressed: () async {
+            popped = await Navigator.of(context).push<String>(MaterialPageRoute(
+              builder: (_) => JoinGroupScreen(
+                  db: db,
+                  clientFactory: (url) {
+                    servers.add(url);
+                    return client;
+                  }),
+            ));
+          },
+          child: const Text('open'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Create a new group'));
+    await tester.pumpAndSettle();
+    expect(find.text('Create group'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextField, 'Group name'), 'Banff Trip');
+    await tester.tap(find.byTooltip('Create'));
+    await tester.pumpAndSettle();
+
+    expect(popped, 'g1');
+    expect(find.byType(JoinGroupScreen), findsNothing);
+    expect(servers, ['https://spliit.app']);
+  });
 }
