@@ -51,6 +51,16 @@ There's no server to configure in code. In the app, tap **+** and paste a group'
 
 Both platforms use the app id `com.sharneng.spliit2go` and the display name **Spliit2Go**; the version comes from `pubspec.yaml` (`1.0.0+1` is version 1.0.0, build 1). Every store upload needs a higher build number. The id is permanent once the app is published. Before #105 the id was `com.sharneng.spliit2go.spliit2go`: a build from before then is a different app to the phone, so it installs alongside the new one with its own data. Uninstall it, or re-join your groups in the new one.
 
+### App icon
+
+The icon and the group list's header logo come from the art in `branding/` (#106): `spliit2go-logo-serious.png`, the logo on a transparent background, is the source for all of them. To change the icon, replace that file and run:
+
+```
+python3 scripts/make_icons.py
+```
+
+It needs Pillow (`pip install pillow`) and rewrites every size: iOS's `AppIcon.appiconset`, Android's launcher and adaptive icons, the 28 pt header logo in `assets/`, and the store icons in `branding/store/` (1024 for App Store Connect, 512 for Google Play). Commit what it writes. `branding/` isn't bundled with the app.
+
 ## iOS
 
 The iOS project (`ios/`, added in #79) needs Xcode. It uses the same bundle id as Android, `com.sharneng.spliit2go`, targets iOS 15 or later, and is iPhone only (#105). Plugins are integrated with Swift Package Manager, so there's no `Podfile` and no `pod install` step. To run it on a simulator:

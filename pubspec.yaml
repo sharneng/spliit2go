@@ -42,6 +42,6 @@ dev_dependencies:
 
 flutter:
   assets:
-    - assets/spliit-logo.png
+    - assets/spliit2go-logo.png
   uses-material-design: true
   generate: true
