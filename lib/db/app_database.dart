@@ -86,8 +86,63 @@ class Expenses extends Table {
   /// the [Expense] model.
   TextColumn get addedByParticipantId => text().nullable()();
 
+  /// See [Expense.documentCount] (#123).
+  IntColumn get documentCount => integer().withDefault(const Constant(0))();
+
   @override
   Set<Column> get primaryKey => {id};
+}
+
+/// The documents (receipt photos) attached to a cached expense on the
+/// server (#123). The expense list only says how many there are
+/// ([Expenses.documentCount]), so these are stored when an expense is
+/// read in full (opening its details online, or editing it), and kept
+/// only while that count still matches: a refresh that finds a different
+/// count drops them, and they're read again next time.
+///
+/// [id] is the server's document id: update keeps the ids it's sent and
+/// deletes the rest, so an edit sends these back unchanged (#128).
+@DataClassName('ExpenseDocumentRow')
+class ExpenseDocuments extends Table {
+  TextColumn get expenseId => text()();
+  TextColumn get groupId => text()();
+  TextColumn get id => text()();
+  TextColumn get url => text()();
+  IntColumn get width => integer()();
+  IntColumn get height => integer()();
+
+  /// The document's place in the expense's list, as the server returned it.
+  IntColumn get position => integer()();
+
+  @override
+  Set<Column> get primaryKey => {expenseId, id};
+}
+
+/// Why a receipt file is on this device, which decides when it may go
+/// (the storage policy in #123). Only the viewing cache exists so far;
+/// photos taken on this device and favorite groups' downloads come with
+/// #124 and #127.
+enum ReceiptFileKind {
+  /// A receipt that was opened: evicted, least recently used first, once
+  /// the viewing cache is over its cap.
+  viewing,
+}
+
+/// A receipt image stored on this device (#123), by its document URL.
+/// URLs are unique and never change (`document-<timestamp>-<random>`), so
+/// a stored file never goes stale. The file itself lives in the receipts
+/// directory under [fileName]; see ReceiptCache.
+@DataClassName('ReceiptFileRow')
+class ReceiptFiles extends Table {
+  TextColumn get url => text()();
+  TextColumn get groupId => text()();
+  TextColumn get fileName => text()();
+  IntColumn get bytes => integer()();
+  TextColumn get kind => textEnum<ReceiptFileKind>()();
+  DateTimeColumn get lastUsedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {url};
 }
 
 /// Last-synced group info, including participants -- needed offline for
@@ -162,12 +217,12 @@ class Groups extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [Expenses, Groups])
+@DriftDatabase(tables: [Expenses, Groups, ExpenseDocuments, ReceiptFiles])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -237,6 +292,14 @@ class AppDatabase extends _$AppDatabase {
             // See Expenses.addedByParticipantId (issue #92). Rows already
             // queued keep null and replay unattributed, as they would have.
             await m.addColumn(expenses, expenses.addedByParticipantId);
+          }
+          if (from < 12) {
+            // Receipts (#123): the list's document count, then the
+            // documents and stored files themselves. Counts are filled by
+            // the next refresh.
+            await m.addColumn(expenses, expenses.documentCount);
+            await m.createTable(expenseDocuments);
+            await m.createTable(receiptFiles);
           }
         },
       );
@@ -463,9 +526,89 @@ class AppDatabase extends _$AppDatabase {
           .go();
       await batch(
           (b) => b.insertAll(expenses, fresh.map(toCompanion).toList()));
+      await _pruneDocuments(groupId, {for (final e in fresh) e.id: e.documentCount});
       return true;
     });
   }
+
+  /// Drops stored documents that no longer match the server (#123): an
+  /// expense that's gone, or whose document count changed, since its
+  /// documents are then unknown until it's read in full again. Then drops
+  /// the stored files no document refers to any more (their files are
+  /// deleted by ReceiptCache.sweep).
+  Future<void> _pruneDocuments(String groupId, Map<String, int> counts) async {
+    final stored = await (select(expenseDocuments)..where((d) => d.groupId.equals(groupId))).get();
+    final byExpense = <String, int>{};
+    for (final d in stored) {
+      byExpense[d.expenseId] = (byExpense[d.expenseId] ?? 0) + 1;
+    }
+    final stale = [
+      for (final MapEntry(key: id, value: n) in byExpense.entries)
+        if (counts[id] != n) id,
+    ];
+    if (stale.isNotEmpty) {
+      await (delete(expenseDocuments)
+            ..where((d) => d.groupId.equals(groupId) & d.expenseId.isIn(stale)))
+          .go();
+    }
+    await _pruneReceiptFiles(groupId);
+  }
+
+  Future<void> _pruneReceiptFiles(String groupId) => (delete(receiptFiles)
+        ..where((f) =>
+            f.groupId.equals(groupId) &
+            f.url.isNotInQuery(selectOnly(expenseDocuments)..addColumns([expenseDocuments.url]))))
+      .go();
+
+  /// Stores the documents an expense was just read with (#123), replacing
+  /// whatever was stored for it, and drops the files of any it no longer
+  /// has (a receipt swapped on the web, #130 review).
+  Future<void> cacheExpenseDocuments(String groupId, String expenseId, List<ExpenseDocument> docs) {
+    return transaction(() async {
+      await (delete(expenseDocuments)..where((d) => d.expenseId.equals(expenseId))).go();
+      await batch((b) => b.insertAll(expenseDocuments, [
+            for (final (i, d) in docs.indexed)
+              ExpenseDocumentsCompanion.insert(
+                expenseId: expenseId,
+                groupId: groupId,
+                id: d.id,
+                url: d.url,
+                width: d.width,
+                height: d.height,
+                position: i,
+              ),
+          ]));
+      await _pruneReceiptFiles(groupId);
+    });
+  }
+
+  /// An expense's stored documents, in order, live.
+  Stream<List<ExpenseDocument>> watchExpenseDocuments(String expenseId) => (select(expenseDocuments)
+        ..where((d) => d.expenseId.equals(expenseId))
+        ..orderBy([(d) => OrderingTerm.asc(d.position)]))
+      .watch()
+      .map((rows) => [
+            for (final r in rows)
+              ExpenseDocument(id: r.id, url: r.url, width: r.width, height: r.height),
+          ]);
+
+  /// The stored file for a receipt URL, if any.
+  Future<ReceiptFileRow?> receiptFile(String url) =>
+      (select(receiptFiles)..where((f) => f.url.equals(url))).getSingleOrNull();
+
+  Future<void> saveReceiptFile(ReceiptFilesCompanion row) =>
+      into(receiptFiles).insertOnConflictUpdate(row);
+
+  Future<void> touchReceiptFile(String url, DateTime at) =>
+      (update(receiptFiles)..where((f) => f.url.equals(url)))
+          .write(ReceiptFilesCompanion(lastUsedAt: Value(at)));
+
+  /// Every stored receipt file, least recently used first.
+  Future<List<ReceiptFileRow>> allReceiptFiles() =>
+      (select(receiptFiles)..orderBy([(f) => OrderingTerm.asc(f.lastUsedAt)])).get();
+
+  Future<void> deleteReceiptFiles(Iterable<String> urls) =>
+      (delete(receiptFiles)..where((f) => f.url.isIn(urls))).go();
 
   /// Removes an expense the server has confirmed deleted (issue #90), and
   /// marks the group's expenses changed first, in the same transaction,
@@ -477,6 +620,8 @@ class AppDatabase extends _$AppDatabase {
       markExpensesChanged(groupId);
       await (delete(expenses)..where((e) => e.id.equals(id) & e.pending.equals(false)))
           .go();
+      await (delete(expenseDocuments)..where((d) => d.expenseId.equals(id))).go();
+      await _pruneReceiptFiles(groupId);
     });
   }
 
@@ -508,6 +653,7 @@ class AppDatabase extends _$AppDatabase {
         conversionRate: Value(e.conversionRate),
         pending: Value(e.pending),
         createdAt: Value(e.createdAt),
+        documentCount: Value(e.documentCount),
       );
 
   /// Device-local organization, never sent to the server or changed by refresh.
@@ -693,6 +839,8 @@ class AppDatabase extends _$AppDatabase {
   Future<void> leaveGroup(String groupId) {
     return transaction(() async {
       await (delete(expenses)..where((e) => e.groupId.equals(groupId))).go();
+      await (delete(expenseDocuments)..where((d) => d.groupId.equals(groupId))).go();
+      await (delete(receiptFiles)..where((f) => f.groupId.equals(groupId))).go();
       await (delete(groups)..where((g) => g.id.equals(groupId))).go();
     });
   }
@@ -719,5 +867,6 @@ class AppDatabase extends _$AppDatabase {
         syncFailed: row.syncFailed,
         lastError: row.lastError,
         createdAt: row.createdAt,
+        documentCount: row.documentCount,
       );
 }

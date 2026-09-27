@@ -17,6 +17,7 @@ import 'services/app_settings.dart';
 import 'sync/outbox.dart';
 import 'theme.dart';
 import 'services/error_reporting.dart';
+import 'services/receipt_cache.dart';
 import 'widgets/error_message.dart';
 
 Future<void> main() async {
@@ -263,6 +264,8 @@ class _RootState extends State<AppRoot> {
       // but aren't expected either: logged (#119 review).
       ErrorReporter.instance.report(error, stack, operation: 'Receiving an app link');
     });
+    // Receipt files whose expense went away while the app was closed (#123).
+    unawaited(ReceiptCache.of(_db).sweep());
     _start();
   }
 

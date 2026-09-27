@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -19,6 +20,7 @@ import 'group_screen.dart';
 import 'app_settings_screen.dart';
 import 'join_group_screen.dart';
 import '../services/error_reporting.dart';
+import '../services/receipt_cache.dart';
 import '../widgets/error_message.dart';
 
 /// Registered as a `MaterialApp.navigatorObservers` entry (main.dart) so
@@ -194,7 +196,8 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
             icon: const Icon(Icons.settings),
             tooltip: context.l10n.appSettingsTitle,
             onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+              MaterialPageRoute(
+                  builder: (_) => AppSettingsScreen(receipts: ReceiptCache.of(widget.db))),
             ),
           ),
         ],
@@ -353,6 +356,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
         case 'remove':
           if (!await _confirmRemove(row)) return;
           await widget.db.leaveGroup(row.id);
+          unawaited(ReceiptCache.of(widget.db).sweep());
       }
     } catch (e, st) {
       _showSaveError(e, st, 'Updating group ${row.id}');

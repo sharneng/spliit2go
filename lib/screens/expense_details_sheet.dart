@@ -20,7 +20,9 @@ import '../utils/money.dart';
 import '../widgets/category_icon.dart';
 import 'expense_screen.dart';
 import '../services/error_reporting.dart';
+import '../services/receipt_cache.dart';
 import '../widgets/error_message.dart';
+import '../widgets/receipts.dart';
 
 /// What tapping an expense does, from both the expense list and the
 /// Activity tab (issue #90): a bottom sheet showing the expense's details,
@@ -202,6 +204,19 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   /// Set once the sheet starts closing through [_close].
   bool _closing = false;
 
+  /// Receipts (#123). The cache stores an expense's documents once it's
+  /// been read in full; the list only gives their count. [_storedDocs] is
+  /// what the cache holds, [_fetchedDocs] what this sheet just read.
+  StreamSubscription<List<ExpenseDocument>>? _docSub;
+  List<ExpenseDocument>? _storedDocs;
+  List<ExpenseDocument>? _fetchedDocs;
+
+  /// Documents are read at most once per open, and again after a
+  /// connection failure once the phone is back online.
+  bool _docsFetchStarted = false;
+  bool _docsOffline = false;
+  String? _docsDiagnostics;
+
   /// A close asked for while the Delete confirmation covered the sheet,
   /// with the action to close with. Popping then would close the dialog
   /// instead, so it waits for the confirmation to end (see [_delete]).
@@ -216,9 +231,21 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   void initState() {
     super.initState();
     _rowSub = widget.db.watchExpense(widget.expenseId).listen(_onRow);
+    _docSub = widget.db.watchExpenseDocuments(widget.expenseId).listen((docs) {
+      if (!mounted) return;
+      setState(() => _storedDocs = docs);
+      _maybeFetchDocuments();
+    });
     _onlineSub = widget.connectivity.listen(
       (online) {
-        if (mounted) setState(() => _online = online);
+        if (!mounted) return;
+        setState(() => _online = online);
+        if (online && _docsOffline) {
+          // Back online: read the documents that couldn't be read offline.
+          _docsFetchStarted = false;
+          _docsOffline = false;
+        }
+        _maybeFetchDocuments();
       },
       onError: (Object e, StackTrace st) =>
           ErrorReporter.instance.report(e, st, operation: 'Watching connectivity'),
@@ -228,6 +255,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   @override
   void dispose() {
     _rowSub?.cancel();
+    _docSub?.cancel();
     _onlineSub?.cancel();
     super.dispose();
   }
@@ -243,6 +271,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
         _loading = false;
         _problem = null;
       });
+      _maybeFetchDocuments();
     } else if (_cached) {
       _close(_closeWith);
     } else if (_expense != null || _fetching) {
@@ -317,6 +346,44 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       });
     } finally {
       _fetching = false;
+    }
+  }
+
+  /// The expense's documents, or null while they aren't known: a cached
+  /// expense's stored ones count only while they match the list's count.
+  List<ExpenseDocument>? _documentsOf(Expense e) {
+    if (!_cached) return e.documents;
+    if (_fetchedDocs != null) return _fetchedDocs;
+    final stored = _storedDocs;
+    return stored != null && stored.length == e.documentCount ? stored : null;
+  }
+
+  /// Reads a cached expense's documents once per open while online, and
+  /// stores them (#123). Stored ones show meanwhile, but a matching count
+  /// doesn't mean they're current: a receipt can be swapped on the web
+  /// with the count unchanged (#130 review), so they're always checked.
+  Future<void> _maybeFetchDocuments() async {
+    final e = _expense;
+    if (e == null || !_cached || e.pending || e.documentCount == 0) return;
+    if (_docsFetchStarted || _online == false || _storedDocs == null) return;
+    _docsFetchStarted = true;
+    try {
+      final fresh =
+          await widget.client.fetchExpense(groupId: widget.group.id, expenseId: widget.expenseId);
+      await widget.db.cacheExpenseDocuments(widget.group.id, widget.expenseId, fresh.documents);
+      if (!mounted) return;
+      setState(() => _fetchedDocs = fresh.documents);
+    } catch (err, st) {
+      // Deleted meanwhile: the row watch closes the sheet.
+      if (err is SpliitApiException && err.isNotFound) return;
+      final error = ErrorReporter.instance
+          .report(err, st, operation: 'Loading receipts of expense ${widget.expenseId}');
+      if (!mounted) return;
+      setState(() {
+        _docsOffline = error.kind == ErrorKind.connection;
+        // With stored ones showing, a failed check is only logged.
+        if (_documentsOf(e) == null) _docsDiagnostics = error.diagnostics;
+      });
     }
   }
 
@@ -606,6 +673,17 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
         Text(l10n.expenseNotesLabel, style: theme.textTheme.titleSmall),
         const SizedBox(height: 4),
         SelectableText(e.notes),
+      ],
+      if (e.documentCount > 0 || (_documentsOf(e)?.isNotEmpty ?? false)) ...[
+        const SizedBox(height: 16),
+        ReceiptsSection(
+          cache: ReceiptCache.of(widget.db),
+          groupId: widget.group.id,
+          count: _documentsOf(e)?.length ?? e.documentCount,
+          documents: _documentsOf(e),
+          online: _docsOffline ? false : _online,
+          loadDiagnostics: _docsDiagnostics,
+        ),
       ],
     ];
   }

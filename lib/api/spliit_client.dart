@@ -174,6 +174,7 @@ class SpliitClient {
           originalCurrency: m['originalCurrency'] as String?,
           conversionRate: m['conversionRate'] == null ? null : _asDouble(m['conversionRate']),
           createdAt: m['createdAt'] == null ? null : _asDateTime(m['createdAt']),
+          documentCount: _documentCount(m['_count']),
         ));
       }
 
@@ -239,6 +240,7 @@ class SpliitClient {
     _checkOk(res);
     final data = _unwrapBatch(jsonDecode(res.body)) as Map<String, dynamic>;
     final m = data['expense'] as Map<String, dynamic>;
+    final documents = _documents(m['documents']);
     return Expense(
       id: _asId(m['id']),
       groupId: groupId,
@@ -258,9 +260,15 @@ class SpliitClient {
       originalCurrency: m['originalCurrency'] as String?,
       conversionRate: m['conversionRate'] == null ? null : _asDouble(m['conversionRate']),
       createdAt: m['createdAt'] == null ? null : _asDateTime(m['createdAt']),
-      documents: _documents(m['documents']),
+      documents: documents,
+      documentCount: documents.length,
     );
   }
+
+  /// The list's `_count: {documents: n}` (#123): only a count, since the
+  /// list doesn't return the documents themselves. Absent means none.
+  static int _documentCount(Object? count) =>
+      count is Map ? (count['documents'] as num?)?.round() ?? 0 : 0;
 
   /// An expense's documents, which an update has to send back (#128).
   /// Absent means none; anything unreadable is a format error rather

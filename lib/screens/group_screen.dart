@@ -24,6 +24,7 @@ import 'group_settings_screen.dart';
 import 'stats_screen.dart';
 import '../widgets/error_message.dart';
 import '../services/error_reporting.dart';
+import '../services/receipt_cache.dart';
 
 /// A single group's expenses, offline-first -- reached by pushing on top
 /// of GroupListScreen (the app's actual root; see main.dart and
@@ -183,6 +184,8 @@ class _GroupScreenState extends State<GroupScreen> {
       // Skipped if an edit or delete landed while this was fetching (#90).
       await widget.db.replaceServerExpenses(widget.groupId, fresh,
           fetchedAtGeneration: generation);
+      // Receipt files the refresh stopped referring to (#123).
+      unawaited(ReceiptCache.of(widget.db).sweep());
       if (!mounted) return;
       setState(() => _error = null);
     } catch (e, st) {

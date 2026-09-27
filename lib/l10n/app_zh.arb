@@ -221,5 +221,21 @@
   "errorDetailsAction": "详情",
   "groupScreenGroupGone": "此群组已不在服务器上。",
   "expenseDetailsEditFailed": "无法打开此消费进行编辑。",
-  "expenseDeleteFailedUnexpected": "无法删除此消费。"
+  "expenseDeleteFailedUnexpected": "无法删除此消费。",
+  "expenseReceiptsHeading": "收据",
+  "receiptAvailableWhenOnline": "联网后可查看",
+  "receiptLoadFailed": "无法加载此收据。",
+  "receiptOpen": "打开收据",
+  "receiptViewerTitle": "收据 {index}/{count}",
+  "receiptViewerSingle": "收据",
+  "appSettingsStorage": "存储",
+  "appSettingsReceipts": "本设备上的收据",
+  "appSettingsReceiptsNone": "无",
+  "appSettingsReceiptsClear": "清除",
+  "appSettingsReceiptsClearTitle": "清除已保存的收据？",
+  "appSettingsReceiptsClearBody": "仅从本设备删除，打开时会重新下载。",
+  "appSettingsReceiptsCleared": "已清除保存的收据。",
+  "appSettingsReceiptsClearFailed": "无法清除保存的收据。",
+  "bytesKilobytes": "{size} KB",
+  "bytesMegabytes": "{size} MB"
 }

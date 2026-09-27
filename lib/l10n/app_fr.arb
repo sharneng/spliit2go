@@ -221,5 +221,21 @@
   "errorDetailsAction": "Détails",
   "groupScreenGroupGone": "Ce groupe n’est plus sur le serveur.",
   "expenseDetailsEditFailed": "Impossible d’ouvrir cette dépense pour la modifier.",
-  "expenseDeleteFailedUnexpected": "Impossible de supprimer cette dépense."
+  "expenseDeleteFailedUnexpected": "Impossible de supprimer cette dépense.",
+  "expenseReceiptsHeading": "Reçus",
+  "receiptAvailableWhenOnline": "Disponible une fois en ligne",
+  "receiptLoadFailed": "Impossible de charger ce reçu.",
+  "receiptOpen": "Ouvrir le reçu",
+  "receiptViewerTitle": "Reçu {index} sur {count}",
+  "receiptViewerSingle": "Reçu",
+  "appSettingsStorage": "Stockage",
+  "appSettingsReceipts": "Reçus sur cet appareil",
+  "appSettingsReceiptsNone": "Aucun",
+  "appSettingsReceiptsClear": "Effacer",
+  "appSettingsReceiptsClearTitle": "Effacer les reçus enregistrés ?",
+  "appSettingsReceiptsClearBody": "Ils sont supprimés de cet appareil seulement, et se téléchargent à nouveau quand vous les ouvrez.",
+  "appSettingsReceiptsCleared": "Reçus enregistrés effacés.",
+  "appSettingsReceiptsClearFailed": "Impossible d’effacer les reçus enregistrés.",
+  "bytesKilobytes": "{size} Ko",
+  "bytesMegabytes": "{size} Mo"
 }
