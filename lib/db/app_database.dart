@@ -561,7 +561,8 @@ class AppDatabase extends _$AppDatabase {
       .go();
 
   /// Stores the documents an expense was just read with (#123), replacing
-  /// whatever was stored for it.
+  /// whatever was stored for it, and drops the files of any it no longer
+  /// has (a receipt swapped on the web, #130 review).
   Future<void> cacheExpenseDocuments(String groupId, String expenseId, List<ExpenseDocument> docs) {
     return transaction(() async {
       await (delete(expenseDocuments)..where((d) => d.expenseId.equals(expenseId))).go();
@@ -577,6 +578,7 @@ class AppDatabase extends _$AppDatabase {
                 position: i,
               ),
           ]));
+      await _pruneReceiptFiles(groupId);
     });
   }
 

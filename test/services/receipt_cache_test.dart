@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -158,4 +159,45 @@ void main() {
 
     expect(await filesOnDisk(), isEmpty);
   });
+
+  // #130 review (Ezra): a sweep while a download is being stored must not
+  // delete the file that load then returns.
+  test('a sweep during a download waits, and never deletes the file being stored', () async {
+    final gate = Completer<void>();
+    final entered = Completer<void>();
+    final paused = _PausingDb(entered, gate.future);
+    addTearDown(paused.close);
+    final receipts = ReceiptCache(paused,
+        directory: () async => dir,
+        httpClient: MockClient((_) async => http.Response.bytes(List.filled(10, 1), 200)));
+
+    final loading = receipts.load(url('a'), groupId: 'g1');
+    await entered.future; // renamed, about to register its row
+    final sweeping = receipts.sweep();
+    // Give the sweep every chance to run before the row is registered.
+    await Future.any([sweeping, Future<void>.delayed(const Duration(milliseconds: 200))]);
+    gate.complete();
+    final file = await loading;
+    await sweeping;
+
+    expect(await file.exists(), isTrue);
+    expect(await paused.receiptFile(url('a')), isNotNull);
+  });
+}
+
+/// Pauses the first file registration until [gate], saying when it got
+/// there through [entered].
+class _PausingDb extends AppDatabase {
+  _PausingDb(this.entered, this.gate) : super(NativeDatabase.memory());
+  final Completer<void> entered;
+  final Future<void> gate;
+
+  @override
+  Future<void> saveReceiptFile(ReceiptFilesCompanion row) async {
+    if (!entered.isCompleted) {
+      entered.complete();
+      await gate;
+    }
+    return super.saveReceiptFile(row);
+  }
 }

@@ -74,6 +74,17 @@ class ReceiptCache {
   /// Downloads in flight, so two widgets asking for one receipt share it.
   final _inFlight = <String, Future<File>>{};
 
+  /// Storing a file (write, rename, register) and [sweep] run one at a
+  /// time (#130 review): a sweep between a store's rename and its row
+  /// being committed would delete the file it returns, and one during a
+  /// write would delete the partial file.
+  Future<void> _tail = Future.value();
+  Future<T> _exclusive<T>(Future<T> Function() action) {
+    final result = _tail.then((_) => action());
+    _tail = result.then<void>((_) {}, onError: (Object _) {});
+    return result;
+  }
+
   /// The stored file for [url], or null when it isn't on this device.
   Future<File?> cachedFile(String url) async {
     final row = await db.receiptFile(url);
@@ -106,18 +117,24 @@ class ReceiptCache {
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw ReceiptDownloadException(res.statusCode, url);
     }
+    return _exclusive(() => _store(url, groupId, res.bodyBytes));
+  }
+
+  /// Writes [bytes] as the image for [url] and registers it. Runs under
+  /// [_exclusive], so [sweep] never sees it half done.
+  Future<File> _store(String url, String groupId, List<int> bytes) async {
     final dir = await _receiptsDir();
     final fileName = '${const Uuid().v4()}.img';
     // Written under a temporary name and renamed, so a partial file is
     // never mistaken for a stored receipt.
     final partial = File(p.join(dir.path, '$fileName.part'));
-    await partial.writeAsBytes(res.bodyBytes, flush: true);
+    await partial.writeAsBytes(bytes, flush: true);
     final file = await partial.rename(p.join(dir.path, fileName));
     await db.saveReceiptFile(ReceiptFilesCompanion.insert(
       url: url,
       groupId: groupId,
       fileName: fileName,
-      bytes: res.bodyBytes.length,
+      bytes: bytes.length,
       kind: ReceiptFileKind.viewing,
       lastUsedAt: _now(),
     ));
@@ -157,7 +174,9 @@ class ReceiptCache {
   /// database dropped their rows (a refresh, a delete, leaving a group,
   /// eviction), or a partial download. Safe to call any time; run at
   /// startup and after those changes.
-  Future<void> sweep() async {
+  Future<void> sweep() => _exclusive(_sweep);
+
+  Future<void> _sweep() async {
     try {
       final dir = await _receiptsDir();
       final known = {for (final f in await db.allReceiptFiles()) f.fileName};

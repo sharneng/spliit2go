@@ -166,11 +166,61 @@ void main() {
     final stored = await tester.runAsync(() => db.watchExpenseDocuments('e1').first);
     expect(stored!.map((d) => d.id), ['d1', 'd2']);
 
-    // Opening it again reads nothing: the stored ones match the count.
+    // Opening it again shows the stored ones, and checks them again.
     await closeTree(tester);
     await openSheet(tester, db, s.client);
-    expect(s.gets.single, 1);
+    expect(s.gets.single, 2);
     expect(receiptImages(), findsNWidgets(2));
+    await closeTree(tester);
+  });
+
+  // #130 review (Ezra): a same-count swap on the web must show.
+  testWidgets('stored receipts are checked online: one swapped on the web shows, '
+      'and the old one\'s file goes', (tester) async {
+    final (db, fake) = await setUpDb();
+    addTearDown(db.close);
+    await tester.runAsync(() async {
+      await db.cacheExpenseDocuments('g1', 'e1', docs());
+      await db.saveReceiptFile(ReceiptFilesCompanion.insert(
+          url: receipts[0]['url'] as String,
+          groupId: 'g1',
+          fileName: 'old.img',
+          bytes: 1,
+          kind: ReceiptFileKind.viewing,
+          lastUsedAt: DateTime(2026, 9, 27)));
+    });
+    final swapped = jsonEncode([
+      {
+        'result': {
+          'data': {
+            'json': {
+              'expense': {
+                'id': 'e1',
+                'title': 'Coffee',
+                'amount': 1860,
+                'paidBy': {'id': 'bea'},
+                'paidFor': [
+                  {'participantId': 'alex', 'shares': 1},
+                ],
+                'expenseDate': '2026-09-23T00:00:00.000Z',
+                'documents': [
+                  {'id': 'd3', 'url': 'https://bucket.test/replacement.jpg', 'width': 600, 'height': 900},
+                  receipts[1],
+                ],
+              },
+            },
+          },
+        },
+      },
+    ]);
+    final s = server([() async => http.Response(swapped, 200)]);
+    await openSheet(tester, db, s.client);
+
+    expect(s.gets.single, 1);
+    expect(fake.loaded, contains('https://bucket.test/replacement.jpg'));
+    final stored = await tester.runAsync(() => db.watchExpenseDocuments('e1').first);
+    expect(stored!.map((d) => d.id), ['d3', 'd2']);
+    expect(await tester.runAsync(() => db.receiptFile(receipts[0]['url'] as String)), isNull);
     await closeTree(tester);
   });
 
@@ -238,7 +288,6 @@ void main() {
     final s = server([ok]);
     await openSheet(tester, db, s.client, connectivity: online.stream);
 
-    expect(s.gets.single, 0); // stored documents match the count
     expect(find.byIcon(Icons.cloud_off_outlined), findsNWidgets(2));
     expect(find.text('Available when online'), findsOneWidget);
 

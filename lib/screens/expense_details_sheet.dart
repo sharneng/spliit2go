@@ -358,14 +358,14 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     return stored != null && stored.length == e.documentCount ? stored : null;
   }
 
-  /// Reads a cached expense in full when the list says it has documents
-  /// the cache doesn't know yet, and stores them (#123).
+  /// Reads a cached expense's documents once per open while online, and
+  /// stores them (#123). Stored ones show meanwhile, but a matching count
+  /// doesn't mean they're current: a receipt can be swapped on the web
+  /// with the count unchanged (#130 review), so they're always checked.
   Future<void> _maybeFetchDocuments() async {
     final e = _expense;
     if (e == null || !_cached || e.pending || e.documentCount == 0) return;
-    if (_documentsOf(e) != null || _docsFetchStarted || _online == false || _storedDocs == null) {
-      return;
-    }
+    if (_docsFetchStarted || _online == false || _storedDocs == null) return;
     _docsFetchStarted = true;
     try {
       final fresh =
@@ -381,7 +381,8 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       if (!mounted) return;
       setState(() {
         _docsOffline = error.kind == ErrorKind.connection;
-        _docsDiagnostics = error.diagnostics;
+        // With stored ones showing, a failed check is only logged.
+        if (_documentsOf(e) == null) _docsDiagnostics = error.diagnostics;
       });
     }
   }
