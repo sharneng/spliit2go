@@ -1,3 +1,5 @@
+import 'dart:math';
+
 /// Our own DTO for an expense, decoupled from Spliit's tRPC/Prisma shape.
 ///
 /// [SpliitClient] is responsible for mapping the raw tRPC response into
@@ -125,6 +127,17 @@ class ExpenseDocument {
       );
 
   Map<String, dynamic> toJson() => {'id': id, 'url': url, 'width': width, 'height': height};
+
+  static const _idAlphabet = '-_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+
+  /// A new document id, as the web app and spliit-ios make them: 21
+  /// random characters from a 64-letter alphabet (#123). The server keeps
+  /// it on update; create replaces it (#124).
+  static String newId([Random? random]) {
+    final r = random ?? Random.secure();
+    return String.fromCharCodes(
+        List.generate(21, (_) => _idAlphabet.codeUnitAt(r.nextInt(_idAlphabet.length))));
+  }
 }
 
 class Expense {

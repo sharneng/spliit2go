@@ -1392,6 +1392,103 @@ void main() {
   });
 
   // Issue #90 part 2.
+  // #123: uploading a receipt the way the web app and spliit-ios do.
+  group('SpliitClient.uploadReceipt', () {
+    ({SpliitClient client, List<http.Request> requests}) server(
+        {int signStatus = 200, String? signBody, int putStatus = 200}) {
+      final requests = <http.Request>[];
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          requests.add(req);
+          if (req.url.path == '/api/s3-upload') {
+            return http.Response(
+                signBody ??
+                    jsonEncode({
+                      'key': 'document-2026-09-27-abc.jpg',
+                      'bucket': 'spliit',
+                      'region': 'us-east-1',
+                      'url': 'https://spliit.s3.amazonaws.com/document-2026-09-27-abc.jpg?X-Amz-Signature=x',
+                    }),
+                signStatus);
+          }
+          return http.Response('', putStatus);
+        }),
+      );
+      return (client: client, requests: requests);
+    }
+
+    test('signs, PUTs the bytes where it was told, and returns the public URL', () async {
+      final s = server();
+
+      final url = await s.client.uploadReceipt([1, 2, 3]);
+
+      expect(url, 'https://spliit.s3.us-east-1.amazonaws.com/document-2026-09-27-abc.jpg');
+      final (sign, put) = (s.requests[0], s.requests[1]);
+      expect(sign.method, 'POST');
+      expect(jsonDecode(sign.body), {
+        'filename': 'receipt.jpg',
+        'filetype': 'image/jpeg',
+        '_nextS3': {'strategy': 'presigned'},
+      });
+      expect(put.method, 'PUT');
+      expect(put.url.toString(), contains('X-Amz-Signature=x'));
+      expect(put.headers['content-type'], 'image/jpeg');
+      expect(put.headers['cache-control'], 'max-age=630720000');
+      expect(put.bodyBytes, [1, 2, 3]);
+    });
+
+    test('an instance with its own S3 endpoint gets endpoint/bucket/key', () {
+      expect(
+          SpliitClient.receiptPublicUrl(
+              key: 'k.jpg', bucket: 'b', region: 'r', endpoint: 'https://s3.example.test/'),
+          'https://s3.example.test/b/k.jpg');
+      // next-s3-upload's "no endpoint".
+      expect(SpliitClient.receiptPublicUrl(key: 'k.jpg', bucket: 'b', region: 'r', endpoint: 'undefined'),
+          'https://b.s3.r.amazonaws.com/k.jpg');
+    });
+
+    test('a signing failure is a server error, not proof there\'s no storage (#123)', () async {
+      // What an instance without S3 answers, and any other failure too.
+      await expectLater(server(signStatus: 500, signBody: '').client.uploadReceipt([1]),
+          throwsA(isA<SpliitApiException>()
+              .having((e) => e.statusCode, 'status', 500)
+              .having((e) => classifyError(e), 'kind', ErrorKind.unexpected)));
+    });
+
+    test('a refused PUT and an unreadable signature are unexpected', () async {
+      await expectLater(server(putStatus: 403).client.uploadReceipt([1]),
+          throwsA(isA<ReceiptUploadException>()
+              .having((e) => classifyError(e), 'kind', ErrorKind.unexpected)));
+      await expectLater(server(signBody: 'not json').client.uploadReceipt([1]),
+          throwsA(isA<SpliitResponseFormatException>()));
+      await expectLater(server(signBody: '{"key": 1}').client.uploadReceipt([1]),
+          throwsA(isA<SpliitResponseFormatException>()));
+    });
+
+    test('create sends the uploaded documents', () async {
+      http.Request? captured;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          captured = req;
+          return http.Response('[{"result":{"data":{"json":{"expenseId":"e9"}}}}]', 200);
+        }),
+      );
+      await client.createExpense(
+        groupId: 'g1',
+        title: 'Coffee',
+        amountCents: 1860,
+        paidBy: 'p1',
+        paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+        documents: const [ExpenseDocument(id: 'x', url: 'https://b.test/a.jpg', width: 600, height: 900)],
+      );
+      expect(jsonDecode(captured!.body)['0']['json']['expenseFormValues']['documents'], [
+        {'id': 'x', 'url': 'https://b.test/a.jpg', 'width': 600, 'height': 900},
+      ]);
+    });
+  });
+
   group('SpliitClient.deleteExpense', () {
     test('posts to groups.expenses.delete with the ids and who to credit', () async {
       http.Request? captured;

@@ -1,6 +1,6 @@
 # spliit2go: receipts (issues #5, #123–#128)
 
-**Status: viewing implemented** in the first PR for [#123](https://github.com/sharneng/spliit2go/issues/123), 2026-09-27. Attaching receipts is the second part of #123; the rest is planned in [#124](https://github.com/sharneng/spliit2go/issues/124)–[#127](https://github.com/sharneng/spliit2go/issues/127), tracked by [#5](https://github.com/sharneng/spliit2go/issues/5). The issues hold the full agreed design (Kenneth and Ezra, 2026-09-27); this records what's built and why.
+**Status: #123 implemented** (viewing in #130, attaching in its second PR), 2026-09-27. The rest is planned in [#124](https://github.com/sharneng/spliit2go/issues/124)–[#127](https://github.com/sharneng/spliit2go/issues/127), tracked by [#5](https://github.com/sharneng/spliit2go/issues/5). The issues hold the full agreed design (Kenneth and Ezra, 2026-09-27); this records what's built and why.
 
 ## How Spliit stores receipts
 
@@ -19,6 +19,22 @@ A receipt is an expense *document*: `{id, url, width, height}` (`src/lib/schemas
 - **Offline is expected, not an error (#119).** A receipt that isn't on the device shows "Available when online" and loads by itself when the phone reconnects. A refused download (the bucket answering 403, say) is unexpected: logged, with details.
 - **Storage** (App settings) shows the space stored receipts use, with Clear. They're copies, downloaded again when opened.
 
+## Attaching (built)
+
+- **Adding:** the form's Receipts field has Add receipt, which offers Take photo or Choose from library (image_picker; the system picker on iOS, so no photo-library permission is needed to choose one).
+- **Shrinking before upload**, as spliit-ios does (`DocumentImage.swift`):
+  - the camera's orientation is applied;
+  - it's at most 2048 px on the long side, as JPEG, about 400 KB for a receipt;
+  - **every EXIF field is dropped, including location.** The system picker warns that location is included, but the app removes it before anything leaves the phone.
+- **Uploaded as soon as it's added,** like the web app: `/api/s3-upload` signs, the image goes straight to the bucket with the web app's headers, and the photo becomes a document (URL, width, height, and a new 21-character id).
+- **When an upload fails (#119):** the photo stays in the form as "Not uploaded", with Retry (tap it) and Remove.
+  - A connection failure says so.
+  - Anything else is unexpected, with details. An empty 500 from the signing route is what an instance without storage returns, but so is any other failure there, so the message only says the server *may* not store receipts, and attaching is never disabled.
+- **Saving** waits until every photo is uploaded or removed. Leaving the form with new photos asks first, and once it's discarded nothing new starts: a photo still being prepared isn't uploaded, and neither is a retry (#131 review). That's all phase 1 promises: a photo isn't kept if the app is closed mid-form (#124 makes it durable).
+- **New expenses** carry their documents on the pending row (`documentsJson`, schema 13), and the outbox sends them with the create. Those count as references for cleanup, so a refresh while the expense is pending keeps its photos (#131 review). Once it syncs they move to `ExpenseDocuments` under the server's expense id, still with this device's ids (create gives documents new ones), until the next online open reads the real ones.
+- **Edits** send the kept documents plus the new ones. Update keeps the ids it's sent, so they're stored as the expense's documents straight away. Removing one only removes it from the expense.
+- **A just-uploaded photo** is stored in the viewing cache under its URL, so it shows without being downloaded back.
+
 ## The storage policy
 
 Every receipt file on the device is recorded in the `ReceiptFiles` table with *why* it's there, which decides when it may go. The full table is in #123. Built so far:
@@ -30,5 +46,4 @@ Still to come: photos taken on this device and pending uploads (#124, never evic
 
 ## Not done yet
 
-- **Attaching:** camera and library, shrinking to 2048 px with location data removed, upload, and the form's "Not uploaded" / Retry / Remove (#123, second part).
-- Offline attachments (#124), on-device scanning (#125, #126), downloading ahead (#127).
+Offline attachments and restart durability (#124), on-device scanning (#125, #126), downloading ahead (#127).

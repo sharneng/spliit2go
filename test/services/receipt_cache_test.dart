@@ -160,6 +160,47 @@ void main() {
     expect(await filesOnDisk(), isEmpty);
   });
 
+  // #131 review (Ezra): a photo uploaded for an expense still pending is
+  // referenced by that expense, through its sync, until it's read again.
+  test('an unsynced expense\'s uploaded receipt survives refreshes and the sync', () async {
+    final receipts = cache();
+    const doc = ExpenseDocument(id: 'local-doc', url: 'https://bucket.test/document-new.jpg', width: 600, height: 900);
+    await receipts.store(doc.url, groupId: 'g1', bytes: List.filled(10, 1));
+    await db.insertPending(Expense(
+        id: 'local-1',
+        groupId: 'g1',
+        title: 'Coffee',
+        amountCents: 1860,
+        paidBy: 'p1',
+        paidFor: const [],
+        date: DateTime(2026, 9, 27),
+        pending: true,
+        documents: const [doc],
+        documentCount: 1));
+
+    // A refresh while it's pending (the server doesn't have it yet).
+    await db.replaceServerExpenses('g1', []);
+    await receipts.sweep();
+    expect(await receipts.cachedFile(doc.url), isNotNull);
+
+    // It syncs, then a refresh lists it with its one document.
+    await db.markSynced(localId: 'local-1', serverId: 'server-1');
+    expect((await db.watchExpenseDocuments('server-1').first).single.url, doc.url);
+    await db.replaceServerExpenses('g1', [
+      Expense(
+          id: 'server-1',
+          groupId: 'g1',
+          title: 'Coffee',
+          amountCents: 1860,
+          paidBy: 'p1',
+          paidFor: const [],
+          date: DateTime(2026, 9, 27),
+          documentCount: 1),
+    ]);
+    await receipts.sweep();
+    expect(await receipts.cachedFile(doc.url), isNotNull);
+  });
+
   // #130 review (Ezra): a sweep while a download is being stored must not
   // delete the file that load then returns.
   test('a sweep during a download waits, and never deletes the file being stored', () async {

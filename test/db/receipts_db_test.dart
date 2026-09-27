@@ -119,6 +119,7 @@ void main() {
     final file = File('${dir.path}/db.sqlite');
     final old = AppDatabase(NativeDatabase(file));
     await old.replaceServerExpenses('g1', [expense('e1', documents: 3)]);
+    await old.customStatement('ALTER TABLE expenses DROP COLUMN documents_json');
     await old.customStatement('ALTER TABLE expenses DROP COLUMN document_count');
     await old.customStatement('DROP TABLE expense_documents');
     await old.customStatement('DROP TABLE receipt_files');
@@ -133,5 +134,30 @@ void main() {
     await db.cacheExpenseDocuments('g1', 'e1', [doc('d1')]);
     expect(await db.watchExpenseDocuments('e1').first, hasLength(1));
     expect(await db.allReceiptFiles(), isEmpty);
+  });
+
+  test('a version 12 cache migrates, keeping a queued expense with no receipts', () async {
+    final dir = await Directory.systemTemp.createTemp('receipts-v12-migration-');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/db.sqlite');
+    final old = AppDatabase(NativeDatabase(file));
+    await old.insertPending(Expense(
+        id: 'local-1',
+        groupId: 'g1',
+        title: 'Coffee',
+        amountCents: 100,
+        paidBy: 'p1',
+        paidFor: const [],
+        date: DateTime(2026, 9, 23),
+        pending: true));
+    await old.customStatement('ALTER TABLE expenses DROP COLUMN documents_json');
+    await old.customStatement('PRAGMA user_version = 12');
+    await old.close();
+
+    final db = AppDatabase(NativeDatabase(file));
+    addTearDown(db.close);
+    final row = (await db.pendingExpensesForGroup('g1')).single;
+    expect(row.documentsJson, isNull);
+    expect(db.rowToExpense(row).documents, isEmpty);
   });
 }

@@ -119,7 +119,6 @@
   "expenseSplitAmount": "按金额",
   "expenseSaveDefaultSplit": "保存为默认分账设置",
   "expenseNotesLabel": "附注",
-  "expenseDocumentsPlaceholder": "附加文档——此应用暂不支持",
   "expenseSaveButton": "保存",
   "expenseSavingButton": "保存中…",
   "expenseCategorySearchLabel": "搜索类别",
@@ -237,5 +236,18 @@
   "appSettingsReceiptsCleared": "已清除保存的收据。",
   "appSettingsReceiptsClearFailed": "无法清除保存的收据。",
   "bytesKilobytes": "{size} KB",
-  "bytesMegabytes": "{size} MB"
+  "bytesMegabytes": "{size} MB",
+  "expenseReceiptAdd": "添加收据",
+  "expenseReceiptTakePhoto": "拍照",
+  "expenseReceiptChoosePhoto": "从相册选择",
+  "expenseReceiptUploading": "正在上传收据",
+  "expenseReceiptNotUploaded": "未上传",
+  "expenseReceiptNotUploadedConnection": "有收据未上传：无法连接服务器。轻点重试，或将其移除。",
+  "expenseReceiptNotUploadedServer": "有收据未上传。此服务器可能不保存收据。轻点重试，或将其移除。",
+  "expenseReceiptRemove": "移除收据",
+  "expenseReceiptPhotoFailed": "无法添加这张照片。",
+  "expenseReceiptsWaitBeforeSave": "请等待收据上传完成，或移除未上传的收据。",
+  "expenseReceiptsDiscardTitle": "放弃新添加的收据？",
+  "expenseReceiptsDiscardBody": "你添加的收据尚未随此消费保存。",
+  "expenseReceiptsDiscard": "放弃"
 }

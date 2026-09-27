@@ -298,6 +298,77 @@ class SpliitClient {
         .toList();
   }
 
+  /// Uploads a receipt image to the instance's own bucket and returns the
+  /// URL an expense document stores (#123), as the web app and spliit-ios
+  /// do (`DocumentUpload.swift`, 80b2e98):
+  ///
+  /// 1. `POST /api/s3-upload` (next-s3-upload, beside tRPC) signs a `PUT`.
+  /// 2. The image goes straight to the bucket, with the same headers the
+  ///    web app sends.
+  /// 3. Its public URL is the instance's endpoint, or AWS's, plus the key.
+  ///
+  /// An instance without storage answers step 1 with an empty 500, but so
+  /// does any other failure there, so nothing here concludes the server
+  /// doesn't store receipts (#123): a signing failure is a
+  /// [SpliitApiException], a refused upload a [ReceiptUploadException].
+  Future<String> uploadReceipt(List<int> bytes,
+      {String filename = 'receipt.jpg', String contentType = 'image/jpeg'}) async {
+    final sign = await _http.post(
+      Uri.parse('$baseUrl/api/s3-upload'),
+      headers: {'content-type': 'application/json', 'accept': 'application/json'},
+      body: jsonEncode({
+        'filename': filename,
+        'filetype': contentType,
+        '_nextS3': {'strategy': 'presigned'},
+      }),
+    );
+    if (sign.statusCode < 200 || sign.statusCode >= 300) {
+      throw SpliitApiException(sign.statusCode, sign.body);
+    }
+    final Map<String, dynamic> signature;
+    try {
+      signature = jsonDecode(sign.body) as Map<String, dynamic>;
+    } on FormatException catch (e) {
+      throw SpliitResponseFormatException('s3-upload: not JSON ($e)');
+    } on TypeError catch (e) {
+      throw SpliitResponseFormatException('s3-upload: not an object ($e)');
+    }
+    final key = signature['key'], bucket = signature['bucket'], putUrl = signature['url'];
+    if (key is! String || bucket is! String || putUrl is! String) {
+      throw SpliitResponseFormatException('s3-upload: missing key, bucket or url');
+    }
+    final put = await _http
+        .put(
+          Uri.parse(putUrl),
+          headers: {'content-type': contentType, 'cache-control': 'max-age=630720000'},
+          body: bytes,
+        )
+        .timeout(const Duration(minutes: 3));
+    if (put.statusCode < 200 || put.statusCode >= 300) {
+      throw ReceiptUploadException(put.statusCode);
+    }
+    return receiptPublicUrl(
+        key: key,
+        bucket: bucket,
+        region: signature['region'] as String?,
+        endpoint: signature['endpoint'] as String?);
+  }
+
+  /// Where an uploaded object can be read: the instance's own S3 endpoint
+  /// when it has one (next-s3-upload sends "undefined" when it doesn't),
+  /// else AWS's regional bucket host.
+  static String receiptPublicUrl(
+      {required String key, required String bucket, String? region, String? endpoint}) {
+    if (endpoint != null && endpoint.isNotEmpty && endpoint != 'undefined') {
+      var trimmed = endpoint;
+      while (trimmed.endsWith('/')) {
+        trimmed = trimmed.substring(0, trimmed.length - 1);
+      }
+      return '$trimmed/$bucket/$key';
+    }
+    return 'https://$bucket.s3.${region ?? ''}.amazonaws.com/$key';
+  }
+
   /// Builds the `expenseFormValues` payload shared by
   /// `groups.expenses.create` and `groups.expenses.update` -- the two
   /// mutations take an identical form shape (verified against
@@ -393,6 +464,7 @@ class SpliitClient {
     String? originalCurrency,
     double? conversionRate,
     String? participantId,
+    List<ExpenseDocument> documents = const [],
   }) async {
     final expenseFormValues = _expenseFormValues(
       title: title,
@@ -406,7 +478,8 @@ class SpliitClient {
       isReimbursement: isReimbursement,
       recurrenceRule: recurrenceRule,
       saveDefaultSplittingOptions: saveDefaultSplittingOptions,
-      documents: const [],
+      // Already uploaded; the server gives them new ids (#123, #124).
+      documents: documents,
       originalAmountCents: originalAmountCents,
       originalCurrency: originalCurrency,
       conversionRate: conversionRate,
@@ -700,6 +773,16 @@ class GroupNotFoundException implements UserError {
 
   @override
   String toString() => 'GroupNotFoundException: no group "$groupId" on $serverUrl';
+}
+
+/// Uploading a receipt image failed after the instance signed it: the
+/// bucket refused the upload (#123). Unexpected under the #119 policy.
+class ReceiptUploadException implements Exception {
+  final int statusCode;
+  ReceiptUploadException(this.statusCode);
+
+  @override
+  String toString() => 'ReceiptUploadException: the bucket answered HTTP $statusCode';
 }
 
 class SpliitApiException implements Exception {

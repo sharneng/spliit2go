@@ -80,7 +80,8 @@ void main() {
     await old.customStatement('ALTER TABLE expenses DROP COLUMN created_at');
     await old.customStatement(
         'ALTER TABLE expenses DROP COLUMN added_by_participant_id');
-    // Undo the version 12 receipts additions (#123).
+    // Undo the version 12 and 13 receipts additions (#123).
+    await old.customStatement('ALTER TABLE expenses DROP COLUMN documents_json');
     await old.customStatement('ALTER TABLE expenses DROP COLUMN document_count');
     await old.customStatement('DROP TABLE expense_documents');
     await old.customStatement('DROP TABLE receipt_files');

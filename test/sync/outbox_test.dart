@@ -384,4 +384,45 @@ void main() {
       expect((await flushAndCapture())['participantId'], 'None');
     });
   });
+
+  // #123: a new expense's receipts were uploaded when attached; the
+  // replayed create carries them, and syncing forgets the local copies,
+  // whose ids the server replaced.
+  test('flush() sends a pending expense\'s receipts, then drops them from the row', () async {
+    const receipt = ExpenseDocument(id: 'local-doc', url: 'https://b.test/a.jpg', width: 600, height: 900);
+    final e = pendingExpense('local-1');
+    await db.insertPending(Expense(
+      id: e.id,
+      groupId: e.groupId,
+      title: e.title,
+      amountCents: e.amountCents,
+      paidBy: e.paidBy,
+      paidFor: e.paidFor,
+      date: e.date,
+      pending: true,
+      documents: const [receipt],
+      documentCount: 1,
+    ));
+    final row = (await db.pendingExpensesForGroup('g1')).single;
+    expect(db.rowToExpense(row).documents.single.url, receipt.url);
+
+    http.Request? captured;
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async {
+        captured = req;
+        return http.Response('[{"result":{"data":{"json":{"expenseId":"server-1"}}}}]', 200);
+      }),
+    );
+    await Outbox(db, client, groupId: 'g1').flush();
+
+    expect(jsonDecode(captured!.body)['0']['json']['expenseFormValues']['documents'],
+        [receipt.toJson()]);
+    final synced = (await db.expensesForGroup('g1')).single;
+    expect(synced.id, 'server-1');
+    expect(synced.documentsJson, isNull);
+    expect(synced.documentCount, 1);
+    // Still referenced, under the server's expense id (#131 review).
+    expect((await db.watchExpenseDocuments('server-1').first).single.url, receipt.url);
+  });
 }

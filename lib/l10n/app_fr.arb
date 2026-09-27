@@ -119,7 +119,6 @@
   "expenseSplitAmount": "Montant",
   "expenseSaveDefaultSplit": "Enregistrer comme répartition par défaut",
   "expenseNotesLabel": "Notes",
-  "expenseDocumentsPlaceholder": "Joindre des documents – pas encore pris en charge dans cette application",
   "expenseSaveButton": "Enregistrer",
   "expenseSavingButton": "Enregistrement…",
   "expenseCategorySearchLabel": "Rechercher une catégorie",
@@ -237,5 +236,18 @@
   "appSettingsReceiptsCleared": "Reçus enregistrés effacés.",
   "appSettingsReceiptsClearFailed": "Impossible d’effacer les reçus enregistrés.",
   "bytesKilobytes": "{size} Ko",
-  "bytesMegabytes": "{size} Mo"
+  "bytesMegabytes": "{size} Mo",
+  "expenseReceiptAdd": "Ajouter un reçu",
+  "expenseReceiptTakePhoto": "Prendre une photo",
+  "expenseReceiptChoosePhoto": "Choisir dans la photothèque",
+  "expenseReceiptUploading": "Envoi du reçu",
+  "expenseReceiptNotUploaded": "Non envoyé",
+  "expenseReceiptNotUploadedConnection": "Un reçu n’a pas été envoyé : impossible de joindre le serveur. Touchez-le pour réessayer, ou retirez-le.",
+  "expenseReceiptNotUploadedServer": "Un reçu n’a pas été envoyé. Ce serveur n’enregistre peut-être pas les reçus. Touchez-le pour réessayer, ou retirez-le.",
+  "expenseReceiptRemove": "Retirer le reçu",
+  "expenseReceiptPhotoFailed": "Impossible d’ajouter cette photo.",
+  "expenseReceiptsWaitBeforeSave": "Attendez l’envoi des reçus, ou retirez ceux qui n’ont pas été envoyés.",
+  "expenseReceiptsDiscardTitle": "Abandonner les nouveaux reçus ?",
+  "expenseReceiptsDiscardBody": "Les reçus ajoutés n’ont pas été enregistrés avec cette dépense.",
+  "expenseReceiptsDiscard": "Abandonner"
 }

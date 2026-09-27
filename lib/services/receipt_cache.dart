@@ -117,8 +117,14 @@ class ReceiptCache {
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw ReceiptDownloadException(res.statusCode, url);
     }
-    return _exclusive(() => _store(url, groupId, res.bodyBytes));
+    return store(url, groupId: groupId, bytes: res.bodyBytes);
   }
+
+  /// Stores [bytes] as the image for [url]: a download, or a photo this
+  /// device just uploaded, so it shows without being downloaded back
+  /// (#123). Viewing cache, like any opened receipt.
+  Future<File> store(String url, {required String groupId, required List<int> bytes}) =>
+      _exclusive(() => _store(url, groupId, bytes));
 
   /// Writes [bytes] as the image for [url] and registers it. Runs under
   /// [_exclusive], so [sweep] never sees it half done.
