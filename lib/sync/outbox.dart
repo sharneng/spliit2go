@@ -1,6 +1,10 @@
+import 'package:drift/drift.dart' show Value;
+
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
+import '../models/expense.dart';
 import '../services/error_reporting.dart';
+import '../services/receipt_cache.dart';
 
 /// The entire sync engine. Because the app only supports offline *view*
 /// and *add* (never offline edit), there's no conflict resolution to do --
@@ -76,7 +80,16 @@ class Outbox {
     var synced = 0;
     for (final row in pendingRows) {
       final local = _db.rowToExpense(row);
+      // Whether a failure came from uploading its receipts (#124).
+      var uploading = true;
       try {
+        // A new expense syncs together with its receipts (#124, as
+        // revised with Kenneth and Ezra): its photos go up first, and
+        // it's created only once they all have, with all of them.
+        final photos = [
+          for (final a in await _db.attachmentsFor(row.id)) await _upload(a),
+        ];
+        uploading = false;
         final serverId = await _api.createExpense(
           groupId: local.groupId,
           title: local.title,
@@ -96,7 +109,8 @@ class Outbox {
           // (issue #92) -- see Expenses.addedByParticipantId.
           participantId: row.addedByParticipantId,
           // Uploaded when they were attached (#123).
-          documents: local.documents,
+          // Uploaded in the form (#123), and just now (#124).
+          documents: [...local.documents, ...photos],
         );
         // Updates the row in place rather than deleting it (issue #43)
         // -- deleting here and relying on the caller's follow-up
@@ -132,15 +146,47 @@ class Outbox {
         // retry/delete affordance instead (see GroupScreen's expense
         // list).
         final isClientError = e is SpliitApiException && e.statusCode >= 400 && e.statusCode < 500;
+        // A receipt the server didn't take, for any reason but the
+        // connection, won't go up by itself either (#124). The expense's
+        // details offer Retry, Sync without receipts, or Discard.
+        final receiptRefused = uploading && classifyError(e) != ErrorKind.connection;
         final retryCount = row.retryCount + 1;
         await _db.recordSyncFailure(
           id: row.id,
           error: e.toString(),
           retryCount: retryCount,
-          failed: isClientError || retryCount >= maxRetries,
+          failed: isClientError || receiptRefused || retryCount >= maxRetries,
         );
       }
     }
     return synced;
+  }
+
+  /// Gets a photo into the bucket (#124) and returns it as the document
+  /// the create sends; throws what the upload threw.
+  ///
+  /// The public URL is recorded before the transfer: if the app stops
+  /// mid-upload, the next flush asks the bucket whether the object
+  /// arrived, and signs and uploads again if not. That can leave an
+  /// orphan object in the bucket, which is accepted; exactly-once uploads
+  /// aren't promised.
+  Future<ExpenseDocument> _upload(ReceiptAttachmentRow a) async {
+    var url = a.url;
+    final arrived = switch (a.state) {
+      AttachmentState.uploaded => true,
+      AttachmentState.uploading => url != null && await _api.receiptExists(url),
+      AttachmentState.local => false,
+    };
+    if (!arrived) {
+      final bytes = await (await ReceiptCache.of(_db).fileNamed(a.fileName)).readAsBytes();
+      final target = await _api.signReceiptUpload();
+      url = target.publicUrl;
+      await _db.updateAttachment(a.id,
+          ReceiptAttachmentsCompanion(state: const Value(AttachmentState.uploading), url: Value(url)));
+      await _api.putReceipt(target, bytes);
+      await _db.updateAttachment(
+          a.id, const ReceiptAttachmentsCompanion(state: Value(AttachmentState.uploaded)));
+    }
+    return ExpenseDocument(id: a.id, url: url!, width: a.width, height: a.height);
   }
 }

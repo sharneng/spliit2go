@@ -217,6 +217,11 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   bool _docsOffline = false;
   String? _docsDiagnostics;
 
+  /// A pending expense's photos not uploaded yet (#124), shown from this
+  /// device.
+  StreamSubscription<List<ReceiptAttachmentRow>>? _attachmentSub;
+  List<ReceiptAttachmentRow> _attachments = const [];
+
   /// A close asked for while the Delete confirmation covered the sheet,
   /// with the action to close with. Popping then would close the dialog
   /// instead, so it waits for the confirmation to end (see [_delete]).
@@ -235,6 +240,9 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       if (!mounted) return;
       setState(() => _storedDocs = docs);
       _maybeFetchDocuments();
+    });
+    _attachmentSub = widget.db.watchAttachments(widget.expenseId).listen((rows) {
+      if (mounted) setState(() => _attachments = rows);
     });
     _onlineSub = widget.connectivity.listen(
       (online) {
@@ -256,6 +264,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   void dispose() {
     _rowSub?.cancel();
     _docSub?.cancel();
+    _attachmentSub?.cancel();
     _onlineSub?.cancel();
     super.dispose();
   }
@@ -549,6 +558,31 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     if (mounted) _close(const _Changed());
   }
 
+  /// Retry, without the photos that didn't upload (#124): they're
+  /// removed from this phone, which has their only copy, so it asks.
+  Future<void> _retryWithoutReceipts() async {
+    final l10n = context.l10n;
+    final confirmed = await showAdaptiveDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog.adaptive(
+        title: Text(l10n.expenseDetailsSyncWithoutReceiptsTitle),
+        content: Text(l10n.expenseDetailsSyncWithoutReceiptsBody),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false), child: Text(l10n.commonCancel)),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: TextButton.styleFrom(foregroundColor: Theme.of(dialogContext).colorScheme.error),
+              child: Text(l10n.expenseDetailsSyncWithoutReceipts)),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busy = true);
+    await widget.db.retrySyncFailure(widget.expenseId, withoutReceipts: true);
+    if (mounted) _close(const _Changed());
+  }
+
   Future<void> _discard() async {
     setState(() => _busy = true);
     // The row's own disappearance closes the sheet (see _onRow); this
@@ -676,7 +710,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
         const SizedBox(height: 4),
         SelectableText(e.notes),
       ],
-      if (e.documentCount > 0 || (_documentsOf(e)?.isNotEmpty ?? false)) ...[
+      if (e.documentCount > 0 || (_documentsOf(e)?.isNotEmpty ?? false) || _attachments.isNotEmpty) ...[
         const SizedBox(height: 16),
         ReceiptsSection(
           cache: ReceiptCache.of(widget.db),
@@ -685,6 +719,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
           documents: _documentsOf(e),
           online: _docsOffline ? false : _online,
           loadDiagnostics: _docsDiagnostics,
+          pending: _attachments,
         ),
       ],
     ];
@@ -727,6 +762,10 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
           Text(e.lastError!, maxLines: 3, overflow: TextOverflow.ellipsis, style: muted),
         const SizedBox(height: 4),
         Text(l10n.expenseDetailsFailedHint, style: muted),
+        if (_attachments.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(l10n.expenseDetailsReceiptsNotUploaded, style: muted),
+        ],
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -737,6 +776,12 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
               icon: const Icon(Icons.refresh),
               label: Text(l10n.commonRetry),
             ),
+            if (_attachments.isNotEmpty)
+              OutlinedButton.icon(
+                onPressed: _busy ? null : _retryWithoutReceipts,
+                icon: const Icon(Icons.sync),
+                label: Text(l10n.expenseDetailsSyncWithoutReceipts),
+              ),
             OutlinedButton.icon(
               onPressed: _busy ? null : _discard,
               style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error),

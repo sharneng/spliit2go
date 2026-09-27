@@ -32,6 +32,23 @@ class _FakeReceipts extends ReceiptCache {
     loaded.add(url);
     return File('/receipts/${url.split('/').last}');
   }
+
+  /// Photos kept for later (#124), as their file names.
+  final pending = <String>[];
+
+  @override
+  Future<void> storePending(
+      List<List<int>> photos, Future<void> Function(List<String> fileNames) register) async {
+    final names = [for (var i = 0; i < photos.length; i++) 'pending-${pending.length + i}.img'];
+    await register(names);
+    pending.addAll(names);
+  }
+
+  @override
+  Future<File> fileNamed(String fileName) async => File('/receipts/$fileName');
+
+  @override
+  Future<void> sweep() async {}
 }
 
 // Issue #123: an expense's receipts in its details sheet, and a viewer.
@@ -151,6 +168,7 @@ void main() {
     await openSheet(tester, db, s.client);
 
     expect(find.text('Receipts'), findsNothing);
+    expect(find.text('Add receipt'), findsNothing);
     expect(s.gets.single, 0);
     await closeTree(tester);
   });
@@ -340,4 +358,80 @@ void main() {
     expect(receiptImages(), findsNWidgets(2));
     await closeTree(tester);
   });
+
+  // #124: a pending expense's photos not uploaded yet.
+  Future<AppDatabase> pendingWithPhoto(WidgetTester tester, {bool failed = false}) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    ReceiptCache.use(_FakeReceipts(db));
+    await tester.runAsync(() async {
+      await db.insertPending(coffee(documents: 0).copyAsPending(), attachments: [
+        ReceiptAttachmentsCompanion.insert(
+          id: 'a1',
+          groupId: 'g1',
+          expenseId: 'e1',
+          fileName: 'a1.img',
+          bytes: 3,
+          width: 600,
+          height: 900,
+          state: AttachmentState.local,
+          createdAt: DateTime(2026, 9, 27),
+        ),
+      ]);
+      if (failed) {
+        await db.recordSyncFailure(
+            id: 'e1', error: 'SpliitApiException(500): ', retryCount: 1, failed: true);
+      }
+    });
+    return db;
+  }
+
+  SpliitClient offlineServer() => SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((_) async => throw http.ClientException('offline')));
+
+  testWidgets('a pending expense shows its photos "Not uploaded", and nothing to change',
+      (tester) async {
+    final db = await pendingWithPhoto(tester);
+    addTearDown(db.close);
+    await openSheet(tester, db, offlineServer());
+
+    expect(find.text('Not uploaded'), findsOneWidget);
+    expect(find.text("Not uploaded yet: it uploads once you're back online."), findsOneWidget);
+    expect(find.text('Add receipt'), findsNothing);
+    expect(find.text('Sync without receipts'), findsNothing);
+    await closeTree(tester);
+  });
+
+  testWidgets('a failed one with photos offers Sync without receipts, which asks first',
+      (tester) async {
+    final db = await pendingWithPhoto(tester, failed: true);
+    addTearDown(db.close);
+    await openSheet(tester, db, offlineServer());
+
+    expect(find.textContaining("If this server doesn't store receipts"), findsOneWidget);
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Sync without receipts'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('which has their only copy'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Sync without receipts'));
+    await tester.pumpAndSettle();
+
+    expect(await tester.runAsync(() => db.attachmentsFor('e1')), isEmpty);
+    final row = (await tester.runAsync(() => db.pendingExpensesForGroup('g1')))!.single;
+    expect(row.syncFailed, isFalse);
+    await closeTree(tester);
+  });
+}
+
+extension on Expense {
+  /// This expense as added on this device and not synced yet.
+  Expense copyAsPending() => Expense(
+        id: id,
+        groupId: groupId,
+        title: title,
+        amountCents: amountCents,
+        paidBy: paidBy,
+        paidFor: paidFor,
+        date: date,
+        pending: true,
+      );
 }

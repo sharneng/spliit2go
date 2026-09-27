@@ -820,7 +820,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 maxLines: 3,
                 maxLength: 5000, // matches Spliit's EXPENSE_NOTES_MAX
               ),
-              ReceiptAttachmentsField(controller: _receipts, onAdd: _addReceipt),
+              ReceiptAttachmentsField(
+                  controller: _receipts, onAdd: _addReceipt, keepsUnsent: !widget.isEditing),
               if (_saveError != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
@@ -1002,8 +1003,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       conversionRate = amountCents / originalAmountCents;
     }
 
-    if (_receipts.busy || _receipts.hasFailed) {
+    // A new expense keeps photos that didn't upload, and syncs with them
+    // later (#124); only ones still on their way hold it back. An edit is
+    // online-only: each new photo is uploaded or removed first, as before.
+    if (_receipts.busy) {
       setState(() => _saveError = context.l10n.expenseReceiptsWaitBeforeSave);
+      return;
+    }
+    if (widget.isEditing && _receipts.hasFailed) {
+      setState(() => _saveError = context.l10n.expenseReceiptsUploadOrRemove);
       return;
     }
 
@@ -1107,8 +1115,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     // which is the entire point. The outbox (triggered by the caller
     // after this returns) is what attempts the real sync. Who added it is
     // captured now, not when the outbox replays it (issue #92).
-    await widget.db.insertPending(expense,
-        addedByParticipantId: await _activityParticipant());
+    // With its photos that didn't upload, in one step (#124): a retried
+    // Save must never add the expense twice.
+    final addedBy = await _activityParticipant();
+    await _receipts.keepUnsent(
+        expenseId: expense.id,
+        save: (attachments) => widget.db.insertPending(expense,
+            addedByParticipantId: addedBy, attachments: attachments));
     await _rememberDefaultSplitIfRequested(paidFor);
 
     if (mounted) Navigator.of(context).pop(true);

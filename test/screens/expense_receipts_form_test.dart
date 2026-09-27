@@ -37,11 +37,27 @@ class _FakePicker implements ReceiptPhotoPicker {
 class _FakeReceipts extends ReceiptCache {
   _FakeReceipts(super.db);
   final stored = <String>[];
+  final kinds = <ReceiptFileKind>[];
+
+  /// Photos kept for later (#124), as their file names.
+  final pending = <String>[];
 
   @override
-  Future<File> store(String url, {required String groupId, required List<int> bytes}) async {
+  Future<File> store(String url,
+      {required String groupId,
+      required List<int> bytes,
+      ReceiptFileKind kind = ReceiptFileKind.viewing}) async {
     stored.add(url);
+    kinds.add(kind);
     return File('/receipts/stored');
+  }
+
+  @override
+  Future<void> storePending(
+      List<List<int>> photos, Future<void> Function(List<String> fileNames) register) async {
+    final names = [for (var i = 0; i < photos.length; i++) 'pending-${pending.length + i}.img'];
+    await register(names);
+    pending.addAll(names);
   }
 
   @override
@@ -191,8 +207,7 @@ void main() {
     await closeTree(tester);
   });
 
-  testWidgets('a failed upload stays, "Not uploaded", blocks Save, and can be retried (#119)',
-      (tester) async {
+  testWidgets('a failed upload stays, "Not uploaded", and can be retried (#119)', (tester) async {
     expectUnexpectedError<SpliitApiException>('Uploading a receipt');
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
@@ -205,17 +220,79 @@ void main() {
     expect(find.textContaining('This server may not store receipts'), findsOneWidget);
     expect(find.text('Tap for details'), findsOneWidget);
 
-    await fillAndSave(tester);
-    expect(popped, isEmpty);
-    expect(find.text("Wait for receipts to upload, or remove the ones that weren't."), findsOneWidget);
-    expect(await tester.runAsync(() => db.pendingExpensesForGroup('g1')), isEmpty);
-
     await tester.tap(find.text('Not uploaded'));
     await tester.pumpAndSettle();
     expect(find.text('Not uploaded'), findsNothing);
 
+    await fillAndSave(tester);
+    expect(popped, [true]);
+    final row = (await tester.runAsync(() => db.pendingExpensesForGroup('g1')))!.single;
+    expect(db.rowToExpense(row).documents, hasLength(1));
+    await closeTree(tester);
+  });
+
+  // #124: a photo that didn't upload used to block Save.
+  testWidgets('a photo that didn\'t upload doesn\'t hold Save back: it\'s kept with the new expense',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final popped = await openForm(tester, db, server(signs: [offline]).client, _FakePicker());
+
+    await addReceipt(tester);
+    expect(find.text('Not uploaded'), findsOneWidget);
+    expect(find.textContaining('You can still save'), findsOneWidget);
+    await fillAndSave(tester);
+
+    expect(popped, [true]);
+    final row = (await tester.runAsync(() => db.pendingExpensesForGroup('g1')))!.single;
+    expect(db.rowToExpense(row).documents, isEmpty);
+    final kept = (await tester.runAsync(() => db.attachmentsFor(row.id)))!.single;
+    expect((kept.state, kept.width, kept.height), (AttachmentState.local, 600, 900));
+    expect((ReceiptCache.of(db) as _FakeReceipts).pending, [kept.fileName]);
+    await closeTree(tester);
+  });
+
+  testWidgets('editing: a photo that didn\'t upload holds Save until it\'s uploaded or removed',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final s = server(signs: [offline]);
+    final popped = await openForm(tester, db, s.client, _FakePicker(),
+        existing: Expense(
+          id: 'e1',
+          groupId: 'g1',
+          title: 'Coffee',
+          amountCents: 1860,
+          paidBy: 'bea',
+          paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
+          date: DateTime(2026, 9, 23),
+        ));
+
+    await addReceipt(tester);
+    // Edits are online-only: nothing is kept for later.
+    expect(find.textContaining('You can still save'), findsNothing);
+    expect(find.textContaining("couldn't reach the server. Tap it to try again"), findsOneWidget);
+    await fillAndSave(tester, fill: false);
+
+    expect(popped, isEmpty);
+    expect(find.text("Wait for receipts to upload, or remove the ones that weren't."), findsOneWidget);
+    expect(s.requests.where((r) => r.url.path.endsWith('groups.expenses.update')), isEmpty);
+
+    await tester.tap(find.byTooltip('Remove receipt'));
+    await tester.pumpAndSettle();
     await fillAndSave(tester, fill: false);
     expect(popped, [true]);
+    await closeTree(tester);
+  });
+
+  testWidgets('a photo this device uploaded is kept as a capture, not viewing cache', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await openForm(tester, db, server().client, _FakePicker());
+
+    await addReceipt(tester);
+
+    expect((ReceiptCache.of(db) as _FakeReceipts).kinds, [ReceiptFileKind.capture]);
     await closeTree(tester);
   });
 

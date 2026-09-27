@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../api/spliit_client.dart';
+import '../db/app_database.dart';
 import '../l10n/context_l10n.dart';
 import '../models/expense.dart';
 import '../services/error_reporting.dart';
@@ -30,10 +31,12 @@ class ReceiptAttachment {
 /// The receipts in an open expense form (#123): the expense's existing
 /// documents, and photos added here.
 ///
-/// Phase 1's promise, as agreed on #123: a photo that isn't uploaded stays
-/// in this form, "Not uploaded", with Retry and Remove; the form can't be
-/// saved until each is uploaded or removed, and leaving asks first. It
-/// isn't kept if the app is closed mid-form; that's #124.
+/// A photo that isn't uploaded stays in this form, "Not uploaded", with
+/// Retry and Remove, and leaving asks first. For a new expense, Save
+/// keeps it with the expense, on this device, and the outbox uploads it
+/// before creating the expense (#124). An edit is online-only: Save waits
+/// until each is uploaded or removed. Either way, a photo isn't kept if
+/// the app is closed before Save: the form itself isn't a draft.
 class ReceiptAttachmentsController extends ChangeNotifier {
   ReceiptAttachmentsController({
     required this.client,
@@ -60,6 +63,41 @@ class ReceiptAttachmentsController extends ChangeNotifier {
 
   bool get busy => preparing > 0 || added.any((a) => a.state == ReceiptUpload.uploading);
   bool get hasFailed => added.any((a) => a.state == ReceiptUpload.failed);
+
+  /// Photos that didn't upload: saved with a new expense as attachments,
+  /// for the outbox (#124).
+  List<ReceiptAttachment> get unsent => [
+        for (final a in added)
+          if (a.state == ReceiptUpload.failed) a,
+      ];
+
+  /// Keeps [unsent] on this device for [expenseId] (#124): their files,
+  /// then [save] with their rows, in one step (see
+  /// ReceiptCache.storePending). [save] stores the rows, with a new
+  /// expense itself when there is one.
+  Future<void> keepUnsent(
+      {required String expenseId,
+      required Future<void> Function(List<ReceiptAttachmentsCompanion> rows) save}) {
+    final photos = unsent;
+    return cache.storePending([for (final a in photos) a.photo.bytes], (fileNames) {
+      final now = DateTime.now();
+      return save([
+        for (final (i, a) in photos.indexed)
+          ReceiptAttachmentsCompanion.insert(
+            id: ExpenseDocument.newId(),
+            groupId: groupId,
+            expenseId: expenseId,
+            fileName: fileNames[i],
+            bytes: a.photo.bytes.length,
+            width: a.photo.width,
+            height: a.photo.height,
+            state: AttachmentState.local,
+            // In the order they were added.
+            createdAt: now.add(Duration(microseconds: i)),
+          ),
+      ]);
+    });
+  }
 
   /// Photos added in this form: what leaving it would lose.
   bool get hasNew => added.isNotEmpty || preparing > 0;
@@ -125,7 +163,8 @@ class ReceiptAttachmentsController extends ChangeNotifier {
       final url = await client.uploadReceipt(a.photo.bytes);
       // Shown from this device, not downloaded back. Best effort.
       try {
-        await cache.store(url, groupId: groupId, bytes: a.photo.bytes);
+        await cache.store(url,
+            groupId: groupId, bytes: a.photo.bytes, kind: ReceiptFileKind.capture);
       } catch (e, st) {
         ErrorReporter.instance.report(e, st, operation: 'Storing an uploaded receipt');
       }
@@ -145,9 +184,14 @@ class ReceiptAttachmentsController extends ChangeNotifier {
 /// The form's Receipts field (#123): thumbnails with Remove, Retry on the
 /// ones that didn't upload, and Add receipt.
 class ReceiptAttachmentsField extends StatelessWidget {
-  const ReceiptAttachmentsField({super.key, required this.controller, required this.onAdd});
+  const ReceiptAttachmentsField(
+      {super.key, required this.controller, required this.onAdd, this.keepsUnsent = false});
 
   final ReceiptAttachmentsController controller;
+
+  /// Whether Save keeps photos that didn't upload (a new expense, #124),
+  /// which the message says.
+  final bool keepsUnsent;
 
   /// Asks where the photo comes from and adds it.
   final void Function(ReceiptSource source) onAdd;
@@ -195,9 +239,12 @@ class ReceiptAttachmentsField extends StatelessWidget {
               if (failure != null) ...[
                 const SizedBox(height: 4),
                 ErrorMessage(
-                  failure.kind == ErrorKind.connection
-                      ? l10n.expenseReceiptNotUploadedConnection
-                      : l10n.expenseReceiptNotUploadedServer,
+                  switch ((failure.kind == ErrorKind.connection, keepsUnsent)) {
+                    (true, true) => l10n.expenseReceiptNotUploadedConnection,
+                    (false, true) => l10n.expenseReceiptNotUploadedServer,
+                    (true, false) => l10n.expenseReceiptNotUploadedConnectionEdit,
+                    (false, false) => l10n.expenseReceiptNotUploadedServerEdit,
+                  },
                   diagnostics: failure.diagnostics,
                 ),
               ],
@@ -229,14 +276,17 @@ class _AddedPhoto extends StatelessWidget {
             child: Center(
               child: a.state == ReceiptUpload.uploading
                   ? Semantics(label: l10n.expenseReceiptUploading, child: const _Spinner(light: true))
-                  : Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.refresh, color: Colors.white),
-                        Text(l10n.expenseReceiptNotUploaded,
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.labelSmall?.copyWith(color: Colors.white)),
-                      ],
+                  : FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.refresh, color: Colors.white),
+                          Text(l10n.expenseReceiptNotUploaded,
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.labelSmall?.copyWith(color: Colors.white)),
+                        ],
+                      ),
                     ),
             ),
           ),
@@ -334,14 +384,18 @@ class _AddTile extends StatelessWidget {
           );
           if (source != null) onAdd(source);
         },
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.add_a_photo_outlined, color: theme.colorScheme.primary),
-            const SizedBox(height: 4),
-            Text(l10n.expenseReceiptAdd,
-                textAlign: TextAlign.center, style: theme.textTheme.labelSmall),
-          ],
+        // Scaled down to fit at large text sizes: the tile stays square.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add_a_photo_outlined, color: theme.colorScheme.primary),
+              const SizedBox(height: 4),
+              Text(l10n.expenseReceiptAdd,
+                  textAlign: TextAlign.center, style: theme.textTheme.labelSmall),
+            ],
+          ),
         ),
       ),
     );

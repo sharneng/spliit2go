@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../db/app_database.dart';
 import '../l10n/context_l10n.dart';
 import '../models/expense.dart';
 import '../services/error_reporting.dart';
@@ -26,6 +27,7 @@ class ReceiptsSection extends StatefulWidget {
     required this.documents,
     required this.online,
     this.loadDiagnostics,
+    this.pending = const [],
   });
 
   final ReceiptCache cache;
@@ -38,6 +40,10 @@ class ReceiptsSection extends StatefulWidget {
 
   /// Set when reading the documents failed unexpectedly (#119).
   final String? loadDiagnostics;
+
+  /// A pending expense's photos not uploaded yet (#124), shown from this
+  /// device after its documents, "Not uploaded".
+  final List<ReceiptAttachmentRow> pending;
 
   @override
   State<ReceiptsSection> createState() => _ReceiptsSectionState();
@@ -113,6 +119,9 @@ class _ReceiptsSectionState extends State<ReceiptsSection> {
                       documents: documents,
                       initialIndex: i),
                 ),
+            for (final a in widget.pending)
+              _PendingThumbnail(
+                  key: ValueKey('attachment-${a.id}'), cache: widget.cache, attachment: a),
           ],
         ),
         if (failure != null) ...[
@@ -122,12 +131,66 @@ class _ReceiptsSectionState extends State<ReceiptsSection> {
           const SizedBox(height: 4),
           Text(l10n.receiptAvailableWhenOnline, style: muted),
         ],
+        if (widget.pending.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(l10n.receiptWaitingToUpload, style: muted),
+        ],
       ],
     );
   }
 }
 
 enum _TileState { loading, loaded, offline, failed }
+
+/// A photo not on its expense yet (#124), from this device.
+class _PendingThumbnail extends StatelessWidget {
+  const _PendingThumbnail({super.key, required this.cache, required this.attachment});
+
+  final ReceiptCache cache;
+  final ReceiptAttachmentRow attachment;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
+    return Semantics(
+      label: l10n.expenseReceiptNotUploaded,
+      child: _Tile(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            FutureBuilder<File>(
+              future: cache.fileNamed(attachment.fileName),
+              builder: (context, file) => file.data == null
+                  ? const SizedBox.shrink()
+                  : Image.file(file.data!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const _TileIcon(Icons.broken_image_outlined)),
+            ),
+            ColoredBox(
+              color: Colors.black45,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.cloud_upload_outlined, color: Colors.white),
+                      Text(l10n.expenseReceiptNotUploaded,
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.labelSmall?.copyWith(color: Colors.white)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 /// One receipt, shown square and cropped, from this device when it's
 /// stored there, downloaded when it isn't (#123).
