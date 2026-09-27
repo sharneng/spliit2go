@@ -101,6 +101,32 @@ class ExpenseShare {
       );
 }
 
+/// A document (a receipt photo) attached to an expense on the server:
+/// Spliit's `ExpenseDocument`. The app doesn't show or add these yet (#123),
+/// but an update must send back every one the expense has, unchanged:
+/// Spliit's update deletes each existing document whose [id] isn't in
+/// the list it's sent (#128).
+class ExpenseDocument {
+  final String id;
+  final String url;
+  final int width;
+  final int height;
+  const ExpenseDocument(
+      {required this.id, required this.url, required this.width, required this.height});
+
+  /// Strict, unlike the lenient parsing above: a document this can't read
+  /// fails the edit (an unexpected error, #119) rather than being dropped,
+  /// since dropping it would delete it on the next save.
+  factory ExpenseDocument.fromJson(Map<String, dynamic> json) => ExpenseDocument(
+        id: json['id'] as String,
+        url: json['url'] as String,
+        width: (json['width'] as num).round(),
+        height: (json['height'] as num).round(),
+      );
+
+  Map<String, dynamic> toJson() => {'id': id, 'url': url, 'width': width, 'height': height};
+}
+
 class Expense {
   final String id;
   final String groupId;
@@ -153,6 +179,11 @@ class Expense {
   /// (issue #88). Null only for rows cached before it was stored.
   final DateTime? createdAt;
 
+  /// The documents attached on the server, as [fetchExpense] read them.
+  /// Only that fresh fetch, which edit mode uses, fills this in; the
+  /// cached list doesn't store them, so it's empty everywhere else (#128).
+  final List<ExpenseDocument> documents;
+
   const Expense({
     required this.id,
     required this.groupId,
@@ -173,5 +204,6 @@ class Expense {
     this.syncFailed = false,
     this.lastError,
     this.createdAt,
+    this.documents = const [],
   });
 }

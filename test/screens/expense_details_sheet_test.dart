@@ -51,7 +51,8 @@ void main() {
       );
 
   /// groups.expenses.get's response for [dinner].
-  String expenseResponse({String title = 'Dinner'}) => jsonEncode([
+  String expenseResponse({String title = 'Dinner', List<Map<String, Object>>? documents}) =>
+      jsonEncode([
         {
           'result': {
             'data': {
@@ -70,6 +71,7 @@ void main() {
                   'notes': 'Birthday dinner',
                   'expenseDate': '2026-09-16T00:00:00.000Z',
                   'isReimbursement': false,
+                  if (documents != null) 'documents': documents,
                 },
               },
             },
@@ -343,6 +345,44 @@ void main() {
     expect(updates, 1);
     expect(find.text('Edit expense'), findsNothing);
     expect(result, isTrue);
+    await closeTree(tester);
+  });
+
+  // #128: Spliit's update deletes every document missing from the list
+  // it's sent, so an edit that sent none removed receipts attached on the
+  // web or iOS.
+  testWidgets('an edit keeps the receipts attached elsewhere, ids and all', (tester) async {
+    tallView(tester);
+    final db = await cachedDb();
+    addTearDown(db.close);
+    const receipts = [
+      {'id': 'd1', 'url': 'https://bucket.test/document-1.jpg', 'width': 1536, 'height': 2048},
+      {'id': 'd2', 'url': 'https://bucket.test/document-2.jpg', 'width': 2048, 'height': 1024},
+    ];
+    http.Request? update;
+    await openSheet(tester, db, client: serverClient((req) async {
+      final url = req.url.toString();
+      if (url.contains('groups.expenses.get')) {
+        return http.Response(expenseResponse(documents: receipts), 200);
+      }
+      if (url.contains('groups.expenses.update')) {
+        update = req;
+        return http.Response('[{"result":{"data":{"json":{"expenseId":"e1"}}}}]', 200);
+      }
+      return http.Response('offline', 500);
+    }));
+
+    await tester.tap(inSheet(find.widgetWithText(FilledButton, 'Edit')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Dinner by the lake');
+    final save = find.widgetWithText(FilledButton, 'Save');
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+
+    final sent = jsonDecode(update!.body)['0']['json']['expenseFormValues'] as Map<String, dynamic>;
+    expect(sent['title'], 'Dinner by the lake');
+    expect(sent['documents'], receipts);
     await closeTree(tester);
   });
 

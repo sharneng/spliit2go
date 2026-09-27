@@ -22,6 +22,13 @@ Spliit's document upload needs a presigned-S3-upload flow (`next-s3-upload`, 5MB
 
 The form shows a disabled "Attach documents – not yet supported in this app" row instead of omitting the field silently, so the gap reads as deliberate rather than missed. As of 2026-09-20 that is still the case.
 
+**Edits keep existing documents ([#128](https://github.com/sharneng/spliit2go/issues/128), 2026-09-27).** Not supporting documents turned out not to be enough. Spliit's `updateExpense` keeps the documents it's sent, by `id`, and deletes every existing one missing from the list. So an edit that sent `documents: []` removed receipts attached on the web or iOS. The fix:
+- The fresh fetch before editing now reads each document's `id`, `url`, `width` and `height`, and the update sends them back unchanged.
+- `updateExpense` requires `documents`, so no edit can forget them.
+- Documents that can't be read fail the edit as an unexpected error (#119) rather than being treated as none, which would delete them on save.
+
+The cached expense list doesn't store documents; only that fresh fetch needs them. Showing and adding documents is planned in [#5](https://github.com/sharneng/spliit2go/issues/5) ([#123](https://github.com/sharneng/spliit2go/issues/123) onward).
+
 ## #17: edit expense
 
 Reuses the add-expense screen (`AddExpenseScreen` then, `ExpenseScreen` now) via an optional `existingExpense` parameter — identical fields, identical validation, branching only in `_save()` (new expense → local pending row + outbox; edit → direct online call).

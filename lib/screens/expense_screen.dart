@@ -1096,6 +1096,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       isReimbursement: _isReimbursement,
       recurrenceRule: _recurrenceRule,
       saveDefaultSplittingOptions: _saveDefaultSplittingOptions,
+      // Kept as fetched: Spliit deletes any not sent back (#128).
+      documents: widget.existingExpense!.documents,
       originalAmountCents: originalAmountCents,
       originalCurrency: originalCurrency,
       conversionRate: conversionRate,

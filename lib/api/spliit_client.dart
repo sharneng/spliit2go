@@ -258,7 +258,22 @@ class SpliitClient {
       originalCurrency: m['originalCurrency'] as String?,
       conversionRate: m['conversionRate'] == null ? null : _asDouble(m['conversionRate']),
       createdAt: m['createdAt'] == null ? null : _asDateTime(m['createdAt']),
+      documents: _documents(m['documents']),
     );
+  }
+
+  /// An expense's documents, which an update has to send back (#128).
+  /// Absent means none; anything unreadable is a format error rather
+  /// than an empty list, which the next save would turn into deletions.
+  static List<ExpenseDocument> _documents(Object? value) {
+    if (value == null) return const [];
+    try {
+      return [
+        for (final d in value as List) ExpenseDocument.fromJson(d as Map<String, dynamic>),
+      ];
+    } on TypeError catch (e) {
+      throw SpliitResponseFormatException('groups.expenses.get: unreadable documents ($e)');
+    }
   }
 
   /// Fetches the full category list, in the server's own order (already
@@ -292,10 +307,10 @@ class SpliitClient {
   /// is a form-only action flag on Spliit's side (there's no persisted
   /// column for it on the Expense model) -- it's still sent on every
   /// call, just never round-tripped back into our own [Expense] model.
-  /// "Attach documents" is deliberately not exposed here yet -- it needs
-  /// Spliit's presigned-S3-upload flow (next-s3-upload), a substantial
-  /// separate subsystem this app has no offline-queueing story for yet;
-  /// `documents` is always sent empty.
+  /// [documents] are sent back as they are: adding documents isn't
+  /// supported yet (#123), so a new expense has none and an edit keeps
+  /// the ones it has. Spliit deletes every existing document missing from
+  /// this list, so an edit must never send fewer than it fetched (#128).
   Map<String, dynamic> _expenseFormValues({
     required String title,
     required int amountCents,
@@ -308,6 +323,7 @@ class SpliitClient {
     required bool isReimbursement,
     required RecurrenceRule recurrenceRule,
     required bool saveDefaultSplittingOptions,
+    required List<ExpenseDocument> documents,
     int? originalAmountCents,
     String? originalCurrency,
     double? conversionRate,
@@ -328,7 +344,7 @@ class SpliitClient {
       'splitMode': splitMode.wireValue,
       'saveDefaultSplittingOptions': saveDefaultSplittingOptions,
       'isReimbursement': isReimbursement,
-      'documents': [],
+      'documents': [for (final d in documents) d.toJson()],
       'notes': notes,
       'recurrenceRule': recurrenceRule.wireValue,
       if (originalAmountCents != null) 'originalAmount': originalAmountCents,
@@ -382,6 +398,7 @@ class SpliitClient {
       isReimbursement: isReimbursement,
       recurrenceRule: recurrenceRule,
       saveDefaultSplittingOptions: saveDefaultSplittingOptions,
+      documents: const [],
       originalAmountCents: originalAmountCents,
       originalCurrency: originalCurrency,
       conversionRate: conversionRate,
@@ -445,6 +462,8 @@ class SpliitClient {
     required int amountCents,
     required String paidBy,
     required List<ExpenseShare> paidFor,
+    // Required, so no edit can forget them: see _expenseFormValues (#128).
+    required List<ExpenseDocument> documents,
     SplitMode splitMode = SplitMode.evenly,
     int category = 0,
     String notes = '',
@@ -469,6 +488,7 @@ class SpliitClient {
       isReimbursement: isReimbursement,
       recurrenceRule: recurrenceRule,
       saveDefaultSplittingOptions: saveDefaultSplittingOptions,
+      documents: documents,
       originalAmountCents: originalAmountCents,
       originalCurrency: originalCurrency,
       conversionRate: conversionRate,
