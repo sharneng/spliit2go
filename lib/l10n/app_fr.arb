@@ -250,9 +250,12 @@
   "expenseReceiptsDiscardTitle": "Abandonner les nouveaux reçus ?",
   "expenseReceiptsDiscardBody": "Les reçus ajoutés n’ont pas été enregistrés avec cette dépense.",
   "expenseReceiptsDiscard": "Abandonner",
-  "receiptRemove": "Retirer",
-  "receiptRemovePendingBody": "Il n’a pas été envoyé : ce téléphone en a la seule copie.",
-  "receiptRemovePendingTitle": "Retirer ce reçu ?",
-  "receiptUploadFailed": "Un reçu n’a pas pu être envoyé. Ce serveur n’enregistre peut-être pas les reçus ; la photo reste sur ce téléphone.",
+  "expenseDetailsSyncWithoutReceiptsBody": "Les reçus non envoyés sont retirés de ce téléphone, qui en a la seule copie. La dépense est ensuite synchronisée sans eux.",
+  "expenseDetailsSyncWithoutReceiptsTitle": "Synchroniser sans ses reçus ?",
+  "expenseDetailsSyncWithoutReceipts": "Synchroniser sans les reçus",
+  "expenseDetailsReceiptsNotUploaded": "Elle a des reçus non envoyés. Si ce serveur n’enregistre pas les reçus, synchronisez-la sans eux.",
+  "expenseReceiptsUploadOrRemove": "Attendez l’envoi des reçus, ou retirez ceux qui n’ont pas été envoyés.",
+  "expenseReceiptNotUploadedServerEdit": "Un reçu n’a pas été envoyé. Ce serveur n’enregistre peut-être pas les reçus. Touchez-le pour réessayer, ou retirez-le.",
+  "expenseReceiptNotUploadedConnectionEdit": "Un reçu n’a pas été envoyé : impossible de joindre le serveur. Touchez-le pour réessayer, ou retirez-le.",
   "receiptWaitingToUpload": "Pas encore envoyé : il sera envoyé dès le retour de la connexion."
 }

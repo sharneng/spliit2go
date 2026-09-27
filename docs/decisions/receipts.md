@@ -30,45 +30,37 @@ A receipt is an expense *document*: `{id, url, width, height}` (`src/lib/schemas
 - **When an upload fails (#119):** the photo stays in the form as "Not uploaded", with Retry (tap it) and Remove.
   - A connection failure says so.
   - Anything else is unexpected, with details. An empty 500 from the signing route is what an instance without storage returns, but so is any other failure there, so the message only says the server *may* not store receipts, and attaching is never disabled.
-- **Saving** waits only for photos still being prepared or uploaded. A photo that didn't upload is saved with the expense and uploads later (#124, below). Leaving the form with new photos asks first, and once it's discarded nothing new starts: a photo still being prepared isn't uploaded, and neither is a retry (#131 review). The form itself isn't a draft: a photo added but not saved is lost if the app is closed.
+- **Saving** a new expense waits only for photos still being prepared or uploaded; a photo that didn't upload is saved with the expense, which syncs with it later (#124, below). Saving an edit waits until each new photo is uploaded or removed. Leaving the form with new photos asks first, and once it's discarded nothing new starts: a photo still being prepared isn't uploaded, and neither is a retry (#131 review). The form itself isn't a draft: a photo added but not saved is lost if the app is closed.
 - **New expenses** carry their documents on the pending row (`documentsJson`, schema 13), and the outbox sends them with the create. Those count as references for cleanup, so a refresh while the expense is pending keeps its photos (#131 review). Once it syncs they move to `ExpenseDocuments` under the server's expense id, still with this device's ids (create gives documents new ones), until the next online open reads the real ones.
 - **Edits** send the kept documents plus the new ones. Update keeps the ids it's sent, so they're stored as the expense's documents straight away. Removing one only removes it from the expense.
 - **A just-uploaded photo** is stored under its URL as a *capture*, so it shows without being downloaded back, and isn't evicted.
 
 ## Offline, and kept across restarts (built, #124)
 
-**The expense and its receipts sync independently, and a receipt is never dropped** (Ezra, #124). A receipt is content the user provided, unlike a preference such as the default split (#119).
+**A new expense syncs together with its receipts** (Kenneth and Ezra, #124 and #138 review). The first design synced them independently: an expense could reach the server first, and its photos followed with a read and an update. That path, and an Add receipt in the expense details that fed it, brought most of the complexity and all three bugs found in review. Kenneth wants the details to stay read-only, and edits are online-only anyway, so the path was dropped.
 
-- **Where a photo waits:** a photo that isn't on its expense yet is a row in `ReceiptAttachments` (schema 15) plus its file in the receipts directory: a *pending original*. It gets there from:
-  - the form's Save, for a photo that didn't upload;
-  - the details sheet's **Add receipt**, which works offline, for any expense on this device except one whose sync failed.
-- **Three identities, kept apart** (#123):
-  - the *local attachment id*, stable from capture;
-  - the server's document id;
-  - the URL.
+- **Where a photo waits:** a new expense's photo that didn't upload in the form is a row in `ReceiptAttachments` (schema 15) plus its file in the receipts directory: a *pending original*. Save stores the expense and its photos in one step, so a retried Save can't add the expense twice.
+- **The outbox, per pending expense:**
+  1. It uploads the expense's photos one by one.
+  2. Once they're all up, it creates the expense with all of them.
+  3. Their rows go, and their files become captures.
 
-  An update keeps the ids it's sent, so a photo added to a synced expense goes up under its attachment id. A create gives documents new ids; the next read of the expense brings them.
+  Offline, the expense and its photos wait together.
 - **States:**
   - `local`: not uploaded;
   - `uploading(url)`: signed, with its public URL recorded *before* the transfer;
-  - `uploaded(url)`: in the bucket, not on the expense yet;
-  - `failed`: an unexpected failure, waiting for Retry.
+  - `uploaded(url)`: in the bucket, and the expense isn't created yet.
 
-  Once it's on the expense, the row goes and the file becomes a capture. All of it is in the database, so an app restart at any step resumes where it was.
-- **The outbox, for a pending expense:** it uploads the expense's photos one by one, creates the expense with the ones that made it, and keeps the rest for the now-synced expense. The expense is never held back by a photo.
-- **The outbox, for a synced expense** (a photo that didn't upload in time, or one added later):
-  1. It reads the expense.
-  2. It adds the photos missing from its documents, keeping the others under their server ids.
-  3. It updates.
+  All of this is in the database, so an app restart at any step resumes where it was: a photo already uploaded isn't sent again when the create is retried.
+- **Interrupted uploads:** the app can stop after the transfer and before `uploaded` is written. On the next flush, an `uploading` photo is checked with a `HEAD` of its public URL; spliit.app's bucket answers 200 when the object exists, 403 when it doesn't. If it's there, the photo becomes `uploaded`. If not, it's signed again (the old signature may have expired) and sent. **Exactly-once uploads aren't promised:** a retry can leave an unreferenced object in the bucket. That's accepted; losing the receipt or duplicating the expense isn't.
+- **Failures (#119, #44):**
+  - A connection failure counts like any failed sync attempt, and the next flush tries again.
+  - Anything else while uploading, such as a server that may not store receipts, marks the expense sync failed at once, with the error. Its details offer **Retry**, **Discard**, and **Sync without receipts**. Sync without receipts asks first, since the phone has the only copy, then drops the photos and syncs the expense.
 
-  If an update's response is lost, the next read shows the photo is there, so nothing is added twice. This doesn't solve the lost-response problem for *creating* the expense itself.
-- **Interrupted uploads:** the app can stop after the transfer and before `uploaded` is written. On the next flush, an `uploading` photo is checked with a `HEAD` of its public URL; spliit.app's bucket answers 200 when the object exists, 403 when it doesn't. If it's there, the photo becomes `uploaded`; if not, it's signed again (the old signature may have expired) and sent. **Exactly-once uploads aren't promised:** a retry can leave an unreferenced object in the bucket. That's accepted; losing the receipt or duplicating the expense isn't.
-- **Failures (#119):**
-  - A connection failure leaves the photo as it was, and the next flush (reconnecting, a refresh) tries again. It shows "Not uploaded yet: it uploads once you're back online."
-  - Anything else is logged once and waits for **Retry**, with details. The message says the server may not store receipts and that the photo stays on this phone. It never says it was uploaded or discarded.
-- **Remove** asks first, since the phone has the only copy.
-- **Discarding** a sync-failed expense removes its photos. So does leaving the group.
-- **An expense deleted on the server** can't take its waiting photos, and nothing would show them, so they're removed when the outbox finds it gone.
+  So a receipt is only ever dropped by the user's explicit choice.
+- **Edits** stay online-only: Save waits until each new photo is uploaded or removed, as before #124.
+- **Identities:** a create gives documents new ids, so the local attachment id is never taken for the server's; the next read of the expense brings the real ones (#123).
+- **Overlapping syncs:** the outbox runs one group's flushes one after another (#141), so two can't both create the same expense.
 
 ## The storage policy
 
@@ -77,7 +69,7 @@ Every receipt file on the device is recorded in the `ReceiptFiles` table with *w
 - **Viewing cache:** receipts that were opened. Capped at about 200 MB, least recently used out first; the receipt being viewed is never evicted.
 - **Cleanup by reference:** when a refresh, a delete or leaving a group removes an expense or document, the database drops its file's row in the same transaction, and `ReceiptCache.sweep` deletes files no row refers to (at startup, after a refresh, after leaving a group). Downloads are written under a temporary name and renamed, so a partial file is never taken for a receipt, and storing a file (write, rename, register) and a sweep run one at a time, so a sweep can't delete a file mid-store (#130 review).
 
-- **Pending originals** (#124): photos not on their expense yet. Never evicted, never removed by Clear or by a sweep; removed only when they're on the expense, when the user removes one, or with a discarded expense or a group left.
+- **Pending originals** (#124): a new expense's photos not uploaded yet. Never evicted, never removed by Clear or by a sweep; removed only when the expense is created with them, by Sync without receipts, or with a discarded expense or a group left.
 - **Captures** (#124): photos from this device that are on their expense. Never evicted; removed by Clear, and with their document, expense or group. Storage's size and Clear cover stored receipts and captures, not pending originals.
 
 Still to come: downloading a favorite group's receipts ahead for offline (#127), with the free-space margin it needs.

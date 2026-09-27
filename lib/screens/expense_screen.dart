@@ -820,7 +820,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 maxLines: 3,
                 maxLength: 5000, // matches Spliit's EXPENSE_NOTES_MAX
               ),
-              ReceiptAttachmentsField(controller: _receipts, onAdd: _addReceipt),
+              ReceiptAttachmentsField(
+                  controller: _receipts, onAdd: _addReceipt, keepsUnsent: !widget.isEditing),
               if (_saveError != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
@@ -1002,10 +1003,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       conversionRate = amountCents / originalAmountCents;
     }
 
-    // Photos that didn't upload don't hold Save back: they're kept with
-    // the expense and uploaded later (#124). Ones still on their way do.
+    // A new expense keeps photos that didn't upload, and syncs with them
+    // later (#124); only ones still on their way hold it back. An edit is
+    // online-only: each new photo is uploaded or removed first, as before.
     if (_receipts.busy) {
       setState(() => _saveError = context.l10n.expenseReceiptsWaitBeforeSave);
+      return;
+    }
+    if (widget.isEditing && _receipts.hasFailed) {
+      setState(() => _saveError = context.l10n.expenseReceiptsUploadOrRemove);
       return;
     }
 
@@ -1179,11 +1185,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     } catch (e, st) {
       ErrorReporter.instance.report(e, st, operation: 'Storing an edited expense\'s receipts');
     }
-    // Photos that didn't upload: added to the expense later (#124).
-    // Retrying Save after a failure here repeats the update, which is
-    // harmless: it keeps the ids it's sent.
-    await _receipts.keepUnsent(
-        expenseId: widget.existingExpense!.id, save: widget.db.addAttachments);
     await _rememberDefaultSplitIfRequested(paidFor);
     if (mounted) Navigator.of(context).pop(true);
   }

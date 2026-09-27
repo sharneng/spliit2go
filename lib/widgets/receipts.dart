@@ -7,9 +7,7 @@ import '../l10n/context_l10n.dart';
 import '../models/expense.dart';
 import '../services/error_reporting.dart';
 import '../services/receipt_cache.dart';
-import '../services/receipt_photo.dart';
 import 'error_message.dart';
-import 'receipt_attachments.dart';
 
 /// An expense's receipts (#123): a row of thumbnails that open a
 /// full-screen viewer.
@@ -30,8 +28,6 @@ class ReceiptsSection extends StatefulWidget {
     required this.online,
     this.loadDiagnostics,
     this.pending = const [],
-    this.onPendingTap,
-    this.onAdd,
   });
 
   final ReceiptCache cache;
@@ -45,13 +41,9 @@ class ReceiptsSection extends StatefulWidget {
   /// Set when reading the documents failed unexpectedly (#119).
   final String? loadDiagnostics;
 
-  /// Photos not on the expense yet (#124), shown from this device after
-  /// its documents, "Not uploaded".
+  /// A pending expense's photos not uploaded yet (#124), shown from this
+  /// device after its documents, "Not uploaded".
   final List<ReceiptAttachmentRow> pending;
-  final void Function(ReceiptAttachmentRow attachment)? onPendingTap;
-
-  /// Adds a receipt (#124); no Add tile without it.
-  final void Function(ReceiptSource source)? onAdd;
 
   @override
   State<ReceiptsSection> createState() => _ReceiptsSectionState();
@@ -129,12 +121,7 @@ class _ReceiptsSectionState extends State<ReceiptsSection> {
                 ),
             for (final a in widget.pending)
               _PendingThumbnail(
-                key: ValueKey('attachment-${a.id}'),
-                cache: widget.cache,
-                attachment: a,
-                onTap: widget.onPendingTap == null ? null : () => widget.onPendingTap!(a),
-              ),
-            if (widget.onAdd case final onAdd?) AddReceiptTile(onAdd: onAdd),
+                  key: ValueKey('attachment-${a.id}'), cache: widget.cache, attachment: a),
           ],
         ),
         if (failure != null) ...[
@@ -144,11 +131,7 @@ class _ReceiptsSectionState extends State<ReceiptsSection> {
           const SizedBox(height: 4),
           Text(l10n.receiptAvailableWhenOnline, style: muted),
         ],
-        if (widget.pending.where((a) => a.state == AttachmentState.failed).firstOrNull
-            case final failed?) ...[
-          const SizedBox(height: 4),
-          ErrorMessage(l10n.receiptUploadFailed, diagnostics: failed.lastError),
-        ] else if (widget.pending.isNotEmpty) ...[
+        if (widget.pending.isNotEmpty) ...[
           const SizedBox(height: 4),
           Text(l10n.receiptWaitingToUpload, style: muted),
         ],
@@ -161,22 +144,18 @@ enum _TileState { loading, loaded, offline, failed }
 
 /// A photo not on its expense yet (#124), from this device.
 class _PendingThumbnail extends StatelessWidget {
-  const _PendingThumbnail({super.key, required this.cache, required this.attachment, this.onTap});
+  const _PendingThumbnail({super.key, required this.cache, required this.attachment});
 
   final ReceiptCache cache;
   final ReceiptAttachmentRow attachment;
-  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final theme = Theme.of(context);
-    final failed = attachment.state == AttachmentState.failed;
     return Semantics(
-      button: onTap != null,
       label: l10n.expenseReceiptNotUploaded,
       child: _Tile(
-        onTap: onTap,
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -197,8 +176,7 @@ class _PendingThumbnail extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(failed ? Icons.error_outline : Icons.cloud_upload_outlined,
-                          color: Colors.white),
+                      const Icon(Icons.cloud_upload_outlined, color: Colors.white),
                       Text(l10n.expenseReceiptNotUploaded,
                           textAlign: TextAlign.center,
                           style: theme.textTheme.labelSmall?.copyWith(color: Colors.white)),

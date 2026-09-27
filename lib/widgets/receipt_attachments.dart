@@ -32,10 +32,11 @@ class ReceiptAttachment {
 /// documents, and photos added here.
 ///
 /// A photo that isn't uploaded stays in this form, "Not uploaded", with
-/// Retry and Remove, and leaving asks first. Saving keeps it with the
-/// expense, on this device, and the outbox uploads it later (#124); only
-/// photos still being prepared or uploaded hold Save back. It isn't kept
-/// if the app is closed before Save: the form itself isn't a draft.
+/// Retry and Remove, and leaving asks first. For a new expense, Save
+/// keeps it with the expense, on this device, and the outbox uploads it
+/// before creating the expense (#124). An edit is online-only: Save waits
+/// until each is uploaded or removed. Either way, a photo isn't kept if
+/// the app is closed before Save: the form itself isn't a draft.
 class ReceiptAttachmentsController extends ChangeNotifier {
   ReceiptAttachmentsController({
     required this.client,
@@ -63,7 +64,7 @@ class ReceiptAttachmentsController extends ChangeNotifier {
   bool get busy => preparing > 0 || added.any((a) => a.state == ReceiptUpload.uploading);
   bool get hasFailed => added.any((a) => a.state == ReceiptUpload.failed);
 
-  /// Photos that didn't upload: saved with the expense as attachments,
+  /// Photos that didn't upload: saved with a new expense as attachments,
   /// for the outbox (#124).
   List<ReceiptAttachment> get unsent => [
         for (final a in added)
@@ -183,9 +184,14 @@ class ReceiptAttachmentsController extends ChangeNotifier {
 /// The form's Receipts field (#123): thumbnails with Remove, Retry on the
 /// ones that didn't upload, and Add receipt.
 class ReceiptAttachmentsField extends StatelessWidget {
-  const ReceiptAttachmentsField({super.key, required this.controller, required this.onAdd});
+  const ReceiptAttachmentsField(
+      {super.key, required this.controller, required this.onAdd, this.keepsUnsent = false});
 
   final ReceiptAttachmentsController controller;
+
+  /// Whether Save keeps photos that didn't upload (a new expense, #124),
+  /// which the message says.
+  final bool keepsUnsent;
 
   /// Asks where the photo comes from and adds it.
   final void Function(ReceiptSource source) onAdd;
@@ -227,15 +233,18 @@ class ReceiptAttachmentsField extends StatelessWidget {
                     ),
                   for (var i = 0; i < controller.preparing; i++)
                     const _RemovableTile(child: _Spinner()),
-                  AddReceiptTile(onAdd: onAdd),
+                  _AddTile(onAdd: onAdd),
                 ],
               ),
               if (failure != null) ...[
                 const SizedBox(height: 4),
                 ErrorMessage(
-                  failure.kind == ErrorKind.connection
-                      ? l10n.expenseReceiptNotUploadedConnection
-                      : l10n.expenseReceiptNotUploadedServer,
+                  switch ((failure.kind == ErrorKind.connection, keepsUnsent)) {
+                    (true, true) => l10n.expenseReceiptNotUploadedConnection,
+                    (false, true) => l10n.expenseReceiptNotUploadedServer,
+                    (true, false) => l10n.expenseReceiptNotUploadedConnectionEdit,
+                    (false, false) => l10n.expenseReceiptNotUploadedServerEdit,
+                  },
                   diagnostics: failure.diagnostics,
                 ),
               ],
@@ -336,9 +345,8 @@ class _RemovableTile extends StatelessWidget {
   }
 }
 
-/// "Add receipt", which asks for the camera or the library.
-class AddReceiptTile extends StatelessWidget {
-  const AddReceiptTile({super.key, required this.onAdd});
+class _AddTile extends StatelessWidget {
+  const _AddTile({required this.onAdd});
   final void Function(ReceiptSource source) onAdd;
 
   @override

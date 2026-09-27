@@ -240,22 +240,22 @@ void main() {
 
     await addReceipt(tester);
     expect(find.text('Not uploaded'), findsOneWidget);
+    expect(find.textContaining('You can still save'), findsOneWidget);
     await fillAndSave(tester);
 
     expect(popped, [true]);
     final row = (await tester.runAsync(() => db.pendingExpensesForGroup('g1')))!.single;
     expect(db.rowToExpense(row).documents, isEmpty);
-    final kept = (await tester.runAsync(() => db.watchAttachments(row.id).first))!.single;
+    final kept = (await tester.runAsync(() => db.attachmentsFor(row.id)))!.single;
     expect((kept.state, kept.width, kept.height), (AttachmentState.local, 600, 900));
     expect((ReceiptCache.of(db) as _FakeReceipts).pending, [kept.fileName]);
     await closeTree(tester);
   });
 
-  testWidgets('editing: a photo that didn\'t upload is kept for the expense, and the edit saves',
+  testWidgets('editing: a photo that didn\'t upload holds Save until it\'s uploaded or removed',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
-    const d1 = ExpenseDocument(id: 'd1', url: 'https://b.test/1.jpg', width: 600, height: 900);
     final s = server(signs: [offline]);
     final popped = await openForm(tester, db, s.client, _FakePicker(),
         existing: Expense(
@@ -266,18 +266,22 @@ void main() {
           paidBy: 'bea',
           paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
           date: DateTime(2026, 9, 23),
-          documents: const [d1],
-          documentCount: 1,
         ));
 
     await addReceipt(tester);
+    // Edits are online-only: nothing is kept for later.
+    expect(find.textContaining('You can still save'), findsNothing);
+    expect(find.textContaining("couldn't reach the server. Tap it to try again"), findsOneWidget);
     await fillAndSave(tester, fill: false);
 
+    expect(popped, isEmpty);
+    expect(find.text("Wait for receipts to upload, or remove the ones that weren't."), findsOneWidget);
+    expect(s.requests.where((r) => r.url.path.endsWith('groups.expenses.update')), isEmpty);
+
+    await tester.tap(find.byTooltip('Remove receipt'));
+    await tester.pumpAndSettle();
+    await fillAndSave(tester, fill: false);
     expect(popped, [true]);
-    final update = s.requests.lastWhere((r) => r.url.path.endsWith('groups.expenses.update'));
-    expect(jsonDecode(update.body)['0']['json']['expenseFormValues']['documents'], [d1.toJson()]);
-    final kept = (await tester.runAsync(() => db.watchAttachments('e1').first))!.single;
-    expect(kept.state, AttachmentState.local);
     await closeTree(tester);
   });
 

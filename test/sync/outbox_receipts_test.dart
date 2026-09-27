@@ -14,9 +14,10 @@ import 'package:spliit2go/sync/outbox.dart';
 
 import '../support/error_log.dart';
 
-/// A Spliit instance and its bucket, with the document rules of
-/// src/lib/api.ts (cc796210): create gives documents new ids; update
-/// keeps the ids it's sent and drops the rest.
+/// A Spliit instance and its bucket, with create's document rule from
+/// src/lib/api.ts (cc796210): documents get new ids. There's no read or
+/// update: a new expense syncs with its receipts, so the outbox never
+/// needs them (#124).
 class _Spliit {
   final bucket = <String, List<int>>{};
   final expenses = <String, List<Map<String, Object?>>>{};
@@ -25,9 +26,6 @@ class _Spliit {
 
   /// Makes the named step fail: with `offline`, or an HTTP status.
   final failing = <String, Object>{};
-
-  /// Applies the next update, then loses its response.
-  bool loseUpdateResponse = false;
 
   /// Drops transfers from this one on (1-based), as a lost connection
   /// would, until cleared.
@@ -52,8 +50,6 @@ class _Spliit {
         final p when p.startsWith('/put/') => 'put',
         final p when p.startsWith('/b/') => 'head',
         final p when p.endsWith('groups.expenses.create') => 'create',
-        final p when p.endsWith('groups.expenses.get') => 'get',
-        final p when p.endsWith('groups.expenses.update') => 'update',
         final p => throw StateError('unexpected request $p'),
       };
       calls.add(step);
@@ -81,33 +77,8 @@ class _Spliit {
             for (final d in values['documents'] as List) {...(d as Map).cast<String, Object?>(), 'id': _id('srv-doc')},
           ];
           return _trpc({'expenseId': id});
-        case 'get':
-          final input = jsonDecode(req.url.queryParameters['input']!)['0']['json'] as Map;
-          final docs = expenses[input['expenseId']];
-          if (docs == null) return http.Response('{"error":{"json":{"message":"NOT_FOUND"}}}', 404);
-          return _trpc({
-            'expense': {
-              'id': input['expenseId'],
-              'title': 'Coffee',
-              'amount': 500,
-              'paidBy': {'id': 'p1'},
-              'paidFor': [
-                {'participantId': 'p1', 'shares': 1},
-              ],
-              'expenseDate': '2026-09-27T00:00:00.000Z',
-              'documents': docs,
-            },
-          });
-        default: // update
-          final json = jsonDecode(req.body)['0']['json'] as Map;
-          expenses[json['expenseId'] as String] = [
-            for (final d in (json['expenseFormValues'] as Map)['documents'] as List) (d as Map).cast(),
-          ];
-          if (loseUpdateResponse) {
-            loseUpdateResponse = false;
-            throw http.ClientException('connection reset');
-          }
-          return _trpc({'expenseId': json['expenseId']});
+        default:
+          throw StateError('unhandled $step');
       }
     }),
   );
@@ -154,75 +125,72 @@ void main() {
         documentCount: documents.length,
       );
 
-  /// Stores a photo for [expenseId], as the form or the sheet does.
-  Future<String> attach(String expenseId,
-      {AttachmentState state = AttachmentState.local, String? url}) async {
-    final id = 'att-${++photos}';
+  /// A pending expense [id] with photos in [states] (with their URLs), as
+  /// the form's Save stores them: files and rows in one step.
+  Future<List<String>> pendingWith(String id,
+      [List<(AttachmentState, String?)> states = const [(AttachmentState.local, null)]]) async {
+    final ids = [for (final _ in states) 'att-${++photos}'];
     await cache.storePending(
-        [List.filled(10, photos)],
-        (fileNames) => db.addAttachments([
-              ReceiptAttachmentsCompanion.insert(
-                id: id,
-                groupId: 'g1',
-                expenseId: expenseId,
-                fileName: fileNames.single,
-                bytes: 10,
-                width: 600,
-                height: 900,
-                state: state,
-                url: Value(url),
-                createdAt: DateTime(2026, 9, 27, 12, photos),
-              ),
+        [for (final (i, _) in states.indexed) List.filled(10, i + 1)],
+        (fileNames) => db.insertPending(expense(id), attachments: [
+              for (final (i, (state, url)) in states.indexed)
+                ReceiptAttachmentsCompanion.insert(
+                  id: ids[i],
+                  groupId: 'g1',
+                  expenseId: id,
+                  fileName: fileNames[i],
+                  bytes: 10,
+                  width: 600,
+                  height: 900,
+                  state: state,
+                  url: Value(url),
+                  createdAt: DateTime(2026, 9, 27, 12, i),
+                ),
             ]));
-    return id;
+    return ids;
   }
 
-  Future<List<ReceiptAttachmentRow>> attachments(String expenseId) =>
-      db.watchAttachments(expenseId).first;
+  Future<List<ReceiptAttachmentRow>> attachments(String expenseId) => db.attachmentsFor(expenseId);
 
-  Future<String> syncedId() async => (await db.expensesForGroup('g1')).single.id;
+  Future<ExpenseRow> onlyRow() async => (await db.expensesForGroup('g1')).single;
 
-  test('a photo that uploads is created with its expense, and becomes a capture', () async {
-    await db.insertPending(expense('local-1'));
-    await attach('local-1');
+  test('the photos go up first, and the expense is created with them; they become captures',
+      () async {
+    await pendingWith('local-1', [(AttachmentState.local, null), (AttachmentState.local, null)]);
 
     await flush();
 
-    final id = await syncedId();
-    expect(spliit.expenses[id], hasLength(1));
-    expect(await attachments(id), isEmpty);
-    final url = spliit.expenses[id]!.single['url'] as String;
-    expect((await db.receiptFile(url))!.kind, ReceiptFileKind.capture);
-    expect(await cache.cachedFile(url), isNotNull);
+    final row = await onlyRow();
+    expect(row.pending, isFalse);
+    expect(spliit.expenses[row.id], hasLength(2));
+    expect(row.documentCount, 2);
+    expect(await attachments('local-1'), isEmpty);
+    for (final d in spliit.expenses[row.id]!) {
+      expect((await db.receiptFile(d['url'] as String))!.kind, ReceiptFileKind.capture);
+    }
+    expect(await dir.list().length, 2);
   });
 
-  test('a transient upload failure: the expense syncs, the photo stays and uploads on reconnect',
-      () async {
-    await db.insertPending(expense('local-1'));
-    final att = await attach('local-1');
+  test('offline, the expense and its photos wait together, and nothing is logged', () async {
+    await pendingWith('local-1');
     spliit.failing['sign'] = 'offline';
 
     await flush();
 
-    final id = await syncedId();
-    expect(spliit.expenses[id], isEmpty);
-    final waiting = (await attachments(id)).single;
-    expect((waiting.id, waiting.state), (att, AttachmentState.local));
+    expect(spliit.count('create'), 0);
+    expect((await onlyRow()).pending, isTrue);
+    expect((await attachments('local-1')).single.state, AttachmentState.local);
+    expect(loggedUnexpectedErrors, isEmpty);
 
     spliit.failing.clear();
     await flush();
 
-    expect(spliit.expenses[id]!.single['id'], att);
-    expect(await attachments(id), isEmpty);
-    expect((await db.watchExpenseDocuments(id).first).single.id, att);
-    expect((await db.expensesForGroup('g1')).single.documentCount, 1);
-    expect(loggedUnexpectedErrors, isEmpty);
+    expect(spliit.expenses[(await onlyRow()).id], hasLength(1));
   });
 
   test('upload succeeds, then the create fails: the retry reuses the upload', () async {
     expectUnexpectedError<SpliitApiException>('Syncing expense local-1');
-    await db.insertPending(expense('local-1'));
-    await attach('local-1');
+    await pendingWith('local-1');
     spliit.failing['create'] = 500;
 
     await flush();
@@ -232,126 +200,104 @@ void main() {
     await flush();
 
     expect(spliit.count('put'), 1);
-    expect(spliit.expenses[await syncedId()], hasLength(1));
+    expect(spliit.expenses[(await onlyRow()).id], hasLength(1));
   });
 
-  test('several photos, partial success: the rest attach later, nothing twice, server ids kept',
+  test('several photos, the connection drops mid-way: the expense waits, and nothing goes up twice',
       () async {
-    await db.insertPending(expense('local-1'));
-    await attach('local-1');
-    final second = await attach('local-1');
+    await pendingWith('local-1', [(AttachmentState.local, null), (AttachmentState.local, null)]);
     spliit.dropPut = 2; // the connection drops during the second transfer
 
     await flush();
 
-    final id = await syncedId();
-    // Created with the first; create gave it the server's own id.
-    final first = spliit.expenses[id]!.single;
-    expect(first['id'], startsWith('srv-doc'));
-    expect((await attachments(id)).single.id, second);
+    expect(spliit.count('create'), 0);
+    expect([for (final a in await attachments('local-1')) a.state],
+        [AttachmentState.uploaded, AttachmentState.uploading]);
 
     spliit.dropPut = null;
     await flush();
 
-    // The first kept its server id; the second went under its own.
-    expect([for (final d in spliit.expenses[id]!) d['id']], [first['id'], second]);
-    expect({for (final d in spliit.expenses[id]!) d['url']}, hasLength(2));
-    expect(await attachments(id), isEmpty);
-    expect(spliit.count('update'), 1);
+    // The first isn't sent again; the second is.
+    expect(spliit.count('put'), 3);
+    expect({for (final d in spliit.expenses[(await onlyRow()).id]!) d['url']}, hasLength(2));
+  });
+
+  // #138 review (Ezra): a rejected create deleted the photos.
+  test('a rejected create keeps the photos with the failed expense', () async {
+    expectUnexpectedError<SpliitApiException>('Syncing expense local-1');
+    await pendingWith('local-1');
+    spliit.failing['create'] = 400;
+
+    await flush();
+
+    expect((await onlyRow()).syncFailed, isTrue);
+    expect(await attachments('local-1'), hasLength(1));
+    await cache.sweep();
+    expect(await dir.list().length, 1);
   });
 
   test('an interrupted upload whose object arrived isn\'t sent again', () async {
-    await db.insertPending(expense('local-1'));
+    await pendingWith('local-1',
+        [(AttachmentState.uploading, 'https://bucket.test/b/document-early.jpg')]);
     spliit.bucket['https://bucket.test/b/document-early.jpg'] = [1];
-    await attach('local-1',
-        state: AttachmentState.uploading, url: 'https://bucket.test/b/document-early.jpg');
 
     await flush();
 
-    expect(spliit.count('sign'), 0);
-    expect(spliit.count('put'), 0);
-    expect(spliit.expenses[await syncedId()]!.single['url'], 'https://bucket.test/b/document-early.jpg');
+    expect((spliit.count('sign'), spliit.count('put')), (0, 0));
+    expect(spliit.expenses[(await onlyRow()).id]!.single['url'],
+        'https://bucket.test/b/document-early.jpg');
   });
 
   test('an interrupted upload whose object never arrived is signed and sent again', () async {
-    await db.insertPending(expense('local-1'));
-    await attach('local-1',
-        state: AttachmentState.uploading, url: 'https://bucket.test/b/document-lost.jpg');
+    await pendingWith('local-1', [(AttachmentState.uploading, 'https://bucket.test/b/document-lost.jpg')]);
 
     await flush();
 
-    expect(spliit.count('head'), 1);
-    expect(spliit.count('sign'), 1);
-    final url = spliit.expenses[await syncedId()]!.single['url'];
+    expect((spliit.count('head'), spliit.count('sign')), (1, 1));
+    final url = spliit.expenses[(await onlyRow()).id]!.single['url'];
     expect(url, isNot('https://bucket.test/b/document-lost.jpg'));
     expect(spliit.bucket, contains(url));
   });
 
-  test('an unexpected failure is kept, not retried by itself, and Retry sends it', () async {
-    expectUnexpectedError<SpliitApiException>('Uploading receipt att-1');
-    await db.insertPending(expense('local-1'));
-    await attach('local-1');
+  test('a photo the server refuses marks the expense failed, keeps the photo, and waits for Retry',
+      () async {
+    expectUnexpectedError<SpliitApiException>('Syncing expense local-1');
+    await pendingWith('local-1');
     spliit.failing['sign'] = 500;
 
     await flush();
     spliit.failing.clear();
     await flush();
 
-    final id = await syncedId();
-    final failed = (await attachments(id)).single;
-    expect(failed.state, AttachmentState.failed);
-    expect(failed.lastError, contains('Uploading receipt att-1 failed.'));
+    final row = await onlyRow();
+    expect((row.pending, row.syncFailed), (true, true));
+    expect(row.lastError, contains('SpliitApiException(500)'));
+    expect(await attachments('local-1'), hasLength(1));
     expect(spliit.count('sign'), 1);
 
-    await db.retryAttachment(failed.id);
+    await db.retrySyncFailure('local-1');
     await flush();
 
-    expect(await attachments(id), isEmpty);
-    expect(spliit.expenses[id], hasLength(1));
+    expect(spliit.expenses[(await onlyRow()).id], hasLength(1));
   });
 
-  test('a photo added to a synced expense keeps its other receipts', () async {
-    spliit.expenses['server-9'] = [
-      {'id': 'web-doc', 'url': 'https://bucket.test/b/web.jpg', 'width': 1, 'height': 1},
-    ];
-    await db.replaceServerExpenses('g1', [expense('server-9').copyWithSynced(documentCount: 1)]);
-    final att = await attach('server-9');
-
+  test('Sync without receipts drops the photos, then the expense syncs without them', () async {
+    expectUnexpectedError<SpliitApiException>('Syncing expense local-1');
+    await pendingWith('local-1');
+    spliit.failing['sign'] = 500;
     await flush();
 
-    expect([for (final d in spliit.expenses['server-9']!) d['id']], ['web-doc', att]);
-    expect([for (final d in await db.watchExpenseDocuments('server-9').first) d.id], ['web-doc', att]);
-    expect((await db.expensesForGroup('g1')).single.documentCount, 2);
+    await db.retrySyncFailure('local-1', withoutReceipts: true);
+    await flush();
+    await cache.sweep();
+
+    expect(spliit.expenses[(await onlyRow()).id], isEmpty);
+    expect(await attachments('local-1'), isEmpty);
+    expect(await dir.list().length, 0);
   });
 
-  test('an update whose response was lost isn\'t repeated', () async {
-    spliit.expenses['server-9'] = [];
-    await db.replaceServerExpenses('g1', [expense('server-9').copyWithSynced()]);
-    await attach('server-9');
-    spliit.loseUpdateResponse = true;
-
-    await flush();
-    expect(await attachments('server-9'), hasLength(1));
-    await flush();
-
-    expect(spliit.count('update'), 1);
-    expect(spliit.expenses['server-9'], hasLength(1));
-    expect(await attachments('server-9'), isEmpty);
-  });
-
-  test('an expense deleted on the server drops its waiting photos', () async {
-    await db.replaceServerExpenses('g1', [expense('server-gone').copyWithSynced()]);
-    await attach('server-gone');
-
-    await flush();
-
-    expect(await attachments('server-gone'), isEmpty);
-    expect(spliit.count('update'), 0);
-  });
-
-  test('discarding a pending expense removes its photos; Clear and sweeps never do', () async {
-    await db.insertPending(expense('local-1'));
-    await attach('local-1');
+  test('discarding a failed expense removes its photos; Clear and sweeps never do', () async {
+    await pendingWith('local-1');
     Future<int> files() => dir.list().length;
 
     await cache.clear();
@@ -364,31 +310,4 @@ void main() {
     expect(await attachments('local-1'), isEmpty);
     expect(await files(), 0);
   });
-
-  test('offline, nothing changes and nothing is logged', () async {
-    await db.insertPending(expense('local-1'));
-    await attach('local-1');
-    for (final step in ['sign', 'create']) {
-      spliit.failing[step] = 'offline';
-    }
-
-    await flush();
-
-    expect((await attachments('local-1')).single.state, AttachmentState.local);
-    expect(loggedUnexpectedErrors, isEmpty);
-  });
-}
-
-extension on Expense {
-  /// This expense as a refresh lists it: synced, counted.
-  Expense copyWithSynced({int documentCount = 0}) => Expense(
-        id: id,
-        groupId: groupId,
-        title: title,
-        amountCents: amountCents,
-        paidBy: paidBy,
-        paidFor: paidFor,
-        date: date,
-        documentCount: documentCount,
-      );
 }

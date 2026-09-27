@@ -139,11 +139,11 @@ enum ReceiptFileKind {
   capture,
 }
 
-/// Where a receipt attachment is on its way to its expense (#124). An
-/// attachment that's on its expense has no row: its file is then a
-/// [ReceiptFileKind.capture].
+/// Where a new expense's receipt photo is on its way to the bucket
+/// (#124). Once the expense is created with it, the row goes and the
+/// file becomes a [ReceiptFileKind.capture].
 enum AttachmentState {
-  /// Not uploaded. The outbox uploads it.
+  /// Not uploaded. The outbox uploads it before creating the expense.
   local,
 
   /// Signed, and [ReceiptAttachments.url] recorded, before the transfer:
@@ -151,30 +151,26 @@ enum AttachmentState {
   /// object is in the bucket, and uploads it again if not.
   uploading,
 
-  /// In the bucket at [ReceiptAttachments.url]; not on the expense yet.
+  /// In the bucket at [ReceiptAttachments.url]; the expense isn't
+  /// created yet.
   uploaded,
-
-  /// An unexpected failure (#119): not retried automatically; Retry
-  /// makes it [local] again. Connection failures stay as they were and
-  /// are retried by the next flush.
-  failed,
 }
 
-/// A receipt photo not on its expense yet (#124): a *pending original* in
+/// A receipt photo of a pending expense (#124): a *pending original* in
 /// #123's storage policy. Never evicted, never removed by Clear; removed
-/// only when it's on the expense, when the user removes it, or with its
-/// discarded expense or its group.
+/// when its expense is created with it, or with its discarded expense,
+/// "Sync without receipts", or its group.
 ///
-/// [id] is the local attachment id, stable from capture. It's also the
-/// document id an *update* sends, which the server keeps; a *create*
-/// gives documents new ids, which the next read of the expense brings.
+/// A new expense syncs together with its receipts: the outbox creates it
+/// only once they're all uploaded. [id] is the local attachment id; a
+/// create gives documents new ids, which the next read of the expense
+/// brings.
 @DataClassName('ReceiptAttachmentRow')
 class ReceiptAttachments extends Table {
   TextColumn get id => text()();
   TextColumn get groupId => text()();
 
-  /// The expense it's for: a pending expense's local id, then its server
-  /// id once it syncs (see AppDatabase.markSynced).
+  /// The pending expense it's for, by local id.
   TextColumn get expenseId => text()();
 
   /// The photo, in the receipts directory (see ReceiptCache).
@@ -186,9 +182,6 @@ class ReceiptAttachments extends Table {
 
   /// The public URL, known from signing, before the transfer.
   TextColumn get url => text().nullable()();
-
-  /// The last unexpected failure's details, for a [AttachmentState.failed] one.
-  TextColumn get lastError => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -535,27 +528,22 @@ class AppDatabase extends _$AppDatabase {
   /// the next time it's opened online. Without a [serverId] they stay on
   /// the row, which keeps its local id until a refresh replaces it.
   ///
-  /// [attached] are the ids of receipt attachments (#124) the create sent:
-  /// they're on the expense now, so they join its documents, their photos
-  /// become captures, and their rows go. The expense's other attachments
-  /// follow it to [serverId].
-  Future<void> markSynced(
-      {required String localId, required String serverId, List<String> attached = const []}) {
+  /// Its receipt photos (#124) went up before the create, so they're on
+  /// the expense now: they join its documents, their files become
+  /// captures, and their rows go.
+  Future<void> markSynced({required String localId, required String serverId}) {
     return transaction(() async {
       final row = await (select(expenses)..where((e) => e.id.equals(localId))).getSingleOrNull();
-      final sent = attached.isEmpty
-          ? const <ReceiptAttachmentRow>[]
-          : await (select(receiptAttachments)..where((a) => a.id.isIn(attached))).get();
+      final sent = await attachmentsFor(localId);
       final docs = [
         if (row?.documentsJson case final json?)
           for (final d in jsonDecode(json) as List) ExpenseDocument.fromJson(d as Map<String, dynamic>),
         for (final a in sent) _documentOf(a),
       ];
-      final id = serverId.isNotEmpty ? serverId : localId;
       final moveDocs = row != null && docs.isNotEmpty && serverId.isNotEmpty;
       await (update(expenses)..where((e) => e.id.equals(localId))).write(
         ExpensesCompanion(
-          id: Value(id),
+          id: Value(serverId.isNotEmpty ? serverId : localId),
           pending: const Value(false),
           documentsJson: row == null || docs.isEmpty
               ? const Value.absent()
@@ -571,8 +559,6 @@ class AppDatabase extends _$AppDatabase {
       );
       if (row == null) return;
       await _captured(row.groupId, sent);
-      await (update(receiptAttachments)..where((a) => a.expenseId.equals(localId)))
-          .write(ReceiptAttachmentsCompanion(expenseId: Value(id)));
       if (moveDocs) await cacheExpenseDocuments(row.groupId, serverId, docs);
     });
   }
@@ -635,15 +621,22 @@ class AppDatabase extends _$AppDatabase {
   /// expense details sheet can outlive the state it was opened in, so a
   /// stale Retry must be a no-op, not a write to a row that has since
   /// synced. Returns whether a row was requeued.
-  Future<bool> retrySyncFailure(String id) async {
-    final updated = await (update(expenses)..where((e) => _stillFailed(e, id))).write(
-      const ExpensesCompanion(
-        retryCount: Value(0),
-        syncFailed: Value(false),
-      ),
-    );
-    return updated > 0;
-  }
+  ///
+  /// [withoutReceipts] is "Sync without receipts" (#124): the photos
+  /// that didn't upload are dropped first, so the expense syncs without
+  /// them. The user asked, after a confirmation.
+  Future<bool> retrySyncFailure(String id, {bool withoutReceipts = false}) => transaction(() async {
+        final updated = await (update(expenses)..where((e) => _stillFailed(e, id))).write(
+          const ExpensesCompanion(
+            retryCount: Value(0),
+            syncFailed: Value(false),
+          ),
+        );
+        if (updated > 0 && withoutReceipts) {
+          await (delete(receiptAttachments)..where((a) => a.expenseId.equals(id))).go();
+        }
+        return updated > 0;
+      });
 
   Expression<bool> _stillFailed(Expenses e, String id) =>
       e.id.equals(id) & e.pending.equals(true) & e.syncFailed.equals(true);
@@ -813,56 +806,22 @@ class AppDatabase extends _$AppDatabase {
   Future<void> deleteReceiptFiles(Iterable<String> urls) =>
       (delete(receiptFiles)..where((f) => f.url.isIn(urls))).go();
 
-  /// Stores receipt attachments (#124) for an expense that exists already.
-  Future<void> addAttachments(List<ReceiptAttachmentsCompanion> rows) =>
-      batch((b) => b.insertAll(receiptAttachments, rows));
+  /// A pending expense's receipt photos (#124), oldest first.
+  Future<List<ReceiptAttachmentRow>> attachmentsFor(String expenseId) =>
+      (select(receiptAttachments)
+            ..where((a) => a.expenseId.equals(expenseId))
+            ..orderBy([(a) => OrderingTerm.asc(a.createdAt)]))
+          .get();
 
-  /// An expense's receipt attachments (#124), oldest first, live.
+  /// [attachmentsFor], live.
   Stream<List<ReceiptAttachmentRow>> watchAttachments(String expenseId) =>
       (select(receiptAttachments)
             ..where((a) => a.expenseId.equals(expenseId))
             ..orderBy([(a) => OrderingTerm.asc(a.createdAt)]))
           .watch();
 
-  /// [groupId]'s attachments the outbox works on: all but the failed
-  /// ones, which wait for Retry. Oldest first.
-  Future<List<ReceiptAttachmentRow>> attachmentsToSync(String groupId) =>
-      (select(receiptAttachments)
-            ..where((a) =>
-                a.groupId.equals(groupId) & a.state.equalsValue(AttachmentState.failed).not())
-            ..orderBy([(a) => OrderingTerm.asc(a.createdAt)]))
-          .get();
-
   Future<void> updateAttachment(String id, ReceiptAttachmentsCompanion changes) =>
       (update(receiptAttachments)..where((a) => a.id.equals(id))).write(changes);
-
-  /// Retry on a failed attachment: the next flush uploads it again.
-  Future<void> retryAttachment(String id) => updateAttachment(
-      id,
-      const ReceiptAttachmentsCompanion(
-          state: Value(AttachmentState.local), lastError: Value(null)));
-
-  /// Removes an attachment the user removed; its file goes at the next
-  /// sweep.
-  Future<void> removeAttachment(String id) =>
-      (delete(receiptAttachments)..where((a) => a.id.equals(id))).go();
-
-  /// [attached] were just added to a synced expense (#124), whose
-  /// documents are now [documents] (read back, plus the new ones): stores
-  /// those, and the attachments' photos become captures.
-  Future<void> attachmentsAttached(
-      {required String groupId,
-      required String expenseId,
-      required List<ExpenseDocument> documents,
-      required List<String> attached}) {
-    return transaction(() async {
-      final rows = await (select(receiptAttachments)..where((a) => a.id.isIn(attached))).get();
-      await _captured(groupId, rows);
-      await (update(expenses)..where((e) => e.id.equals(expenseId) & e.pending.equals(false)))
-          .write(ExpensesCompanion(documentCount: Value(documents.length)));
-      await cacheExpenseDocuments(groupId, expenseId, documents);
-    });
-  }
 
   /// Every attachment's file name, which ReceiptCache.sweep must keep.
   Future<Set<String>> attachmentFileNames() async =>

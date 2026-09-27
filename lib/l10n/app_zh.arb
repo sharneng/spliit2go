@@ -250,9 +250,12 @@
   "expenseReceiptsDiscardTitle": "放弃新添加的收据？",
   "expenseReceiptsDiscardBody": "你添加的收据尚未随此消费保存。",
   "expenseReceiptsDiscard": "放弃",
-  "receiptRemove": "移除",
-  "receiptRemovePendingBody": "它尚未上传，本机上的是唯一副本。",
-  "receiptRemovePendingTitle": "移除这张收据？",
-  "receiptUploadFailed": "有收据无法上传。此服务器可能不保存收据；照片仍保留在本机。",
+  "expenseDetailsSyncWithoutReceiptsBody": "未上传的收据将从本机移除，本机上的是唯一副本。随后消费会不带这些收据同步。",
+  "expenseDetailsSyncWithoutReceiptsTitle": "不带收据同步？",
+  "expenseDetailsSyncWithoutReceipts": "不带收据同步",
+  "expenseDetailsReceiptsNotUploaded": "它有未上传的收据。如果此服务器不保存收据，请不带收据同步。",
+  "expenseReceiptsUploadOrRemove": "请等待收据上传完成，或移除未上传的收据。",
+  "expenseReceiptNotUploadedServerEdit": "有收据未上传。此服务器可能不保存收据。轻点重试，或将其移除。",
+  "expenseReceiptNotUploadedConnectionEdit": "有收据未上传：无法连接服务器。轻点重试，或将其移除。",
   "receiptWaitingToUpload": "尚未上传：联网后会自动上传。"
 }
