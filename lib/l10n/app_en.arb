@@ -161,7 +161,6 @@
   "expenseSplitAmount": "Amount",
   "expenseSaveDefaultSplit": "Save as default split",
   "expenseNotesLabel": "Notes",
-  "expenseDocumentsPlaceholder": "Attach documents – not yet supported in this app",
   "expenseSaveButton": "Save",
   "expenseSavingButton": "Saving…",
   "expenseCategorySearchLabel": "Search categories",
@@ -478,5 +477,18 @@
         "type": "String"
       }
     }
-  }
+  },
+  "expenseReceiptAdd": "Add receipt",
+  "expenseReceiptTakePhoto": "Take photo",
+  "expenseReceiptChoosePhoto": "Choose from library",
+  "expenseReceiptUploading": "Uploading receipt",
+  "expenseReceiptNotUploaded": "Not uploaded",
+  "expenseReceiptNotUploadedConnection": "A receipt wasn't uploaded: couldn't reach the server. Tap it to try again, or remove it.",
+  "expenseReceiptNotUploadedServer": "A receipt wasn't uploaded. This server may not store receipts. Tap it to try again, or remove it.",
+  "expenseReceiptRemove": "Remove receipt",
+  "expenseReceiptPhotoFailed": "Couldn't add this photo.",
+  "expenseReceiptsWaitBeforeSave": "Wait for receipts to upload, or remove the ones that weren't.",
+  "expenseReceiptsDiscardTitle": "Discard new receipts?",
+  "expenseReceiptsDiscardBody": "The receipts you added haven't been saved with this expense.",
+  "expenseReceiptsDiscard": "Discard"
 }

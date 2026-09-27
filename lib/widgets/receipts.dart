@@ -208,6 +208,41 @@ class _ReceiptThumbnailViewState extends State<_ReceiptThumbnail> {
   }
 }
 
+/// A stored receipt's image, filling its box (the expense form's tiles):
+/// from this device, or downloaded, with the same offline and failure
+/// states as the details sheet's thumbnails.
+class ReceiptImage extends StatefulWidget {
+  const ReceiptImage({super.key, required this.cache, required this.groupId, required this.url});
+
+  final ReceiptCache cache;
+  final String groupId;
+  final String url;
+
+  @override
+  State<ReceiptImage> createState() => _ReceiptImageState();
+}
+
+class _ReceiptImageState extends State<ReceiptImage> {
+  final _loader = _ReceiptLoader();
+
+  @override
+  void initState() {
+    super.initState();
+    _loader.load(widget.cache, widget.url, widget.groupId,
+        onChange: () => mounted ? setState(() {}) : null);
+  }
+
+  @override
+  Widget build(BuildContext context) => switch (_loader.state) {
+        _TileState.loaded => Image.file(_loader.file!,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const _TileIcon(Icons.broken_image_outlined)),
+        _TileState.loading => const _TileSpinner(),
+        _TileState.offline => const _TileIcon(Icons.cloud_off_outlined),
+        _TileState.failed => const _TileIcon(Icons.broken_image_outlined),
+      };
+}
+
 /// Loads one receipt through the cache and classifies a failure under the
 /// #119 policy: a connection failure is "offline" (expected), anything
 /// else is unexpected and reported once.

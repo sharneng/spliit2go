@@ -78,6 +78,8 @@ class Outbox {
           // Whoever was the active user when this was added, not now
           // (issue #92) -- see Expenses.addedByParticipantId.
           participantId: row.addedByParticipantId,
+          // Uploaded when they were attached (#123).
+          documents: local.documents,
         );
         // Updates the row in place rather than deleting it (issue #43)
         // -- deleting here and relying on the caller's follow-up

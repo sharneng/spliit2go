@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show Uint8List, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
@@ -20,6 +21,9 @@ import '../widgets/currency_picker.dart';
 import '../widgets/category_icon.dart';
 import '../widgets/error_message.dart';
 import '../services/error_reporting.dart';
+import '../services/receipt_cache.dart';
+import '../services/receipt_photo.dart';
+import '../widgets/receipt_attachments.dart';
 
 /// Adds -- or, given [existingExpense], edits -- an expense. An expense
 /// with [Expense.isReimbursement] set is a settlement/"paid back"
@@ -55,9 +59,10 @@ import '../services/error_reporting.dart';
 /// Field set matches Spliit's own add/edit expense form (issue #16):
 /// title, amount, category, paid by, paid for/split mode, date, "paid
 /// in" a different currency, reimbursement flag, save-as-default-split,
-/// recurrence, and notes. "Attach documents" is the one field
-/// deliberately not implemented -- see the note next to
-/// [_documentsPlaceholder] below for why.
+/// recurrence, notes, and receipts (#123): photos are uploaded as they're
+/// added, so they're documents by the time the expense is saved; see
+/// [ReceiptAttachmentsController] for what happens to one that isn't
+/// uploaded.
 class ExpenseScreen extends StatefulWidget {
   final SpliitClient client;
   final AppDatabase db;
@@ -86,6 +91,13 @@ class ExpenseScreen extends StatefulWidget {
   /// matching the web/iOS apps' own settle-up flow.
   final Expense? initialDraft;
 
+  /// Where receipt photos come from (#123); a fake in widget tests.
+  final ReceiptPhotoPicker receiptPicker;
+
+  /// Prepares a picked photo for upload; see [prepareReceiptPhoto].
+  @visibleForTesting
+  final Future<PreparedReceipt> Function(Uint8List)? prepareReceipt;
+
   const ExpenseScreen({
     super.key,
     required this.client,
@@ -95,6 +107,8 @@ class ExpenseScreen extends StatefulWidget {
     this.initialPaidBy,
     this.existingExpense,
     this.initialDraft,
+    this.receiptPicker = const ImagePickerReceiptPhotoPicker(),
+    this.prepareReceipt,
   });
 
   bool get isEditing => existingExpense != null;
@@ -112,6 +126,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   final _originalCurrencyController = TextEditingController();
   String? _paidBy;
   bool _saving = false;
+
+  /// The receipts in this form (#123).
+  late final _receipts = ReceiptAttachmentsController(
+    client: widget.client,
+    cache: ReceiptCache.of(widget.db),
+    groupId: widget.group.id,
+    existing: widget.existingExpense?.documents ?? const [],
+    prepare: widget.prepareReceipt,
+  );
   String? _saveError;
   String? _saveErrorDiagnostics;
 
@@ -316,7 +339,46 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     _notesController.dispose();
     _originalAmountController.dispose();
     _originalCurrencyController.dispose();
+    _receipts.dispose();
     super.dispose();
+  }
+
+  Future<void> _addReceipt(ReceiptSource source) async {
+    try {
+      final photo = await widget.receiptPicker.pick(source);
+      if (photo == null || !mounted) return;
+      await _receipts.add(photo);
+    } catch (e, st) {
+      // The picker or an unreadable photo; upload failures stay on the
+      // photo instead. A missing camera (a simulator) lands here too.
+      final error = ErrorReporter.instance.report(e, st, operation: 'Adding a receipt photo');
+      if (mounted) {
+        showErrorSnackBar(context, context.l10n.expenseReceiptPhotoFailed,
+            diagnostics: error.diagnostics);
+      }
+    }
+  }
+
+  /// Leaving with photos added here asks first (#123): nothing else keeps
+  /// them.
+  Future<void> _confirmLeave() async {
+    final l10n = context.l10n;
+    final discard = await showAdaptiveDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog.adaptive(
+        title: Text(l10n.expenseReceiptsDiscardTitle),
+        content: Text(l10n.expenseReceiptsDiscardBody),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false), child: Text(l10n.commonCancel)),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: TextButton.styleFrom(foregroundColor: Theme.of(dialogContext).colorScheme.error),
+              child: Text(l10n.expenseReceiptsDiscard)),
+        ],
+      ),
+    );
+    if (discard == true && mounted) Navigator.of(context).pop();
   }
 
   List<Participant> get _includedParticipants =>
@@ -520,6 +582,20 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: _receipts,
+      builder: (context, child) => PopScope(
+        canPop: !_receipts.hasNew,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _confirmLeave();
+        },
+        child: child!,
+      ),
+      child: _form(context),
+    );
+  }
+
+  Widget _form(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
           title:
@@ -744,7 +820,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 maxLines: 3,
                 maxLength: 5000, // matches Spliit's EXPENSE_NOTES_MAX
               ),
-              _documentsPlaceholder(context),
+              ReceiptAttachmentsField(controller: _receipts, onAdd: _addReceipt),
               if (_saveError != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
@@ -757,32 +833,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  /// "Attach documents" is the one field from issue #16 deliberately not
-  /// implemented here. Spliit's own upload flow needs a presigned-S3
-  /// upload (next-s3-upload, capped at 5MB/file) -- a substantial, separate
-  /// subsystem this app has no offline-queueing story for yet (what
-  /// happens to a picked file if it's attached while offline and the
-  /// outbox tries to replay the create later?). Shown as a disabled row
-  /// rather than silently omitted, so it reads as "not yet supported"
-  /// instead of looking like an oversight.
-  Widget _documentsPlaceholder(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Icon(Icons.attach_file, color: Theme.of(context).disabledColor),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              context.l10n.expenseDocumentsPlaceholder,
-              style: TextStyle(color: Theme.of(context).disabledColor),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -952,6 +1002,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       conversionRate = amountCents / originalAmountCents;
     }
 
+    if (_receipts.busy || _receipts.hasFailed) {
+      setState(() => _saveError = context.l10n.expenseReceiptsWaitBeforeSave);
+      return;
+    }
+
     setState(() => _saving = true);
 
     // One catch for both paths (#119 review): an edit's request, and a new
@@ -1044,6 +1099,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       conversionRate: conversionRate,
       pending: true,
       createdAt: DateTime.now(),
+      documents: _receipts.documents,
+      documentCount: _receipts.documents.length,
     );
 
     // Written locally first -- this succeeds regardless of connectivity,
@@ -1096,8 +1153,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       isReimbursement: _isReimbursement,
       recurrenceRule: _recurrenceRule,
       saveDefaultSplittingOptions: _saveDefaultSplittingOptions,
-      // Kept as fetched: Spliit deletes any not sent back (#128).
-      documents: widget.existingExpense!.documents,
+      // The ones still attached, plus uploads: Spliit deletes any not
+      // sent back (#128), and keeps the ids it's sent.
+      documents: _receipts.documents,
       originalAmountCents: originalAmountCents,
       originalCurrency: originalCurrency,
       conversionRate: conversionRate,
@@ -1106,6 +1164,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     // A refresh fetched before this edit mustn't write the old copy
     // back over it (issue #90).
     widget.db.markExpensesChanged(widget.group.id);
+    // Update keeps the ids sent, so these are the server's now (#123).
+    // Best effort: the edit is saved either way.
+    try {
+      await widget.db.cacheExpenseDocuments(
+          widget.group.id, widget.existingExpense!.id, _receipts.documents);
+    } catch (e, st) {
+      ErrorReporter.instance.report(e, st, operation: 'Storing an edited expense\'s receipts');
+    }
     await _rememberDefaultSplitIfRequested(paidFor);
     if (mounted) Navigator.of(context).pop(true);
   }

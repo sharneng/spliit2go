@@ -89,6 +89,12 @@ class Expenses extends Table {
   /// See [Expense.documentCount] (#123).
   IntColumn get documentCount => integer().withDefault(const Constant(0))();
 
+  /// A pending expense's documents (#123): already uploaded, sent with the
+  /// create the outbox replays. JSON, like [paidForJson]. Null on synced
+  /// rows, whose documents are in [ExpenseDocuments] under the server's
+  /// ids (create gives documents new ones).
+  TextColumn get documentsJson => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -222,7 +228,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -300,6 +306,10 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(expenses, expenses.documentCount);
             await m.createTable(expenseDocuments);
             await m.createTable(receiptFiles);
+          }
+          if (from < 13) {
+            // A pending expense's receipts (#123).
+            await m.addColumn(expenses, expenses.documentsJson);
           }
         },
       );
@@ -406,6 +416,9 @@ class AppDatabase extends _$AppDatabase {
       ExpensesCompanion(
         id: Value(newId),
         pending: const Value(false),
+        // Its documents now have server ids this device doesn't know yet;
+        // they're read when it's next opened (#123).
+        documentsJson: const Value(null),
         // A synced row can't also be a failed one -- clear whatever a
         // prior failed attempt (before a successful retry) left behind
         // (issue #44).
@@ -654,6 +667,9 @@ class AppDatabase extends _$AppDatabase {
         pending: Value(e.pending),
         createdAt: Value(e.createdAt),
         documentCount: Value(e.documentCount),
+        documentsJson: Value(e.pending && e.documents.isNotEmpty
+            ? jsonEncode([for (final d in e.documents) d.toJson()])
+            : null),
       );
 
   /// Device-local organization, never sent to the server or changed by refresh.
@@ -868,5 +884,9 @@ class AppDatabase extends _$AppDatabase {
         lastError: row.lastError,
         createdAt: row.createdAt,
         documentCount: row.documentCount,
+        documents: [
+          for (final d in (row.documentsJson == null ? const [] : jsonDecode(row.documentsJson!) as List))
+            ExpenseDocument.fromJson(d as Map<String, dynamic>),
+        ],
       );
 }

@@ -312,4 +312,29 @@ void main() {
     expect(find.byType(InteractiveViewer), findsOneWidget);
     await closeTree(tester);
   });
+
+  testWidgets('an expense added here and not synced yet shows its receipts, without the server',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    ReceiptCache.use(_FakeReceipts(db));
+    await tester.runAsync(() => db.insertPending(Expense(
+          id: 'e1',
+          groupId: 'g1',
+          title: 'Coffee',
+          amountCents: 1860,
+          paidBy: 'bea',
+          paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
+          date: DateTime(2026, 9, 23),
+          pending: true,
+          documents: docs(),
+          documentCount: 2,
+        )));
+    final s = server([ok]);
+    await openSheet(tester, db, s.client);
+
+    expect(s.gets.single, 0);
+    expect(receiptImages(), findsNWidgets(2));
+    await closeTree(tester);
+  });
 }

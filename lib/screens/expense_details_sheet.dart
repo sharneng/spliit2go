@@ -352,7 +352,9 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   /// The expense's documents, or null while they aren't known: a cached
   /// expense's stored ones count only while they match the list's count.
   List<ExpenseDocument>? _documentsOf(Expense e) {
-    if (!_cached) return e.documents;
+    // Uncached (read from the server), or pending (uploaded, not synced):
+    // the expense carries its own.
+    if (!_cached || e.pending) return e.documents;
     if (_fetchedDocs != null) return _fetchedDocs;
     final stored = _storedDocs;
     return stored != null && stored.length == e.documentCount ? stored : null;
