@@ -78,13 +78,19 @@ An unexpected error (a malformed response, a database failure, anything the app 
 
 ## Running checks locally
 
-`scripts/run_test` runs the full check CI runs -- `dart run build_runner build`, `flutter gen-l10n`, `flutter analyze`, `flutter test --coverage`, in that order -- and logs the result to `.flutter-ci.log` (gitignored) at the repo root:
+`scripts/run_test` runs the full check CI runs -- `dart run build_runner build`, `flutter gen-l10n`, `flutter analyze`, `flutter test --coverage`, in that order -- and prints each step's output:
 
 ```
 scripts/run_test
 ```
 
-Each step is bounded by [`timeout`](https://www.gnu.org/software/coreutils/timeout) (or `gtimeout`, e.g. `brew install coreutils`) if either is on `PATH`, so a genuine hang in one step (seen once, issue #55: a Flutter-test/drift interaction left a dangling `Timer`) fails loudly in the log instead of hanging indefinitely. Without `timeout`/`gtimeout` installed, steps just run unbounded. A killed step's exit status is `124`.
+Every step runs even if an earlier one failed. The script exits `0` only if all of them passed; otherwise it exits `1`, and its last line names the failed steps with their exit status, e.g. `FAILED: test:1` (#135). To keep a log, redirect it; `.flutter-ci.log` at the repo root is gitignored for this:
+
+```
+scripts/run_test > .flutter-ci.log 2>&1
+```
+
+Each step is bounded by [`timeout`](https://www.gnu.org/software/coreutils/timeout) (or `gtimeout`, e.g. `brew install coreutils`) if either is on `PATH`, so a genuine hang in one step (seen once, issue #55: a Flutter-test/drift interaction left a dangling `Timer`) fails loudly instead of hanging indefinitely. The tests get 120 seconds: the suite takes about 80 on a busy machine. Without `timeout`/`gtimeout` installed, steps just run unbounded. A timed-out step's exit status is `124`.
 
 An earlier version of this repo also had a `.githooks/post-commit` hook and an `fswatch` loop to run this automatically after every commit -- a workaround for an early sandboxed environment that couldn't run Flutter itself at all, and so needed a side channel to trigger a real Flutter install elsewhere. That doesn't apply to a normal local setup, Claude Code, or Codex -- all three can just run `scripts/run_test` (or the individual `flutter`/`dart` commands above) directly, so that indirection has been removed.
 
