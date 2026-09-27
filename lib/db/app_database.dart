@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:drift/drift.dart';
 
+import '../models/category.dart';
 import '../models/default_split.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
@@ -223,12 +224,31 @@ class Groups extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [Expenses, Groups, ExpenseDocuments, ReceiptFiles])
+/// A server's category list, as `categories.list` last returned it
+/// (#132), so the expense form's picker, the list's icons and the stats'
+/// names work offline. Keyed by server: categories belong to an instance,
+/// not a group. Replaced whole on each successful read; see
+/// CategoryStore.
+@DataClassName('CachedCategoryRow')
+class CachedCategories extends Table {
+  TextColumn get serverUrl => text()();
+  IntColumn get id => integer()();
+  TextColumn get name => text()();
+  TextColumn get grouping => text()();
+
+  /// The category's place in the server's list.
+  IntColumn get position => integer()();
+
+  @override
+  Set<Column> get primaryKey => {serverUrl, id};
+}
+
+@DriftDatabase(tables: [Expenses, Groups, ExpenseDocuments, ReceiptFiles, CachedCategories])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -311,8 +331,41 @@ class AppDatabase extends _$AppDatabase {
             // A pending expense's receipts (#123).
             await m.addColumn(expenses, expenses.documentsJson);
           }
+          if (from < 14) {
+            // Categories kept offline (#132); filled by the next read.
+            await m.createTable(cachedCategories);
+          }
         },
       );
+
+  SimpleSelectStatement<$CachedCategoriesTable, CachedCategoryRow> _categoriesOf(
+          String serverUrl) =>
+      select(cachedCategories)
+        ..where((c) => c.serverUrl.equals(serverUrl))
+        ..orderBy([(c) => OrderingTerm.asc(c.position)]);
+
+  static List<Category> _toCategories(List<CachedCategoryRow> rows) =>
+      [for (final r in rows) Category(id: r.id, name: r.name, grouping: r.grouping)];
+
+  /// [serverUrl]'s cached categories in the server's order, or an empty
+  /// list if none has been read yet (#132).
+  Future<List<Category>> categoriesFor(String serverUrl) =>
+      _categoriesOf(serverUrl).get().then(_toCategories);
+
+  /// [categoriesFor], following every change.
+  Stream<List<Category>> watchCategories(String serverUrl) =>
+      _categoriesOf(serverUrl).watch().map(_toCategories);
+
+  /// Replaces [serverUrl]'s cached categories with [categories].
+  Future<void> replaceCategories(String serverUrl, List<Category> categories) =>
+      transaction(() async {
+        await (delete(cachedCategories)..where((c) => c.serverUrl.equals(serverUrl))).go();
+        await batch((b) => b.insertAll(cachedCategories, [
+              for (final (i, c) in categories.indexed)
+                CachedCategoriesCompanion.insert(
+                    serverUrl: serverUrl, id: c.id, name: c.name, grouping: c.grouping, position: i),
+            ]));
+      });
 
   /// Spliit's own list order (issue #88): calendar day, then creation
   /// time, both newest first, with an unknown creation time last. By

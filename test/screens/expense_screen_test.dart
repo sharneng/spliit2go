@@ -8,6 +8,7 @@ import 'package:http/testing.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
+import 'package:spliit2go/models/category.dart';
 import 'package:spliit2go/models/default_split.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
@@ -311,13 +312,39 @@ void main() {
     expect(find.widgetWithText(InputDecorator, 'Groceries'), findsOneWidget);
   });
 
-  testWidgets('falls back to General only when categories.list is unreachable',
+  // #132: offline, the picker used to have General only.
+  testWidgets('offline before the list was ever read, the picker has every Spliit category',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     await pumpScreen(tester, db); // pumpScreen's client always throws (offline)
 
-    expect(find.widgetWithText(InputDecorator, 'General'), findsOneWidget);
+    await tester.ensureVisible(find.widgetWithText(InputDecorator, 'General'));
+    await tester.tap(find.widgetWithText(InputDecorator, 'General'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Search categories'), 'gro');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Groceries'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(InputDecorator, 'Groceries'), findsOneWidget);
+  });
+
+  testWidgets('offline, the picker has the server\'s list as last read', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await tester.runAsync(() => db.replaceCategories('https://example.test', const [
+          Category(id: 0, name: 'General', grouping: 'Uncategorized'),
+          Category(id: 44, name: 'Hobbies', grouping: 'Life'),
+        ]));
+    await pumpScreen(tester, db);
+
+    await tester.ensureVisible(find.widgetWithText(InputDecorator, 'General'));
+    await tester.tap(find.widgetWithText(InputDecorator, 'General'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hobbies'), findsOneWidget);
+    expect(find.text('Groceries'), findsNothing);
   });
 
   testWidgets('category picker groups categories under their grouping header', (tester) async {
@@ -920,6 +947,10 @@ void main() {
   testWidgets('each row in the category picker shows its own icon', (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
+    await tester.runAsync(() => db.replaceCategories('https://example.test', const [
+          Category(id: 0, name: 'General', grouping: 'Uncategorized'),
+          Category(id: 9, name: 'Groceries', grouping: 'Food and Drink'),
+        ]));
     await pumpScreen(tester, db);
 
     await tester.ensureVisible(find.widgetWithText(InputDecorator, 'General'));
@@ -927,8 +958,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // The field's own icon, plus one per row in the now-open picker
-    // (just "General" in this offline test setup).
-    expect(find.byType(CategoryIconGlyph), findsNWidgets(2));
+    // (the two categories cached for this offline test).
+    expect(find.byType(CategoryIconGlyph), findsNWidgets(3));
   });
 
   testWidgets(

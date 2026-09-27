@@ -123,6 +123,7 @@ void main() {
     await old.customStatement('ALTER TABLE expenses DROP COLUMN document_count');
     await old.customStatement('DROP TABLE expense_documents');
     await old.customStatement('DROP TABLE receipt_files');
+    await old.customStatement('DROP TABLE cached_categories');
     await old.customStatement('PRAGMA user_version = 11');
     await old.close();
 
@@ -151,6 +152,7 @@ void main() {
         date: DateTime(2026, 9, 23),
         pending: true));
     await old.customStatement('ALTER TABLE expenses DROP COLUMN documents_json');
+    await old.customStatement('DROP TABLE cached_categories');
     await old.customStatement('PRAGMA user_version = 12');
     await old.close();
 

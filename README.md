@@ -10,7 +10,7 @@ Spliit has an official [iOS app](https://github.com/spliit-app/spliit-ios) but n
 
 ## Scope
 
-- **View, offline:** groups, expenses, and balances are cached locally and available with no connection.
+- **View, offline:** groups, expenses, balances and each server's expense categories are cached locally and available with no connection.
 - **Add, offline:** new expenses can be created while offline; they're queued locally and synced to the server automatically once connectivity returns.
 - **No offline edit:** editing or deleting an expense requires connectivity. This keeps the sync model simple — appends only, no conflict resolution — which fits how expense-splitting apps are actually used.
 

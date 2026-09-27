@@ -11,6 +11,7 @@ import '../models/category.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
 import '../services/active_user.dart';
+import '../services/category_store.dart';
 import '../services/group_url.dart';
 import '../services/settings_service.dart';
 import '../sync/outbox.dart';
@@ -86,17 +87,12 @@ class _GroupScreenState extends State<GroupScreen> {
   // screen's original default (and only) content.
   int _tabIndex = 0;
 
-  // Falls back to just "General" (Spliit's own default, id 0) until/unless
-  // a live categories.list succeeds -- same fallback expense_screen.dart
-  // uses, and for the same reason: offline or a slow first load shouldn't
-  // block the expense list from rendering at all, just from resolving
-  // real category icons (issue #28) until the fetch completes. Every
-  // expense not in [_categories] yet shows the same fallback banknote
-  // glyph (see categoryIconData's own default) rather than a blank or
-  // crashing lookup.
-  List<Category> _categories = const [
-    Category(id: 0, name: 'General', grouping: 'Uncategorized'),
-  ];
+  // The server's list as last read, or Spliit's seeded one until this
+  // device has read it (#132), so the list shows real category icons
+  // (issue #28) offline too. An id in neither still gets the fallback
+  // banknote glyph (see categoryIconData's own default).
+  List<Category> _categories = spliitSeedCategories;
+  StreamSubscription<List<Category>>? _categoriesSub;
 
   @override
   void initState() {
@@ -114,8 +110,10 @@ class _GroupScreenState extends State<GroupScreen> {
       if (!mounted) return;
       setState(() => _expenses = rows.map(widget.db.rowToExpense).toList());
     });
+    _categoriesSub = CategoryStore.of(widget.db).watch(widget.client).listen((cats) {
+      if (mounted) setState(() => _categories = cats);
+    });
     _refresh();
-    _loadCategories();
     // Guarded: connectivity_plus's platform channel isn't set up in every
     // environment (widget tests being the immediate reason this got
     // added, but a misconfigured platform is a real possibility too).
@@ -143,20 +141,8 @@ class _GroupScreenState extends State<GroupScreen> {
   void dispose() {
     _groupSub?.cancel();
     _expensesSub?.cancel();
+    _categoriesSub?.cancel();
     super.dispose();
-  }
-
-  Future<void> _loadCategories() async {
-    try {
-      final cats = await widget.client.fetchCategories();
-      if (!mounted || cats.isEmpty) return;
-      setState(() => _categories = cats);
-    } catch (e, st) {
-      // Offline or the server's unreachable -- keep the General-only
-      // fallback so the list still renders (with generic icons) without
-      // connectivity. Anything else is logged (#119 review).
-      ErrorReporter.instance.report(e, st, operation: 'Loading categories');
-    }
   }
 
   /// The [Category] behind an expense's [Expense.category] id, or a
@@ -176,6 +162,8 @@ class _GroupScreenState extends State<GroupScreen> {
   /// fields via setState.
   Future<void> _refresh() async {
     setState(() => _loading = true);
+    // Once per run; again on the next refresh if it didn't get through.
+    unawaited(CategoryStore.of(widget.db).refresh(widget.client));
     try {
       final generation = widget.db.expensesGeneration(widget.groupId);
       final group = await widget.client.fetchGroup(widget.groupId);
