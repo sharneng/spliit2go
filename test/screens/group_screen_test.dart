@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1042,6 +1043,86 @@ void main() {
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
+    });
+  });
+
+  // Kenneth, testing #124 in airplane mode: reconnecting after leaving a
+  // group ran its sync and refresh on a closed screen ("Null check
+  // operator used on a null value" in setState).
+  group('after the group screen closes', () {
+    Future<(AppDatabase, StreamController<List<ConnectivityResult>>)> open(WidgetTester tester,
+        SpliitClient client) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await tester.runAsync(() => db.cacheGroup(const Group(
+            id: 'g1',
+            name: 'Banff Trip',
+            currency: '\$',
+            participants: [Participant(id: 'p1', name: 'Ken')],
+          )));
+      final changes = StreamController<List<ConnectivityResult>>.broadcast();
+      addTearDown(changes.close);
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: GroupScreen(
+            client: client,
+            db: db,
+            outbox: Outbox(db, client, groupId: 'g1'),
+            groupId: 'g1',
+            connectivityChanges: changes.stream),
+      ));
+      await tester.pumpAndSettle();
+      return (db, changes);
+    }
+
+    Future<void> close(WidgetTester tester) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+
+    testWidgets('reconnecting doesn\'t reach it: it stopped listening', (tester) async {
+      final (_, changes) = await open(tester, offlineClient());
+      expect(changes.hasListener, isTrue);
+
+      await close(tester);
+
+      expect(changes.hasListener, isFalse);
+    });
+
+    testWidgets('a sync that finishes after it closed doesn\'t refresh it', (tester) async {
+      final syncing = Completer<void>();
+      final client = SpliitClient(
+          baseUrl: 'https://example.test',
+          httpClient: MockClient((req) async {
+            if (req.url.path.endsWith('groups.expenses.create')) {
+              await syncing.future;
+              return http.Response('[{"result":{"data":{"json":{"expenseId":"s1"}}}}]', 200);
+            }
+            throw http.ClientException('offline');
+          }));
+      final (db, changes) = await open(tester, client);
+      await tester.runAsync(() => db.insertPending(Expense(
+            id: 'local-1',
+            groupId: 'g1',
+            title: 'Coffee',
+            amountCents: 500,
+            paidBy: 'p1',
+            paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+            date: DateTime.utc(2026, 9, 27),
+            pending: true,
+          )));
+
+      // Back online: a sync starts, and the screen closes while it runs.
+      changes.add([ConnectivityResult.wifi]);
+      await tester.pump();
+      await close(tester);
+      syncing.complete();
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
     });
   });
 }
