@@ -40,6 +40,12 @@ class Outbox {
 
   Outbox(this._db, this._api, {required this.groupId});
 
+  /// The last flush queued per database and group (#141). Outboxes are
+  /// built per call site, so the queue can't live on one instance: two
+  /// overlapping flushes would both read the same pending expense and
+  /// create it twice.
+  static final _queues = Expando<Map<String, Future<void>>>('Outbox');
+
   /// Attempts to sync every pending, not-yet-failed expense belonging
   /// to [groupId] (see the field's own doc comment). Each row is synced
   /// independently -- one failure (still offline, server rejected it,
@@ -59,22 +65,31 @@ class Outbox {
   ///
   /// Returns the number of rows successfully synced.
   ///
-  /// Receipt photos that aren't uploaded yet (#124) are uploaded first: a
-  /// pending expense is created with the ones that made it, and the rest
-  /// stay attached to it, pending, once it's synced. The expense is never
-  /// held back by a photo. Then photos pending on synced expenses are
-  /// added to them (see [_attachToSynced]).
-  Future<int> flush() async {
+  /// Flushes of one group run one after another (#141): one asked for
+  /// while another runs starts when it ends, so work queued meanwhile
+  /// isn't missed.
+  Future<int> flush() {
+    final queue = _queues[_db] ??= {};
+    final run = (queue[groupId] ?? Future.value()).then((_) => _flush());
+    queue[groupId] = run.then<void>((_) {}, onError: (Object _) {});
+    return run;
+  }
+
+  Future<int> _flush() async {
     final pendingRows = await _db.pendingExpensesForGroup(groupId);
-    final attachments = await _db.attachmentsToSync(groupId);
     var synced = 0;
     for (final row in pendingRows) {
       final local = _db.rowToExpense(row);
-      final uploaded = await _uploadAll([
-        for (final a in attachments)
-          if (a.expenseId == row.id) a,
-      ]);
+      // Whether a failure came from uploading its receipts (#124).
+      var uploading = true;
       try {
+        // A new expense syncs together with its receipts (#124, as
+        // revised with Kenneth and Ezra): its photos go up first, and
+        // it's created only once they all have, with all of them.
+        final photos = [
+          for (final a in await _db.attachmentsFor(row.id)) await _upload(a),
+        ];
+        uploading = false;
         final serverId = await _api.createExpense(
           groupId: local.groupId,
           title: local.title,
@@ -93,8 +108,9 @@ class Outbox {
           // Whoever was the active user when this was added, not now
           // (issue #92) -- see Expenses.addedByParticipantId.
           participantId: row.addedByParticipantId,
-          // Uploaded in the form (#123), and since (#124).
-          documents: [...local.documents, for (final a in uploaded) _documentOf(a)],
+          // Uploaded when they were attached (#123).
+          // Uploaded in the form (#123), and just now (#124).
+          documents: [...local.documents, ...photos],
         );
         // Updates the row in place rather than deleting it (issue #43)
         // -- deleting here and relying on the caller's follow-up
@@ -103,8 +119,7 @@ class Outbox {
         // from the local cache (and so missing from the list and
         // balance math) until the next successful refresh, whenever
         // that happened to be.
-        await _db.markSynced(
-            localId: row.id, serverId: serverId, attached: [for (final a in uploaded) a.id]);
+        await _db.markSynced(localId: row.id, serverId: serverId);
         synced++;
       } catch (e, st) {
         // Logged unless it's a connection problem (#119 review): a
@@ -131,147 +146,47 @@ class Outbox {
         // retry/delete affordance instead (see GroupScreen's expense
         // list).
         final isClientError = e is SpliitApiException && e.statusCode >= 400 && e.statusCode < 500;
+        // A receipt the server didn't take, for any reason but the
+        // connection, won't go up by itself either (#124). The expense's
+        // details offer Retry, Sync without receipts, or Discard.
+        final receiptRefused = uploading && classifyError(e) != ErrorKind.connection;
         final retryCount = row.retryCount + 1;
         await _db.recordSyncFailure(
           id: row.id,
           error: e.toString(),
           retryCount: retryCount,
-          failed: isClientError || retryCount >= maxRetries,
+          failed: isClientError || receiptRefused || retryCount >= maxRetries,
         );
       }
     }
-    await _attachToSynced();
     return synced;
   }
 
-  ExpenseDocument _documentOf(ReceiptAttachmentRow a) =>
-      ExpenseDocument(id: a.id, url: a.url!, width: a.width, height: a.height);
-
-  /// Uploads [rows] one by one, and returns the ones now in the bucket.
-  Future<List<ReceiptAttachmentRow>> _uploadAll(List<ReceiptAttachmentRow> rows) async => [
-        for (final a in rows)
-          if (await _upload(a) case final done?) done,
-      ];
-
-  /// Gets [a] into the bucket, or returns null.
+  /// Gets a photo into the bucket (#124) and returns it as the document
+  /// the create sends; throws what the upload threw.
   ///
-  /// The public URL is recorded before the transfer (#124): if the app
-  /// stops mid-upload, the next flush asks the bucket whether the object
+  /// The public URL is recorded before the transfer: if the app stops
+  /// mid-upload, the next flush asks the bucket whether the object
   /// arrived, and signs and uploads again if not. That can leave an
   /// orphan object in the bucket, which is accepted; exactly-once uploads
   /// aren't promised.
-  ///
-  /// A connection failure leaves it for the next flush. Anything else is
-  /// unexpected (#119): logged, and [AttachmentState.failed] until Retry.
-  Future<ReceiptAttachmentRow?> _upload(ReceiptAttachmentRow a) async {
-    try {
-      if (a.state == AttachmentState.uploaded) return a;
-      if (a.state == AttachmentState.uploading && a.url != null && await _api.receiptExists(a.url!)) {
-        return await _uploaded(a, a.url!);
-      }
+  Future<ExpenseDocument> _upload(ReceiptAttachmentRow a) async {
+    var url = a.url;
+    final arrived = switch (a.state) {
+      AttachmentState.uploaded => true,
+      AttachmentState.uploading => url != null && await _api.receiptExists(url),
+      AttachmentState.local => false,
+    };
+    if (!arrived) {
       final bytes = await (await ReceiptCache.of(_db).fileNamed(a.fileName)).readAsBytes();
       final target = await _api.signReceiptUpload();
-      await _db.updateAttachment(
-          a.id,
-          ReceiptAttachmentsCompanion(
-              state: const Value(AttachmentState.uploading), url: Value(target.publicUrl)));
+      url = target.publicUrl;
+      await _db.updateAttachment(a.id,
+          ReceiptAttachmentsCompanion(state: const Value(AttachmentState.uploading), url: Value(url)));
       await _api.putReceipt(target, bytes);
-      return await _uploaded(a, target.publicUrl);
-    } catch (e, st) {
-      await _failed([a], e, st, operation: 'Uploading receipt ${a.id}');
-      return null;
-    }
-  }
-
-  Future<ReceiptAttachmentRow> _uploaded(ReceiptAttachmentRow a, String url) async {
-    await _db.updateAttachment(a.id,
-        ReceiptAttachmentsCompanion(state: const Value(AttachmentState.uploaded), url: Value(url)));
-    return a.copyWith(state: AttachmentState.uploaded, url: Value(url));
-  }
-
-  /// Reports a failure for [rows]; an unexpected one marks them failed.
-  Future<void> _failed(List<ReceiptAttachmentRow> rows, Object e, StackTrace st,
-      {required String operation}) async {
-    final error = ErrorReporter.instance.report(e, st, operation: operation);
-    if (error.kind == ErrorKind.connection) return;
-    for (final a in rows) {
       await _db.updateAttachment(
-          a.id,
-          ReceiptAttachmentsCompanion(
-              state: const Value(AttachmentState.failed), lastError: Value(error.diagnostics)));
+          a.id, const ReceiptAttachmentsCompanion(state: Value(AttachmentState.uploaded)));
     }
-  }
-
-  /// Adds photos pending on synced expenses to them (#124): a photo that
-  /// didn't upload when its expense was created or edited, or one added
-  /// to it later. Per expense: read it, add the photos missing from its
-  /// documents, update.
-  ///
-  /// The read gives the documents' server ids, which the update sends
-  /// back: update keeps the ids it's sent and deletes the rest (#128). A
-  /// new document goes under its attachment id, which update keeps too,
-  /// so an update repeated after a lost response adds nothing twice: the
-  /// read shows it's there. This doesn't solve the lost-response problem
-  /// for creating the expense itself.
-  Future<void> _attachToSynced() async {
-    final pendingIds = {for (final r in await _db.pendingExpensesForGroup(groupId)) r.id};
-    final byExpense = <String, List<ReceiptAttachmentRow>>{};
-    for (final a in await _db.attachmentsToSync(groupId)) {
-      if (!pendingIds.contains(a.expenseId)) (byExpense[a.expenseId] ??= []).add(a);
-    }
-    for (final MapEntry(key: expenseId, value: rows) in byExpense.entries) {
-      final uploaded = await _uploadAll(rows);
-      if (uploaded.isEmpty) continue;
-      try {
-        final Expense current;
-        try {
-          current = await _api.fetchExpense(groupId: groupId, expenseId: expenseId);
-        } on SpliitApiException catch (e) {
-          if (!e.isNotFound) rethrow;
-          // Deleted on the server: there's nothing to add them to, and
-          // nowhere left to show them.
-          for (final a in uploaded) {
-            await _db.removeAttachment(a.id);
-          }
-          continue;
-        }
-        final have = {for (final d in current.documents) d.url};
-        final documents = [
-          ...current.documents,
-          for (final a in uploaded)
-            if (!have.contains(a.url)) _documentOf(a),
-        ];
-        if (documents.length > current.documents.length) {
-          await _api.updateExpense(
-            groupId: groupId,
-            expenseId: expenseId,
-            title: current.title,
-            amountCents: current.amountCents,
-            paidBy: current.paidBy,
-            paidFor: current.paidFor,
-            documents: documents,
-            splitMode: current.splitMode,
-            category: current.category,
-            notes: current.notes,
-            date: current.date,
-            isReimbursement: current.isReimbursement,
-            recurrenceRule: current.recurrenceRule,
-            originalAmountCents: current.originalAmountCents,
-            originalCurrency: current.originalCurrency,
-            conversionRate: current.conversionRate,
-          );
-          // A refresh fetched before this mustn't write the old copy
-          // back (issue #90).
-          _db.markExpensesChanged(groupId);
-        }
-        await _db.attachmentsAttached(
-            groupId: groupId,
-            expenseId: expenseId,
-            documents: documents,
-            attached: [for (final a in uploaded) a.id]);
-      } catch (e, st) {
-        await _failed(uploaded, e, st, operation: 'Adding receipts to expense $expenseId');
-      }
-    }
+    return ExpenseDocument(id: a.id, url: url!, width: a.width, height: a.height);
   }
 }
