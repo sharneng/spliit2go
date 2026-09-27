@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/native.dart';
@@ -430,5 +431,85 @@ void main() {
     expect(synced.documentCount, 1);
     // Still referenced, under the server's expense id (#131 review).
     expect((await db.watchExpenseDocuments('server-1').first).single.url, receipt.url);
+  });
+
+  // #141 (Ezra, reviewing #138): two flushes overlapping both created the
+  // same pending expense.
+  group('overlapping flushes', () {
+    ({SpliitClient client, List<String> creates, Completer<void> gate}) heldServer() {
+      final creates = <String>[];
+      final gate = Completer<void>();
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          final title = (jsonDecode(req.body)['0']['json']['expenseFormValues'] as Map)['title'];
+          creates.add(title as String);
+          await gate.future;
+          return http.Response(
+              '[{"result":{"data":{"json":{"expenseId":"server-${creates.length}"}}}}]', 200);
+        }),
+      );
+      return (client: client, creates: creates, gate: gate);
+    }
+
+    test('of one group run one after another: an expense is created once', () async {
+      await db.insertPending(pendingExpense('local-1'));
+      final s = heldServer();
+
+      // Two call sites, each with its own outbox for the group.
+      final first = Outbox(db, s.client, groupId: 'g1').flush();
+      final second = Outbox(db, s.client, groupId: 'g1').flush();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      s.gate.complete();
+
+      expect(await first, 1);
+      expect(await second, 0);
+      expect(s.creates, ['Coffee']);
+      expect(await db.pendingExpenses(), isEmpty);
+    });
+
+    test('a flush asked for during another still runs after it', () async {
+      await db.insertPending(pendingExpense('local-1'));
+      final s = heldServer();
+      final outbox = Outbox(db, s.client, groupId: 'g1');
+
+      final first = outbox.flush();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      // Queued while the first create is held.
+      await db.insertPending(pendingExpense('local-2'));
+      final second = outbox.flush();
+      s.gate.complete();
+
+      expect((await first, await second), (1, 1));
+      expect(s.creates, hasLength(2));
+    });
+
+    test('of different groups don\'t wait for each other', () async {
+      await db.insertPending(pendingExpense('local-1'));
+      final s = heldServer();
+      final g2 = SpliitClient(
+          baseUrl: 'https://example.test',
+          httpClient: MockClient((_) async => throw StateError('g2 has nothing to sync')));
+
+      final held = Outbox(db, s.client, groupId: 'g1').flush();
+      expect(await Outbox(db, g2, groupId: 'g2').flush().timeout(const Duration(seconds: 1)), 0);
+      s.gate.complete();
+      await held;
+    });
+
+    test('a failed flush doesn\'t block the next', () async {
+      expectUnexpectedError<StateError>('Syncing expense local-1');
+      await db.insertPending(pendingExpense('local-1'));
+      final failing = SpliitClient(
+          baseUrl: 'https://example.test',
+          httpClient: MockClient((_) async => throw StateError('boom')));
+
+      await Outbox(db, failing, groupId: 'g1').flush();
+      final ok = SpliitClient(
+          baseUrl: 'https://example.test',
+          httpClient: MockClient(
+              (_) async => http.Response('[{"result":{"data":{"json":{"expenseId":"s1"}}}}]', 200)));
+      expect(await Outbox(db, ok, groupId: 'g1').flush(), 1);
+    });
   });
 }
