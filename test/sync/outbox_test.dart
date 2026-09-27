@@ -422,5 +422,7 @@ void main() {
     expect(synced.id, 'server-1');
     expect(synced.documentsJson, isNull);
     expect(synced.documentCount, 1);
+    // Still referenced, under the server's expense id (#131 review).
+    expect((await db.watchExpenseDocuments('server-1').first).single.url, receipt.url);
   });
 }

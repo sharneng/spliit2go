@@ -410,23 +410,38 @@ class AppDatabase extends _$AppDatabase {
   /// [replaceServerExpenses] reconciles it -- exactly the outcome a
   /// normal successful refresh already produces today, just without the
   /// in-between gap.
+  ///
+  /// A pending row's documents (#123) move to [ExpenseDocuments] under
+  /// [serverId], so the photos stay referenced (and their stored files
+  /// kept) through the handoff (#131 review). Their ids are this device's:
+  /// create gives documents new ones, which the expense details sheet reads
+  /// the next time it's opened online. Without a [serverId] they stay on
+  /// the row, which keeps its local id until a refresh replaces it.
   Future<void> markSynced({required String localId, required String serverId}) {
-    final newId = serverId.isNotEmpty ? serverId : localId;
-    return (update(expenses)..where((e) => e.id.equals(localId))).write(
-      ExpensesCompanion(
-        id: Value(newId),
-        pending: const Value(false),
-        // Its documents now have server ids this device doesn't know yet;
-        // they're read when it's next opened (#123).
-        documentsJson: const Value(null),
-        // A synced row can't also be a failed one -- clear whatever a
-        // prior failed attempt (before a successful retry) left behind
-        // (issue #44).
-        retryCount: const Value(0),
-        lastError: const Value(null),
-        syncFailed: const Value(false),
-      ),
-    );
+    return transaction(() async {
+      final row = await (select(expenses)..where((e) => e.id.equals(localId))).getSingleOrNull();
+      final docsJson = row?.documentsJson;
+      final moveDocs = row != null && docsJson != null && serverId.isNotEmpty;
+      await (update(expenses)..where((e) => e.id.equals(localId))).write(
+        ExpensesCompanion(
+          id: Value(serverId.isNotEmpty ? serverId : localId),
+          pending: const Value(false),
+          documentsJson: moveDocs ? const Value(null) : const Value.absent(),
+          // A synced row can't also be a failed one -- clear whatever a
+          // prior failed attempt (before a successful retry) left behind
+          // (issue #44).
+          retryCount: const Value(0),
+          lastError: const Value(null),
+          syncFailed: const Value(false),
+        ),
+      );
+      if (moveDocs) {
+        await cacheExpenseDocuments(row.groupId, serverId, [
+          for (final d in jsonDecode(docsJson) as List)
+            ExpenseDocument.fromJson(d as Map<String, dynamic>),
+        ]);
+      }
+    });
   }
 
   /// Records a failed sync attempt on a still-pending row (issue #44):
@@ -567,11 +582,26 @@ class AppDatabase extends _$AppDatabase {
     await _pruneReceiptFiles(groupId);
   }
 
-  Future<void> _pruneReceiptFiles(String groupId) => (delete(receiptFiles)
-        ..where((f) =>
-            f.groupId.equals(groupId) &
-            f.url.isNotInQuery(selectOnly(expenseDocuments)..addColumns([expenseDocuments.url]))))
-      .go();
+  /// Drops stored files nothing refers to. Two sources refer to them: an
+  /// expense's documents, and a pending expense's own (its
+  /// [Expenses.documentsJson]), whose photos were uploaded and must stay
+  /// viewable until it syncs (#131 review).
+  Future<void> _pruneReceiptFiles(String groupId) async {
+    final pending = await (select(expenses)
+          ..where((e) => e.groupId.equals(groupId) & e.documentsJson.isNotNull()))
+        .get();
+    final pendingUrls = {
+      for (final r in pending)
+        for (final d in jsonDecode(r.documentsJson!) as List) (d as Map)['url'] as String,
+    };
+    await (delete(receiptFiles)
+          ..where((f) {
+            final unreferenced = f.groupId.equals(groupId) &
+                f.url.isNotInQuery(selectOnly(expenseDocuments)..addColumns([expenseDocuments.url]));
+            return pendingUrls.isEmpty ? unreferenced : unreferenced & f.url.isNotIn(pendingUrls);
+          }))
+        .go();
+  }
 
   /// Stores the documents an expense was just read with (#123), replacing
   /// whatever was stored for it, and drops the files of any it no longer

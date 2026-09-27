@@ -93,6 +93,9 @@ class ReceiptAttachmentsController extends ChangeNotifier {
       preparing--;
       _changed();
     }
+    // The form was discarded while the photo was being prepared: nothing
+    // may start after that (#131 review).
+    if (_disposed) return;
     final attachment = ReceiptAttachment(photo);
     added.add(attachment);
     await _upload(attachment);
@@ -111,6 +114,9 @@ class ReceiptAttachmentsController extends ChangeNotifier {
   }
 
   Future<void> _upload(ReceiptAttachment a) async {
+    // Never start an upload for a discarded form. One already sent may
+    // leave an orphan in the bucket, which is accepted (#124).
+    if (_disposed) return;
     a
       ..state = ReceiptUpload.uploading
       ..error = null;
