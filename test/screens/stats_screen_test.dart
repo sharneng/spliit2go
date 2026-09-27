@@ -9,6 +9,7 @@ import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/main.dart' show spliit2goAppBuilder;
+import 'package:spliit2go/models/category.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/stats_screen.dart';
@@ -141,13 +142,46 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   });
 
-  testWidgets('falls back to an id-based category label when the fetch fails', (tester) async {
+  // #132: offline, names used to be id-based ("Category 9").
+  testWidgets('offline before the list was ever read, names come from Spliit\'s seeded list',
+      (tester) async {
     tester.view.physicalSize = const Size(800, 3000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final db = await dbWithExpenses();
     addTearDown(db.close);
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async => throw http.ClientException('offline')),
+    );
+    final outbox = Outbox(db, client, groupId: 'g1');
+
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: StatsScreen(client: client, db: db, outbox: outbox, group: group),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Groceries'), findsOneWidget);
+    expect(find.text('Category 9'), findsNothing);
+    // See the first test above for why. (issue #47)
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+
+
+  testWidgets('a category missing from the server\'s list gets an id-based label', (tester) async {
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final db = await dbWithExpenses();
+    addTearDown(db.close);
+    await db.replaceCategories('https://example.test',
+        const [Category(id: 0, name: 'General', grouping: 'Uncategorized')]);
     final client = SpliitClient(
       baseUrl: 'https://example.test',
       httpClient: MockClient((req) async => throw http.ClientException('offline')),

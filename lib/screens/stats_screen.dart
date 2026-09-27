@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api/spliit_client.dart';
@@ -6,10 +8,10 @@ import '../l10n/category_names.dart';
 import '../l10n/context_l10n.dart';
 import '../models/category.dart';
 import '../models/group.dart';
+import '../services/category_store.dart';
 import '../services/stats_calculator.dart';
 import '../sync/outbox.dart';
 import '../utils/money.dart';
-import '../services/error_reporting.dart';
 
 /// A first pass at the web app's Stats tab (issue #27, split from #6
 /// alongside Activity -- see issue #26): the group's total spending
@@ -60,28 +62,27 @@ class StatsScreen extends StatefulWidget {
 
 class _StatsScreenState extends State<StatsScreen> {
   late final Stream<List<ExpenseRow>> _expensesStream;
-  Map<int, Category> _categoryNames = const {};
+  Map<int, Category> _categoryNames = {for (final c in spliitSeedCategories) c.id: c};
+  StreamSubscription<List<Category>>? _categoriesSub;
 
   @override
   void initState() {
     super.initState();
     _expensesStream = widget.db.watchExpensesForGroup(widget.group.id);
-    _loadCategoryNames();
+    // Best-effort only -- see class doc comment. Never blocks the
+    // totals, which don't need category names to be correct. Offline,
+    // the names are the ones last read, or Spliit's seeded ones (#132).
+    final categories = CategoryStore.of(widget.db);
+    _categoriesSub = categories.watch(widget.client).listen((cats) {
+      if (mounted) setState(() => _categoryNames = {for (final c in cats) c.id: c});
+    });
+    categories.refresh(widget.client);
   }
 
-  // Best-effort only -- see class doc comment. Never blocks the totals,
-  // which don't need category names to be correct.
-  Future<void> _loadCategoryNames() async {
-    try {
-      final cats = await widget.client.fetchCategories();
-      if (!mounted) return;
-      setState(() => _categoryNames = {for (final c in cats) c.id: c});
-    } catch (e, st) {
-      // Offline or unreachable -- category totals still show, just
-      // labeled by id via _categoryLabel's fallback. Anything else is
-      // logged (#119 review).
-      ErrorReporter.instance.report(e, st, operation: 'Loading category names');
-    }
+  @override
+  void dispose() {
+    _categoriesSub?.cancel();
+    super.dispose();
   }
 
   // Delegates to the app-wide formatMoney helper (issue #50) -- kept as

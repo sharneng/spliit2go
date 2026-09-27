@@ -12,6 +12,7 @@ import '../models/default_split.dart';
 import '../l10n/category_names.dart';
 import '../l10n/context_l10n.dart';
 import '../services/active_user.dart';
+import '../services/category_store.dart';
 import '../services/expense_shares.dart';
 import '../sync/outbox.dart';
 import '../utils/date_format.dart';
@@ -161,12 +162,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   bool get _hasGroupCurrencyCode =>
       widget.group.currencyCode != null && widget.group.currencyCode!.isNotEmpty;
 
-  // Falls back to just "General" (Spliit's own default, id 0) until/unless
-  // a live categories.list succeeds -- offline or a slow first load
-  // shouldn't block adding an expense on having a full category list.
-  List<Category> _categories = const [
-    Category(id: 0, name: 'General', grouping: 'Uncategorized'),
-  ];
+  // The server's list as last read, or Spliit's seeded one until this
+  // device has read it: offline, the picker still has every category
+  // (#132).
+  List<Category> _categories = spliitSeedCategories;
   int _category = 0;
 
   /// The fetched [Category] for [_category], or null if it isn't in
@@ -232,6 +231,20 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _loadDefaultSplit();
     }
     _loadCategories();
+  }
+
+  /// What's on this device, then the server's list if it's read now.
+  /// Read, not watched: the form is short-lived.
+  Future<void> _loadCategories() async {
+    final store = CategoryStore.of(widget.db);
+    Future<void> show() async {
+      final cats = await store.current(widget.client);
+      if (mounted) setState(() => _categories = cats);
+    }
+
+    await show();
+    await store.refresh(widget.client);
+    await show();
   }
 
   /// Applies this group's remembered "Paid for" split (issue #29,
@@ -316,19 +329,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     // hasn't fetched a name for yet -- [_selectedCategory] synthesizes a
     // placeholder display on demand rather than requiring one to be
     // seeded into [_categories] up front.
-  }
-
-  Future<void> _loadCategories() async {
-    try {
-      final cats = await widget.client.fetchCategories();
-      if (!mounted || cats.isEmpty) return;
-      setState(() => _categories = cats);
-    } catch (e, st) {
-      // Offline or the server's unreachable -- keep the General-only
-      // fallback so the form still works without connectivity. Anything
-      // else is logged (#119 review).
-      ErrorReporter.instance.report(e, st, operation: 'Loading categories');
-    }
   }
 
   @override
