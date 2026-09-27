@@ -44,7 +44,7 @@ void main() {
   });
 
   test('a retry after the form is discarded doesn\'t upload either', () async {
-    expectUnexpectedError('Uploading a receipt');
+    expectUnexpectedError<SpliitApiException>('Uploading a receipt');
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     var signs = 0;

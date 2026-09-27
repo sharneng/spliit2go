@@ -285,7 +285,7 @@ void main() {
   testWidgets('Edit on a malformed response says so, logged, with details', (tester) async {
     final db = await cachedDb();
     addTearDown(db.close);
-    expectUnexpectedError('Fetching expense e1 to edit');
+    expectUnexpectedError<TypeError>('Fetching expense e1 to edit');
     await openSheet(tester, db,
         client: serverClient((_) async => http.Response('[{"result":{"data":{"json":{}}}}]', 200)));
 
@@ -530,7 +530,7 @@ void main() {
     });
 
     testWidgets('a failed load can be retried', (tester) async {
-      expectUnexpectedError('Loading expense e1');
+      expectUnexpectedError<SpliitApiException>('Loading expense e1');
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       var fail = true;
@@ -674,7 +674,7 @@ void main() {
     });
 
     testWidgets('a failure keeps the expense and says so in the sheet', (tester) async {
-      expectUnexpectedError('Deleting expense e1');
+      expectUnexpectedError<SpliitApiException>('Deleting expense e1');
       final db = await cachedDb();
       addTearDown(db.close);
       await openSheet(tester, db, client: serverClient((req) async {

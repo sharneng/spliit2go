@@ -555,7 +555,8 @@ void main() {
       final client = SpliitClient(
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async {
-          // Only the update is served; categories load from the cache.
+          // Only the update is served; the categories fail as if offline and
+          // the form falls back to General (#132).
           if (!req.url.path.endsWith('groups.expenses.update')) throw http.ClientException('offline');
           captured = req;
           return http.Response('[{"result":{"data":{"json":{"expenseId":"e1"}}}}]', 200);
@@ -997,7 +998,8 @@ void main() {
     final client = SpliitClient(
       baseUrl: 'https://example.test',
       httpClient: MockClient((req) async {
-        // Only the update is served; categories load from the cache.
+        // Only the update is served; the categories fail as if offline and
+        // the form falls back to General (#132).
         if (!req.url.path.endsWith('groups.expenses.update')) throw http.ClientException('offline');
         captured = req;
         return http.Response(
@@ -1047,7 +1049,7 @@ void main() {
       (tester) async {
     final db = _FailingInsertDb();
     addTearDown(db.close);
-    expectUnexpectedError('Adding an expense');
+    expectUnexpectedError<StateError>('Adding an expense to g1');
     await pumpScreen(tester, db);
     await fillCommonFields(tester, amount: '30');
 
@@ -1118,7 +1120,7 @@ void main() {
     testWidgets('default split fails after adding: saved once, the form closes, and the note has Details', (tester) async {
       final db = _FailingDefaultSplitDb();
       addTearDown(db.close);
-      expectUnexpectedError('Saving the default split');
+      expectUnexpectedError<StateError>('Saving the default split for g1');
       final popped = await openFrom(tester, db);
       await fillCommonFields(tester, amount: '30');
       await checkDefaultAndSave(tester);
@@ -1148,7 +1150,7 @@ void main() {
           return http.Response('[{"result":{"data":{"json":{"expenseId":"e1"}}}}]', 200);
         }),
       );
-      expectUnexpectedError('Saving the default split');
+      expectUnexpectedError<StateError>('Saving the default split for g1');
       final popped = await openFrom(tester, db,
           client: client,
           existing: Expense(

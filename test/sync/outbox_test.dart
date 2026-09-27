@@ -109,7 +109,7 @@ void main() {
   });
 
   test('flush() leaves a row pending when the server call fails', () async {
-    expectUnexpectedError('Syncing expense local-1');
+    expectUnexpectedError<SpliitApiException>('Syncing expense local-1');
     await db.insertPending(pendingExpense('local-1'));
 
     final client = SpliitClient(
@@ -232,7 +232,7 @@ void main() {
   group('retry limit and failure state (issue #44)', () {
     test('flush() marks a row syncFailed immediately on a 4xx response, without waiting for '
         'maxRetries', () async {
-      expectUnexpectedError('Syncing expense local-1');
+      expectUnexpectedError<SpliitApiException>('Syncing expense local-1');
       await db.insertPending(pendingExpense('local-1'));
 
       final client = SpliitClient(
@@ -252,7 +252,7 @@ void main() {
     });
 
     test('flush() leaves a row pending and retriable after a single non-4xx failure', () async {
-      expectUnexpectedError('Syncing expense local-1');
+      expectUnexpectedError<SpliitApiException>('Syncing expense local-1');
       await db.insertPending(pendingExpense('local-1'));
 
       final client = SpliitClient(
@@ -272,7 +272,7 @@ void main() {
     });
 
     test('flush() marks a row syncFailed once it hits maxRetries non-4xx failures', () async {
-      expectUnexpectedError('Syncing expense local-1');
+      expectUnexpectedError<SpliitApiException>('Syncing expense local-1', times: Outbox.maxRetries);
       await db.insertPending(pendingExpense('local-1'));
 
       final client = SpliitClient(

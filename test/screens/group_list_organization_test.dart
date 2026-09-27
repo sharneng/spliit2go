@@ -147,7 +147,7 @@ void main() {
   testWidgets(
       'failed full swipe displays error, restores row, and does not crash on reload',
       (tester) async {
-    expectUnexpectedError('Updating group Alpha');
+    expectUnexpectedError<StateError>('Updating group Alpha');
     final db = _FailingOrganizationDatabase();
     await seed(database: db);
     await pump(tester, db);
@@ -192,7 +192,7 @@ void main() {
     testWidgets(
         'failed sort save preserves selection, order, and reload ($throwsError)',
         (tester) async {
-      expectUnexpectedError('Saving the group list sort');
+      expectUnexpectedError<StateError>('Saving the group list sort');
       SharedPreferences.resetStatic();
       SharedPreferencesStorePlatform.instance = _FailingSortStore(throwsError);
       addTearDown(() => SharedPreferences.setMockInitialValues({}));

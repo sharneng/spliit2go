@@ -12,6 +12,8 @@ import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/group_settings_screen.dart';
 
+import '../support/error_log.dart';
+
 /// A minimal expense used purely to exercise the participant-protection
 /// checks (issue #46) below -- title/amount/date are arbitrary.
 Expense _expenseWithSplit({
@@ -543,7 +545,7 @@ void main() {
 
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw http.ClientException('not used')),
+      httpClient: noRequestsClient(),
     );
 
     await tester.pumpWidget(MaterialApp(
@@ -590,7 +592,7 @@ void main() {
 
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw http.ClientException('not used')),
+      httpClient: noRequestsClient(),
     );
 
     await tester.pumpWidget(MaterialApp(
@@ -733,7 +735,7 @@ void main() {
 
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw http.ClientException('not used')),
+      httpClient: noRequestsClient(),
     );
 
     await tester.pumpWidget(MaterialApp(
@@ -764,7 +766,7 @@ void main() {
 
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw http.ClientException('not used')),
+      httpClient: noRequestsClient(),
     );
 
     await tester.pumpWidget(MaterialApp(

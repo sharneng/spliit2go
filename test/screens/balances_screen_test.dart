@@ -136,7 +136,9 @@ void main() {
         if (req.url.toString().contains('groups.expenses.create')) {
           return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
         }
-        throw http.ClientException('offline'); // categories load from the cache
+        // Anything else, such as the form's categories, as if offline: the
+        // form falls back to General (#132).
+        throw http.ClientException('offline');
       }),
     );
     final outbox = Outbox(db, client, groupId: 'g1');

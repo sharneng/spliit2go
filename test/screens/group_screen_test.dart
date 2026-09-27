@@ -429,7 +429,9 @@ void main() {
 
       final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw http.ClientException('not used')),
+        // Offline: the screen's refresh and the form's categories are
+        // attempted, and fall back as they do without a connection.
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       final outbox = Outbox(db, client, groupId: 'g1');
 
@@ -457,7 +459,9 @@ void main() {
 
       final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw http.ClientException('not used')),
+        // Offline: the screen's refresh and the form's categories are
+        // attempted, and fall back as they do without a connection.
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       final outbox = Outbox(db, client, groupId: 'g1');
 
@@ -535,7 +539,9 @@ void main() {
 
       final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw http.ClientException('not used')),
+        // Offline: the screen's refresh and the form's categories are
+        // attempted, and fall back as they do without a connection.
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       final outbox = Outbox(db, client, groupId: 'g1');
 

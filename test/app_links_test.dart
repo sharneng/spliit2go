@@ -113,7 +113,7 @@ void main() {
   testWidgets(
       'unrelated and malformed links are ignored; valid warm link still works',
       (tester) async {
-    expectUnexpectedError('Receiving an app link');
+    expectUnexpectedError<Exception>('Receiving an app link');
     await mount(tester);
     for (final url in [
       'https://evil.test/groups/g1',

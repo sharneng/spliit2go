@@ -243,7 +243,7 @@ void main() {
   });
 
   testWidgets('a server failure stays on the form with the error', (tester) async {
-    expectUnexpectedError('Creating a group');
+    expectUnexpectedError<SpliitApiException>('Creating a group on https://spliit.app');
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final popped = await openCreate(tester, db, fakeServer(fail: true).factory);

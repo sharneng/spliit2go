@@ -7,8 +7,6 @@ import 'package:drift/native.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
@@ -19,6 +17,8 @@ import 'package:spliit2go/screens/group_list_screen.dart';
 import 'package:spliit2go/screens/group_settings_screen.dart';
 import 'package:spliit2go/services/date_span_calculator.dart';
 import 'package:spliit2go/utils/date_format.dart';
+
+import 'support/error_log.dart';
 
 const group = Group(id: 'g1', name: 'Trip', currency: '€', participants: []);
 Expense expense(String id, DateTime date) => Expense(
@@ -91,7 +91,7 @@ void main() {
       (tester) async {
     final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((_) async => throw http.ClientException('unused')));
+        httpClient: noRequestsClient());
     await tester.pumpWidget(
         app(GroupSettingsScreen(client: client, db: db, group: group)));
     await tester.pumpAndSettle();

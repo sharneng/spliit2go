@@ -269,7 +269,7 @@ void main() {
   });
 
   testWidgets('an unexpected failure reading them says so, with details (#119)', (tester) async {
-    expectUnexpectedError('Loading receipts of expense e1');
+    expectUnexpectedError<SpliitApiException>('Loading receipts of expense e1');
     final (db, _) = await setUpDb();
     addTearDown(db.close);
     final s = server([() async => http.Response('boom', 500)]);

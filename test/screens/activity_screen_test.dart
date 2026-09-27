@@ -162,7 +162,7 @@ void main() {
   testWidgets('shows an error with a retry button when the fetch fails', (tester) async {
     final db = await newDb();
     addTearDown(db.close);
-    expectUnexpectedError('Loading activity for g1');
+    expectUnexpectedError<SpliitApiException>('Loading activity for g1');
     final client = SpliitClient(
       baseUrl: 'https://example.test',
       httpClient: MockClient((req) async => http.Response('server error', 500)),

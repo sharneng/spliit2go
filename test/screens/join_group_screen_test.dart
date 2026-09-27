@@ -155,7 +155,7 @@ void main() {
 
   testWidgets('an expense fetch failure fails the join and caches nothing (#81)',
       (tester) async {
-    expectUnexpectedError('Joining');
+    expectUnexpectedError<SpliitApiException>('Joining https://example.test/groups/g1');
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
 
@@ -189,7 +189,7 @@ void main() {
   });
 
   testWidgets('a server error is shown inline and nothing is cached', (tester) async {
-    expectUnexpectedError('Joining');
+    expectUnexpectedError<SpliitApiException>('Joining https://example.test/groups/g1');
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final client = SpliitClient(
@@ -348,7 +348,7 @@ void main() {
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
-    expectUnexpectedError('Joining');
+    expectUnexpectedError<SpliitResponseFormatException>('Joining https://example.test/groups/g1');
     final popped = await pushAndJoin(tester, db,
         answering('[{"result":{"data":{"json":{"group":[]}}}}]'));
 

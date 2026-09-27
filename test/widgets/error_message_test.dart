@@ -81,7 +81,7 @@ void main() {
   });
 
   testWidgets('an uncaught error shows after the frame as a snack bar, with Details', (tester) async {
-    expectUnexpectedError('Unhandled async error');
+    expectUnexpectedError<StateError>('Unhandled async error');
     final reporter = ErrorReporter.instance;
     final navigatorKey = GlobalKey<NavigatorState>();
     await tester.pumpWidget(app(const Text('home'), navigatorKey: navigatorKey, reporter: reporter));

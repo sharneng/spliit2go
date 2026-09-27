@@ -91,7 +91,7 @@ void main() {
 
   testWidgets('failed persistence restores selection and reports error',
       (tester) async {
-    expectUnexpectedError('Saving an app setting');
+    expectUnexpectedError<StateError>('Saving an app setting');
     final settings = await AppSettings.load(FailingSettingsService());
     addTearDown(settings.dispose);
     await tester.pumpWidget(

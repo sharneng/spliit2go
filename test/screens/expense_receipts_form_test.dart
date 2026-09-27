@@ -193,7 +193,7 @@ void main() {
 
   testWidgets('a failed upload stays, "Not uploaded", blocks Save, and can be retried (#119)',
       (tester) async {
-    expectUnexpectedError('Uploading a receipt');
+    expectUnexpectedError<SpliitApiException>('Uploading a receipt');
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final s = server(signs: [signFails, () async => http.Response('', 200)]);
@@ -233,7 +233,7 @@ void main() {
 
   testWidgets('removing a photo that didn\'t upload lets the expense save without it',
       (tester) async {
-    expectUnexpectedError('Uploading a receipt');
+    expectUnexpectedError<SpliitApiException>('Uploading a receipt');
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final popped = await openForm(tester, db, server(signs: [signFails]).client, _FakePicker());
@@ -283,7 +283,7 @@ void main() {
   });
 
   testWidgets('cancelling the picker adds nothing; an unreadable photo says so', (tester) async {
-    expectUnexpectedError('Adding a receipt photo');
+    expectUnexpectedError<UnreadableReceiptPhotoException>('Adding a receipt photo');
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final s = server();
