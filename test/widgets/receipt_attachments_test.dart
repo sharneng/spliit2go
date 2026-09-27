@@ -11,6 +11,8 @@ import 'package:spliit2go/services/receipt_cache.dart';
 import 'package:spliit2go/services/receipt_photo.dart';
 import 'package:spliit2go/widgets/receipt_attachments.dart';
 
+import '../support/error_log.dart';
+
 // #131 review (Ezra): discarding the form stops anything not yet started.
 void main() {
   test('a photo still being prepared when the form is discarded is never uploaded', () async {
@@ -42,6 +44,7 @@ void main() {
   });
 
   test('a retry after the form is discarded doesn\'t upload either', () async {
+    expectUnexpectedError<SpliitApiException>('Uploading a receipt');
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     var signs = 0;

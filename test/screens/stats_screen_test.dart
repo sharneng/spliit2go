@@ -150,7 +150,7 @@ void main() {
     addTearDown(db.close);
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => http.Response('offline', 500)),
+      httpClient: MockClient((req) async => throw http.ClientException('offline')),
     );
     final outbox = Outbox(db, client, groupId: 'g1');
 
@@ -173,7 +173,7 @@ void main() {
     addTearDown(db.close);
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => http.Response('offline', 500)),
+      httpClient: MockClient((req) async => throw http.ClientException('offline')),
     );
     final outbox = Outbox(db, client, groupId: 'g1');
 
@@ -195,7 +195,7 @@ void main() {
       {Locale locale = const Locale('en'), TransitionBuilder? builder}) async {
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => http.Response('offline', 500)),
+      httpClient: MockClient((req) async => throw http.ClientException('offline')),
     );
     await tester.pumpWidget(MaterialApp(
       locale: locale,

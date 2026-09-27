@@ -1,6 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
@@ -52,7 +53,7 @@ void main() {
       {VoidCallback? onExpensesChanged}) async {
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw Exception('offline')),
+      httpClient: MockClient((req) async => throw http.ClientException('offline')),
     );
     await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),

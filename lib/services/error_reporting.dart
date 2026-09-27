@@ -75,7 +75,13 @@ class ReportedError {
 /// Classifies errors, logs the unexpected ones once, and keeps the last
 /// uncaught one for the app to present (see [installErrorHandlers]).
 class ErrorReporter {
-  ErrorReporter();
+  ErrorReporter({void Function(ReportedError error)? log}) : _log = log ?? _debugLog;
+
+  /// Where unexpected errors are logged: `debugPrint`, so they show up in
+  /// `flutter run` and device logs. Tests collect them instead (#133).
+  final void Function(ReportedError error) _log;
+
+  static void _debugLog(ReportedError r) => debugPrint('Unexpected error: ${r.diagnostics}');
 
   /// The app's reporter. Screens use this; tests may replace it.
   static ErrorReporter instance = ErrorReporter();
@@ -115,8 +121,6 @@ class ErrorReporter {
     }
     return true;
   }
-
-  void _log(ReportedError r) => debugPrint('Unexpected error: ${r.diagnostics}');
 }
 
 /// Routes errors nothing caught, from the framework and from async code,

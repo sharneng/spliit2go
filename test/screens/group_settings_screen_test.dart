@@ -12,6 +12,8 @@ import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/group_settings_screen.dart';
 
+import '../support/error_log.dart';
+
 /// A minimal expense used purely to exercise the participant-protection
 /// checks (issue #46) below -- title/amount/date are arbitrary.
 Expense _expenseWithSplit({
@@ -410,8 +412,10 @@ void main() {
           updateRequest = req;
           return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
         }
-        return http.Response(
-          freshGroupResponse({
+        // Encoded as UTF-8: http.Response(String) is Latin-1 only, and '€'
+        // isn't in it.
+        return http.Response.bytes(
+          utf8.encode(freshGroupResponse({
             'id': 'g1',
             'name': 'Banff Trip',
             'currency': '€',
@@ -420,8 +424,9 @@ void main() {
               {'id': 'alex', 'name': 'Alex'},
               {'id': 'bea', 'name': 'Bea'},
             ],
-          }),
+          })),
           200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
         );
       }),
     );
@@ -540,7 +545,7 @@ void main() {
 
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw Exception('not used')),
+      httpClient: noRequestsClient(),
     );
 
     await tester.pumpWidget(MaterialApp(
@@ -587,7 +592,7 @@ void main() {
 
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw Exception('not used')),
+      httpClient: noRequestsClient(),
     );
 
     await tester.pumpWidget(MaterialApp(
@@ -730,7 +735,7 @@ void main() {
 
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw Exception('not used')),
+      httpClient: noRequestsClient(),
     );
 
     await tester.pumpWidget(MaterialApp(
@@ -761,7 +766,7 @@ void main() {
 
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw Exception('not used')),
+      httpClient: noRequestsClient(),
     );
 
     await tester.pumpWidget(MaterialApp(

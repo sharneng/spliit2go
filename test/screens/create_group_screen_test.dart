@@ -12,6 +12,8 @@ import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/group_settings_screen.dart';
 
+import '../support/error_log.dart';
+
 // Issue #115: the group settings form, in create mode.
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -241,6 +243,7 @@ void main() {
   });
 
   testWidgets('a server failure stays on the form with the error', (tester) async {
+    expectUnexpectedError<SpliitApiException>('Creating a group on https://spliit.app');
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final popped = await openCreate(tester, db, fakeServer(fail: true).factory);

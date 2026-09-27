@@ -51,7 +51,7 @@ void main() {
     addTearDown(db.close);
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => http.Response('offline', 500)),
+      httpClient: MockClient((req) async => throw http.ClientException('offline')),
     );
     final outbox = Outbox(db, client, groupId: 'g1');
 
@@ -133,8 +133,12 @@ void main() {
             200,
           );
         }
-        // groups.expenses.create
-        return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+        if (req.url.toString().contains('groups.expenses.create')) {
+          return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
+        }
+        // Anything else, such as the form's categories, as if offline: the
+        // form falls back to General (#132).
+        throw http.ClientException('offline');
       }),
     );
     final outbox = Outbox(db, client, groupId: 'g1');
@@ -179,7 +183,7 @@ void main() {
     addTearDown(db.close);
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw Exception('offline')),
+      httpClient: MockClient((req) async => throw http.ClientException('offline')),
     );
     final outbox = Outbox(db, client, groupId: 'g1');
 
@@ -216,7 +220,7 @@ void main() {
       {String? activeUserId, VoidCallback? onPickActiveUser}) async {
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => http.Response('offline', 500)),
+      httpClient: MockClient((req) async => throw http.ClientException('offline')),
     );
     await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -342,7 +346,7 @@ void main() {
       addTearDown(db.close);
       final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => http.Response('offline', 500)),
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       var picks = 0;
       await tester.pumpWidget(MaterialApp(

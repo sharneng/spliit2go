@@ -34,7 +34,7 @@ void main() {
   // real network failure looks like to SpliitClient's callers.
   SpliitClient offlineClient() => SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw Exception('offline')),
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
 
   // Regression test for the headline bug found 2026-09-16: before the
@@ -150,7 +150,7 @@ void main() {
               200,
             );
           }
-          throw Exception('offline'); // fetchGroup/fetchExpenses -- _refresh falls back to cache
+          throw http.ClientException('offline'); // fetchGroup/fetchExpenses -- _refresh falls back to cache
         }),
       );
       final outbox = Outbox(db, client, groupId: 'g1');
@@ -242,7 +242,7 @@ void main() {
 
       final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw Exception('offline')),
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       final outbox = Outbox(db, client, groupId: 'g1');
 
@@ -309,7 +309,7 @@ void main() {
             deleted = req;
             return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
           }
-          throw Exception('offline'); // every refresh fails
+          throw http.ClientException('offline'); // every refresh fails
         }),
       );
       await tester.pumpWidget(MaterialApp(
@@ -355,7 +355,7 @@ void main() {
             return http.Response(listJson(['Tea']), 200);
           }
           if (url.contains('groups.get')) return http.Response(groupJson(), 200);
-          throw Exception('offline');
+          throw http.ClientException('offline');
         }),
       );
       await tester.pumpWidget(MaterialApp(
@@ -429,7 +429,9 @@ void main() {
 
       final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw Exception('not used')),
+        // Offline: the screen's refresh and the form's categories are
+        // attempted, and fall back as they do without a connection.
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       final outbox = Outbox(db, client, groupId: 'g1');
 
@@ -457,7 +459,9 @@ void main() {
 
       final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw Exception('not used')),
+        // Offline: the screen's refresh and the form's categories are
+        // attempted, and fall back as they do without a connection.
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       final outbox = Outbox(db, client, groupId: 'g1');
 
@@ -498,7 +502,7 @@ void main() {
             return http.Response('[{"result":{"data":{"json":{"expenseId":"server-1"}}}}]', 200);
           }
           // groups.get / groups.expenses.list follow-up refresh.
-          throw Exception('offline');
+          throw http.ClientException('offline');
         }),
       );
       final outbox = Outbox(db, client, groupId: 'g1');
@@ -535,7 +539,9 @@ void main() {
 
       final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw Exception('not used')),
+        // Offline: the screen's refresh and the form's categories are
+        // attempted, and fall back as they do without a connection.
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       final outbox = Outbox(db, client, groupId: 'g1');
 
@@ -589,7 +595,7 @@ void main() {
 
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw Exception('offline')),
+      httpClient: MockClient((req) async => throw http.ClientException('offline')),
     );
     final outbox = Outbox(db, client, groupId: 'g1');
 
@@ -625,7 +631,7 @@ void main() {
       await db.cacheGroup(cachedGroup);
       final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw Exception('offline')),
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       final outbox = Outbox(db, client, groupId: 'g1');
       await tester.pumpWidget(MaterialApp(
@@ -779,7 +785,7 @@ void main() {
       final shared = <(Uri, String?)>[];
       final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw Exception('offline')),
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       await tester.pumpWidget(MaterialApp(
         locale: const Locale('en'),
@@ -902,7 +908,7 @@ void main() {
       await db.cacheGroup(cachedGroup);
       final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw Exception('offline')),
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       await tester.pumpWidget(MaterialApp(
         locale: locale,

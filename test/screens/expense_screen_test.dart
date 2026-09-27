@@ -16,6 +16,8 @@ import 'package:spliit2go/services/active_user.dart';
 import 'package:spliit2go/sync/outbox.dart';
 import 'package:spliit2go/widgets/category_icon.dart';
 
+import '../support/error_log.dart';
+
 void main() {
   const group = Group(
     id: 'g1',
@@ -31,7 +33,7 @@ void main() {
   Future<void> pumpScreen(WidgetTester tester, AppDatabase db, {String? initialPaidBy}) async {
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw Exception('offline')),
+      httpClient: MockClient((req) async => throw http.ClientException('offline')),
     );
     final outbox = Outbox(db, client, groupId: 'g1');
     // Mirrors real usage: this screen is only ever reached from
@@ -404,7 +406,7 @@ void main() {
       addTearDown(db.close);
       final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw Exception('offline')),
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       final outbox = Outbox(db, client, groupId: 'g1');
 
@@ -457,7 +459,7 @@ void main() {
       addTearDown(db.close);
       final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw Exception('offline')),
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       final outbox = Outbox(db, client, groupId: 'g1');
       final percentageExpense = Expense(
@@ -508,7 +510,7 @@ void main() {
       addTearDown(db.close);
       final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw Exception('offline')),
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       final outbox = Outbox(db, client, groupId: 'g1');
       final evenlyExpense = Expense(
@@ -553,6 +555,9 @@ void main() {
       final client = SpliitClient(
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async {
+          // Only the update is served; the categories fail as if offline and
+          // the form falls back to General (#132).
+          if (!req.url.path.endsWith('groups.expenses.update')) throw http.ClientException('offline');
           captured = req;
           return http.Response('[{"result":{"data":{"json":{"expenseId":"e1"}}}}]', 200);
         }),
@@ -591,7 +596,7 @@ void main() {
       addTearDown(db.close);
       final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw Exception('offline')),
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       final outbox = Outbox(db, client, groupId: 'g1');
 
@@ -613,7 +618,7 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining("Couldn't save"), findsOneWidget);
+      expect(find.text("Couldn't reach the server. Check your connection and try again."), findsOneWidget);
       // Still on the edit screen (didn't pop), and nothing was queued.
       expect(find.text('Edit expense'), findsOneWidget);
       expect(await db.pendingExpenses(), isEmpty);
@@ -656,7 +661,7 @@ void main() {
     addTearDown(db.close);
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw Exception('offline')),
+      httpClient: MockClient((req) async => throw http.ClientException('offline')),
     );
     final outbox = Outbox(db, client, groupId: 'g2');
 
@@ -993,6 +998,9 @@ void main() {
     final client = SpliitClient(
       baseUrl: 'https://example.test',
       httpClient: MockClient((req) async {
+        // Only the update is served; the categories fail as if offline and
+        // the form falls back to General (#132).
+        if (!req.url.path.endsWith('groups.expenses.update')) throw http.ClientException('offline');
         captured = req;
         return http.Response(
             '[{"result":{"data":{"json":{"expenseId":"e1"}}}}]', 200);
@@ -1041,28 +1049,20 @@ void main() {
       (tester) async {
     final db = _FailingInsertDb();
     addTearDown(db.close);
-    final logs = <String>[];
-    final original = debugPrint;
-    debugPrint = (message, {wrapWidth}) => logs.add(message ?? '');
-    // Restored in the test body: flutter_test checks debugPrint before
-    // tear-downs run.
-    try {
-      await pumpScreen(tester, db);
-      await fillCommonFields(tester, amount: '30');
+    expectUnexpectedError<StateError>('Adding an expense to g1');
+    await pumpScreen(tester, db);
+    await fillCommonFields(tester, amount: '30');
 
-      final save = find.widgetWithText(FilledButton, 'Save');
-      await tester.ensureVisible(save);
-      await tester.tap(save);
-      await tester.pumpAndSettle();
+    final save = find.widgetWithText(FilledButton, 'Save');
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
 
-      expect(find.text("Couldn't save this expense."), findsOneWidget);
-      expect(find.text('Tap for details'), findsOneWidget);
-      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Save')).onPressed,
-          isNotNull);
-      expect(logs.where((l) => l.contains('disk I/O error')), hasLength(1));
-    } finally {
-      debugPrint = original;
-    }
+    expect(find.text("Couldn't save this expense."), findsOneWidget);
+    expect(find.text('Tap for details'), findsOneWidget);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Save')).onPressed,
+        isNotNull);
+    expect(loggedUnexpectedErrors.where((e) => '${e.error}'.contains('disk I/O error')), hasLength(1));
   });
 
   // #119 review (Ezra, Kenneth): once the expense is saved, failing to
@@ -1073,7 +1073,7 @@ void main() {
         {SpliitClient? client, Expense? existing}) async {
       client ??= SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((req) async => throw Exception('offline')),
+        httpClient: MockClient((req) async => throw http.ClientException('offline')),
       );
       await db.cacheGroup(group);
       final popped = <bool?>[];
@@ -1120,28 +1120,22 @@ void main() {
     testWidgets('default split fails after adding: saved once, the form closes, and the note has Details', (tester) async {
       final db = _FailingDefaultSplitDb();
       addTearDown(db.close);
-      final logs = <String>[];
-      final original = debugPrint;
-      debugPrint = (message, {wrapWidth}) => logs.add(message ?? '');
-      try {
-        final popped = await openFrom(tester, db);
-        await fillCommonFields(tester, amount: '30');
-        await checkDefaultAndSave(tester);
+      expectUnexpectedError<StateError>('Saving the default split for g1');
+      final popped = await openFrom(tester, db);
+      await fillCommonFields(tester, amount: '30');
+      await checkDefaultAndSave(tester);
 
-        expect(popped, [true]);
-        expect(find.byType(ExpenseScreen), findsNothing);
-        expect(await tester.runAsync(() => db.expensesForGroup('g1')), hasLength(1));
-        expect(await tester.runAsync(() => db.defaultSplitFor('g1')), isNull);
-        expect(find.text(note), findsOneWidget);
-        expect(logs.where((l) => l.contains('disk I/O error')), hasLength(1));
+      expect(popped, [true]);
+      expect(find.byType(ExpenseScreen), findsNothing);
+      expect(await tester.runAsync(() => db.expensesForGroup('g1')), hasLength(1));
+      expect(await tester.runAsync(() => db.defaultSplitFor('g1')), isNull);
+      expect(find.text(note), findsOneWidget);
+      expect(loggedUnexpectedErrors.where((e) => '${e.error}'.contains('disk I/O error')), hasLength(1));
 
-        // Details still opens after the form that showed the note closed.
-        await tester.tap(find.text('Details'));
-        await tester.pumpAndSettle();
-        expect(find.textContaining('Saving the default split for g1 failed.'), findsOneWidget);
-      } finally {
-        debugPrint = original;
-      }
+      // Details still opens after the form that showed the note closed.
+      await tester.tap(find.text('Details'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Saving the default split for g1 failed.'), findsOneWidget);
     });
 
     testWidgets('default split fails after editing: the form closes after the one update, with the note', (tester) async {
@@ -1151,35 +1145,31 @@ void main() {
       final client = SpliitClient(
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async {
-          if (req.url.path.endsWith('groups.expenses.update')) updates++;
+          if (!req.url.path.endsWith('groups.expenses.update')) throw http.ClientException('offline');
+          updates++;
           return http.Response('[{"result":{"data":{"json":{"expenseId":"e1"}}}}]', 200);
         }),
       );
-      final original = debugPrint;
-      debugPrint = (message, {wrapWidth}) {};
-      try {
-        final popped = await openFrom(tester, db,
-            client: client,
-            existing: Expense(
-              id: 'e1',
-              groupId: 'g1',
-              title: 'Groceries',
-              amountCents: 9000,
-              paidBy: 'bea',
-              paidFor: const [
-                ExpenseShare(participantId: 'alex', shares: 1),
-                ExpenseShare(participantId: 'bea', shares: 1),
-              ],
-              date: DateTime.utc(2026, 9, 10),
-            ));
-        await checkDefaultAndSave(tester);
+      expectUnexpectedError<StateError>('Saving the default split for g1');
+      final popped = await openFrom(tester, db,
+          client: client,
+          existing: Expense(
+            id: 'e1',
+            groupId: 'g1',
+            title: 'Groceries',
+            amountCents: 9000,
+            paidBy: 'bea',
+            paidFor: const [
+              ExpenseShare(participantId: 'alex', shares: 1),
+              ExpenseShare(participantId: 'bea', shares: 1),
+            ],
+            date: DateTime.utc(2026, 9, 10),
+          ));
+      await checkDefaultAndSave(tester);
 
-        expect(popped, [true]);
-        expect(updates, 1);
-        expect(find.text(note), findsOneWidget);
-      } finally {
-        debugPrint = original;
-      }
+      expect(popped, [true]);
+      expect(updates, 1);
+      expect(find.text(note), findsOneWidget);
     });
 }
 

@@ -27,3 +27,13 @@ Joining a group on Android failed with "Couldn't join: type 'Null' is not a subt
 ## Presentation
 
 `ErrorMessage` shows a message, with "Tap for details" only when there are diagnostics; the sheet shows the message, operation, error and stack, selectable, with Copy. Without details the message is selectable text, so one that carries a link (a created group that couldn't be loaded, #116) can still be copied. See SETUP.md, "Diagnosing errors on a device".
+
+## In tests (#133)
+
+A passing `flutter test` run prints nothing. Before #133 it printed about 180 "Unexpected error" blocks, and one was taken for a failure. Most came from fakes failing the wrong way: a plain `Exception('offline')` is correctly *unexpected*, so it was logged.
+
+- **Fakes fail the way the real thing does.** Offline is `http.ClientException`, which the app handles quietly as a connection problem. A call the test doesn't care about, but that the screen legitimately makes, gets a valid answer or fails as if offline. Falling back quietly isn't evidence that the feature works offline: the expense form's categories are a known gap (#132).
+- **A server that must not be reached** is `noRequestsClient()`. Any request to it fails the test, even when the app catches the error it gets.
+- **Unexpected errors are collected, not printed.** `test/flutter_test_config.dart` runs for every test file. Before each test it installs a fresh `ErrorReporter.instance` (so the de-duplication and the uncaught-error notice are fresh too). Its log output (`ErrorReporter(log:)`, `debugPrint` in the app) collects the `ReportedError`s (`test/support/error_log.dart`). Nothing else is intercepted: other `debugPrint` output and Flutter's own handling of test failures are unchanged.
+- **A test declares each unexpected error it causes on purpose**, by type, exact operation and count: `expectUnexpectedError<SpliitApiException>('Syncing expense local-1', times: Outbox.maxRetries)`. It can inspect them with `loggedUnexpectedErrors`.
+- **Anything else fails the test after it runs**, with the error's details. That covers an undeclared report, another error type from a declared operation, an extra occurrence, and a declaration not met (Ezra, #133 and #134 review). So a change that starts failing unexpectedly somewhere can't pass quietly. The rule has already caught one: a fake's reply contained "€", which `http.Response(String)` can't encode, so a follow-up read after saving group settings had been failing unnoticed.

@@ -14,6 +14,8 @@ import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/activity_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
 
+import '../support/error_log.dart';
+
 // Flat testWidgets calls throughout this file, not group() -- `group` is
 // also the name of the fixture constant below, and flutter_test's
 // group() would be shadowed by it if used here (see
@@ -160,9 +162,10 @@ void main() {
   testWidgets('shows an error with a retry button when the fetch fails', (tester) async {
     final db = await newDb();
     addTearDown(db.close);
+    expectUnexpectedError<SpliitApiException>('Loading activity for g1');
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => http.Response('offline', 500)),
+      httpClient: MockClient((req) async => http.Response('server error', 500)),
     );
     final outbox = Outbox(db, client, groupId: 'g1');
 
@@ -174,7 +177,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining("Couldn't load activity"), findsOneWidget);
+    expect(find.text("Couldn't load activity."), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
   });
 
@@ -332,14 +335,14 @@ void main() {
     }, before: (cursor) async {
       if (cursor == 1 && failNext) {
         failNext = false;
-        throw Exception('offline');
+        throw http.ClientException('offline');
       }
     });
 
     await pumpActivity(tester, server.client, db);
     expect(server.cursors, [0, 1]);
     expect(find.byType(ListTile), findsOneWidget);
-    expect(find.textContaining("Couldn't load activity"), findsOneWidget);
+    expect(find.text("Couldn't reach the server. Check your connection and try again."), findsOneWidget);
 
     // No automatic retry, however the list is poked.
     await tester.drag(find.byType(ListView), const Offset(0, -300));

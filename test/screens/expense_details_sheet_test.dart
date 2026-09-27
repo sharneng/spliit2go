@@ -13,7 +13,10 @@ import 'package:spliit2go/models/category.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/expense_details_sheet.dart';
+import 'package:spliit2go/services/receipt_cache.dart';
 import 'package:spliit2go/sync/outbox.dart';
+
+import '../support/error_log.dart';
 
 // Issue #90: tapping an expense shows its details in a sheet, with Edit,
 // Retry and Discard inside it depending on the expense's state.
@@ -85,7 +88,7 @@ void main() {
   SpliitClient serverClient(Future<http.Response> Function(http.Request req) handler) =>
       SpliitClient(baseUrl: 'https://example.test', httpClient: MockClient(handler));
 
-  final offlineClient = serverClient((_) async => throw Exception('offline'));
+  final offlineClient = serverClient((_) async => throw http.ClientException('offline'));
 
   bool? result;
   setUp(() => result = null);
@@ -282,26 +285,18 @@ void main() {
   testWidgets('Edit on a malformed response says so, logged, with details', (tester) async {
     final db = await cachedDb();
     addTearDown(db.close);
-    final logs = <String>[];
-    final original = debugPrint;
-    debugPrint = (message, {wrapWidth}) => logs.add(message ?? '');
-    // Restored in the test body: flutter_test checks debugPrint before
-    // tear-downs run.
-    try {
-      await openSheet(tester, db,
-          client: serverClient((_) async => http.Response('[{"result":{"data":{"json":{}}}}]', 200)));
+    expectUnexpectedError<TypeError>('Fetching expense e1 to edit');
+    await openSheet(tester, db,
+        client: serverClient((_) async => http.Response('[{"result":{"data":{"json":{}}}}]', 200)));
 
-      await tester.tap(inSheet(find.widgetWithText(FilledButton, 'Edit')));
-      await tester.pumpAndSettle();
+    await tester.tap(inSheet(find.widgetWithText(FilledButton, 'Edit')));
+    await tester.pumpAndSettle();
 
-      expect(inSheet(find.text("Couldn't open this expense for editing.")), findsOneWidget);
-      expect(inSheet(find.text('Editing an expense needs a connection.')), findsNothing);
-      expect(inSheet(find.text('Tap for details')), findsOneWidget);
-      expect(logs.where((l) => l.contains('Fetching expense e1 to edit')), hasLength(1));
-      await closeTree(tester);
-    } finally {
-      debugPrint = original;
-    }
+    expect(inSheet(find.text("Couldn't open this expense for editing.")), findsOneWidget);
+    expect(inSheet(find.text('Editing an expense needs a connection.')), findsNothing);
+    expect(inSheet(find.text('Tap for details')), findsOneWidget);
+    expect(loggedUnexpectedErrors.where((e) => e.operation == 'Fetching expense e1 to edit'), hasLength(1));
+    await closeTree(tester);
   });
 
   testWidgets('Edit with no connection says so, with no details', (tester) async {
@@ -330,7 +325,7 @@ void main() {
         updates++;
         return http.Response('[{"result":{"data":{"json":{"expenseId":"e1"}}}}]', 200);
       }
-      return http.Response('offline', 500);
+      throw http.ClientException('offline');
     }));
 
     await tester.tap(inSheet(find.widgetWithText(FilledButton, 'Edit')));
@@ -355,6 +350,9 @@ void main() {
     tallView(tester);
     final db = await cachedDb();
     addTearDown(db.close);
+    // The images aren't what this test is about: the bucket is offline.
+    ReceiptCache.use(ReceiptCache(db,
+        httpClient: MockClient((_) async => throw http.ClientException('offline'))));
     const receipts = [
       {'id': 'd1', 'url': 'https://bucket.test/document-1.jpg', 'width': 1536, 'height': 2048},
       {'id': 'd2', 'url': 'https://bucket.test/document-2.jpg', 'width': 2048, 'height': 1024},
@@ -369,7 +367,7 @@ void main() {
         update = req;
         return http.Response('[{"result":{"data":{"json":{"expenseId":"e1"}}}}]', 200);
       }
-      return http.Response('offline', 500);
+      throw http.ClientException('offline');
     }));
 
     await tester.tap(inSheet(find.widgetWithText(FilledButton, 'Edit')));
@@ -532,6 +530,7 @@ void main() {
     });
 
     testWidgets('a failed load can be retried', (tester) async {
+      expectUnexpectedError<SpliitApiException>('Loading expense e1');
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       var fail = true;
@@ -675,6 +674,7 @@ void main() {
     });
 
     testWidgets('a failure keeps the expense and says so in the sheet', (tester) async {
+      expectUnexpectedError<SpliitApiException>('Deleting expense e1');
       final db = await cachedDb();
       addTearDown(db.close);
       await openSheet(tester, db, client: serverClient((req) async {
