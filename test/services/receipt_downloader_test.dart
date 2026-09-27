@@ -29,56 +29,66 @@ void main() {
   late Map<String, int> bucketStatus;
   late List<String> downloads;
   late List<String> reads;
+
+  /// Expenses whose read the server answers with a 500.
+  late Set<String> failingReads;
   Completer<void>? holdDownload;
 
   const wifi = [ConnectivityResult.wifi];
   const mobile = [ConnectivityResult.mobile];
 
   /// The server: e1 has two receipts, e2 one.
-  final documents = {
+  late Map<String, List<String>> documents;
+  final initialDocuments = {
     'e1': ['https://bucket.test/1.jpg', 'https://bucket.test/2.jpg'],
     'e2': ['https://bucket.test/3.jpg'],
   };
 
-  setUp(() async {
-    SharedPreferences.setMockInitialValues({});
-    db = AppDatabase(NativeDatabase.memory());
-    dir = await Directory.systemTemp.createTemp('favorite-receipts-');
-    cache = ReceiptCache(db, directory: () async => dir, limit: 1000);
-    ReceiptCache.use(cache);
-    network = wifi;
-    changes = StreamController.broadcast();
-    bucketStatus = {};
-    downloads = [];
-    reads = [];
-    holdDownload = null;
-    await db.cacheGroup(const Group(id: 'g1', name: 'Banff Trip', currency: '\$', participants: []));
-    await db.setGroupOrganization('g1', GroupOrganization.favorite);
-    await db.replaceServerExpenses('g1', [
-      for (final MapEntry(key: id, value: urls) in documents.entries)
-        Expense(
-            id: id,
-            groupId: 'g1',
-            title: 'Coffee',
-            amountCents: 500,
-            paidBy: 'p1',
-            paidFor: const [],
-            date: DateTime(2026, 9, 27),
-            documentCount: urls.length),
-    ]);
-  });
-  tearDown(() async {
-    await changes.close();
-    await db.close();
-    await dir.delete(recursive: true);
-  });
+  late SpliitClient server;
 
-  final server = SpliitClient(
+  /// The server's activity log, newest first: `(id, type, expenseId)`.
+  late List<(String, String, String?)> activities;
+  late int activityReads;
+
+  http.Response trpc(Object data) => http.Response(
+      jsonEncode([
+        {
+          'result': {
+            'data': {'json': data},
+          },
+        },
+      ]),
+      200);
+
+  SpliitClient newServer() => SpliitClient(
     baseUrl: 'https://spliit.test',
     httpClient: MockClient((req) async {
       final input = jsonDecode(req.url.queryParameters['input']!)['0']['json'] as Map;
+      if (req.url.path.endsWith('groups.activities.list')) {
+        activityReads++;
+        final cursor = input['cursor'] as int, limit = input['limit'] as int;
+        final page = activities.skip(cursor).take(limit).toList();
+        return trpc({
+          'activities': [
+            for (final (i, (id, type, expenseId)) in page.indexed)
+              {
+                'id': id,
+                // A minute apart, fixed per entry: counted from the oldest.
+                'time': DateTime.utc(2026, 9, 27, 12)
+                    .add(Duration(minutes: activities.length - 1 - (cursor + i)))
+                    .toIso8601String(),
+                'activityType': type,
+                'expenseId': expenseId,
+                'expense': expenseId == null ? null : {'id': expenseId},
+              },
+          ],
+          'hasMore': cursor + limit < activities.length,
+          'nextCursor': cursor + limit,
+        });
+      }
       final id = input['expenseId'] as String;
       reads.add(id);
+      if (failingReads.contains(id)) return http.Response('boom', 500);
       return http.Response(
           jsonEncode([
             {
@@ -105,6 +115,44 @@ void main() {
           200);
     }),
   );
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    documents = {for (final e in initialDocuments.entries) e.key: [...e.value]};
+    db = AppDatabase(NativeDatabase.memory());
+    dir = await Directory.systemTemp.createTemp('favorite-receipts-');
+    cache = ReceiptCache(db, directory: () async => dir, limit: 1000);
+    ReceiptCache.use(cache);
+    network = wifi;
+    changes = StreamController.broadcast();
+    bucketStatus = {};
+    downloads = [];
+    reads = [];
+    holdDownload = null;
+    activities = [('a2', 'UPDATE_EXPENSE', 'e1'), ('a1', 'CREATE_EXPENSE', 'e1')];
+    activityReads = 0;
+    failingReads = {};
+    server = newServer();
+    await db.cacheGroup(const Group(id: 'g1', name: 'Banff Trip', currency: '\$', participants: []));
+    await db.setGroupOrganization('g1', GroupOrganization.favorite);
+    await db.replaceServerExpenses('g1', [
+      for (final MapEntry(key: id, value: urls) in documents.entries)
+        Expense(
+            id: id,
+            groupId: 'g1',
+            title: 'Coffee',
+            amountCents: 500,
+            paidBy: 'p1',
+            paidFor: const [],
+            date: DateTime(2026, 9, 27),
+            documentCount: urls.length),
+    ]);
+  });
+  tearDown(() async {
+    await changes.close();
+    await db.close();
+    await dir.delete(recursive: true);
+  });
 
   ReceiptDownloader downloader() => ReceiptDownloader(
         db,
@@ -376,5 +424,128 @@ void main() {
 
     expect(downloads, hasLength(3));
     expect(reads, ['e1', 'e2']);
+  });
+
+  // #127 (Kenneth): Spliit has no updatedAt on expenses, so edits are
+  // found through the activity log.
+  group('changes since the last check', () {
+    /// The server's refresh: the list, with each expense's count now.
+    Future<void> refresh() => db.replaceServerExpenses('g1', [
+          for (final MapEntry(key: id, value: urls) in documents.entries)
+            Expense(
+                id: id,
+                groupId: 'g1',
+                title: 'Coffee',
+                amountCents: 500,
+                paidBy: 'p1',
+                paidFor: const [],
+                date: DateTime(2026, 9, 27),
+                documentCount: urls.length),
+        ]);
+
+    /// An edit made on the web: logged, newest first.
+    void edited(String activityId, String expenseId) =>
+        activities.insert(0, (activityId, 'UPDATE_EXPENSE', expenseId));
+
+    test('a receipt swapped on the web, count unchanged, is found and downloaded', () async {
+      final d = downloader();
+      await d.run('g1', server);
+      (reads, downloads) = (<String>[], <String>[]);
+
+      documents['e1']![1] = 'https://bucket.test/swapped.jpg';
+      edited('a3', 'e1');
+      await refresh();
+      await d.run('g1', server);
+
+      expect(reads, ['e1']);
+      expect(downloads, ['https://bucket.test/swapped.jpg']);
+      expect(await stored(), {
+        'https://bucket.test/1.jpg': ReceiptFileKind.favorite,
+        'https://bucket.test/swapped.jpg': ReceiptFileKind.favorite,
+        'https://bucket.test/3.jpg': ReceiptFileKind.favorite,
+      });
+      expect((await statusOf(d)).complete, isTrue);
+    });
+
+    test('nothing edited since: one look at the log, no expense read again', () async {
+      final d = downloader();
+      await d.run('g1', server);
+      (reads, activityReads) = (<String>[], 0);
+
+      await d.run('g1', server);
+
+      expect(reads, isEmpty);
+      expect(activityReads, 1);
+    });
+
+    test('the first check reads every list once, even ones already known', () async {
+      await db.cacheExpenseDocuments('g1', 'e1', [
+        for (final (i, u) in documents['e1']!.indexed) ExpenseDocument(id: 'e1-d$i', url: u, width: 1, height: 1),
+      ]);
+      final d = downloader();
+
+      await d.run('g1', server);
+
+      expect(reads, ['e1', 'e2']);
+    });
+
+    test('a run that fails partway checks the same range again next time', () async {
+      expectUnexpectedError<SpliitApiException>('Reading receipts of expense e2');
+      final d = downloader();
+      await d.run('g1', server);
+      reads = [];
+
+      edited('a3', 'e1');
+      edited('a4', 'e2');
+      failingReads.add('e2');
+      await d.run('g1', server);
+      expect(reads, unorderedEquals(['e1', 'e2']));
+      expect((await statusOf(d)).problem, ReceiptDownloadProblem.failed);
+
+      failingReads.clear();
+      reads = [];
+      await d.run('g1', server);
+      expect(reads, unorderedEquals(['e1', 'e2']));
+      expect((await statusOf(d)).problem, isNull);
+    });
+
+    test('too many changes to page through: every list is read again', () async {
+      final d = downloader();
+      await d.run('g1', server);
+      reads = [];
+
+      for (var i = 0; i < ReceiptDownloader.activityPages * 50 + 1; i++) {
+        activities.insert(0, ('x$i', 'UPDATE_GROUP', null));
+      }
+      await d.run('g1', server);
+
+      expect(reads, ['e1', 'e2']);
+      expect(activityReads, 1 + ReceiptDownloader.activityPages);
+    });
+
+    test('a receipt added to an expense downloads alone: the others stay', () async {
+      final d = downloader();
+      await d.run('g1', server);
+      downloads = [];
+
+      documents['e1']!.add('https://bucket.test/added.jpg');
+      edited('a3', 'e1');
+      await refresh();
+      await d.run('g1', server);
+
+      expect(downloads, ['https://bucket.test/added.jpg']);
+      expect((await statusOf(d)).available, 4);
+    });
+
+    test('an expense left with no receipts loses its list and files', () async {
+      final d = downloader();
+      await d.run('g1', server);
+
+      documents['e2'] = [];
+      edited('a3', 'e2');
+      await refresh();
+
+      expect((await stored()).keys, isNot(contains('https://bucket.test/3.jpg')));
+    });
   });
 }

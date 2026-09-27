@@ -74,7 +74,11 @@ Kenneth mostly uses one group when traveling, and needs its receipts offline. Fa
 
   Never right after Clear: Clear stops what's running, and a group's receipts come back at its next refresh.
 - **A run (`ReceiptDownloader`), per group:**
-  1. It reads the expenses whose documents aren't known yet, since the list only counts them.
+  1. It reads the receipt lists it needs:
+     - the ones not known yet, since the list only counts them;
+     - those of expenses **edited since the last check**.
+
+     Spliit has no `updatedAt` on expenses (not at cc796210, nor on `main` at 936adbcb), so a receipt swapped on the web with the count unchanged is invisible to a refresh. Its **activity log** records every edit made through its API. So the run reads the log back to the entry the last complete check saw, stored with the group as id and time, and re-reads the expenses updated since; usually that's one request. Some cases read every list instead: the first check, more than 5 pages of changes, or a log that can't be read for an unexpected reason. The position moves forward only once every list read succeeded, and it's taken before the reads, so an edit made meanwhile is seen next time. An edit made directly in a self-hosted server's database, with no activity entry, isn't seen; that's accepted.
   2. Receipts already stored (opened earlier) become favorite downloads rather than downloading again.
   3. It downloads the rest one at a time, as *favorite downloads*: never evicted while the group is a favorite, removed by Clear.
 
@@ -86,6 +90,7 @@ Kenneth mostly uses one group when traveling, and needs its receipts offline. Fa
   - "Waiting for Wi-Fi" isn't an error, so it isn't red.
   - The counts come from the database, and the last problem is stored with the group, so the status survives a restart.
 - **Network:** under Wi-Fi only, nothing downloads over mobile data. Moving onto mobile data mid-run cancels the transfer in flight: the run's HTTP client is closed, which aborts it. The rest wait for the next refresh or Retry. Going offline doesn't cancel anything, because the transfer fails by itself; iOS also reports "none" the moment the app starts listening, which on the simulator stopped a run before this rule.
+- **A changed count keeps the list:** a refresh no longer drops an expense's stored receipt list when its count changes. The list just stops counting as known until the expense is read again, so the receipts that didn't change keep their files instead of downloading again. The list goes when the expense is gone or has no receipts left.
 - **Lifecycle:**
   - Unfavoriting or archiving cancels the run, and its downloads become viewing cache.
   - Removing the group cancels it, and its files go with its rows.

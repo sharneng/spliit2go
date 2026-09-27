@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
+import '../models/activity.dart';
 import '../models/group_organization.dart';
 import 'error_reporting.dart';
 import 'receipt_cache.dart';
@@ -245,7 +246,11 @@ class ReceiptDownloader {
   Future<(ReceiptDownloadProblem?, String?)> _download(
       String groupId, SpliitClient client, _Run run) async {
     ReportedError? failure;
-    for (final expenseId in await db.expensesWithUnreadDocuments(groupId)) {
+    // Which receipt lists to read: the ones not known yet, plus those of
+    // expenses edited since the last complete check, which the activity
+    // log tells (a receipt swapped on the web keeps the count).
+    final (:toRead, :newest) = await _listsToRead(groupId, client);
+    for (final expenseId in toRead) {
       if (run.cancelled) return (run.reason, null);
       try {
         final fresh = await client.fetchExpense(groupId: groupId, expenseId: expenseId);
@@ -257,6 +262,11 @@ class ReceiptDownloader {
         failure ??= ErrorReporter.instance
             .report(e, st, operation: 'Reading receipts of expense $expenseId');
       }
+    }
+    // Every list read: the next run starts from here. Taken before the
+    // reads, so an edit made meanwhile is seen next time, never skipped.
+    if (failure == null && newest != null && !run.cancelled) {
+      await db.setReceiptsChecked(groupId, activityId: newest.id, at: newest.time);
     }
     // Opened earlier: already here, so kept rather than downloaded again.
     await db.keepGroupReceipts(groupId);
@@ -279,6 +289,69 @@ class ReceiptDownloader {
       }
     }
     return failure == null ? (null, null) : (ReceiptDownloadProblem.failed, failure.diagnostics);
+  }
+
+  /// How many activity-log pages a run reads looking for where the last
+  /// check stopped, before re-reading every list instead.
+  @visibleForTesting
+  static const activityPages = 5;
+  static const _activityPageSize = 50;
+
+  /// The receipt lists [groupId]'s run reads, and the newest activity-log
+  /// entry now (null for an empty log).
+  ///
+  /// Spliit has no `updatedAt` on expenses; its activity log records every
+  /// edit made through its API. So after the first check (which reads
+  /// every list), a run reads the log back to the entry the last complete
+  /// check saw, and re-reads the expenses updated since, plus any list not
+  /// known yet. If that entry isn't within [activityPages] pages, or the
+  /// log can't be read for an unexpected reason, every list is read.
+  Future<({List<String> toRead, Activity? newest})> _listsToRead(
+      String groupId, SpliitClient client) async {
+    final unread = await db.expensesWithUnreadDocuments(groupId);
+    final row = await db.groupRow(groupId);
+    final checked = row?.receiptsCheckedActivityId;
+    final checkedAt = row?.receiptsCheckedAt;
+    final updated = <String>{};
+    Activity? newest;
+    var reachedCheck = false;
+    try {
+      var cursor = 0;
+      for (var page = 0; page < activityPages && !reachedCheck; page++) {
+        final result =
+            await client.fetchActivities(groupId: groupId, cursor: cursor, limit: _activityPageSize);
+        for (final a in result.activities) {
+          newest ??= a;
+          // The entry itself, or anything older if it's gone.
+          if (a.id == checked || (checkedAt != null && a.time.isBefore(checkedAt))) {
+            reachedCheck = true;
+            break;
+          }
+          if (a.activityType == ActivityType.updateExpense && a.expenseId != null) {
+            updated.add(a.expenseId!);
+          }
+        }
+        if (!result.hasMore) {
+          // The whole log is read: nothing older to miss.
+          reachedCheck = true;
+          break;
+        }
+        cursor = result.nextCursor;
+      }
+    } catch (e, st) {
+      if (classifyError(e) == ErrorKind.connection) rethrow;
+      ErrorReporter.instance.report(e, st, operation: 'Reading the activity log of $groupId');
+      return (toRead: await db.expensesWithReceipts(groupId), newest: null);
+    }
+    if (checked == null || !reachedCheck) {
+      // The first check, or too much changed since: every list.
+      return (toRead: await db.expensesWithReceipts(groupId), newest: newest);
+    }
+    final withReceipts = (await db.expensesWithReceipts(groupId)).toSet();
+    return (
+      toRead: {...unread, ...updated.where(withReceipts.contains)}.toList(),
+      newest: newest,
+    );
   }
 
   /// Stops [groupId]'s run, closing the transfer in flight.

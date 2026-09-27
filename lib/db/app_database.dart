@@ -265,6 +265,14 @@ class Groups extends Table {
   /// went wrong. Kept so the 📎 stays red after a restart.
   TextColumn get receiptDownloadProblem => text().nullable()();
 
+  /// The newest activity-log entry the last complete check of this
+  /// favorite group's receipt lists had seen (#127), and its time. Spliit
+  /// has no `updatedAt` on expenses, so its activity log is how a receipt
+  /// swapped on the web with the count unchanged is found: the next run
+  /// reads the entries since this one. Null before the first check.
+  TextColumn get receiptsCheckedActivityId => text().nullable()();
+  DateTimeColumn get receiptsCheckedAt => dateTime().nullable()();
+
   /// This device's remembered "Paid for" split for this group (issue
   /// #29, decisions/paid-for-split-ux-spec.md) -- [DefaultSplit.splitMode]
   /// as its wire value. Null means nothing's been remembered yet.
@@ -372,7 +380,11 @@ class AppDatabase extends _$AppDatabase {
               // Rebuild from the current schema to remove the obsolete flags.
               // Columns added to groups since version 9 don't exist yet:
               // the rebuild creates them, and their own step skips them.
-              await m.alterTable(TableMigration(groups, newColumns: [groups.receiptDownloadProblem]));
+              await m.alterTable(TableMigration(groups, newColumns: [
+                groups.receiptDownloadProblem,
+                groups.receiptsCheckedActivityId,
+                groups.receiptsCheckedAt,
+              ]));
             }
           }
           if (from < 10) {
@@ -408,6 +420,8 @@ class AppDatabase extends _$AppDatabase {
           if (from < 16 && from != 8) {
             // Downloading favorite groups' receipts ahead (#127).
             await m.addColumn(groups, groups.receiptDownloadProblem);
+            await m.addColumn(groups, groups.receiptsCheckedActivityId);
+            await m.addColumn(groups, groups.receiptsCheckedAt);
           }
         },
       );
@@ -729,24 +743,25 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  /// Drops stored documents that no longer match the server (#123): an
-  /// expense that's gone, or whose document count changed, since its
-  /// documents are then unknown until it's read in full again. Then drops
+  /// Drops the stored documents of expenses that are gone or have none
+  /// left (#123), then
   /// the stored files no document refers to any more (their files are
   /// deleted by ReceiptCache.sweep).
+  ///
+  /// An expense whose document count changed keeps its stored list until
+  /// it's read again (#127): the list no longer counts as known (see
+  /// [receiptAvailability] and the details sheet), but the files of the
+  /// receipts that didn't change stay, instead of downloading again.
   Future<void> _pruneDocuments(String groupId, Map<String, int> counts) async {
     final stored = await (select(expenseDocuments)..where((d) => d.groupId.equals(groupId))).get();
-    final byExpense = <String, int>{};
-    for (final d in stored) {
-      byExpense[d.expenseId] = (byExpense[d.expenseId] ?? 0) + 1;
-    }
-    final stale = [
-      for (final MapEntry(key: id, value: n) in byExpense.entries)
-        if (counts[id] != n) id,
-    ];
-    if (stale.isNotEmpty) {
+    // Gone, or with no receipts left: nothing of the list is kept.
+    final gone = {
+      for (final d in stored)
+        if ((counts[d.expenseId] ?? 0) == 0) d.expenseId,
+    };
+    if (gone.isNotEmpty) {
       await (delete(expenseDocuments)
-            ..where((d) => d.groupId.equals(groupId) & d.expenseId.isIn(stale)))
+            ..where((d) => d.groupId.equals(groupId) & d.expenseId.isIn(gone)))
           .go();
     }
     await _pruneReceiptFiles(groupId);
@@ -840,6 +855,26 @@ class AppDatabase extends _$AppDatabase {
   Future<void> updateAttachment(String id, ReceiptAttachmentsCompanion changes) =>
       (update(receiptAttachments)..where((a) => a.id.equals(id))).write(changes);
 
+  /// An expense's stored document list counts as known only while it
+  /// matches the list's count (for `e`, an expense row).
+  static const _listKnown = 'e.document_count = '
+      '(SELECT COUNT(*) FROM expense_documents k WHERE k.expense_id = e.id)';
+
+  /// [groupId]'s synced expenses with receipts (#127).
+  Future<List<String>> expensesWithReceipts(String groupId) async {
+    final rows = await (select(expenses)
+          ..where((e) =>
+              e.groupId.equals(groupId) & e.pending.equals(false) & e.documentCount.isBiggerThanValue(0)))
+        .get();
+    return [for (final r in rows) r.id];
+  }
+
+  /// Remembers the newest activity-log entry a complete check of
+  /// [groupId]'s receipt lists saw (#127).
+  Future<void> setReceiptsChecked(String groupId, {required String activityId, required DateTime at}) =>
+      (update(groups)..where((g) => g.id.equals(groupId))).write(GroupsCompanion(
+          receiptsCheckedActivityId: Value(activityId), receiptsCheckedAt: Value(at)));
+
   /// How many of [groupId]'s receipts are known, and how many of those
   /// are stored on this device (#127). Known: each synced expense's count
   /// from the list; stored: documents read in full whose file is here.
@@ -853,7 +888,7 @@ class AppDatabase extends _$AppDatabase {
     final available = await customSelect(
       'SELECT COUNT(*) AS n FROM expense_documents d '
       'JOIN expenses e ON e.id = d.expense_id AND e.pending = 0 '
-      'WHERE d.group_id = ? AND d.url IN (SELECT url FROM receipt_files)',
+      'WHERE d.group_id = ? AND d.url IN (SELECT url FROM receipt_files) AND $_listKnown',
       variables: [Variable(groupId)],
       readsFrom: {expenseDocuments, expenses, receiptFiles},
     ).getSingle();
@@ -879,7 +914,7 @@ class AppDatabase extends _$AppDatabase {
     final rows = await customSelect(
       'SELECT DISTINCT d.url AS url FROM expense_documents d '
       'JOIN expenses e ON e.id = d.expense_id AND e.pending = 0 '
-      'WHERE d.group_id = ? AND d.url NOT IN (SELECT url FROM receipt_files) '
+      'WHERE d.group_id = ? AND d.url NOT IN (SELECT url FROM receipt_files) AND $_listKnown '
       'ORDER BY e.date DESC, d.position',
       variables: [Variable(groupId)],
       readsFrom: {expenseDocuments, expenses, receiptFiles},
