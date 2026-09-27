@@ -47,6 +47,9 @@ class GroupScreen extends StatefulWidget {
   /// inject a recorder instead of the platform plugin.
   final Future<void> Function(Uri link, String? subject) shareLink;
 
+  /// The platform's connectivity changes; tests inject their own.
+  final Stream<List<ConnectivityResult>>? connectivityChanges;
+
   const GroupScreen({
     super.key,
     required this.client,
@@ -54,6 +57,7 @@ class GroupScreen extends StatefulWidget {
     required this.outbox,
     required this.groupId,
     this.shareLink = shareWithSystemSheet,
+    @visibleForTesting this.connectivityChanges,
   });
 
   @override
@@ -79,6 +83,10 @@ class _GroupScreenState extends State<GroupScreen> {
   // remembering to reload after each one.
   StreamSubscription<Group?>? _groupSub;
   StreamSubscription<List<ExpenseRow>>? _expensesSub;
+
+  /// Cancelled with the screen: left running, reconnecting after the
+  /// group was closed synced and refreshed a screen that was gone.
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
   // Which of the four bottom-nav tabs is showing (issue #38 -- replaces
   // the old design where Balances/Stats/Activity were each a full
@@ -120,7 +128,8 @@ class _GroupScreenState extends State<GroupScreen> {
     // Losing this listener only means sync falls back to pull-to-refresh
     // and the right-after-adding trigger, rather than crashing the screen.
     try {
-      Connectivity().onConnectivityChanged.listen(
+      _connectivitySub =
+          (widget.connectivityChanges ?? Connectivity().onConnectivityChanged).listen(
         (results) {
           if (!results.contains(ConnectivityResult.none)) {
             _syncThenRefresh();
@@ -142,6 +151,7 @@ class _GroupScreenState extends State<GroupScreen> {
     _groupSub?.cancel();
     _expensesSub?.cancel();
     _categoriesSub?.cancel();
+    _connectivitySub?.cancel();
     super.dispose();
   }
 
@@ -161,6 +171,9 @@ class _GroupScreenState extends State<GroupScreen> {
   /// [replaceServerExpenses]'s writes on their own and update those
   /// fields via setState.
   Future<void> _refresh() async {
+    // Called after awaits elsewhere (a sync first): the screen may have
+    // closed meanwhile.
+    if (!mounted) return;
     setState(() => _loading = true);
     // Once per run; again on the next refresh if it didn't get through.
     unawaited(CategoryStore.of(widget.db).refresh(widget.client));
