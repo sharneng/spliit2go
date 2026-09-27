@@ -783,6 +783,65 @@ void main() {
       expect(expense.paidFor.map((s) => s.participantId).toSet(), {'p1', 'p2'});
     });
 
+    // #128: an update must send these back, so they have to be read.
+    String withDocuments(Object? documents) => jsonEncode([
+          {
+            'result': {
+              'data': {
+                'json': {
+                  'expense': {
+                    'id': 'e1',
+                    'title': 'Hotel',
+                    'amount': 10000,
+                    'paidBy': {'id': 'p1', 'name': 'Alex'},
+                    'paidFor': [
+                      {'participantId': 'p1', 'shares': 1},
+                    ],
+                    'expenseDate': '2026-09-16T00:00:00.000Z',
+                    if (documents != null) 'documents': documents,
+                  },
+                },
+              },
+            },
+          },
+        ]);
+
+    Future<Expense> fetchWith(Object? documents) => SpliitClient(
+          baseUrl: 'https://example.test',
+          httpClient: MockClient((req) async => http.Response(withDocuments(documents), 200)),
+        ).fetchExpense(groupId: 'g1', expenseId: 'e1');
+
+    test('reads the documents attached to it (#128)', () async {
+      final expense = await fetchWith([
+        {'id': 'd1', 'url': 'https://bucket.test/a.jpg', 'width': 1536, 'height': 2048, 'expenseId': 'e1'},
+        {'id': 'd2', 'url': 'https://bucket.test/b.jpg', 'width': 2048, 'height': 1024, 'expenseId': 'e1'},
+      ]);
+
+      expect(expense.documents.map((d) => d.toJson()), [
+        {'id': 'd1', 'url': 'https://bucket.test/a.jpg', 'width': 1536, 'height': 2048},
+        {'id': 'd2', 'url': 'https://bucket.test/b.jpg', 'width': 2048, 'height': 1024},
+      ]);
+    });
+
+    test('no documents field means none', () async {
+      expect((await fetchWith(null)).documents, isEmpty);
+      expect((await fetchWith([])).documents, isEmpty);
+    });
+
+    // Reading unreadable documents as "none" would delete them on save.
+    test('unreadable documents are a format error, not an empty list (#128)', () async {
+      for (final documents in [
+        'nope',
+        [
+          {'id': 'd1', 'url': 'https://bucket.test/a.jpg'},
+        ],
+        [42],
+      ]) {
+        await expectLater(fetchWith(documents), throwsA(isA<SpliitResponseFormatException>()),
+            reason: '$documents');
+      }
+    });
+
     test('throws when the expense is not found', () async {
       final body = jsonEncode([
         {
@@ -939,6 +998,7 @@ void main() {
         amountCents: 1500,
         paidBy: 'p1',
         paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+        documents: const [],
       );
 
       expect(id, 'e1');
@@ -950,6 +1010,36 @@ void main() {
       final formValues = json['expenseFormValues'] as Map<String, dynamic>;
       expect(formValues['title'], 'Dinner (edited)');
       expect(formValues['amount'], 1500);
+    });
+
+    test('sends the documents back unchanged, so the server keeps them (#128)', () async {
+      http.Request? captured;
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          captured = req;
+          return http.Response('[{"result":{"data":{"json":{"expenseId":"e1"}}}}]', 200);
+        }),
+      );
+
+      await client.updateExpense(
+        groupId: 'g1',
+        expenseId: 'e1',
+        title: 'Dinner',
+        amountCents: 1500,
+        paidBy: 'p1',
+        paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+        documents: const [
+          ExpenseDocument(id: 'd1', url: 'https://bucket.test/a.jpg', width: 1536, height: 2048),
+          ExpenseDocument(id: 'd2', url: 'https://bucket.test/b.jpg', width: 2048, height: 1024),
+        ],
+      );
+
+      final sent = jsonDecode(captured!.body)['0']['json']['expenseFormValues'];
+      expect(sent['documents'], [
+        {'id': 'd1', 'url': 'https://bucket.test/a.jpg', 'width': 1536, 'height': 2048},
+        {'id': 'd2', 'url': 'https://bucket.test/b.jpg', 'width': 2048, 'height': 1024},
+      ]);
     });
 
     test('throws on an embedded tRPC error', () async {
@@ -971,6 +1061,7 @@ void main() {
           amountCents: 1000,
           paidBy: 'p1',
           paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+          documents: const [],
         ),
         throwsA(isA<SpliitApiException>()),
       );
@@ -1208,6 +1299,7 @@ void main() {
           amountCents: 1000,
           paidBy: 'p1',
           paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+          documents: const [],
           participantId: participantId,
         );
 
