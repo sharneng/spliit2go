@@ -11,6 +11,8 @@ import 'package:spliit2go/services/app_settings.dart';
 import 'package:spliit2go/services/receipt_cache.dart';
 import 'package:spliit2go/services/settings_service.dart';
 
+import '../support/error_log.dart';
+
 class FailingSettingsService extends SettingsService {
   @override
   Future<void> setThemeMode(ThemeMode mode) async =>
@@ -89,6 +91,7 @@ void main() {
 
   testWidgets('failed persistence restores selection and reports error',
       (tester) async {
+    expectUnexpectedError('Saving an app setting');
     final settings = await AppSettings.load(FailingSettingsService());
     addTearDown(settings.dispose);
     await tester.pumpWidget(

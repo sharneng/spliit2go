@@ -17,6 +17,8 @@ import 'package:spliit2go/services/receipt_cache.dart';
 import 'package:spliit2go/services/receipt_photo.dart';
 import 'package:spliit2go/sync/outbox.dart';
 
+import '../support/error_log.dart';
+
 /// Hands back [photo] (null: the user cancelled), or throws [error].
 class _FakePicker implements ReceiptPhotoPicker {
   Uint8List? photo = Uint8List.fromList([1, 2, 3]);
@@ -90,7 +92,7 @@ void main() {
         if (path.endsWith('groups.expenses.update')) {
           return http.Response('[{"result":{"data":{"json":{"expenseId":"e1"}}}}]', 200);
         }
-        return http.Response('no', 500); // categories: not needed here
+        throw http.ClientException('offline'); // categories: not needed here
       }),
     );
     return (client: client, requests: requests);
@@ -191,6 +193,7 @@ void main() {
 
   testWidgets('a failed upload stays, "Not uploaded", blocks Save, and can be retried (#119)',
       (tester) async {
+    expectUnexpectedError('Uploading a receipt');
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final s = server(signs: [signFails, () async => http.Response('', 200)]);
@@ -230,6 +233,7 @@ void main() {
 
   testWidgets('removing a photo that didn\'t upload lets the expense save without it',
       (tester) async {
+    expectUnexpectedError('Uploading a receipt');
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final popped = await openForm(tester, db, server(signs: [signFails]).client, _FakePicker());
@@ -279,6 +283,7 @@ void main() {
   });
 
   testWidgets('cancelling the picker adds nothing; an unreadable photo says so', (tester) async {
+    expectUnexpectedError('Adding a receipt photo');
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final s = server();

@@ -27,3 +27,12 @@ Joining a group on Android failed with "Couldn't join: type 'Null' is not a subt
 ## Presentation
 
 `ErrorMessage` shows a message, with "Tap for details" only when there are diagnostics; the sheet shows the message, operation, error and stack, selectable, with Copy. Without details the message is selectable text, so one that carries a link (a created group that couldn't be loaded, #116) can still be copied. See SETUP.md, "Diagnosing errors on a device".
+
+## In tests (#133)
+
+A passing `flutter test` run prints nothing. Before #133 it printed about 180 "Unexpected error" blocks, and one was taken for a failure. Most came from fakes failing the wrong way: a plain `Exception('offline')` is correctly *unexpected*, so it was logged.
+
+- **Fakes fail the way the real thing does.** Offline is `http.ClientException`, which the app handles quietly as a connection problem. A server that isn't part of the test answers the same way, so it logs nothing.
+- **Unexpected errors are collected, not printed.** `test/flutter_test_config.dart` runs for every test file. Before each test it installs an `ErrorReporter.instance` whose log output (`ErrorReporter(log:)`, `debugPrint` in the app) collects into a list (`test/support/error_log.dart`).
+- **A test declares the unexpected errors it causes on purpose**, with `expectUnexpectedError('Loading categories')`, which matches on the operation. It can inspect them with `loggedUnexpectedErrors`.
+- **Anything else fails the test after it runs**, with the error's details. The same happens when a declared error never happens. So a change that starts failing unexpectedly somewhere can't pass quietly. The rule has already caught one: a fake's reply contained "€", which `http.Response(String)` can't encode, so a follow-up read after saving group settings had been failing unnoticed.

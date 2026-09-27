@@ -15,6 +15,8 @@ import 'package:spliit2go/screens/group_list_screen.dart';
 import 'package:spliit2go/widgets/group_monogram.dart';
 import 'package:spliit2go/services/settings_service.dart';
 
+import '../support/error_log.dart';
+
 class _FailingSortStore extends InMemorySharedPreferencesStore {
   _FailingSortStore(this.throwsError)
       : super.withData({'flutter.group_list_sort': 'lastOpened'});
@@ -145,6 +147,7 @@ void main() {
   testWidgets(
       'failed full swipe displays error, restores row, and does not crash on reload',
       (tester) async {
+    expectUnexpectedError('Updating group Alpha');
     final db = _FailingOrganizationDatabase();
     await seed(database: db);
     await pump(tester, db);
@@ -189,6 +192,7 @@ void main() {
     testWidgets(
         'failed sort save preserves selection, order, and reload ($throwsError)',
         (tester) async {
+      expectUnexpectedError('Saving the group list sort');
       SharedPreferences.resetStatic();
       SharedPreferencesStorePlatform.instance = _FailingSortStore(throwsError);
       addTearDown(() => SharedPreferences.setMockInitialValues({}));

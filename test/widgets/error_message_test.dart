@@ -5,6 +5,8 @@ import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/services/error_reporting.dart';
 import 'package:spliit2go/widgets/error_message.dart';
 
+import '../support/error_log.dart';
+
 // Issue #118, #119 review: the presentation side of the error policy.
 void main() {
   Widget app(Widget home, {GlobalKey<NavigatorState>? navigatorKey, ErrorReporter? reporter}) =>
@@ -79,7 +81,8 @@ void main() {
   });
 
   testWidgets('an uncaught error shows after the frame as a snack bar, with Details', (tester) async {
-    final reporter = ErrorReporter();
+    expectUnexpectedError('Unhandled async error');
+    final reporter = ErrorReporter.instance;
     final navigatorKey = GlobalKey<NavigatorState>();
     await tester.pumpWidget(app(const Text('home'), navigatorKey: navigatorKey, reporter: reporter));
 

@@ -7,6 +7,7 @@ import 'package:drift/native.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:spliit2go/api/spliit_client.dart';
@@ -90,7 +91,7 @@ void main() {
       (tester) async {
     final client = SpliitClient(
         baseUrl: 'https://example.test',
-        httpClient: MockClient((_) async => throw Exception('unused')));
+        httpClient: MockClient((_) async => throw http.ClientException('unused')));
     await tester.pumpWidget(
         app(GroupSettingsScreen(client: client, db: db, group: group)));
     await tester.pumpAndSettle();

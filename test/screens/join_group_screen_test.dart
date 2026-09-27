@@ -10,7 +10,10 @@ import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/screens/join_group_screen.dart';
+import 'package:spliit2go/services/error_reporting.dart';
 import 'package:spliit2go/services/date_span_calculator.dart';
+
+import '../support/error_log.dart';
 
 void main() {
   // SettingsService.defaultActiveUserName() awaits
@@ -152,6 +155,7 @@ void main() {
 
   testWidgets('an expense fetch failure fails the join and caches nothing (#81)',
       (tester) async {
+    expectUnexpectedError('Joining');
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
 
@@ -185,6 +189,7 @@ void main() {
   });
 
   testWidgets('a server error is shown inline and nothing is cached', (tester) async {
+    expectUnexpectedError('Joining');
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final client = SpliitClient(
@@ -299,20 +304,6 @@ void main() {
 
   // Issue #118: "Couldn't join: type 'Null' is not a subtype of type
   // 'Map<String, dynamic>' in type cast" for a group the server doesn't have.
-  /// Everything [body] writes to debugPrint, where unexpected errors are
-  /// logged (#119 review).
-  Future<List<String>> captureLogs(Future<void> Function() body) async {
-    final lines = <String>[];
-    final original = debugPrint;
-    debugPrint = (message, {wrapWidth}) => lines.add(message ?? '');
-    try {
-      await body();
-    } finally {
-      debugPrint = original;
-    }
-    return lines;
-  }
-
   SpliitClient answering(String body, {int status = 200}) => SpliitClient(
         baseUrl: 'https://example.test',
         httpClient: MockClient((req) async => http.Response(body, status)),
@@ -326,18 +317,15 @@ void main() {
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
-    String? popped;
-    final logs = await captureLogs(() async {
-      popped = await pushAndJoin(tester, db,
-          answering('[{"result":{"data":{"json":{"group":null}}}}]'));
-    });
+    final popped = await pushAndJoin(tester, db,
+        answering('[{"result":{"data":{"json":{"group":null}}}}]'));
 
     expect(popped, isNull);
     expect(find.text('No group with that link was found on example.test. Check the link and try again.'),
         findsOneWidget);
     expect(find.textContaining('is not a subtype'), findsNothing);
     expect(find.text('Tap for details'), findsNothing);
-    expect(logs.where((l) => l.contains('Unexpected error')), isEmpty);
+    expect(loggedUnexpectedErrors, isEmpty);
   });
 
   testWidgets('no connection says so, with no log and no details (#119)', (tester) async {
@@ -347,31 +335,28 @@ void main() {
       baseUrl: 'https://example.test',
       httpClient: MockClient((req) async => throw http.ClientException('Failed host lookup')),
     );
-    late final String? popped;
-    final logs = await captureLogs(() async => popped = await pushAndJoin(tester, db, client));
+    final popped = await pushAndJoin(tester, db, client);
 
     expect(popped, isNull);
     expect(find.text("Couldn't reach the server. Check your connection and try again."),
         findsOneWidget);
     expect(find.text('Tap for details'), findsNothing);
-    expect(logs.where((l) => l.contains('Unexpected error')), isEmpty);
+    expect(loggedUnexpectedErrors, isEmpty);
   });
 
   testWidgets('a malformed response is unexpected: a short message, logged, details one tap away (#119)',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
-    late final String? popped;
-    final logs = await captureLogs(() async {
-      popped = await pushAndJoin(tester, db,
-          answering('[{"result":{"data":{"json":{"group":[]}}}}]'));
-    });
+    expectUnexpectedError('Joining');
+    final popped = await pushAndJoin(tester, db,
+        answering('[{"result":{"data":{"json":{"group":[]}}}}]'));
 
     expect(popped, isNull);
     // The raw exception stays out of the message.
     expect(find.text("Couldn't join the group."), findsOneWidget);
     expect(find.textContaining('SpliitResponseFormatException'), findsNothing);
-    expect(logs.where((l) => l.contains('SpliitResponseFormatException')), hasLength(1));
+    expect(loggedUnexpectedErrors.where((e) => e.error is SpliitResponseFormatException), hasLength(1));
 
     await tester.tap(find.text('Tap for details'));
     await tester.pumpAndSettle();

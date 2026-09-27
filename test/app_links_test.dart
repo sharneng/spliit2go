@@ -3,17 +3,21 @@ import 'dart:async';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/main.dart';
+import 'package:spliit2go/models/category.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/screens/group_list_screen.dart';
 import 'package:spliit2go/screens/group_screen.dart';
 import 'package:spliit2go/screens/join_group_screen.dart';
+
+import 'support/error_log.dart';
 
 void main() {
   late AppDatabase db;
@@ -43,7 +47,7 @@ void main() {
               SpliitClient(
                   baseUrl: url,
                   httpClient:
-                      MockClient((_) async => throw Exception('offline')))),
+                      MockClient((_) async => throw http.ClientException('offline')))),
     ));
     await tester.pumpAndSettle();
   }
@@ -109,6 +113,7 @@ void main() {
   testWidgets(
       'unrelated and malformed links are ignored; valid warm link still works',
       (tester) async {
+    expectUnexpectedError('Receiving an app link');
     await mount(tester);
     for (final url in [
       'https://evil.test/groups/g1',
@@ -168,4 +173,7 @@ class _JoinClient extends SpliitClient {
 
   @override
   Future<List<Expense>> fetchExpenses(String groupId) async => [];
+
+  @override
+  Future<List<Category>> fetchCategories() async => throw http.ClientException('offline');
 }

@@ -16,6 +16,8 @@ import 'package:spliit2go/screens/expense_details_sheet.dart';
 import 'package:spliit2go/services/receipt_cache.dart';
 import 'package:spliit2go/sync/outbox.dart';
 
+import '../support/error_log.dart';
+
 /// Serves every receipt as a file path, or fails with [error], without
 /// touching the file system (widget tests run in a fake-async zone).
 class _FakeReceipts extends ReceiptCache {
@@ -267,6 +269,7 @@ void main() {
   });
 
   testWidgets('an unexpected failure reading them says so, with details (#119)', (tester) async {
+    expectUnexpectedError('Loading receipts of expense e1');
     final (db, _) = await setUpDb();
     addTearDown(db.close);
     final s = server([() async => http.Response('boom', 500)]);

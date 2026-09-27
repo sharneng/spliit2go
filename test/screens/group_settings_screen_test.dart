@@ -410,8 +410,10 @@ void main() {
           updateRequest = req;
           return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
         }
-        return http.Response(
-          freshGroupResponse({
+        // Encoded as UTF-8: http.Response(String) is Latin-1 only, and '€'
+        // isn't in it.
+        return http.Response.bytes(
+          utf8.encode(freshGroupResponse({
             'id': 'g1',
             'name': 'Banff Trip',
             'currency': '€',
@@ -420,8 +422,9 @@ void main() {
               {'id': 'alex', 'name': 'Alex'},
               {'id': 'bea', 'name': 'Bea'},
             ],
-          }),
+          })),
           200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
         );
       }),
     );
@@ -540,7 +543,7 @@ void main() {
 
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw Exception('not used')),
+      httpClient: MockClient((req) async => throw http.ClientException('not used')),
     );
 
     await tester.pumpWidget(MaterialApp(
@@ -587,7 +590,7 @@ void main() {
 
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw Exception('not used')),
+      httpClient: MockClient((req) async => throw http.ClientException('not used')),
     );
 
     await tester.pumpWidget(MaterialApp(
@@ -730,7 +733,7 @@ void main() {
 
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw Exception('not used')),
+      httpClient: MockClient((req) async => throw http.ClientException('not used')),
     );
 
     await tester.pumpWidget(MaterialApp(
@@ -761,7 +764,7 @@ void main() {
 
     final client = SpliitClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((req) async => throw Exception('not used')),
+      httpClient: MockClient((req) async => throw http.ClientException('not used')),
     );
 
     await tester.pumpWidget(MaterialApp(
