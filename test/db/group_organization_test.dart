@@ -59,6 +59,10 @@ void main() {
     await old.customStatement('ALTER TABLE expenses DROP COLUMN created_at');
     await old.customStatement(
         'ALTER TABLE expenses DROP COLUMN added_by_participant_id');
+    // Undo the version 12 receipts additions (#123).
+    await old.customStatement('ALTER TABLE expenses DROP COLUMN document_count');
+    await old.customStatement('DROP TABLE expense_documents');
+    await old.customStatement('DROP TABLE receipt_files');
     await old.customStatement('PRAGMA user_version = 7');
     await old.close();
     final db = AppDatabase(NativeDatabase(file));
@@ -106,6 +110,10 @@ void main() {
         "UPDATE groups SET is_favorite = 1 WHERE id IN ('favorite', 'both')");
     await old.customStatement(
         "UPDATE groups SET is_archived = 1 WHERE id IN ('archived', 'both')");
+    // Undo the version 12 receipts additions (#123).
+    await old.customStatement('ALTER TABLE expenses DROP COLUMN document_count');
+    await old.customStatement('DROP TABLE expense_documents');
+    await old.customStatement('DROP TABLE receipt_files');
     await old.customStatement('PRAGMA user_version = 8');
     await old.close();
     final db = AppDatabase(NativeDatabase(file));

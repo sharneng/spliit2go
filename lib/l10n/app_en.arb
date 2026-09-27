@@ -438,5 +438,45 @@
   "errorDetailsAction": "Details",
   "groupScreenGroupGone": "This group is no longer on the server.",
   "expenseDetailsEditFailed": "Couldn't open this expense for editing.",
-  "expenseDeleteFailedUnexpected": "Couldn't delete this expense."
+  "expenseDeleteFailedUnexpected": "Couldn't delete this expense.",
+  "expenseReceiptsHeading": "Receipts",
+  "receiptAvailableWhenOnline": "Available when online",
+  "receiptLoadFailed": "Couldn't load this receipt.",
+  "receiptOpen": "Open receipt",
+  "receiptViewerTitle": "Receipt {index} of {count}",
+  "@receiptViewerTitle": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "receiptViewerSingle": "Receipt",
+  "appSettingsStorage": "Storage",
+  "appSettingsReceipts": "Receipts on this device",
+  "appSettingsReceiptsNone": "None",
+  "appSettingsReceiptsClear": "Clear",
+  "appSettingsReceiptsClearTitle": "Clear stored receipts?",
+  "appSettingsReceiptsClearBody": "They're removed from this device only, and download again when you open them.",
+  "appSettingsReceiptsCleared": "Stored receipts cleared.",
+  "appSettingsReceiptsClearFailed": "Couldn't clear stored receipts.",
+  "bytesKilobytes": "{size} KB",
+  "@bytesKilobytes": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "bytesMegabytes": "{size} MB",
+  "@bytesMegabytes": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  }
 }

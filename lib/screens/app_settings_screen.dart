@@ -1,14 +1,21 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../l10n/app_locales.dart';
 import '../l10n/context_l10n.dart';
 import '../services/app_settings.dart';
 import '../services/error_reporting.dart';
+import '../services/receipt_cache.dart';
+import '../utils/byte_size.dart';
 import '../widgets/error_message.dart';
 
 /// App-wide preferences, separate from an individual group's settings.
 class AppSettingsScreen extends StatelessWidget {
-  const AppSettingsScreen({super.key});
+  const AppSettingsScreen({super.key, this.receipts});
+
+  /// The receipts stored on this device, for the Storage section (#123).
+  /// Without it, the section isn't shown.
+  final ReceiptCache? receipts;
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +60,11 @@ class AppSettingsScreen extends StatelessWidget {
               selected: settings.locale == option.locale,
               onSelected: () => settings.setLocale(option.locale),
             ),
+          if (receipts case final receipts?) ...[
+            const Divider(height: 32),
+            _sectionHeading(context, l10n.appSettingsStorage),
+            _ReceiptStorageTile(receipts),
+          ],
         ],
       ),
     );
@@ -90,4 +102,107 @@ class AppSettingsScreen extends StatelessWidget {
           }
         },
       );
+}
+
+/// How much space stored receipts use, with Clear (#123). They're only
+/// copies: Clear removes them from this device, and they download again
+/// when opened.
+class _ReceiptStorageTile extends StatefulWidget {
+  const _ReceiptStorageTile(this.receipts);
+  final ReceiptCache receipts;
+
+  @override
+  State<_ReceiptStorageTile> createState() => _ReceiptStorageTileState();
+}
+
+class _ReceiptStorageTileState extends State<_ReceiptStorageTile> {
+  int? _bytes;
+  bool _clearing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _measure();
+  }
+
+  Future<void> _measure() async {
+    try {
+      final bytes = await widget.receipts.usage();
+      if (mounted) setState(() => _bytes = bytes);
+    } catch (e, st) {
+      ErrorReporter.instance.report(e, st, operation: 'Measuring stored receipts');
+    }
+  }
+
+  Future<void> _clear() async {
+    final l10n = context.l10n;
+    final confirmed = await showAdaptiveDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog.adaptive(
+        title: Text(l10n.appSettingsReceiptsClearTitle),
+        content: Text(l10n.appSettingsReceiptsClearBody),
+        actions: _confirmActions(dialogContext),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _clearing = true);
+    try {
+      await widget.receipts.clear();
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)
+          ?.showSnackBar(SnackBar(content: Text(context.l10n.appSettingsReceiptsCleared)));
+    } catch (e, st) {
+      // Deleting this app's own files has no expected failure (#119).
+      final error = ErrorReporter.instance.report(e, st, operation: 'Clearing stored receipts');
+      if (mounted) {
+        showErrorSnackBar(context, context.l10n.appSettingsReceiptsClearFailed,
+            diagnostics: error.diagnostics);
+      }
+    } finally {
+      if (mounted) setState(() => _clearing = false);
+      await _measure();
+    }
+  }
+
+  /// Cancel and a destructive Clear, as the group list's Remove asks.
+  List<Widget> _confirmActions(BuildContext dialogContext) {
+    final l10n = dialogContext.l10n;
+    final platform = Theme.of(dialogContext).platform;
+    if (platform == TargetPlatform.iOS || platform == TargetPlatform.macOS) {
+      return [
+        CupertinoDialogAction(
+            onPressed: () => Navigator.pop(dialogContext, false), child: Text(l10n.commonCancel)),
+        CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(l10n.appSettingsReceiptsClear)),
+      ];
+    }
+    return [
+      TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false), child: Text(l10n.commonCancel)),
+      TextButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          style: TextButton.styleFrom(foregroundColor: Theme.of(dialogContext).colorScheme.error),
+          child: Text(l10n.appSettingsReceiptsClear)),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final bytes = _bytes;
+    return ListTile(
+      title: Text(l10n.appSettingsReceipts),
+      subtitle: Text(bytes == null
+          ? ''
+          : bytes == 0
+              ? l10n.appSettingsReceiptsNone
+              : formatByteSize(context, bytes)),
+      trailing: TextButton(
+        onPressed: bytes == null || bytes == 0 || _clearing ? null : _clear,
+        child: Text(l10n.appSettingsReceiptsClear),
+      ),
+    );
+  }
 }

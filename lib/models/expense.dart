@@ -180,9 +180,15 @@ class Expense {
   final DateTime? createdAt;
 
   /// The documents attached on the server, as [fetchExpense] read them.
-  /// Only that fresh fetch, which edit mode uses, fills this in; the
-  /// cached list doesn't store them, so it's empty everywhere else (#128).
+  /// Only that fresh fetch fills this in; the expense list doesn't return
+  /// them (#128), and the cache keeps them separately (#123).
   final List<ExpenseDocument> documents;
+
+  /// How many documents the expense has on the server. The expense list
+  /// returns only this count (`_count.documents`), not the documents
+  /// themselves, so it's what the cache knows before an expense has been
+  /// opened online (#123).
+  final int documentCount;
 
   const Expense({
     required this.id,
@@ -205,5 +211,6 @@ class Expense {
     this.lastError,
     this.createdAt,
     this.documents = const [],
+    this.documentCount = 0,
   });
 }

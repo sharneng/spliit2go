@@ -80,6 +80,10 @@ void main() {
     await old.customStatement('ALTER TABLE expenses DROP COLUMN created_at');
     await old.customStatement(
         'ALTER TABLE expenses DROP COLUMN added_by_participant_id');
+    // Undo the version 12 receipts additions (#123).
+    await old.customStatement('ALTER TABLE expenses DROP COLUMN document_count');
+    await old.customStatement('DROP TABLE expense_documents');
+    await old.customStatement('DROP TABLE receipt_files');
     await old.customStatement('PRAGMA user_version = 9');
     await old.close();
 

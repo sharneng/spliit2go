@@ -246,6 +246,43 @@ void main() {
       expect(expenses[1].createdAt, isNull);
     });
 
+    test('reads each expense\'s document count, which is all the list gives (#123)', () async {
+      Map<String, dynamic> item(String id, {Object? count}) => {
+            'id': id,
+            'title': id,
+            'amount': 500,
+            'paidBy': {'id': 'p1', 'name': 'Ken'},
+            'paidFor': [],
+            'expenseDate': '2026-09-16T00:00:00.000Z',
+            if (count != null) '_count': count,
+          };
+      final body = jsonEncode([
+        {
+          'result': {
+            'data': {
+              'json': {
+                'expenses': [
+                  item('two', count: {'documents': 2}),
+                  item('none', count: {'documents': 0}),
+                  item('absent'),
+                ],
+                'hasMore': false,
+              },
+            },
+          },
+        },
+      ]);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(body, 200)),
+      );
+
+      final expenses = await client.fetchExpenses('g1');
+
+      expect(expenses.map((e) => e.documentCount), [2, 0, 0]);
+      expect(expenses.every((e) => e.documents.isEmpty), isTrue);
+    });
+
     // Regression test for the real bug found testing against a live
     // server on 2026-09-16: groups.expenses.list returns paidBy and each
     // paidFor entry's participant as an expanded {id, name} object, not
