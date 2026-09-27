@@ -36,6 +36,12 @@ class Outbox {
 
   Outbox(this._db, this._api, {required this.groupId});
 
+  /// The last flush queued per database and group (#141). Outboxes are
+  /// built per call site, so the queue can't live on one instance: two
+  /// overlapping flushes would both read the same pending expense and
+  /// create it twice.
+  static final _queues = Expando<Map<String, Future<void>>>('Outbox');
+
   /// Attempts to sync every pending, not-yet-failed expense belonging
   /// to [groupId] (see the field's own doc comment). Each row is synced
   /// independently -- one failure (still offline, server rejected it,
@@ -54,7 +60,18 @@ class Outbox {
   /// one, silently corrupting it.
   ///
   /// Returns the number of rows successfully synced.
-  Future<int> flush() async {
+  ///
+  /// Flushes of one group run one after another (#141): one asked for
+  /// while another runs starts when it ends, so work queued meanwhile
+  /// isn't missed.
+  Future<int> flush() {
+    final queue = _queues[_db] ??= {};
+    final run = (queue[groupId] ?? Future.value()).then((_) => _flush());
+    queue[groupId] = run.then<void>((_) {}, onError: (Object _) {});
+    return run;
+  }
+
+  Future<int> _flush() async {
     final pendingRows = await _db.pendingExpensesForGroup(groupId);
     var synced = 0;
     for (final row in pendingRows) {
