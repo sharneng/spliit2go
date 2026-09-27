@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +16,7 @@ import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/expense_details_sheet.dart';
 import 'package:spliit2go/services/receipt_cache.dart';
+import 'package:spliit2go/services/receipt_photo.dart';
 import 'package:spliit2go/sync/outbox.dart';
 
 import '../support/error_log.dart';
@@ -32,6 +35,28 @@ class _FakeReceipts extends ReceiptCache {
     loaded.add(url);
     return File('/receipts/${url.split('/').last}');
   }
+
+  /// Photos kept for later (#124), as their file names.
+  final pending = <String>[];
+
+  @override
+  Future<void> storePending(
+      List<List<int>> photos, Future<void> Function(List<String> fileNames) register) async {
+    final names = [for (var i = 0; i < photos.length; i++) 'pending-${pending.length + i}.img'];
+    await register(names);
+    pending.addAll(names);
+  }
+
+  @override
+  Future<File> fileNamed(String fileName) async => File('/receipts/$fileName');
+
+  @override
+  Future<void> sweep() async {}
+}
+
+class _FakePicker implements ReceiptPhotoPicker {
+  @override
+  Future<Uint8List?> pick(ReceiptSource source) async => Uint8List.fromList([1, 2, 3]);
 }
 
 // Issue #123: an expense's receipts in its details sheet, and a viewer.
@@ -126,7 +151,9 @@ void main() {
                   db: db,
                   client: client,
                   outbox: Outbox(db, client, groupId: 'g1'),
-                  connectivity: connectivity),
+                  connectivity: connectivity,
+                  receiptPicker: _FakePicker(),
+                  prepareReceipt: (bytes) async => PreparedReceipt(bytes, 600, 900)),
               child: const Text('open'),
             ),
           ),
@@ -144,13 +171,15 @@ void main() {
 
   Finder receiptImages() => find.byWidgetPredicate((w) => w is Image && w.image is FileImage);
 
-  testWidgets('an expense with no receipts has no Receipts section', (tester) async {
+  testWidgets('an expense with no receipts isn\'t read, and offers Add receipt (#124)',
+      (tester) async {
     final (db, _) = await setUpDb(documents: 0);
     addTearDown(db.close);
     final s = server([ok]);
     await openSheet(tester, db, s.client);
 
-    expect(find.text('Receipts'), findsNothing);
+    expect(find.text('Receipts'), findsOneWidget);
+    expect(find.text('Add receipt'), findsOneWidget);
     expect(s.gets.single, 0);
     await closeTree(tester);
   });
@@ -338,6 +367,101 @@ void main() {
 
     expect(s.gets.single, 0);
     expect(receiptImages(), findsNWidgets(2));
+    await closeTree(tester);
+  });
+
+  // #124: photos not on their expense yet.
+  Future<void> attach(AppDatabase db, String id,
+          {AttachmentState state = AttachmentState.local, String? lastError}) =>
+      db.addAttachments([
+        ReceiptAttachmentsCompanion.insert(
+          id: id,
+          groupId: 'g1',
+          expenseId: 'e1',
+          fileName: '$id.img',
+          bytes: 3,
+          width: 600,
+          height: 900,
+          state: state,
+          lastError: Value(lastError),
+          createdAt: DateTime(2026, 9, 27),
+        ),
+      ]);
+
+  Future<List<ReceiptAttachmentRow>> attachmentsOf(WidgetTester tester, AppDatabase db) async =>
+      (await tester.runAsync(() => db.watchAttachments('e1').first))!;
+
+  /// An offline server: the outbox's flushes change nothing.
+  SpliitClient offlineServer() => SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((_) async => throw http.ClientException('offline')));
+
+  testWidgets('a photo waiting to upload shows "Not uploaded", and says it uploads when online',
+      (tester) async {
+    final (db, _) = await setUpDb(documents: 0);
+    addTearDown(db.close);
+    await attach(db, 'a1');
+    await openSheet(tester, db, offlineServer());
+
+    expect(find.text('Not uploaded'), findsOneWidget);
+    expect(find.text("Not uploaded yet: it uploads once you're back online."), findsOneWidget);
+    expect(find.text('Tap for details'), findsNothing);
+    await closeTree(tester);
+  });
+
+  testWidgets('a failed upload says the photo stays on this phone, with details, and Retry requeues it',
+      (tester) async {
+    final (db, _) = await setUpDb(documents: 0);
+    addTearDown(db.close);
+    await attach(db, 'a1', state: AttachmentState.failed, lastError: 'Uploading receipt a1 failed.');
+    await openSheet(tester, db, offlineServer());
+
+    expect(find.textContaining('the photo stays on this phone'), findsOneWidget);
+    expect(find.text('Tap for details'), findsOneWidget);
+
+    await tester.tap(find.text('Not uploaded'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+
+    expect((await attachmentsOf(tester, db)).single.state, AttachmentState.local);
+    await closeTree(tester);
+  });
+
+  testWidgets('removing a photo that isn\'t uploaded asks first: this phone has the only copy',
+      (tester) async {
+    final (db, _) = await setUpDb(documents: 0);
+    addTearDown(db.close);
+    await attach(db, 'a1');
+    await openSheet(tester, db, offlineServer());
+
+    await tester.tap(find.text('Not uploaded'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+    expect(find.text("It isn't uploaded, so this phone has the only copy."), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
+    await tester.pumpAndSettle();
+
+    expect(await attachmentsOf(tester, db), isEmpty);
+    expect(find.text('Not uploaded'), findsNothing);
+    await closeTree(tester);
+  });
+
+  testWidgets('offline, Add receipt keeps the photo for the expense', (tester) async {
+    final (db, fake) = await setUpDb(documents: 0);
+    addTearDown(db.close);
+    await openSheet(tester, db, offlineServer());
+
+    await tester.tap(find.text('Add receipt'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose from library'));
+    await tester.pumpAndSettle();
+
+    final kept = (await attachmentsOf(tester, db)).single;
+    expect((kept.state, kept.width, kept.height, kept.bytes), (AttachmentState.local, 600, 900, 3));
+    expect(fake.pending, [kept.fileName]);
+    expect(find.text('Not uploaded'), findsOneWidget);
     await closeTree(tester);
   });
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show Uint8List;
 import 'package:flutter/material.dart';
 
 import '../api/spliit_client.dart';
@@ -21,6 +22,7 @@ import '../widgets/category_icon.dart';
 import 'expense_screen.dart';
 import '../services/error_reporting.dart';
 import '../services/receipt_cache.dart';
+import '../services/receipt_photo.dart';
 import '../widgets/error_message.dart';
 import '../widgets/receipts.dart';
 
@@ -64,6 +66,8 @@ Future<bool> showExpenseDetails(
   String? activeUserId,
   bool fetchIfMissing = false,
   @visibleForTesting Stream<bool>? connectivity,
+  @visibleForTesting ReceiptPhotoPicker receiptPicker = const ImagePickerReceiptPhotoPicker(),
+  @visibleForTesting Future<PreparedReceipt> Function(Uint8List)? prepareReceipt,
 }) async {
   final action = await showModalBottomSheet<_SheetAction>(
     context: context,
@@ -79,6 +83,9 @@ Future<bool> showExpenseDetails(
       activeUserId: activeUserId,
       fetchIfMissing: fetchIfMissing,
       connectivity: connectivity ?? _deviceOnline(),
+      outbox: outbox,
+      receiptPicker: receiptPicker,
+      prepareReceipt: prepareReceipt ?? prepareReceiptPhoto,
     ),
   );
   if (!context.mounted) return false;
@@ -153,6 +160,9 @@ class _ExpenseDetailsSheet extends StatefulWidget {
   final String? activeUserId;
   final bool fetchIfMissing;
   final Stream<bool> connectivity;
+  final Outbox outbox;
+  final ReceiptPhotoPicker receiptPicker;
+  final Future<PreparedReceipt> Function(Uint8List) prepareReceipt;
 
   const _ExpenseDetailsSheet({
     required this.expenseId,
@@ -163,6 +173,9 @@ class _ExpenseDetailsSheet extends StatefulWidget {
     required this.activeUserId,
     required this.fetchIfMissing,
     required this.connectivity,
+    required this.outbox,
+    required this.receiptPicker,
+    required this.prepareReceipt,
   });
 
   @override
@@ -217,6 +230,10 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   bool _docsOffline = false;
   String? _docsDiagnostics;
 
+  /// Photos not on the expense yet (#124).
+  StreamSubscription<List<ReceiptAttachmentRow>>? _attachmentSub;
+  List<ReceiptAttachmentRow> _attachments = const [];
+
   /// A close asked for while the Delete confirmation covered the sheet,
   /// with the action to close with. Popping then would close the dialog
   /// instead, so it waits for the confirmation to end (see [_delete]).
@@ -235,6 +252,9 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       if (!mounted) return;
       setState(() => _storedDocs = docs);
       _maybeFetchDocuments();
+    });
+    _attachmentSub = widget.db.watchAttachments(widget.expenseId).listen((rows) {
+      if (mounted) setState(() => _attachments = rows);
     });
     _onlineSub = widget.connectivity.listen(
       (online) {
@@ -256,6 +276,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   void dispose() {
     _rowSub?.cancel();
     _docSub?.cancel();
+    _attachmentSub?.cancel();
     _onlineSub?.cancel();
     super.dispose();
   }
@@ -387,6 +408,88 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
         if (_documentsOf(e) == null) _docsDiagnostics = error.diagnostics;
       });
     }
+  }
+
+  /// Adds a photo to this expense (#124), offline too: it's kept on this
+  /// device, and the outbox uploads it and adds it to the expense.
+  Future<void> _addReceipt(ReceiptSource source) async {
+    try {
+      final original = await widget.receiptPicker.pick(source);
+      if (original == null) return;
+      final photo = await widget.prepareReceipt(original);
+      await ReceiptCache.of(widget.db).storePending(
+          [photo.bytes],
+          (fileNames) => widget.db.addAttachments([
+                ReceiptAttachmentsCompanion.insert(
+                  id: ExpenseDocument.newId(),
+                  groupId: widget.group.id,
+                  expenseId: widget.expenseId,
+                  fileName: fileNames.single,
+                  bytes: photo.bytes.length,
+                  width: photo.width,
+                  height: photo.height,
+                  state: AttachmentState.local,
+                  createdAt: DateTime.now(),
+                ),
+              ]));
+      unawaited(widget.outbox.flush());
+    } catch (e, st) {
+      final error = ErrorReporter.instance.report(e, st, operation: 'Adding a receipt photo');
+      if (mounted) {
+        showErrorSnackBar(context, context.l10n.expenseReceiptPhotoFailed,
+            diagnostics: error.diagnostics);
+      }
+    }
+  }
+
+  /// Retry or Remove, for a photo not on the expense yet (#124).
+  Future<void> _pendingReceiptActions(ReceiptAttachmentRow a) async {
+    final l10n = context.l10n;
+    final choice = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.refresh),
+              title: Text(l10n.commonRetry),
+              onTap: () => Navigator.pop(sheetContext, true),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: Text(l10n.receiptRemove),
+              onTap: () => Navigator.pop(sheetContext, false),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    if (choice) {
+      await widget.db.retryAttachment(a.id);
+      unawaited(widget.outbox.flush());
+      return;
+    }
+    final remove = await showAdaptiveDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog.adaptive(
+        title: Text(l10n.receiptRemovePendingTitle),
+        content: Text(l10n.receiptRemovePendingBody),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false), child: Text(l10n.commonCancel)),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: TextButton.styleFrom(foregroundColor: Theme.of(dialogContext).colorScheme.error),
+              child: Text(l10n.receiptRemove)),
+        ],
+      ),
+    );
+    if (remove != true) return;
+    await widget.db.removeAttachment(a.id);
+    unawaited(ReceiptCache.of(widget.db).sweep());
   }
 
   Future<void> _edit() async {
@@ -676,7 +779,12 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
         const SizedBox(height: 4),
         SelectableText(e.notes),
       ],
-      if (e.documentCount > 0 || (_documentsOf(e)?.isNotEmpty ?? false)) ...[
+      // A cached expense takes receipts offline too (#124), unless its
+      // sync failed: that one waits for Retry or Discard.
+      if (e.documentCount > 0 ||
+          (_documentsOf(e)?.isNotEmpty ?? false) ||
+          _attachments.isNotEmpty ||
+          _canAddReceipts(e)) ...[
         const SizedBox(height: 16),
         ReceiptsSection(
           cache: ReceiptCache.of(widget.db),
@@ -685,10 +793,15 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
           documents: _documentsOf(e),
           online: _docsOffline ? false : _online,
           loadDiagnostics: _docsDiagnostics,
+          pending: _attachments,
+          onPendingTap: _pendingReceiptActions,
+          onAdd: _canAddReceipts(e) ? _addReceipt : null,
         ),
       ],
     ];
   }
+
+  bool _canAddReceipts(Expense e) => _cached && !e.syncFailed;
 
   List<Widget> _badges(BuildContext context, Expense e) {
     final l10n = context.l10n;

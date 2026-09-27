@@ -483,12 +483,17 @@
   "expenseReceiptChoosePhoto": "Choose from library",
   "expenseReceiptUploading": "Uploading receipt",
   "expenseReceiptNotUploaded": "Not uploaded",
-  "expenseReceiptNotUploadedConnection": "A receipt wasn't uploaded: couldn't reach the server. Tap it to try again, or remove it.",
-  "expenseReceiptNotUploadedServer": "A receipt wasn't uploaded. This server may not store receipts. Tap it to try again, or remove it.",
+  "expenseReceiptNotUploadedConnection": "A receipt wasn't uploaded: couldn't reach the server. You can still save: it stays on this phone and uploads once you're back online.",
+  "expenseReceiptNotUploadedServer": "A receipt wasn't uploaded. This server may not store receipts. Tap it to try again, or remove it; if you save, it stays on this phone.",
   "expenseReceiptRemove": "Remove receipt",
   "expenseReceiptPhotoFailed": "Couldn't add this photo.",
-  "expenseReceiptsWaitBeforeSave": "Wait for receipts to upload, or remove the ones that weren't.",
+  "expenseReceiptsWaitBeforeSave": "Wait for receipts to finish uploading.",
   "expenseReceiptsDiscardTitle": "Discard new receipts?",
   "expenseReceiptsDiscardBody": "The receipts you added haven't been saved with this expense.",
-  "expenseReceiptsDiscard": "Discard"
+  "expenseReceiptsDiscard": "Discard",
+  "receiptRemove": "Remove",
+  "receiptRemovePendingBody": "It isn't uploaded, so this phone has the only copy.",
+  "receiptRemovePendingTitle": "Remove this receipt?",
+  "receiptUploadFailed": "A receipt couldn't be uploaded. This server may not store receipts; the photo stays on this phone.",
+  "receiptWaitingToUpload": "Not uploaded yet: it uploads once you're back online."
 }

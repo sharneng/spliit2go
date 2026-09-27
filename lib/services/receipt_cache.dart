@@ -120,32 +120,53 @@ class ReceiptCache {
     return store(url, groupId: groupId, bytes: res.bodyBytes);
   }
 
-  /// Stores [bytes] as the image for [url]: a download, or a photo this
-  /// device just uploaded, so it shows without being downloaded back
-  /// (#123). Viewing cache, like any opened receipt.
-  Future<File> store(String url, {required String groupId, required List<int> bytes}) =>
-      _exclusive(() => _store(url, groupId, bytes));
+  /// Stores [bytes] as the image for [url]: a download (viewing cache,
+  /// like any opened receipt), or a photo this device just uploaded, so it
+  /// shows without being downloaded back ([ReceiptFileKind.capture], #124).
+  Future<File> store(String url,
+          {required String groupId,
+          required List<int> bytes,
+          ReceiptFileKind kind = ReceiptFileKind.viewing}) =>
+      _exclusive(() async {
+        final (file, fileName) = await _write(bytes);
+        await db.saveReceiptFile(ReceiptFilesCompanion.insert(
+          url: url,
+          groupId: groupId,
+          fileName: fileName,
+          bytes: bytes.length,
+          kind: kind,
+          lastUsedAt: _now(),
+        ));
+        await _evict(keep: url);
+        return file;
+      });
 
-  /// Writes [bytes] as the image for [url] and registers it. Runs under
-  /// [_exclusive], so [sweep] never sees it half done.
-  Future<File> _store(String url, String groupId, List<int> bytes) async {
+  /// Writes photos that aren't uploaded yet (#124), then has [register]
+  /// record them, with their file names, in the same step: the
+  /// attachments' rows, and a new expense's own. Until [register]
+  /// completes, [sweep] waits, so a new file can't be taken for a stray
+  /// one; if it throws, the files are strays, and the next sweep deletes
+  /// them.
+  Future<void> storePending(
+          List<List<int>> photos, Future<void> Function(List<String> fileNames) register) =>
+      _exclusive(() async {
+        final fileNames = [for (final bytes in photos) (await _write(bytes)).$2];
+        await register(fileNames);
+      });
+
+  /// A stored file by name: a pending photo's (#124).
+  Future<File> fileNamed(String fileName) async =>
+      File(p.join((await _receiptsDir()).path, fileName));
+
+  /// Writes [bytes] under a new name. Written under a temporary name and
+  /// renamed, so a partial file is never mistaken for a stored receipt.
+  /// Only under [_exclusive], so [sweep] never sees it half done.
+  Future<(File, String)> _write(List<int> bytes) async {
     final dir = await _receiptsDir();
     final fileName = '${const Uuid().v4()}.img';
-    // Written under a temporary name and renamed, so a partial file is
-    // never mistaken for a stored receipt.
     final partial = File(p.join(dir.path, '$fileName.part'));
     await partial.writeAsBytes(bytes, flush: true);
-    final file = await partial.rename(p.join(dir.path, fileName));
-    await db.saveReceiptFile(ReceiptFilesCompanion.insert(
-      url: url,
-      groupId: groupId,
-      fileName: fileName,
-      bytes: bytes.length,
-      kind: ReceiptFileKind.viewing,
-      lastUsedAt: _now(),
-    ));
-    await _evict(keep: url);
-    return file;
+    return (await partial.rename(p.join(dir.path, fileName)), fileName);
   }
 
   /// Brings the viewing cache under [viewingCap], least recently used
@@ -170,6 +191,7 @@ class ReceiptCache {
       (await db.allReceiptFiles()).fold<int>(0, (sum, f) => sum + f.bytes);
 
   /// Removes every stored receipt. They're downloaded again when opened.
+  /// Photos not uploaded yet aren't stored receipts, and stay (#124).
   Future<void> clear() async {
     final rows = await db.allReceiptFiles();
     await db.deleteReceiptFiles(rows.map((f) => f.url));
@@ -185,7 +207,11 @@ class ReceiptCache {
   Future<void> _sweep() async {
     try {
       final dir = await _receiptsDir();
-      final known = {for (final f in await db.allReceiptFiles()) f.fileName};
+      final known = {
+        for (final f in await db.allReceiptFiles()) f.fileName,
+        // Photos not on their expense yet (#124): never swept.
+        ...await db.attachmentFileNames(),
+      };
       await for (final entity in dir.list()) {
         if (entity is File && !known.contains(p.basename(entity.path))) {
           await entity.delete();

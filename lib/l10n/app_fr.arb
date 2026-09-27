@@ -242,12 +242,17 @@
   "expenseReceiptChoosePhoto": "Choisir dans la photothèque",
   "expenseReceiptUploading": "Envoi du reçu",
   "expenseReceiptNotUploaded": "Non envoyé",
-  "expenseReceiptNotUploadedConnection": "Un reçu n’a pas été envoyé : impossible de joindre le serveur. Touchez-le pour réessayer, ou retirez-le.",
-  "expenseReceiptNotUploadedServer": "Un reçu n’a pas été envoyé. Ce serveur n’enregistre peut-être pas les reçus. Touchez-le pour réessayer, ou retirez-le.",
+  "expenseReceiptNotUploadedConnection": "Un reçu n’a pas été envoyé : impossible de joindre le serveur. Vous pouvez quand même enregistrer : il reste sur ce téléphone et sera envoyé dès le retour de la connexion.",
+  "expenseReceiptNotUploadedServer": "Un reçu n’a pas été envoyé. Ce serveur n’enregistre peut-être pas les reçus. Touchez-le pour réessayer, ou retirez-le ; si vous enregistrez, il reste sur ce téléphone.",
   "expenseReceiptRemove": "Retirer le reçu",
   "expenseReceiptPhotoFailed": "Impossible d’ajouter cette photo.",
-  "expenseReceiptsWaitBeforeSave": "Attendez l’envoi des reçus, ou retirez ceux qui n’ont pas été envoyés.",
+  "expenseReceiptsWaitBeforeSave": "Attendez la fin de l’envoi des reçus.",
   "expenseReceiptsDiscardTitle": "Abandonner les nouveaux reçus ?",
   "expenseReceiptsDiscardBody": "Les reçus ajoutés n’ont pas été enregistrés avec cette dépense.",
-  "expenseReceiptsDiscard": "Abandonner"
+  "expenseReceiptsDiscard": "Abandonner",
+  "receiptRemove": "Retirer",
+  "receiptRemovePendingBody": "Il n’a pas été envoyé : ce téléphone en a la seule copie.",
+  "receiptRemovePendingTitle": "Retirer ce reçu ?",
+  "receiptUploadFailed": "Un reçu n’a pas pu être envoyé. Ce serveur n’enregistre peut-être pas les reçus ; la photo reste sur ce téléphone.",
+  "receiptWaitingToUpload": "Pas encore envoyé : il sera envoyé dès le retour de la connexion."
 }

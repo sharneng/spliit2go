@@ -313,6 +313,16 @@ class SpliitClient {
   /// [SpliitApiException], a refused upload a [ReceiptUploadException].
   Future<String> uploadReceipt(List<int> bytes,
       {String filename = 'receipt.jpg', String contentType = 'image/jpeg'}) async {
+    final target = await signReceiptUpload(filename: filename, contentType: contentType);
+    await putReceipt(target, bytes);
+    return target.publicUrl;
+  }
+
+  /// Step 1 of [uploadReceipt]: where the image goes, and the URL it will
+  /// have. Separate so the outbox can record the URL before the transfer
+  /// (#124).
+  Future<ReceiptUploadTarget> signReceiptUpload(
+      {String filename = 'receipt.jpg', String contentType = 'image/jpeg'}) async {
     final sign = await _http.post(
       Uri.parse('$baseUrl/api/s3-upload'),
       headers: {'content-type': 'application/json', 'accept': 'application/json'},
@@ -337,21 +347,41 @@ class SpliitClient {
     if (key is! String || bucket is! String || putUrl is! String) {
       throw SpliitResponseFormatException('s3-upload: missing key, bucket or url');
     }
+    return ReceiptUploadTarget(
+      putUrl: putUrl,
+      contentType: contentType,
+      publicUrl: receiptPublicUrl(
+          key: key,
+          bucket: bucket,
+          region: signature['region'] as String?,
+          endpoint: signature['endpoint'] as String?),
+    );
+  }
+
+  /// Step 2 of [uploadReceipt]: the image goes straight to the bucket,
+  /// with the same headers the web app sends.
+  Future<void> putReceipt(ReceiptUploadTarget target, List<int> bytes) async {
     final put = await _http
         .put(
-          Uri.parse(putUrl),
-          headers: {'content-type': contentType, 'cache-control': 'max-age=630720000'},
+          Uri.parse(target.putUrl),
+          headers: {'content-type': target.contentType, 'cache-control': 'max-age=630720000'},
           body: bytes,
         )
         .timeout(const Duration(minutes: 3));
     if (put.statusCode < 200 || put.statusCode >= 300) {
       throw ReceiptUploadException(put.statusCode);
     }
-    return receiptPublicUrl(
-        key: key,
-        bucket: bucket,
-        region: signature['region'] as String?,
-        endpoint: signature['endpoint'] as String?);
+  }
+
+  /// Whether an upload the app may have been stopped in the middle of
+  /// reached the bucket (#124): a `HEAD` of its public URL. A bucket
+  /// answers a missing object with 404, or 403 when it doesn't let
+  /// anyone list it.
+  Future<bool> receiptExists(String url) async {
+    final res = await _http.head(Uri.parse(url)).timeout(const Duration(seconds: 60));
+    if (res.statusCode >= 200 && res.statusCode < 300) return true;
+    if (res.statusCode == 403 || res.statusCode == 404) return false;
+    throw ReceiptUploadException(res.statusCode);
   }
 
   /// Where an uploaded object can be read: the instance's own S3 endpoint
@@ -773,6 +803,15 @@ class GroupNotFoundException implements UserError {
 
   @override
   String toString() => 'GroupNotFoundException: no group "$groupId" on $serverUrl';
+}
+
+/// Where a receipt image is uploaded (#123): the signed `PUT`, and the
+/// public URL the expense stores.
+class ReceiptUploadTarget {
+  final String putUrl;
+  final String publicUrl;
+  final String contentType;
+  const ReceiptUploadTarget({required this.putUrl, required this.publicUrl, required this.contentType});
 }
 
 /// Uploading a receipt image failed after the instance signed it: the

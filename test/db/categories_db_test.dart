@@ -35,6 +35,7 @@ void main() {
     final file = File('${dir.path}/db.sqlite');
     final old = AppDatabase(NativeDatabase(file));
     await old.customStatement('DROP TABLE cached_categories');
+    await old.customStatement('DROP TABLE receipt_attachments');
     await old.customStatement('PRAGMA user_version = 13');
     await old.close();
 

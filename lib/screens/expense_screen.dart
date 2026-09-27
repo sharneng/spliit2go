@@ -1002,7 +1002,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       conversionRate = amountCents / originalAmountCents;
     }
 
-    if (_receipts.busy || _receipts.hasFailed) {
+    // Photos that didn't upload don't hold Save back: they're kept with
+    // the expense and uploaded later (#124). Ones still on their way do.
+    if (_receipts.busy) {
       setState(() => _saveError = context.l10n.expenseReceiptsWaitBeforeSave);
       return;
     }
@@ -1107,8 +1109,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     // which is the entire point. The outbox (triggered by the caller
     // after this returns) is what attempts the real sync. Who added it is
     // captured now, not when the outbox replays it (issue #92).
-    await widget.db.insertPending(expense,
-        addedByParticipantId: await _activityParticipant());
+    // With its photos that didn't upload, in one step (#124): a retried
+    // Save must never add the expense twice.
+    final addedBy = await _activityParticipant();
+    await _receipts.keepUnsent(
+        expenseId: expense.id,
+        save: (attachments) => widget.db.insertPending(expense,
+            addedByParticipantId: addedBy, attachments: attachments));
     await _rememberDefaultSplitIfRequested(paidFor);
 
     if (mounted) Navigator.of(context).pop(true);
@@ -1172,6 +1179,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     } catch (e, st) {
       ErrorReporter.instance.report(e, st, operation: 'Storing an edited expense\'s receipts');
     }
+    // Photos that didn't upload: added to the expense later (#124).
+    // Retrying Save after a failure here repeats the update, which is
+    // harmless: it keeps the ids it's sent.
+    await _receipts.keepUnsent(
+        expenseId: widget.existingExpense!.id, save: widget.db.addAttachments);
     await _rememberDefaultSplitIfRequested(paidFor);
     if (mounted) Navigator.of(context).pop(true);
   }

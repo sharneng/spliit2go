@@ -242,12 +242,17 @@
   "expenseReceiptChoosePhoto": "从相册选择",
   "expenseReceiptUploading": "正在上传收据",
   "expenseReceiptNotUploaded": "未上传",
-  "expenseReceiptNotUploadedConnection": "有收据未上传：无法连接服务器。轻点重试，或将其移除。",
-  "expenseReceiptNotUploadedServer": "有收据未上传。此服务器可能不保存收据。轻点重试，或将其移除。",
+  "expenseReceiptNotUploadedConnection": "有收据未上传：无法连接服务器。仍可保存：收据会保留在本机，联网后自动上传。",
+  "expenseReceiptNotUploadedServer": "有收据未上传。此服务器可能不保存收据。轻点重试，或将其移除；保存后，收据会保留在本机。",
   "expenseReceiptRemove": "移除收据",
   "expenseReceiptPhotoFailed": "无法添加这张照片。",
-  "expenseReceiptsWaitBeforeSave": "请等待收据上传完成，或移除未上传的收据。",
+  "expenseReceiptsWaitBeforeSave": "请等待收据上传完成。",
   "expenseReceiptsDiscardTitle": "放弃新添加的收据？",
   "expenseReceiptsDiscardBody": "你添加的收据尚未随此消费保存。",
-  "expenseReceiptsDiscard": "放弃"
+  "expenseReceiptsDiscard": "放弃",
+  "receiptRemove": "移除",
+  "receiptRemovePendingBody": "它尚未上传，本机上的是唯一副本。",
+  "receiptRemovePendingTitle": "移除这张收据？",
+  "receiptUploadFailed": "有收据无法上传。此服务器可能不保存收据；照片仍保留在本机。",
+  "receiptWaitingToUpload": "尚未上传：联网后会自动上传。"
 }

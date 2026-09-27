@@ -1209,7 +1209,8 @@ class _FailingInsertDb extends AppDatabase {
   _FailingInsertDb() : super(NativeDatabase.memory());
 
   @override
-  Future<void> insertPending(Expense e, {String? addedByParticipantId}) =>
+  Future<void> insertPending(Expense e,
+          {String? addedByParticipantId, List<ReceiptAttachmentsCompanion> attachments = const []}) =>
       Future.error(StateError('disk I/O error'));
 }
 
