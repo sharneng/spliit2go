@@ -39,7 +39,7 @@ An early, usable Android client, tested on a physical device against a real self
 Not built yet:
 
 - Receipt attachments and AI receipt scan ([#5](https://github.com/sharneng/spliit2go/issues/5)); the expense form shows a disabled "Attach documents" row.
-- Share link / invite ([#3](https://github.com/sharneng/spliit2go/issues/3)), QR scanning when joining ([#41](https://github.com/sharneng/spliit2go/issues/41)).
+- QR scanning when joining ([#41](https://github.com/sharneng/spliit2go/issues/41)).
 - CSV/JSON export ([#7](https://github.com/sharneng/spliit2go/issues/7)).
 - Stats charts, projections, and a date-range selector; Stats is "all time" only.
 - More languages and right-to-left support ([#64](https://github.com/sharneng/spliit2go/issues/64), [#65](https://github.com/sharneng/spliit2go/issues/65)).
