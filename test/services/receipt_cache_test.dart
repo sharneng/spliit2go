@@ -33,7 +33,7 @@ void main() {
       ReceiptCache(
         db,
         directory: () async => dir,
-        viewingCap: cap,
+        limit: cap,
         clock: () => now = now.add(const Duration(minutes: 1)),
         httpClient: MockClient((req) async {
           requests.add(req.url);

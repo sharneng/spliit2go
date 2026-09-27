@@ -1,11 +1,14 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../l10n/app_locales.dart';
 import '../l10n/context_l10n.dart';
 import '../services/app_settings.dart';
 import '../services/error_reporting.dart';
 import '../services/receipt_cache.dart';
+import '../services/receipt_downloader.dart';
+import '../services/settings_service.dart';
 import '../utils/byte_size.dart';
 import '../widgets/error_message.dart';
 
@@ -64,6 +67,7 @@ class AppSettingsScreen extends StatelessWidget {
             const Divider(height: 32),
             _sectionHeading(context, l10n.appSettingsStorage),
             _ReceiptStorageTile(receipts),
+            _ReceiptDownloadSettings(receipts),
           ],
         ],
       ),
@@ -146,8 +150,13 @@ class _ReceiptStorageTileState extends State<_ReceiptStorageTile> {
     );
     if (confirmed != true || !mounted) return;
     setState(() => _clearing = true);
+    final downloads = ReceiptDownloader.of(widget.receipts.db);
     try {
+      // Favorite groups' downloads stop, and start again only at their
+      // next refresh (#127).
+      downloads.cancelAll();
       await widget.receipts.clear();
+      await downloads.refreshAll();
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)
           ?.showSnackBar(SnackBar(content: Text(context.l10n.appSettingsReceiptsCleared)));
@@ -204,5 +213,129 @@ class _ReceiptStorageTileState extends State<_ReceiptStorageTile> {
         child: Text(l10n.appSettingsReceiptsClear),
       ),
     );
+  }
+}
+
+/// Downloading favorite groups' receipts ahead, and the limit on what
+/// receipts may take (#127).
+class _ReceiptDownloadSettings extends StatefulWidget {
+  const _ReceiptDownloadSettings(this.receipts);
+  final ReceiptCache receipts;
+
+  @override
+  State<_ReceiptDownloadSettings> createState() => _ReceiptDownloadSettingsState();
+}
+
+class _ReceiptDownloadSettingsState extends State<_ReceiptDownloadSettings> {
+  final _settings = SettingsService();
+  ReceiptDownloadMode? _mode;
+  int? _limitMb;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final mode = await _settings.receiptDownloadMode();
+      final limit = await _settings.receiptStorageLimitMb();
+      if (!mounted) return;
+      setState(() {
+        _mode = mode;
+        _limitMb = limit;
+      });
+    } catch (e, st) {
+      ErrorReporter.instance.report(e, st, operation: 'Reading the receipt settings');
+    }
+  }
+
+  String _modeLabel(ReceiptDownloadMode mode) => switch (mode) {
+        ReceiptDownloadMode.off => context.l10n.appSettingsReceiptDownloadsOff,
+        ReceiptDownloadMode.wifiOnly => context.l10n.appSettingsReceiptDownloadsWifiOnly,
+        ReceiptDownloadMode.always => context.l10n.appSettingsReceiptDownloadsAlways,
+      };
+
+  String _limitLabel(int mb) => context.l10n
+      .bytesMegabytes(NumberFormat.decimalPattern(context.appLocale.toString()).format(mb));
+
+  Future<T?> _choose<T>(String title, List<(T, String)> options, T current) =>
+      showDialog<T>(
+        context: context,
+        builder: (dialogContext) => SimpleDialog(
+          title: Text(title),
+          children: [
+            for (final (value, label) in options)
+              ListTile(
+                title: Text(label),
+                trailing: value == current ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.pop(dialogContext, value),
+              ),
+          ],
+        ),
+      );
+
+  Future<void> _save(Future<void> Function() save) async {
+    try {
+      await save();
+    } catch (e, st) {
+      final error = ErrorReporter.instance.report(e, st, operation: 'Saving an app setting');
+      if (mounted) {
+        showErrorSnackBar(context, context.l10n.appSettingsSaveError,
+            diagnostics: error.diagnostics);
+      }
+    }
+    await _load();
+  }
+
+  Future<void> _chooseMode() async {
+    final current = _mode;
+    if (current == null) return;
+    final mode = await _choose(context.l10n.appSettingsReceiptDownloads,
+        [for (final m in ReceiptDownloadMode.values) (m, _modeLabel(m))], current);
+    if (mode == null || mode == current) return;
+    await _save(() async {
+      await _settings.setReceiptDownloadMode(mode);
+      final downloads = ReceiptDownloader.of(widget.receipts.db);
+      // Turned off, or narrowed to Wi-Fi: what's running stops, and the
+      // next refresh starts again under the new setting.
+      downloads.cancelAll();
+      await downloads.refreshAll();
+    });
+  }
+
+  Future<void> _chooseLimit() async {
+    final current = _limitMb;
+    if (current == null) return;
+    final mb = await _choose(context.l10n.appSettingsReceiptLimit,
+        [for (final c in receiptStorageLimitChoicesMb) (c, _limitLabel(c))], current);
+    if (mb == null || mb == current) return;
+    await _save(() async {
+      await _settings.setReceiptStorageLimitMb(mb);
+      widget.receipts.limit = mb * 1024 * 1024;
+      // A lower limit: the viewing cache makes room now.
+      await widget.receipts.makeRoom(0);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final mode = _mode, limit = _limitMb;
+    return Column(children: [
+      ListTile(
+        title: Text(l10n.appSettingsReceiptDownloads),
+        subtitle: Text(mode == null
+            ? l10n.appSettingsReceiptDownloadsHint
+            : '${_modeLabel(mode)} · ${l10n.appSettingsReceiptDownloadsHint}'),
+        onTap: mode == null ? null : _chooseMode,
+      ),
+      ListTile(
+        title: Text(l10n.appSettingsReceiptLimit),
+        subtitle: limit == null ? null : Text(_limitLabel(limit)),
+        onTap: limit == null ? null : _chooseLimit,
+      ),
+    ]);
   }
 }

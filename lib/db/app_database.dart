@@ -137,6 +137,11 @@ enum ReceiptFileKind {
   /// A photo taken or picked on this device that's now on its expense
   /// (#124): never evicted, removed by Clear.
   capture,
+
+  /// Downloaded ahead for a favorite group (#127): never evicted while
+  /// the group is a favorite, removed by Clear. Unfavoriting makes it
+  /// [viewing].
+  favorite,
 }
 
 /// Where a new expense's receipt photo is on its way to the bucket
@@ -255,6 +260,11 @@ class Groups extends Table {
   /// for a legacy pre-multi-group row before the startup migration.
   DateTimeColumn get lastOpenedAt => dateTime().nullable()();
 
+  /// Why downloading this favorite group's receipts ahead last stopped
+  /// short (#127), as a ReceiptDownloadProblem name; null when nothing
+  /// went wrong. Kept so the 📎 stays red after a restart.
+  TextColumn get receiptDownloadProblem => text().nullable()();
+
   /// This device's remembered "Paid for" split for this group (issue
   /// #29, decisions/paid-for-split-ux-spec.md) -- [DefaultSplit.splitMode]
   /// as its wire value. Null means nothing's been remembered yet.
@@ -301,7 +311,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -360,7 +370,9 @@ class AppDatabase extends _$AppDatabase {
                   ELSE 'active' END
               """);
               // Rebuild from the current schema to remove the obsolete flags.
-              await m.alterTable(TableMigration(groups));
+              // Columns added to groups since version 9 don't exist yet:
+              // the rebuild creates them, and their own step skips them.
+              await m.alterTable(TableMigration(groups, newColumns: [groups.receiptDownloadProblem]));
             }
           }
           if (from < 10) {
@@ -391,6 +403,11 @@ class AppDatabase extends _$AppDatabase {
           if (from < 15) {
             // Receipt photos not on their expense yet (#124).
             await m.createTable(receiptAttachments);
+          }
+          // From 8, the rebuild above already created it.
+          if (from < 16 && from != 8) {
+            // Downloading favorite groups' receipts ahead (#127).
+            await m.addColumn(groups, groups.receiptDownloadProblem);
           }
         },
       );
@@ -822,6 +839,79 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> updateAttachment(String id, ReceiptAttachmentsCompanion changes) =>
       (update(receiptAttachments)..where((a) => a.id.equals(id))).write(changes);
+
+  /// How many of [groupId]'s receipts are known, and how many of those
+  /// are stored on this device (#127). Known: each synced expense's count
+  /// from the list; stored: documents read in full whose file is here.
+  Future<({int total, int available})> receiptAvailability(String groupId) async {
+    final total = await customSelect(
+      'SELECT COALESCE(SUM(document_count), 0) AS n FROM expenses '
+      'WHERE group_id = ? AND pending = 0',
+      variables: [Variable(groupId)],
+      readsFrom: {expenses},
+    ).getSingle();
+    final available = await customSelect(
+      'SELECT COUNT(*) AS n FROM expense_documents d '
+      'JOIN expenses e ON e.id = d.expense_id AND e.pending = 0 '
+      'WHERE d.group_id = ? AND d.url IN (SELECT url FROM receipt_files)',
+      variables: [Variable(groupId)],
+      readsFrom: {expenseDocuments, expenses, receiptFiles},
+    ).getSingle();
+    return (total: total.read<int>('n'), available: available.read<int>('n'));
+  }
+
+  /// [groupId]'s synced expenses whose documents aren't known yet (#127):
+  /// counted by the list, not read in full, or changed since.
+  Future<List<String>> expensesWithUnreadDocuments(String groupId) async {
+    final rows = await customSelect(
+      'SELECT e.id AS id FROM expenses e WHERE e.group_id = ? AND e.pending = 0 '
+      'AND e.document_count > 0 AND e.document_count != '
+      '(SELECT COUNT(*) FROM expense_documents d WHERE d.expense_id = e.id)',
+      variables: [Variable(groupId)],
+      readsFrom: {expenses, expenseDocuments},
+    ).get();
+    return [for (final r in rows) r.read<String>('id')];
+  }
+
+  /// The URLs of [groupId]'s known documents that aren't stored here, in
+  /// the list's order.
+  Future<List<String>> receiptUrlsNotStored(String groupId) async {
+    final rows = await customSelect(
+      'SELECT DISTINCT d.url AS url FROM expense_documents d '
+      'JOIN expenses e ON e.id = d.expense_id AND e.pending = 0 '
+      'WHERE d.group_id = ? AND d.url NOT IN (SELECT url FROM receipt_files) '
+      'ORDER BY e.date DESC, d.position',
+      variables: [Variable(groupId)],
+      readsFrom: {expenseDocuments, expenses, receiptFiles},
+    ).get();
+    return [for (final r in rows) r.read<String>('url')];
+  }
+
+  /// Makes the stored files of [groupId]'s known documents favorite
+  /// downloads (#127): a receipt opened earlier needn't download again.
+  Future<void> keepGroupReceipts(String groupId) => (update(receiptFiles)
+        ..where((f) =>
+            f.groupId.equals(groupId) &
+            f.kind.equalsValue(ReceiptFileKind.viewing) &
+            f.url.isInQuery(selectOnly(expenseDocuments)
+              ..addColumns([expenseDocuments.url])
+              ..where(expenseDocuments.groupId.equals(groupId)))))
+      .write(const ReceiptFilesCompanion(kind: Value(ReceiptFileKind.favorite)));
+
+  /// Unfavoriting (#127): [groupId]'s favorite downloads become viewing
+  /// cache, evicted like any other.
+  Future<void> releaseGroupReceipts(String groupId) => (update(receiptFiles)
+        ..where((f) => f.groupId.equals(groupId) & f.kind.equalsValue(ReceiptFileKind.favorite)))
+      .write(const ReceiptFilesCompanion(kind: Value(ReceiptFileKind.viewing)));
+
+  Future<void> setReceiptDownloadProblem(String groupId, String? problem) =>
+      (update(groups)..where((g) => g.id.equals(groupId)))
+          .write(GroupsCompanion(receiptDownloadProblem: Value(problem)));
+
+  /// Bytes held by photos not uploaded yet (#124), which count toward
+  /// the receipt storage limit but are never evicted.
+  Future<int> attachmentBytes() async =>
+      (await select(receiptAttachments).get()).fold<int>(0, (sum, a) => sum + a.bytes);
 
   /// Every attachment's file name, which ReceiptCache.sweep must keep.
   Future<Set<String>> attachmentFileNames() async =>

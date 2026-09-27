@@ -8,6 +8,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// and fold them into the new AppDatabase-backed joined-groups list.
 /// Nothing writes the legacy keys anymore; a fresh install simply never
 /// has them, and the migration is a no-op for it.
+/// Whether favorite groups' receipts download ahead (#127).
+enum ReceiptDownloadMode { off, wifiOnly, always }
+
+/// The receipt storage limit's choices, in MB, and its default (#127).
+const receiptStorageLimitChoicesMb = [250, 500, 1000, 2000];
+const defaultReceiptStorageLimitMb = 500;
+
 class SettingsService {
   static const _keyServerUrl = 'server_url';
   static const _keyGroupId = 'group_id';
@@ -31,6 +38,34 @@ class SettingsService {
       // the persisted view so a later screen reload cannot apply a failed write.
       await prefs.reload();
       rethrow;
+    }
+  }
+
+  /// Whether favorite groups' receipts download ahead for offline
+  /// (#127). Wi-Fi only by default: a receipt uploaded from the web can
+  /// be up to 5 MB.
+  Future<ReceiptDownloadMode> receiptDownloadMode() async {
+    final value = (await SharedPreferences.getInstance()).getString('receipt_download_mode');
+    return ReceiptDownloadMode.values.asNameMap()[value] ?? ReceiptDownloadMode.wifiOnly;
+  }
+
+  Future<void> setReceiptDownloadMode(ReceiptDownloadMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setString('receipt_download_mode', mode.name)) {
+      throw StateError('Could not save the receipt download setting');
+    }
+  }
+
+  /// The most space stored receipts may take, in MB (#127): one limit
+  /// for every kind; see ReceiptCache.
+  Future<int> receiptStorageLimitMb() async =>
+      (await SharedPreferences.getInstance()).getInt('receipt_storage_limit_mb') ??
+      defaultReceiptStorageLimitMb;
+
+  Future<void> setReceiptStorageLimitMb(int mb) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setInt('receipt_storage_limit_mb', mb)) {
+      throw StateError('Could not save the receipt storage limit');
     }
   }
 

@@ -125,6 +125,7 @@ void main() {
     await old.customStatement('DROP TABLE receipt_files');
     await old.customStatement('DROP TABLE cached_categories');
     await old.customStatement('DROP TABLE receipt_attachments');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipt_download_problem');
     await old.customStatement('PRAGMA user_version = 11');
     await old.close();
 
@@ -155,6 +156,7 @@ void main() {
     await old.customStatement('ALTER TABLE expenses DROP COLUMN documents_json');
     await old.customStatement('DROP TABLE cached_categories');
     await old.customStatement('DROP TABLE receipt_attachments');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipt_download_problem');
     await old.customStatement('PRAGMA user_version = 12');
     await old.close();
 

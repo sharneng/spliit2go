@@ -73,6 +73,7 @@ void main() {
     final file = File('${dir.path}/db.sqlite');
     final old = AppDatabase(NativeDatabase(file));
     await old.customStatement('DROP TABLE receipt_attachments');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipt_download_problem');
     await old.customStatement('PRAGMA user_version = 14');
     await old.close();
 

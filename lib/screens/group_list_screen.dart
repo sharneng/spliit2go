@@ -21,6 +21,8 @@ import 'app_settings_screen.dart';
 import 'join_group_screen.dart';
 import '../services/error_reporting.dart';
 import '../services/receipt_cache.dart';
+import '../services/receipt_downloader.dart';
+import '../widgets/receipt_download_indicator.dart';
 import '../widgets/error_message.dart';
 
 /// Registered as a `MaterialApp.navigatorObservers` entry (main.dart) so
@@ -342,19 +344,22 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
     try {
       switch (action) {
         case 'favorite':
+          final favorite = row.organization != GroupOrganization.favorite;
           await widget.db.setGroupOrganization(
-              row.id,
-              row.organization == GroupOrganization.favorite
-                  ? GroupOrganization.active
-                  : GroupOrganization.favorite);
+              row.id, favorite ? GroupOrganization.favorite : GroupOrganization.active);
+          // A favorite's receipts download ahead for offline (#127).
+          await _favoriteChanged(row, favorite);
         case 'archive':
           await widget.db.setGroupOrganization(
               row.id,
               row.organization == GroupOrganization.archived
                   ? GroupOrganization.active
                   : GroupOrganization.archived);
+          // Archiving a favorite ends it being one.
+          if (row.organization == GroupOrganization.favorite) await _favoriteChanged(row, false);
         case 'remove':
           if (!await _confirmRemove(row)) return;
+          ReceiptDownloader.of(widget.db).removed(row.id);
           await widget.db.leaveGroup(row.id);
           unawaited(ReceiptCache.of(widget.db).sweep());
       }
@@ -362,6 +367,15 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
       _showSaveError(e, st, 'Updating group ${row.id}');
     } finally {
       if (mounted) await _load(); // Always rebuild with the fresh key
+    }
+  }
+
+  Future<void> _favoriteChanged(GroupRow row, bool favorite) async {
+    final downloads = ReceiptDownloader.of(widget.db);
+    if (favorite) {
+      unawaited(downloads.run(row.id, widget.clientFactory(row.serverUrl)));
+    } else {
+      await downloads.unfavorited(row.id);
     }
   }
 
@@ -408,7 +422,17 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
                         child: Center(
                             child:
                                 GroupMonogram(id: row.id, name: row.name)))))),
-        title: Text(row.name),
+        title: Row(children: [
+          Flexible(child: Text(row.name)),
+          // A favorite's receipts offline (#127).
+          ReceiptDownloadIndicator(
+            size: 18,
+            compact: true,
+            status: ReceiptDownloader.of(widget.db).status(row.id),
+            onRetry: () => unawaited(ReceiptDownloader.of(widget.db)
+                .run(row.id, widget.clientFactory(row.serverUrl))),
+          ),
+        ]),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Wrap(spacing: 12, runSpacing: 4, children: [

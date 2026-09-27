@@ -1,6 +1,6 @@
 # spliit2go: receipts (issues #5, #123–#128)
 
-**Status: #123 and #124 implemented** (viewing in #130, attaching in #131, offline and durable attaching in #124's PR), 2026-09-27. The rest is planned in [#125](https://github.com/sharneng/spliit2go/issues/125)–[#127](https://github.com/sharneng/spliit2go/issues/127), tracked by [#5](https://github.com/sharneng/spliit2go/issues/5). The issues hold the full agreed design (Kenneth and Ezra, 2026-09-27); this records what's built and why.
+**Status: #123, #124 and #127 implemented** (viewing in #130, attaching in #131, offline and durable attaching in #138, downloading ahead in #127's PR), 2026-09-27. Scanning is planned in [#125](https://github.com/sharneng/spliit2go/issues/125) and [#126](https://github.com/sharneng/spliit2go/issues/126), tracked by [#5](https://github.com/sharneng/spliit2go/issues/5). The issues hold the full agreed design (Kenneth and Ezra, 2026-09-27); this records what's built and why.
 
 ## How Spliit stores receipts
 
@@ -62,18 +62,48 @@ A receipt is an expense *document*: `{id, url, width, height}` (`src/lib/schemas
 - **Identities:** a create gives documents new ids, so the local attachment id is never taken for the server's; the next read of the expense brings the real ones (#123).
 - **Overlapping syncs:** the outbox runs one group's flushes one after another (#141), so two can't both create the same expense.
 
+## Downloading ahead for favorite groups (built, #127)
+
+Kenneth mostly uses one group when traveling, and needs its receipts offline. Favorites (#68) mark exactly those groups, so only **favorite groups'** receipts download ahead: not Active, not Archived.
+
+- **Setting** (App settings, Storage): "Download receipts of favorite groups": **Off / Wi-Fi only / Always**, Wi-Fi only by default. A receipt uploaded from the web can be up to 5 MB.
+- **When:**
+  - after a favorite group refreshes, in the background, so the refresh doesn't wait;
+  - when a group is made a favorite;
+  - on Retry.
+
+  Never right after Clear: Clear stops what's running, and a group's receipts come back at its next refresh.
+- **A run (`ReceiptDownloader`), per group:**
+  1. It reads the expenses whose documents aren't known yet, since the list only counts them.
+  2. Receipts already stored (opened earlier) become favorite downloads rather than downloading again.
+  3. It downloads the rest one at a time, as *favorite downloads*: never evicted while the group is a favorite, removed by Clear.
+
+  Runs for one group are joined, never doubled. A receipt that fails for an unexpected reason is logged, and the rest go on.
+- **The 📎** (Kenneth): shown in the group's app bar, next to ⋯, and at the right end of its name in the group list, for a favorite group with downloads on and receipts to have.
+  - It **blinks** while downloading, is **red** after an error, and is **solid** once every receipt is on the device.
+  - It's **dimmed** when some aren't here and nothing is wrong: waiting for Wi-Fi, or for the next refresh after Clear. This fourth state was added after the simulator showed a solid 📎 after Clear, which read as "done".
+  - Tapping it shows the progress: "Downloading receipts: 12 of 40", "All receipts available offline", or "38 of 40 receipts available offline" with the reason (no connection, not enough space, some receipts failed, with details) and Retry.
+  - "Waiting for Wi-Fi" isn't an error, so it isn't red.
+  - The counts come from the database, and the last problem is stored with the group, so the status survives a restart.
+- **Network:** under Wi-Fi only, nothing downloads over mobile data. Moving onto mobile data mid-run cancels the transfer in flight: the run's HTTP client is closed, which aborts it. The rest wait for the next refresh or Retry. Going offline doesn't cancel anything, because the transfer fails by itself; iOS also reports "none" the moment the app starts listening, which on the simulator stopped a run before this rule.
+- **Lifecycle:**
+  - Unfavoriting or archiving cancels the run, and its downloads become viewing cache.
+  - Removing the group cancels it, and its files go with its rows.
+  - Turning downloads off, or narrowing them to Wi-Fi, cancels what's running.
+  - A receipt or expense gone from a refreshed group loses its file by #123's cleanup by reference.
+
 ## The storage policy
 
 Every receipt file on the device is recorded in the `ReceiptFiles` table with *why* it's there, which decides when it may go. The full table is in #123. Built so far:
 
-- **Viewing cache:** receipts that were opened. Capped at about 200 MB, least recently used out first; the receipt being viewed is never evicted.
+- **One limit for everything** (#127, Kenneth): App settings' "Receipt storage limit", 500 MB by default, with 250 MB, 1,000 MB and 2,000 MB as the other choices. Every stored receipt counts toward it, including photos not uploaded yet. It replaces the viewing cache's own 200 MB cap. It's an app-level limit rather than a free-space margin, because Flutter has no free-space API without a native plugin.
+- **Viewing cache:** receipts that were opened. The only kind evicted to stay under the limit, least recently used first; the receipt being viewed is never evicted.
+- **Favorite downloads** (#127): kept while their group is a favorite; removed by Clear. When only receipts that can't be evicted are left, a run pauses with "Not enough space", and photos not uploaded yet are never touched.
 - **Cleanup by reference:** when a refresh, a delete or leaving a group removes an expense or document, the database drops its file's row in the same transaction, and `ReceiptCache.sweep` deletes files no row refers to (at startup, after a refresh, after leaving a group). Downloads are written under a temporary name and renamed, so a partial file is never taken for a receipt, and storing a file (write, rename, register) and a sweep run one at a time, so a sweep can't delete a file mid-store (#130 review).
 
 - **Pending originals** (#124): a new expense's photos not uploaded yet. Never evicted, never removed by Clear or by a sweep; removed only when the expense is created with them, by Sync without receipts, or with a discarded expense or a group left.
 - **Captures** (#124): photos from this device that are on their expense. Never evicted; removed by Clear, and with their document, expense or group. Storage's size and Clear cover stored receipts and captures, not pending originals.
 
-Still to come: downloading a favorite group's receipts ahead for offline (#127), with the free-space margin it needs.
-
 ## Not done yet
 
-On-device scanning (#125, #126), downloading ahead (#127).
+On-device scanning (#125, #126).

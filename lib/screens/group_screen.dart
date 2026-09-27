@@ -26,6 +26,8 @@ import 'stats_screen.dart';
 import '../widgets/error_message.dart';
 import '../services/error_reporting.dart';
 import '../services/receipt_cache.dart';
+import '../services/receipt_downloader.dart';
+import '../widgets/receipt_download_indicator.dart';
 
 /// A single group's expenses, offline-first -- reached by pushing on top
 /// of GroupListScreen (the app's actual root; see main.dart and
@@ -187,6 +189,9 @@ class _GroupScreenState extends State<GroupScreen> {
           fetchedAtGeneration: generation);
       // Receipt files the refresh stopped referring to (#123).
       unawaited(ReceiptCache.of(widget.db).sweep());
+      // A favorite's receipts, ahead for offline (#127); in the
+      // background, so the refresh doesn't wait.
+      unawaited(ReceiptDownloader.of(widget.db).run(widget.groupId, widget.client));
       if (!mounted) return;
       setState(() => _error = null);
     } catch (e, st) {
@@ -234,6 +239,11 @@ class _GroupScreenState extends State<GroupScreen> {
         // group settings, and sharing the group's link. Room for more
         // later (a QR code).
         actions: [
+          ReceiptDownloadIndicator(
+            status: ReceiptDownloader.of(widget.db).status(widget.groupId),
+            onRetry: () =>
+                unawaited(ReceiptDownloader.of(widget.db).run(widget.groupId, widget.client)),
+          ),
           PopupMenuButton<_GroupAction>(
             icon: const Icon(Icons.more_horiz),
             tooltip: context.l10n.groupScreenMenuTooltip,
