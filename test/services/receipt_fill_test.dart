@@ -65,6 +65,13 @@ void main() {
     expect((fill.amountCents, fill.amountHint), (null, '€ 15,95'));
   });
 
+  // #147 review (Ezra), through the parser: a USD receipt in a EUR group.
+  test('a currency declared on its own line keeps the total out of the amount', () {
+    final scan = readReceipt('CORNER CAFE\nCurrency: USD\nTOTAL 19.62', today: DateTime(2026, 9, 27));
+    final fill = receiptFill(scan, form());
+    expect((fill.amountCents, fill.amountHint), (null, 'USD 19.62'));
+  });
+
   test('with "paid in a different currency" on, the total is only a hint', () {
     final fill = receiptFill(scan, form(paidInOtherCurrency: true));
     expect((fill.amountCents, fill.amountHint), (null, '15,95'));

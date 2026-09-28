@@ -188,6 +188,20 @@ Amount Due      \$19.62''');
       expect(receiptTotal(['Coffee  \$3.50', 'TOTAL USD 3.50'])!.currency!.codes, {'USD'});
     });
 
+    // #147 review (Ezra): a currency on a line of its own was ignored, and
+    // the total went into a EUR group's amount as euros.
+    test('a currency declared on a line of its own', () {
+      for (final line in ['Currency: USD', 'Devise : USD', 'USD', 'Prices in USD']) {
+        final total = receiptTotal(['CORNER CAFE', line, 'TOTAL 19.62'])!;
+        expect(total.currency?.codes, {'USD'}, reason: line);
+      }
+      expect(receiptTotal(['CORNER CAFE', '€', 'TOTAL 19,62'])!.currency?.codes, {'EUR'});
+    });
+
+    test('a code in ordinary words is not a currency', () {
+      expect(receiptTotal(['THE USD LOUNGE', 'TOTAL 19.62'])!.currency, isNull);
+    });
+
     test('two currencies make it unclear, so not sure', () {
       final total = receiptTotal(['Coffee  € 3,50', 'Cake  £ 2,00', 'TOTAL  5,50'])!;
       expect(total.sure, isFalse);

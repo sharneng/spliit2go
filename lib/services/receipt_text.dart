@@ -289,16 +289,35 @@ List<ReceiptCurrency> _marksIn(String line) => [
       for (final m in _currencyMark.allMatches(line)) ReceiptCurrency(m[0]!, _currencyMarks[m[0]!]!),
     ];
 
+/// Lines that say what currency the receipt is in.
+const _currencyKeywords = ['currency', 'devise', 'monnaie', 'prices in', 'prix en', 'amounts in', 'montants en'];
+
+/// A mark with a currency sign in it ("€", "US\$"), which nothing else
+/// on a receipt looks like; a code or "kr" needs context.
+final _currencySign = RegExp('[\$€£¥₹₩₪₱฿₫₺₽]');
+
+/// The marks on [line] that mean a currency: every sign, and a code only
+/// beside an amount, on a line that declares the currency ("Currency:
+/// USD", #147 review), or alone on its line. "THE USD LOUNGE" has none.
+List<ReceiptCurrency> _currencyMarksOn(String line) {
+  final marks = _marksIn(line);
+  if (marks.isEmpty) return marks;
+  final context = receiptAmounts(line).isNotEmpty ||
+      receiptLineNames(_currencyKeywords, line) ||
+      marks.length == 1 && line.replaceAll(RegExp(r'[\s:.\-*]'), '') == marks.single.mark.replaceAll('.', '');
+  return [
+    for (final m in marks)
+      if (context || _currencySign.hasMatch(m.mark)) m,
+  ];
+}
+
 /// The currency of the total on [line]: its own line's marks, or else
 /// the receipt's. Several marks count as one currency when they can mean
 /// the same one ("\$" and "USD"); otherwise it's unclear (false).
 (ReceiptCurrency?, bool) _currencyFor(String line, List<String> lines) {
   var marks = _marksIn(line);
   if (marks.isEmpty) {
-    marks = [
-      for (final l in lines)
-        if (receiptAmounts(l).isNotEmpty) ..._marksIn(l),
-    ];
+    marks = [for (final l in lines) ..._currencyMarksOn(l)];
   }
   if (marks.isEmpty) return (null, true);
   var codes = marks.first.codes;
