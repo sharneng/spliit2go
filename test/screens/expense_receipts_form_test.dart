@@ -220,9 +220,11 @@ void main() {
     expect(find.textContaining('This server may not store receipts'), findsOneWidget);
     expect(find.text('Tap for details'), findsOneWidget);
 
-    await tester.tap(find.text('Not uploaded'));
+    // ↻, since a tap opens it (#148).
+    await tester.tap(find.byTooltip('Retry'));
     await tester.pumpAndSettle();
     expect(find.text('Not uploaded'), findsNothing);
+    expect(find.byTooltip('Retry'), findsNothing);
 
     await fillAndSave(tester);
     expect(popped, [true]);
@@ -271,7 +273,7 @@ void main() {
     await addReceipt(tester);
     // Edits are online-only: nothing is kept for later.
     expect(find.textContaining('You can still save'), findsNothing);
-    expect(find.textContaining("couldn't reach the server. Tap it to try again"), findsOneWidget);
+    expect(find.textContaining("couldn't reach the server. Tap ↻ on it to try again"), findsOneWidget);
     await fillAndSave(tester, fill: false);
 
     expect(popped, isEmpty);
@@ -282,6 +284,66 @@ void main() {
     await tester.pumpAndSettle();
     await fillAndSave(tester, fill: false);
     expect(popped, [true]);
+    await closeTree(tester);
+  });
+
+  // #148: receipts open full screen from the form too.
+  testWidgets('tapping a receipt opens them all full screen, at that one', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await openForm(tester, db, server().client, _FakePicker(),
+        existing: Expense(
+          id: 'e1',
+          groupId: 'g1',
+          title: 'Coffee',
+          amountCents: 1860,
+          paidBy: 'bea',
+          paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
+          date: DateTime(2026, 9, 23),
+          documents: const [ExpenseDocument(id: 'd1', url: 'https://bucket.test/old.jpg', width: 600, height: 900)],
+          documentCount: 1,
+        ));
+    await addReceipt(tester);
+    Finder tile(String key) => find.byKey(key.startsWith('http') ? ValueKey(key) : ObjectKey(key));
+
+    // The photo just added, from memory.
+    await tester.tap(find.descendant(of: find.byType(Wrap), matching: find.byType(Image)).last);
+    await tester.pumpAndSettle();
+    expect(find.text('Receipt 2 of 2'), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is Image && w.image is MemoryImage), findsWidgets);
+    await tester.tap(find.byType(CloseButton));
+    await tester.pumpAndSettle();
+
+    // The expense's own receipt.
+    await tester.tap(tile('https://bucket.test/old.jpg'));
+    await tester.pumpAndSettle();
+    expect(find.text('Receipt 1 of 2'), findsOneWidget);
+    await tester.tap(find.byType(CloseButton));
+    await tester.pumpAndSettle();
+    await closeTree(tester);
+  });
+
+  testWidgets('a photo that didn\'t upload opens too, offline; ↻ retries it', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final s = server(signs: [offline, () async => http.Response('', 200)]);
+    await openForm(tester, db, s.client, _FakePicker());
+    await addReceipt(tester);
+    int signs() => s.requests.where((r) => r.url.path == '/api/s3-upload').length;
+    expect(find.text('Not uploaded'), findsOneWidget);
+    expect(signs(), 1);
+
+    await tester.tap(find.text('Not uploaded'));
+    await tester.pumpAndSettle();
+    expect(find.text('Receipt'), findsOneWidget);
+    expect(signs(), 1);
+    await tester.tap(find.byType(CloseButton));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Retry'));
+    await tester.pumpAndSettle();
+    expect(find.text('Not uploaded'), findsNothing);
+    expect(signs(), 2);
     await closeTree(tester);
   });
 
