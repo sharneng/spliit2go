@@ -146,6 +146,28 @@ class ReceiptCache {
         return file;
       });
 
+  /// Stores [bytes] for [url] only if they fit under [limit] once viewing
+  /// cache is evicted, and returns the file, or null when they don't
+  /// (#127). The check, the eviction, the write and the registration are
+  /// one step under the cache's lock, so two favorite groups downloading
+  /// at once can't both pass the check and overrun the limit together
+  /// (#144 review). The transfer itself happens before, outside the lock.
+  Future<File?> storeIfRoom(String url,
+          {required String groupId, required List<int> bytes, required ReceiptFileKind kind}) =>
+      _exclusive(() async {
+        if (!await _evictFor(bytes.length)) return null;
+        final (file, fileName) = await _write(bytes);
+        await db.saveReceiptFile(ReceiptFilesCompanion.insert(
+          url: url,
+          groupId: groupId,
+          fileName: fileName,
+          bytes: bytes.length,
+          kind: kind,
+          lastUsedAt: _now(),
+        ));
+        return file;
+      });
+
   /// Writes photos that aren't uploaded yet (#124), then has [register]
   /// record them, with their file names, in the same step: the
   /// attachments' rows, and a new expense's own. Until [register]

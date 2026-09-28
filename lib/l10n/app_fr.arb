@@ -271,5 +271,6 @@
   "receiptDownloadsWaitingForWifi": "En attente du Wi-Fi : rien n’est téléchargé via les données mobiles.",
   "receiptDownloadsOffline": "Impossible de joindre le serveur. Les téléchargements reprennent au retour de la connexion.",
   "receiptDownloadsNoSpace": "Pas assez d’espace : augmentez l’espace maximal pour les reçus dans les réglages, ou effacez les reçus stockés.",
-  "receiptDownloadsFailed": "Certains reçus n’ont pas pu être téléchargés."
+  "receiptDownloadsFailed": "Certains reçus n’ont pas pu être téléchargés.",
+  "receiptDownloadsUnverified": "Les reçus ne sont peut-être pas à jour"
 }

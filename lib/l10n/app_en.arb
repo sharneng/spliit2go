@@ -532,5 +532,6 @@
   "receiptDownloadsWaitingForWifi": "Waiting for Wi-Fi: nothing downloads over mobile data.",
   "receiptDownloadsOffline": "Couldn't reach the server. Downloads continue when you're back online.",
   "receiptDownloadsNoSpace": "Not enough space: raise the receipt storage limit in App settings, or clear stored receipts.",
-  "receiptDownloadsFailed": "Some receipts couldn't be downloaded."
+  "receiptDownloadsFailed": "Some receipts couldn't be downloaded.",
+  "receiptDownloadsUnverified": "Receipts may be out of date"
 }

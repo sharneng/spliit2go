@@ -224,6 +224,31 @@ void main() {
     expect(await file.exists(), isTrue);
     expect(await paused.receiptFile(url('a')), isNotNull);
   });
+
+  // #144 review (Ezra): the check and the store are one step.
+  test('two stores at once that fit only one: one is stored, the other refused', () async {
+    final receipts = cache(cap: 150);
+
+    final results = await Future.wait([
+      for (final name in ['a', 'b'])
+        receipts.storeIfRoom(url(name),
+            groupId: 'g1', bytes: List.filled(100, 1), kind: ReceiptFileKind.favorite),
+    ]);
+
+    expect(results.whereType<File>(), hasLength(1));
+    expect(await receipts.usage(), 100);
+  });
+
+  test('a store that fits once viewing cache is evicted evicts it', () async {
+    final receipts = cache(size: 100, cap: 150);
+    await receipts.load(url('viewed'), groupId: 'g1');
+
+    final file = await receipts.storeIfRoom(url('kept'),
+        groupId: 'g1', bytes: List.filled(100, 1), kind: ReceiptFileKind.favorite);
+
+    expect(file, isNotNull);
+    expect({for (final f in await db.allReceiptFiles()) f.url}, {url('kept')});
+  });
 }
 
 /// Pauses the first file registration until [gate], saying when it got

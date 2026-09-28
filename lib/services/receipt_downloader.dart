@@ -53,7 +53,16 @@ class ReceiptDownloadStatus {
   final ReceiptDownloadProblem? problem;
   final String? diagnostics;
 
-  bool get complete => available >= total;
+  /// Every receipt is here, and the last check found nothing it
+  /// couldn't read: safe to go offline. A check that stopped short
+  /// (#144 review) can't vouch for the receipts it didn't read, such as
+  /// one swapped on the web with the count unchanged, even when the
+  /// counts add up; the problem is stored, so this survives a restart.
+  bool get complete => available >= total && problem == null;
+
+  /// All counted, but the last check stopped short: some may be out of
+  /// date.
+  bool get unverified => available >= total && problem != null;
 
   /// Red: something went wrong, beyond waiting for Wi-Fi.
   bool get isError =>
@@ -279,9 +288,11 @@ class ReceiptDownloader {
           throw ReceiptDownloadException(res.statusCode, url);
         }
         if (run.cancelled) return (run.reason, null);
-        if (!await _receipts.makeRoom(res.bodyBytes.length)) return (ReceiptDownloadProblem.noSpace, null);
-        await _receipts.store(url,
+        // Room, eviction and storing in one step: another group can't
+        // take the same room meanwhile (#144 review).
+        final stored = await _receipts.storeIfRoom(url,
             groupId: groupId, bytes: res.bodyBytes, kind: ReceiptFileKind.favorite);
+        if (stored == null) return (ReceiptDownloadProblem.noSpace, null);
         await refreshStatus(groupId);
       } catch (e, st) {
         if (run.cancelled || classifyError(e) == ErrorKind.connection) rethrow;

@@ -105,4 +105,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('raise the receipt storage limit'), findsOneWidget);
   });
+
+  // #144 review (Ezra): the counts adding up isn't enough after a check
+  // that stopped short.
+  testWidgets('all counted but the last check failed: red, "may be out of date", Retry',
+      (tester) async {
+    await pump(
+        tester,
+        const ReceiptDownloadStatus(
+            shown: true,
+            total: 3,
+            available: 3,
+            problem: ReceiptDownloadProblem.failed,
+            diagnostics: 'Reading receipts of expense e1 failed.'));
+
+    expect(clip(tester).color, Theme.of(tester.element(find.byType(Scaffold))).colorScheme.error);
+    await tester.tap(find.byIcon(Icons.attach_file));
+    await tester.pumpAndSettle();
+    expect(find.text('Receipts may be out of date'), findsOneWidget);
+    expect(find.text('All receipts available offline'), findsNothing);
+    expect(find.text('Retry'), findsOneWidget);
+  });
 }

@@ -96,7 +96,9 @@ class _Details extends StatelessWidget {
         ? l10n.receiptDownloadsRunning(s.available, s.total)
         : s.complete
             ? l10n.receiptDownloadsComplete
-            : l10n.receiptDownloadsPartial(s.available, s.total);
+            : s.unverified
+                ? l10n.receiptDownloadsUnverified
+                : l10n.receiptDownloadsPartial(s.available, s.total);
     final reason = s.running || s.complete
         ? null
         : switch (s.problem) {

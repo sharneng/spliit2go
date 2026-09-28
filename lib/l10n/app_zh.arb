@@ -271,5 +271,6 @@
   "receiptDownloadsWaitingForWifi": "正在等待 Wi-Fi：不会使用移动数据下载。",
   "receiptDownloadsOffline": "无法连接服务器。联网后会继续下载。",
   "receiptDownloadsNoSpace": "空间不足：请在应用设置中提高收据存储上限，或清除已存储的收据。",
-  "receiptDownloadsFailed": "部分收据无法下载。"
+  "receiptDownloadsFailed": "部分收据无法下载。",
+  "receiptDownloadsUnverified": "收据可能不是最新的"
 }

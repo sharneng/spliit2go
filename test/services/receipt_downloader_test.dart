@@ -548,4 +548,72 @@ void main() {
       expect((await stored()).keys, isNot(contains('https://bucket.test/3.jpg')));
     });
   });
+
+  // #144 review (Ezra): two reproductions.
+  test('a swap whose expense can\'t be read leaves the group not complete, red, with Retry, '
+      'even across a restart', () async {
+    expectUnexpectedError<SpliitApiException>('Reading receipts of expense e1', times: 2);
+    final d = downloader();
+    await d.run('g1', server);
+    expect((await statusOf(d)).complete, isTrue);
+
+    documents['e1']![1] = 'https://bucket.test/swapped.jpg';
+    activities.insert(0, ('a3', 'UPDATE_EXPENSE', 'e1'));
+    failingReads.add('e1');
+    await d.run('g1', server);
+
+    var status = await statusOf(d);
+    // The counts add up, but the swap couldn't be checked.
+    expect((status.available, status.total), (3, 3));
+    expect((status.complete, status.unverified, status.isError), (false, true, true));
+
+    final later = downloader();
+    expect((await statusOf(later)).complete, isFalse);
+
+    // Retry, still failing: still not complete. Then it reads.
+    await later.run('g1', server);
+    expect((await statusOf(later)).complete, isFalse);
+    failingReads.clear();
+    await later.run('g1', server);
+    status = await statusOf(later);
+    expect((status.complete, status.problem), (true, null));
+    expect(await stored(), contains('https://bucket.test/swapped.jpg'));
+  });
+
+  test('two favorite groups downloading at once can\'t overrun the limit together', () async {
+    // One 100-byte receipt each, under a 150-byte limit.
+    cache = ReceiptCache(db, directory: () async => dir, limit: 150);
+    ReceiptCache.use(cache);
+    documents
+      ..clear()
+      ..['e1'] = ['https://bucket.test/1.jpg']
+      ..['e9'] = ['https://bucket.test/9.jpg'];
+    Expense one(String id, String groupId) => Expense(
+        id: id,
+        groupId: groupId,
+        title: 'Coffee',
+        amountCents: 500,
+        paidBy: 'p1',
+        paidFor: const [],
+        date: DateTime(2026, 9, 27),
+        documentCount: 1);
+    await db.replaceServerExpenses('g1', [one('e1', 'g1')]);
+    await db.cacheGroup(const Group(id: 'g2', name: 'Tokyo', currency: '\$', participants: []));
+    await db.setGroupOrganization('g2', GroupOrganization.favorite);
+    await db.replaceServerExpenses('g2', [one('e9', 'g2')]);
+    final d = downloader();
+    holdDownload = Completer();
+
+    final runs = [d.run('g1', server), d.run('g2', server)];
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(downloads, hasLength(2)); // both transfers under way
+    holdDownload!.complete();
+    await Future.wait(runs);
+
+    expect(await cache.usage(), lessThanOrEqualTo(150));
+    final problems = [
+      for (final g in ['g1', 'g2']) (await db.groupRow(g))!.receiptDownloadProblem,
+    ];
+    expect(problems, unorderedEquals([null, ReceiptDownloadProblem.noSpace.name]));
+  });
 }
