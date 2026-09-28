@@ -23,7 +23,10 @@ import '../widgets/category_icon.dart';
 import '../widgets/error_message.dart';
 import '../services/error_reporting.dart';
 import '../services/receipt_cache.dart';
+import '../services/receipt_fill.dart';
 import '../services/receipt_photo.dart';
+import '../services/receipt_scanner.dart';
+import '../services/receipt_text.dart';
 import '../widgets/receipt_attachments.dart';
 
 /// Adds -- or, given [existingExpense], edits -- an expense. An expense
@@ -64,6 +67,10 @@ import '../widgets/receipt_attachments.dart';
 /// added, so they're documents by the time the expense is saved; see
 /// [ReceiptAttachmentsController] for what happens to one that isn't
 /// uploaded.
+///
+/// A new expense can be filled in from a receipt (#125, Android): Scan
+/// receipt reads it on the phone, keeps the photo with the expense, and
+/// fills in only what the user hasn't; see [receiptFill].
 class ExpenseScreen extends StatefulWidget {
   final SpliitClient client;
   final AppDatabase db;
@@ -99,6 +106,9 @@ class ExpenseScreen extends StatefulWidget {
   @visibleForTesting
   final Future<PreparedReceipt> Function(Uint8List)? prepareReceipt;
 
+  /// Reads receipts on the phone (#125); a fake in widget tests.
+  final ReceiptScanner receiptScanner;
+
   const ExpenseScreen({
     super.key,
     required this.client,
@@ -110,6 +120,7 @@ class ExpenseScreen extends StatefulWidget {
     this.initialDraft,
     this.receiptPicker = const ImagePickerReceiptPhotoPicker(),
     this.prepareReceipt,
+    this.receiptScanner = const PlatformReceiptScanner(),
   });
 
   bool get isEditing => existingExpense != null;
@@ -147,6 +158,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   bool _hasAttemptedSave = false;
 
   DateTime _date = DateTime.now();
+
+  /// Whether the date or category was picked (or filled from a receipt),
+  /// so a scan leaves it alone (#125).
+  bool _dateChosen = false;
+  bool _categoryChosen = false;
+
+  _Scan _scan = _Scan.idle;
+  String? _scanDiagnostics;
+
+  /// What the last scan left beside the fields it didn't fill.
+  ReceiptFill? _scanFill;
+
   bool _isReimbursement = false;
   bool _saveDefaultSplittingOptions = false;
   RecurrenceRule _recurrenceRule = RecurrenceRule.none;
@@ -349,14 +372,131 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       if (photo == null || !mounted) return;
       await _receipts.add(photo);
     } catch (e, st) {
-      // The picker or an unreadable photo; upload failures stay on the
-      // photo instead. A missing camera (a simulator) lands here too.
-      final error = ErrorReporter.instance.report(e, st, operation: 'Adding a receipt photo');
+      _photoFailed(e, st);
+    }
+  }
+
+  /// The picker or an unreadable photo; upload failures stay on the
+  /// photo instead. A missing camera (a simulator) lands here too.
+  void _photoFailed(Object e, StackTrace st) {
+    final error = ErrorReporter.instance.report(e, st, operation: 'Adding a receipt photo');
+    if (mounted) {
+      showErrorSnackBar(context, context.l10n.expenseReceiptPhotoFailed, diagnostics: error.diagnostics);
+    }
+  }
+
+  /// Offered for a new expense on a phone that reads receipts (#125). A
+  /// draft (Balances' "mark as paid") is already filled in.
+  bool get _offersScan => !widget.isEditing && widget.initialDraft == null && widget.receiptScanner.isSupported;
+
+  /// Scan receipt (#125): the Document Scanner, or the camera and library
+  /// when it can't run. The photo joins the receipts like any other, and
+  /// is read as soon as it's prepared, while it uploads.
+  Future<void> _scanReceipt() async {
+    try {
+      Uint8List? photo;
+      try {
+        photo = await widget.receiptScanner.scanDocument();
+      } on ReceiptScannerUnavailable {
+        if (!mounted) return;
+        final source = await chooseReceiptSource(context);
+        if (source == null) return;
+        photo = await widget.receiptPicker.pick(source);
+      }
+      if (photo == null || !mounted) return;
+      await _receipts.add(photo, onPrepared: _readReceipt);
+    } catch (e, st) {
+      _photoFailed(e, st);
+    }
+  }
+
+  Future<void> _readReceipt(PreparedReceipt photo) async {
+    setState(() {
+      _scan = _Scan.reading;
+      _scanFill = null;
+      _scanDiagnostics = null;
+    });
+    try {
+      final blocks = await widget.receiptScanner.recognizeText(photo.bytes);
+      final scan = readReceipt(receiptRows(blocks), categories: _categories, today: DateTime.now());
+      if (!mounted) return;
+      // The form as it is now, not as it was when the scan started: the
+      // user may have typed meanwhile.
+      final fill = receiptFill(
+        scan,
+        ReceiptFormState(
+          titleEmpty: _titleController.text.trim().isEmpty,
+          amountEmpty: _amountController.text.trim().isEmpty,
+          paidInOtherCurrency: _paidInOtherCurrency,
+          dateChosen: _dateChosen,
+          categoryChosen: _categoryChosen,
+          groupCurrencyCode: widget.group.currencyCode,
+          groupCurrency: widget.group.currency,
+        ),
+      );
+      setState(() {
+        if (fill.title case final title?) _titleController.text = title;
+        if (fill.amountCents case final cents?) _amountController.text = (cents / 100).toStringAsFixed(2);
+        if (fill.date case final date?) {
+          _date = date;
+          _dateChosen = true;
+        }
+        if (fill.categoryId case final id?) {
+          _category = id;
+          _categoryChosen = true;
+        }
+        _scanFill = fill;
+        _scan = scan.isEmpty
+            ? _Scan.nothing
+            : fill.filledAny
+                ? _Scan.filled
+                : _Scan.hintsOnly;
+      });
+    } catch (e, st) {
+      final error = ErrorReporter.instance.report(e, st, operation: 'Reading a receipt');
       if (mounted) {
-        showErrorSnackBar(context, context.l10n.expenseReceiptPhotoFailed,
-            diagnostics: error.diagnostics);
+        setState(() {
+          _scan = _Scan.failed;
+          _scanDiagnostics = error.diagnostics;
+        });
       }
     }
+  }
+
+  /// "Receipt: …" under a field, for what the scan didn't fill in.
+  String? _scanHint(String? value) => value == null ? null : context.l10n.expenseScanHint(value);
+
+  Widget _scanSection(BuildContext context) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
+    final reading = _scan == _Scan.reading;
+    final status = switch (_scan) {
+      _Scan.idle => l10n.expenseScanIntro,
+      _Scan.reading => l10n.expenseScanReading,
+      _Scan.filled => l10n.expenseScanFilled,
+      _Scan.hintsOnly => l10n.expenseScanHintsOnly,
+      _Scan.nothing => l10n.expenseScanNothing,
+      _Scan.failed => l10n.expenseScanFailed,
+    };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OutlinedButton.icon(
+            onPressed: reading ? null : _scanReceipt,
+            icon: reading
+                ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.document_scanner_outlined),
+            label: Text(l10n.expenseScanReceipt),
+          ),
+          const SizedBox(height: 4),
+          _scan == _Scan.failed
+              ? ErrorMessage(status, diagnostics: _scanDiagnostics)
+              : Text(status, style: theme.textTheme.bodySmall),
+        ],
+      ),
+    );
   }
 
   /// Leaving with photos added here asks first (#123): nothing else keeps
@@ -607,16 +747,20 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (_offersScan) _scanSection(context),
               TextFormField(
                 controller: _titleController,
-                decoration: InputDecoration(labelText: context.l10n.expenseTitleLabel),
+                decoration: InputDecoration(
+                    labelText: context.l10n.expenseTitleLabel, helperText: _scanHint(_scanFill?.titleHint)),
                 validator: (v) => (v == null || v.isEmpty) ? context.l10n.commonRequired : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _amountController,
                 decoration: InputDecoration(
-                    labelText: context.l10n.expenseAmountLabel, prefixText: widget.group.currency),
+                    labelText: context.l10n.expenseAmountLabel,
+                    prefixText: widget.group.currency,
+                    helperText: _scanHint(_scanFill?.amountHint)),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 onChanged: (_) => setState(() {}), // amount feeds the by-amount hint below
                 validator: (v) {
@@ -629,7 +773,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               InkWell(
                 onTap: _pickDate,
                 child: InputDecorator(
-                  decoration: InputDecoration(labelText: context.l10n.expenseDateLabel),
+                  decoration: InputDecoration(
+                      labelText: context.l10n.expenseDateLabel, helperText: _scanHint(_scanFill?.dateHint)),
                   child: Text(formatDate(_date, locale: context.appLocale)),
                 ),
               ),
@@ -637,7 +782,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               InkWell(
                 onTap: _pickCategory,
                 child: InputDecorator(
-                  decoration: InputDecoration(labelText: context.l10n.expenseCategoryLabel),
+                  decoration: InputDecoration(
+                    labelText: context.l10n.expenseCategoryLabel,
+                    helperText: _scanHint(switch (_scanFill?.categoryHint) {
+                      final id? => localizedCategoryLabel(
+                          context, id, _categories.where((c) => c.id == id).firstOrNull),
+                      null => null,
+                    }),
+                  ),
                   child: Row(
                     children: [
                       CategoryIconGlyph(category: _selectedCategory, size: 24),
@@ -845,7 +997,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    if (picked != null) setState(() => _date = picked);
+    if (picked != null) {
+      setState(() {
+        _date = picked;
+        _dateChosen = true;
+      });
+    }
   }
 
   /// Opens the category picker (issue #19): grouped by
@@ -858,7 +1015,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       isScrollControlled: true,
       builder: (_) => _CategoryPicker(categories: _categories, selectedId: _category),
     );
-    if (picked != null) setState(() => _category = picked.id);
+    if (picked != null) {
+      setState(() {
+        _category = picked.id;
+        _categoryChosen = true;
+      });
+    }
   }
 
   /// Opens the shared currency picker (issue #23) for "paid in a
@@ -1189,6 +1351,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     if (mounted) Navigator.of(context).pop(true);
   }
 }
+
+/// Where Scan receipt is (#125).
+enum _Scan { idle, reading, filled, hintsOnly, nothing, failed }
 
 /// The category picker's contents (issue #19): a search field followed by
 /// a scrollable, grouped list. Filtering narrows to categories whose name

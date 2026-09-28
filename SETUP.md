@@ -63,7 +63,7 @@ It needs Pillow (`pip install pillow`) and rewrites every size: iOS's `AppIcon.a
 
 ## iOS
 
-The iOS project (`ios/`, added in #79) needs Xcode. It uses the same bundle id as Android, `com.sharneng.spliit2go`, targets iOS 15 or later, and is iPhone only (#105). Plugins are integrated with Swift Package Manager, so there's no `Podfile` and no `pod install` step. To run it on a simulator:
+The iOS project (`ios/`, added in #79) needs Xcode. It uses the same bundle id as Android, `com.sharneng.spliit2go`, targets iOS 15 or later, and is iPhone only (#105). Plugins are integrated with Swift Package Manager, so there's no `Podfile` and no `pod install` step. Receipt scanning (#125) is Android only: ML Kit is called from `android/app` (`ReceiptScanChannel.kt`), not through the pub.dev plugins, which would bring CocoaPods back. To run it on a simulator:
 
 ```
 open -a Simulator

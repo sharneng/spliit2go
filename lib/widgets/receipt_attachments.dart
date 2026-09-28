@@ -121,7 +121,9 @@ class ReceiptAttachmentsController extends ChangeNotifier {
 
   /// Prepares [original] and uploads it. Throws if the photo can't be
   /// read (it's then not added); upload failures stay on the attachment.
-  Future<void> add(Uint8List original) async {
+  /// [onPrepared] gets the photo as it's added, before its upload: what
+  /// a receipt scan reads (#125).
+  Future<void> add(Uint8List original, {void Function(PreparedReceipt photo)? onPrepared}) async {
     preparing++;
     _changed();
     final PreparedReceipt photo;
@@ -136,6 +138,7 @@ class ReceiptAttachmentsController extends ChangeNotifier {
     if (_disposed) return;
     final attachment = ReceiptAttachment(photo);
     added.add(attachment);
+    onPrepared?.call(photo);
     await _upload(attachment);
   }
 
@@ -361,27 +364,7 @@ class _AddTile extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
         onPressed: () async {
-          final source = await showModalBottomSheet<ReceiptSource>(
-            context: context,
-            showDragHandle: true,
-            builder: (sheetContext) => SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.photo_camera_outlined),
-                    title: Text(l10n.expenseReceiptTakePhoto),
-                    onTap: () => Navigator.pop(sheetContext, ReceiptSource.camera),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.photo_library_outlined),
-                    title: Text(l10n.expenseReceiptChoosePhoto),
-                    onTap: () => Navigator.pop(sheetContext, ReceiptSource.library),
-                  ),
-                ],
-              ),
-            ),
-          );
+          final source = await chooseReceiptSource(context);
           if (source != null) onAdd(source);
         },
         // Scaled down to fit at large text sizes: the tile stays square.
@@ -400,6 +383,33 @@ class _AddTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Asks whether the photo comes from the camera or the library; null
+/// when dismissed.
+Future<ReceiptSource?> chooseReceiptSource(BuildContext context) {
+  final l10n = context.l10n;
+  return showModalBottomSheet<ReceiptSource>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.photo_camera_outlined),
+            title: Text(l10n.expenseReceiptTakePhoto),
+            onTap: () => Navigator.pop(sheetContext, ReceiptSource.camera),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: Text(l10n.expenseReceiptChoosePhoto),
+            onTap: () => Navigator.pop(sheetContext, ReceiptSource.library),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _Spinner extends StatelessWidget {

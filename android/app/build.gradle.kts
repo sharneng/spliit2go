@@ -47,3 +47,13 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Receipt scanning on the phone (#125), called from ReceiptScanChannel.kt.
+    // Text recognition with the Latin model bundled (about 4 MB), so it
+    // works offline from the first use.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+    // The Document Scanner: a small client; Google Play services downloads
+    // the scanner itself on first use.
+    implementation("com.google.android.gms:play-services-mlkit-document-scanner:16.0.0")
+}

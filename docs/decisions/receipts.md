@@ -1,6 +1,6 @@
 # spliit2go: receipts (issues #5, #123–#128)
 
-**Status: #123, #124 and #127 implemented** (viewing in #130, attaching in #131, offline and durable attaching in #138, downloading ahead in #127's PR), 2026-09-27. Scanning is planned in [#125](https://github.com/sharneng/spliit2go/issues/125) and [#126](https://github.com/sharneng/spliit2go/issues/126), tracked by [#5](https://github.com/sharneng/spliit2go/issues/5). The issues hold the full agreed design (Kenneth and Ezra, 2026-09-27); this records what's built and why.
+**Status: #123, #124, #125 and #127 implemented** (viewing in #130, attaching in #131, offline and durable attaching in #138, downloading ahead in #144, scanning on Android in #125's PR), 2026-09-27. Scanning on the iPhone and Chinese or Japanese receipts are [#126](https://github.com/sharneng/spliit2go/issues/126), tracked by [#5](https://github.com/sharneng/spliit2go/issues/5). The issues hold the full agreed design (Kenneth and Ezra, 2026-09-27); this records what's built and why.
 
 ## How Spliit stores receipts
 
@@ -110,6 +110,19 @@ Every receipt file on the device is recorded in the `ReceiptFiles` table with *w
 - **Pending originals** (#124): a new expense's photos not uploaded yet. Never evicted, never removed by Clear or by a sweep; removed only when the expense is created with them, by Sync without receipts, or with a discarded expense or a group left.
 - **Captures** (#124): photos from this device that are on their expense. Never evicted; removed by Clear, and with their document, expense or group. Storage's size and Clear cover stored receipts and captures, not pending originals.
 
+## Scanning on the phone (#125)
+
+Scan receipt, at the top of a new expense's form (Android), fills in what it can read and keeps the photo with the expense. Everything happens on the phone, so it works offline and against any Spliit server. It follows spliit-ios (80b2e98: `Spliit/Receipts/ReceiptScanner.swift`, `Packages/SpliitKit/Sources/SpliitCore/ReceiptScan.swift`). The web app reads receipts on its server with OpenAI, through a Next.js server action that isn't a stable API.
+
+- **Capture:** ML Kit's Document Scanner, which crops and straightens the page and can import from the gallery. Google Play services downloads its code and UI on first use, so it isn't in the app. When it can't start (no Play services, or a fresh install that was never online), Scan receipt offers #123's camera and library instead. Either way the photo joins the form's receipts like Add receipt's, so it uploads, or stays on the phone and syncs with the expense (#124).
+- **Text:** ML Kit text recognition on the prepared photo, with the Latin model bundled in the app (about 4 MB), so it works offline from the first use. Recognition returns lines in columns (the labels, then the prices), so the rows are rebuilt from where each line sits (`receiptRows`, spliit-ios `ReceiptText.rows`).
+- **Reading:** `lib/services/receipt_text.dart` ports spliit-ios's parser: the merchant is the first line that reads like a name; the total is the largest amount on a line that names a total and not a subtotal, tax or tip; the date is the first plausible one (within two years, at most tomorrow); the category comes from the merchant's name only, and must be one the server offers. English and French keywords, as spliit-ios.
+- **What it's not sure of stays unset** (Ezra's review of the issue). A number with one separator and three digits ("1.234") is a thousand or one and a bit: the receipt's own prices decide it when they show their cents, and otherwise the total isn't sure. A date that reads two ways ("03/04/25") isn't read, unless only one reading is plausible; a dotted date is day first. A total no line names is only the largest price. Several currencies that can't be the same one make the currency unclear. spliit-ios fills all of these in; here they're only shown.
+- **Filling the form** (`lib/services/receipt_fill.dart`): suggestions only. A field the user typed in, or a date or category they picked, is never overwritten, judged when the scan finishes, so typing while it reads is safe. What the receipt says for a field it didn't fill is shown under it ("Receipt: …"). The total goes in the amount only when the receipt shows no currency or one that can be the group's (a mark like "\$" can be several), and not while "Paid in a different currency" is on; pre-filling that field is a possible follow-up. A photo with nothing readable says so, and is kept.
+- **Not for edits or drafts:** Scan receipt is only on a new expense's form. Balances' "mark as paid" opens one already filled in.
+- **The bridge:** ML Kit is called from `android/app` (`ReceiptScanChannel.kt`, on the `com.sharneng.spliit2go/receipt_scan` channel) rather than through the pub.dev plugins. Those support iOS only through CocoaPods: adding them made `flutter build ios` create a Podfile and then fail, since ML Kit needs iOS 15.5 and the app targets 15.0. The iOS project stays SwiftPM-only (#105), and scanning isn't offered there.
+- **Tested:** the parser with spliit-ios's tests and Vision recording, and with what ML Kit returned through this app's own channel on an Android emulator; the form with a fake scanner, including a scan finishing after the user typed. On the emulator, offline: the Document Scanner imported a receipt from the gallery, and the form was filled in (title, the Amount Due rather than the subtotal, date, Dining Out).
+
 ## Not done yet
 
-On-device scanning (#125, #126).
+Scanning on the iPhone, Chinese and Japanese receipts, and an on-device model pass (#126).
