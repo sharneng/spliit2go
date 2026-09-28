@@ -40,3 +40,9 @@ coverage/
 
 # Secrets dropped locally for Claude to read via the device bridge -- never commit
 .secrets/
+
+# Codex instructions
+AGENTS.md
+
+# OS files
+.DS_Store
