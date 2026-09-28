@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -24,9 +26,10 @@ abstract interface class ReceiptScanner {
 
   /// Has Google Play services download the Document Scanner, when the
   /// phone is online and it isn't there yet, so the first scan is likely
-  /// to have it. Best effort, and never throws: a scan without it falls
-  /// back to the camera and library, and asks for it again.
-  Future<void> prepare();
+  /// to have it; see [ReceiptScannerWarmup]. True once it's installed.
+  /// Best effort, and never throws: a scan without it falls back to the
+  /// camera and library, and asks for it again.
+  Future<bool> prepare();
 
   /// ML Kit's Document Scanner: the page as JPEG, or null when the user
   /// cancelled. Throws [ReceiptScannerUnavailable] when it can't run.
@@ -52,19 +55,19 @@ class PlatformReceiptScanner implements ReceiptScanner {
   @override
   bool get isSupported => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
-  /// Called at launch (main.dart) and when a new expense's form opens,
-  /// so there's time for the download before the first scan. Offline,
-  /// nothing is asked: the next call, with a connection, asks.
+  /// Offline, nothing is asked, and it's false: whether it's installed
+  /// isn't known until the next call with a connection.
   @override
-  Future<void> prepare() async {
-    if (!isSupported) return;
+  Future<bool> prepare() async {
+    if (!isSupported) return false;
     try {
       final network = await (connectivity ?? Connectivity().checkConnectivity)();
-      if (network.every((r) => r == ConnectivityResult.none)) return;
-      await _channel.invokeMethod<bool>('prepareScanner');
+      if (network.every((r) => r == ConnectivityResult.none)) return false;
+      return await _channel.invokeMethod<bool>('prepareScanner') ?? false;
     } catch (_) {
       // Best effort (see ReceiptScanner.prepare): the scan falls back
       // without it, and the bridge reports its own failures as false.
+      return false;
     }
   }
 
@@ -92,5 +95,50 @@ class PlatformReceiptScanner implements ReceiptScanner {
           height: ((line['bottom'] as num) - (line['top'] as num)) / height,
         ),
     ];
+  }
+}
+
+/// Gets the Document Scanner downloaded as soon as the phone is online
+/// (#125, Kenneth), so the first scan usually has it: at launch, and again
+/// whenever a connection comes back, wherever the user is in the app.
+/// Stops listening once the scanner is installed; until then each check is
+/// a quick local question to Play services. A scan without the scanner
+/// still falls back to the camera and library.
+class ReceiptScannerWarmup {
+  ReceiptScannerWarmup(this._scanner, {Stream<List<ConnectivityResult>>? connectivityChanges})
+      : _changes = connectivityChanges;
+
+  final ReceiptScanner _scanner;
+  final Stream<List<ConnectivityResult>>? _changes;
+  StreamSubscription<List<ConnectivityResult>>? _subscription;
+  bool _checking = false;
+  bool _done = false;
+
+  /// Whether it's still listening for a connection.
+  @visibleForTesting
+  bool get listening => _subscription != null;
+
+  void start() {
+    if (!_scanner.isSupported) return;
+    _subscription = (_changes ?? Connectivity().onConnectivityChanged).listen((network) {
+      if (network.any((r) => r != ConnectivityResult.none)) _check();
+    });
+    _check();
+  }
+
+  Future<void> _check() async {
+    if (_checking || _done) return;
+    _checking = true;
+    try {
+      if (await _scanner.prepare()) stop();
+    } finally {
+      _checking = false;
+    }
+  }
+
+  void stop() {
+    _done = true;
+    unawaited(_subscription?.cancel());
+    _subscription = null;
   }
 }

@@ -28,9 +28,9 @@ Future<void> main() async {
   installErrorHandlers(ErrorReporter.instance);
   final links = AppLinks();
   final settings = await AppSettings.load(SettingsService());
-  // The Document Scanner downloads on first use; start it now, while
-  // online, so the first scan has it (#125).
-  unawaited(const PlatformReceiptScanner().prepare());
+  // The Document Scanner downloads on first use: get it as soon as the
+  // phone is online, so the first scan has it (#125).
+  ReceiptScannerWarmup(const PlatformReceiptScanner()).start();
   runApp(Spliit2GoApp(
       settings: settings,
       home: AppRoot(

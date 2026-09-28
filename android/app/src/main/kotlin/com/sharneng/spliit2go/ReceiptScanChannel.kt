@@ -30,8 +30,9 @@ import io.flutter.plugin.common.MethodChannel
  *   stops it starting, the error is "unavailable" and the app uses the
  *   camera instead, while Play services fetches it for next time.
  * - prepareScanner: has Play services download the Document Scanner when it
- *   isn't there yet, called at launch and when a new expense's form opens,
- *   while online, so it's usually ready by the first scan. True when it's
+ *   isn't there yet, so it's usually ready by the first scan. Called while
+ *   online, at launch and whenever a connection comes back, until it's
+ *   installed (ReceiptScannerWarmup in receipt_scanner.dart). True when it's
  *   already installed.
  * - recognizeText: ML Kit text recognition with the Latin model bundled in
  *   the app (com.google.mlkit:text-recognition), so it works offline from
