@@ -27,7 +27,8 @@ A receipt is an expense *document*: `{id, url, width, height}` (`src/lib/schemas
   - it's at most 2048 px on the long side, as JPEG, about 400 KB for a receipt;
   - **every EXIF field is dropped, including location.** The system picker warns that location is included, but the app removes it before anything leaves the phone.
 - **Uploaded as soon as it's added,** like the web app: `/api/s3-upload` signs, the image goes straight to the bucket with the web app's headers, and the photo becomes a document (URL, width, height, and a new 21-character id).
-- **When an upload fails (#119):** the photo stays in the form as "Not uploaded", with Retry (tap it) and Remove.
+- **Viewing in the form (#148):** tapping any of the form's receipts opens them all in the full-screen viewer at that one: the expense's own receipts (from this device, or downloaded), and photos added in the form, shown from memory, so one that didn't upload opens offline too.
+- **When an upload fails (#119):** the photo stays in the form as "Not uploaded", with Retry (↻ on its corner; a tap opens it, #148, Kenneth) and Remove (✕).
   - A connection failure says so.
   - Anything else is unexpected, with details. An empty 500 from the signing route is what an instance without storage returns, but so is any other failure there, so the message only says the server *may* not store receipts, and attaching is never disabled.
 - **Saving** a new expense waits only for photos still being prepared or uploaded; a photo that didn't upload is saved with the expense, which syncs with it later (#124, below). Saving an edit waits until each new photo is uploaded or removed. Leaving the form with new photos asks first, and once it's discarded nothing new starts: a photo still being prepared isn't uploaded, and neither is a retry (#131 review). The form itself isn't a draft: a photo added but not saved is lost if the app is closed.

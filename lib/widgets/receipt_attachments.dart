@@ -185,7 +185,9 @@ class ReceiptAttachmentsController extends ChangeNotifier {
 }
 
 /// The form's Receipts field (#123): thumbnails with Remove, Retry on the
-/// ones that didn't upload, and Add receipt.
+/// ones that didn't upload, and Add receipt. Tapping one opens them all
+/// full screen at that one (#148), existing receipts and photos added
+/// here alike, uploaded or not.
 class ReceiptAttachmentsField extends StatelessWidget {
   const ReceiptAttachmentsField(
       {super.key, required this.controller, required this.onAdd, this.keepsUnsent = false});
@@ -206,6 +208,12 @@ class ReceiptAttachmentsField extends StatelessWidget {
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
+        final pages = <ReceiptViewerPage>[
+          for (final d in controller.kept) StoredReceiptPage(d),
+          for (final a in controller.added) LocalReceiptPage(a.photo.bytes, identity: a),
+        ];
+        void open(int index) => showReceiptViewer(context,
+            cache: controller.cache, groupId: controller.groupId, pages: pages, initialIndex: index);
         final failure = controller.added
             .where((a) => a.state == ReceiptUpload.failed)
             .map((a) => a.error)
@@ -221,17 +229,19 @@ class ReceiptAttachmentsField extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final d in controller.kept)
+                  for (final (i, d) in controller.kept.indexed)
                     _RemovableTile(
                       key: ValueKey(d.url),
                       onRemove: () => controller.removeExisting(d),
+                      onTap: () => open(i),
                       child: ReceiptImage(cache: controller.cache, groupId: controller.groupId, url: d.url),
                     ),
-                  for (final a in controller.added)
+                  for (final (i, a) in controller.added.indexed)
                     _RemovableTile(
                       key: ObjectKey(a),
                       onRemove: () => controller.remove(a),
-                      onTap: a.state == ReceiptUpload.failed ? () => controller.retry(a) : null,
+                      onRetry: a.state == ReceiptUpload.failed ? () => controller.retry(a) : null,
+                      onTap: () => open(controller.kept.length + i),
                       child: _AddedPhoto(a),
                     ),
                   for (var i = 0; i < controller.preparing; i++)
@@ -284,7 +294,7 @@ class _AddedPhoto extends StatelessWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.refresh, color: Colors.white),
+                          const Icon(Icons.cloud_off_outlined, color: Colors.white),
                           Text(l10n.expenseReceiptNotUploaded,
                               textAlign: TextAlign.center,
                               style: theme.textTheme.labelSmall?.copyWith(color: Colors.white)),
@@ -299,11 +309,14 @@ class _AddedPhoto extends StatelessWidget {
 }
 
 class _RemovableTile extends StatelessWidget {
-  const _RemovableTile({super.key, required this.child, this.onRemove, this.onTap});
+  const _RemovableTile({super.key, required this.child, this.onRemove, this.onRetry, this.onTap});
 
   static const double size = 88;
   final Widget child;
   final VoidCallback? onRemove;
+
+  /// Uploads it again: a corner button, since a tap opens it (#148).
+  final VoidCallback? onRetry;
   final VoidCallback? onTap;
 
   @override
@@ -322,30 +335,43 @@ class _RemovableTile extends StatelessWidget {
               ),
             ),
           ),
+          if (onRetry != null)
+            Positioned(
+                top: 2,
+                left: 2,
+                child: _CornerButton(icon: Icons.refresh, tooltip: context.l10n.commonRetry, onTap: onRetry!)),
           if (onRemove != null)
             Positioned(
-              top: 2,
-              right: 2,
-              child: Material(
-                color: Colors.black54,
-                shape: const CircleBorder(),
-                child: InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: onRemove,
-                  child: Tooltip(
-                    message: context.l10n.expenseReceiptRemove,
-                    child: const Padding(
-                      padding: EdgeInsets.all(4),
-                      child: Icon(Icons.close, size: 16, color: Colors.white),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+                top: 2,
+                right: 2,
+                child: _CornerButton(
+                    icon: Icons.close, tooltip: context.l10n.expenseReceiptRemove, onTap: onRemove!)),
         ],
       ),
     );
   }
+}
+
+/// A small round button on a tile's corner.
+class _CornerButton extends StatelessWidget {
+  const _CornerButton({required this.icon, required this.tooltip, required this.onTap});
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Colors.black54,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Tooltip(
+            message: tooltip,
+            child: Padding(padding: const EdgeInsets.all(4), child: Icon(icon, size: 16, color: Colors.white)),
+          ),
+        ),
+      );
 }
 
 class _AddTile extends StatelessWidget {

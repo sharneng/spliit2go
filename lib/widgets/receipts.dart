@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show Uint8List;
 import 'package:flutter/material.dart';
 
 import '../db/app_database.dart';
@@ -116,7 +117,7 @@ class _ReceiptsSectionState extends State<ReceiptsSection> {
                   onOpen: () => showReceiptViewer(context,
                       cache: widget.cache,
                       groupId: widget.groupId,
-                      documents: documents,
+                      pages: [for (final d in documents) StoredReceiptPage(d)],
                       initialIndex: i),
                 ),
             for (final a in widget.pending)
@@ -376,12 +377,42 @@ class _TileSpinner extends StatelessWidget {
       const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2));
 }
 
+/// One page of the full-screen viewer.
+sealed class ReceiptViewerPage {
+  const ReceiptViewerPage();
+
+  /// Keeps a page's state with its receipt as pages come and go.
+  Key get key;
+}
+
+/// A receipt on its expense: from this device, or downloaded.
+class StoredReceiptPage extends ReceiptViewerPage {
+  const StoredReceiptPage(this.document);
+  final ExpenseDocument document;
+
+  @override
+  Key get key => ValueKey(document.url);
+}
+
+/// A photo added in the expense form (#148), from memory: uploaded or not,
+/// and offline too.
+class LocalReceiptPage extends ReceiptViewerPage {
+  const LocalReceiptPage(this.bytes, {required this.identity});
+  final Uint8List bytes;
+
+  /// The photo this is, for [key].
+  final Object identity;
+
+  @override
+  Key get key => ObjectKey(identity);
+}
+
 /// The receipts full screen, one per page, zoomable.
 Future<void> showReceiptViewer(
   BuildContext context, {
   required ReceiptCache cache,
   required String groupId,
-  required List<ExpenseDocument> documents,
+  required List<ReceiptViewerPage> pages,
   int initialIndex = 0,
 }) =>
     Navigator.of(context).push(MaterialPageRoute(
@@ -389,7 +420,7 @@ Future<void> showReceiptViewer(
       builder: (_) => _ReceiptViewer(
         cache: cache,
         groupId: groupId,
-        documents: documents,
+        pages: pages,
         initialIndex: initialIndex,
       ),
     ));
@@ -398,13 +429,13 @@ class _ReceiptViewer extends StatefulWidget {
   const _ReceiptViewer({
     required this.cache,
     required this.groupId,
-    required this.documents,
+    required this.pages,
     required this.initialIndex,
   });
 
   final ReceiptCache cache;
   final String groupId;
-  final List<ExpenseDocument> documents;
+  final List<ReceiptViewerPage> pages;
   final int initialIndex;
 
   @override
@@ -424,7 +455,7 @@ class _ReceiptViewerState extends State<_ReceiptViewer> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final count = widget.documents.length;
+    final count = widget.pages.length;
     return Theme(
       data: ThemeData.dark(useMaterial3: true),
       child: Scaffold(
@@ -437,12 +468,20 @@ class _ReceiptViewerState extends State<_ReceiptViewer> {
           controller: _controller,
           itemCount: count,
           onPageChanged: (i) => setState(() => _index = i),
-          itemBuilder: (_, i) => _ReceiptPage(
-            key: ValueKey(widget.documents[i].url),
-            cache: widget.cache,
-            groupId: widget.groupId,
-            document: widget.documents[i],
-          ),
+          itemBuilder: (_, i) => switch (widget.pages[i]) {
+            StoredReceiptPage(:final document) => _ReceiptPage(
+                key: widget.pages[i].key,
+                cache: widget.cache,
+                groupId: widget.groupId,
+                document: document,
+              ),
+            LocalReceiptPage(:final bytes) => Center(
+                key: widget.pages[i].key,
+                child: _Zoomable(Image.memory(bytes,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, size: 48))),
+              ),
+          },
         ),
       ),
     );
@@ -477,13 +516,9 @@ class _ReceiptPageState extends State<_ReceiptPage> {
     final l10n = context.l10n;
     return Center(
       child: switch (_loader.state) {
-        _TileState.loaded => InteractiveViewer(
-            maxScale: 6,
-            child: Image.file(_loader.file!,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) =>
-                    const Icon(Icons.broken_image_outlined, size: 48)),
-          ),
+        _TileState.loaded => _Zoomable(Image.file(_loader.file!,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, size: 48))),
         _TileState.loading => const CircularProgressIndicator(),
         _TileState.offline || _TileState.failed => Padding(
             padding: const EdgeInsets.all(24),
@@ -503,4 +538,12 @@ class _ReceiptPageState extends State<_ReceiptPage> {
       },
     );
   }
+}
+
+class _Zoomable extends StatelessWidget {
+  const _Zoomable(this.image);
+  final Widget image;
+
+  @override
+  Widget build(BuildContext context) => InteractiveViewer(maxScale: 6, child: image);
 }
