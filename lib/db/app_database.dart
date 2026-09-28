@@ -952,6 +952,18 @@ class AppDatabase extends _$AppDatabase {
   Future<Set<String>> attachmentFileNames() async =>
       {for (final a in await select(receiptAttachments).get()) a.fileName};
 
+  /// Every file ReceiptCache.sweep must keep: stored receipts' and pending
+  /// photos'. One statement, so one snapshot: a sync that makes a photo a
+  /// capture (insert its receipt row, delete its attachment row) between
+  /// two separate reads would hide it from both (#138 review).
+  Future<Set<String>> keptReceiptFileNames() async => {
+        for (final row in await customSelect(
+          'SELECT file_name FROM receipt_files UNION SELECT file_name FROM receipt_attachments',
+          readsFrom: {receiptFiles, receiptAttachments},
+        ).get())
+          row.read<String>('file_name'),
+      };
+
   /// Removes an expense the server has confirmed deleted (issue #90), and
   /// marks the group's expenses changed first, in the same transaction,
   /// so a refresh already in flight can't bring it back (see
