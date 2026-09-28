@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../db/app_database.dart';
+import 'settings_service.dart' show defaultReceiptStorageLimitMb;
 import 'error_reporting.dart';
 
 /// A receipt's server answered, but not with the image (#123): a bucket
@@ -28,8 +29,11 @@ class ReceiptDownloadException implements Exception {
 /// `ReceiptFiles`.
 ///
 /// - Keyed by document URL, which never changes, so nothing goes stale.
-/// - Opened receipts are the viewing cache: capped at [viewingCap] bytes,
-///   evicting the least recently used first.
+/// - Everything stored counts toward one limit, [limit] bytes (#127;
+///   App settings, 500 MB by default): opened receipts (the viewing
+///   cache), favorite groups' downloads, this device's photos, and photos
+///   not uploaded yet. Only the viewing cache is evicted to stay under
+///   it, least recently used first.
 /// - A file nothing refers to any more (its expense, document or group
 ///   was removed; the database drops the row) is deleted by [sweep].
 class ReceiptCache {
@@ -37,7 +41,7 @@ class ReceiptCache {
     this.db, {
     Future<Directory> Function()? directory,
     http.Client? httpClient,
-    this.viewingCap = 200 * 1024 * 1024,
+    this.limit = defaultReceiptStorageLimitMb * 1024 * 1024,
     DateTime Function()? clock,
   })  : _directory = directory ?? _defaultDirectory,
         _http = httpClient ?? http.Client(),
@@ -48,8 +52,9 @@ class ReceiptCache {
   final http.Client _http;
   final DateTime Function() _now;
 
-  /// The viewing cache's size limit, in bytes.
-  final int viewingCap;
+  /// The most space stored receipts may take, in bytes: the App settings
+  /// limit, set at startup and when it changes.
+  int limit;
 
   static final _byDb = Expando<ReceiptCache>('ReceiptCache');
 
@@ -141,6 +146,28 @@ class ReceiptCache {
         return file;
       });
 
+  /// Stores [bytes] for [url] only if they fit under [limit] once viewing
+  /// cache is evicted, and returns the file, or null when they don't
+  /// (#127). The check, the eviction, the write and the registration are
+  /// one step under the cache's lock, so two favorite groups downloading
+  /// at once can't both pass the check and overrun the limit together
+  /// (#144 review). The transfer itself happens before, outside the lock.
+  Future<File?> storeIfRoom(String url,
+          {required String groupId, required List<int> bytes, required ReceiptFileKind kind}) =>
+      _exclusive(() async {
+        if (!await _evictFor(bytes.length)) return null;
+        final (file, fileName) = await _write(bytes);
+        await db.saveReceiptFile(ReceiptFilesCompanion.insert(
+          url: url,
+          groupId: groupId,
+          fileName: fileName,
+          bytes: bytes.length,
+          kind: kind,
+          lastUsedAt: _now(),
+        ));
+        return file;
+      });
+
   /// Writes photos that aren't uploaded yet (#124), then has [register]
   /// record them, with their file names, in the same step: the
   /// attachments' rows, and a new expense's own. Until [register]
@@ -169,21 +196,30 @@ class ReceiptCache {
     return (await partial.rename(p.join(dir.path, fileName)), fileName);
   }
 
-  /// Brings the viewing cache under [viewingCap], least recently used
-  /// first, never evicting [keep] (the receipt just stored).
-  Future<void> _evict({required String keep}) async {
-    final viewing = (await db.allReceiptFiles()).where((f) => f.kind == ReceiptFileKind.viewing);
-    var total = viewing.fold<int>(0, (sum, f) => sum + f.bytes);
+  /// Brings everything stored under [limit] by evicting viewing cache,
+  /// least recently used first, never [keep] (the receipt just stored).
+  Future<void> _evict({required String keep}) => _evictFor(0, keep: keep);
+
+  /// Evicts viewing cache until [bytes] more fit under [limit], and
+  /// returns whether they do (#127): favorite downloads pause when only
+  /// receipts that can't be evicted are left.
+  Future<bool> makeRoom(int bytes) => _exclusive(() => _evictFor(bytes));
+
+  Future<bool> _evictFor(int bytes, {String? keep}) async {
+    final files = await db.allReceiptFiles();
+    var total = files.fold<int>(0, (sum, f) => sum + f.bytes) + await db.attachmentBytes() + bytes;
     final evicted = <ReceiptFileRow>[];
-    for (final f in viewing) {
-      if (total <= viewingCap) break;
-      if (f.url == keep) continue;
+    for (final f in files) {
+      if (total <= limit) break;
+      if (f.kind != ReceiptFileKind.viewing || f.url == keep) continue;
       evicted.add(f);
       total -= f.bytes;
     }
-    if (evicted.isEmpty) return;
-    await db.deleteReceiptFiles(evicted.map((f) => f.url));
-    await _deleteFiles(evicted.map((f) => f.fileName));
+    if (evicted.isNotEmpty) {
+      await db.deleteReceiptFiles(evicted.map((f) => f.url));
+      await _deleteFiles(evicted.map((f) => f.fileName));
+    }
+    return total <= limit;
   }
 
   /// Bytes stored on this device for receipts.

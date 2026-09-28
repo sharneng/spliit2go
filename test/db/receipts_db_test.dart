@@ -56,16 +56,26 @@ void main() {
     expect((await db.watchExpenseDocuments('e1').first).map((d) => d.id), ['c']);
   });
 
-  test('a refresh keeps documents that still match, and drops the rest with their files', () async {
+  // #127: a changed count keeps the list, so unchanged receipts aren't
+  // downloaded again; it's unknown until the expense is read again.
+  test('a refresh keeps lists, even of changed counts, and drops those of expenses gone or emptied',
+      () async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     await db.replaceServerExpenses('g1', [
       expense('same', documents: 1),
       expense('changed', documents: 1),
+      expense('emptied', documents: 1),
       expense('gone', documents: 1),
     ]);
     await db.replaceServerExpenses('g2', [expense('other', groupId: 'g2', documents: 1)]);
-    for (final (group, id) in [('g1', 'same'), ('g1', 'changed'), ('g1', 'gone'), ('g2', 'other')]) {
+    for (final (group, id) in [
+      ('g1', 'same'),
+      ('g1', 'changed'),
+      ('g1', 'emptied'),
+      ('g1', 'gone'),
+      ('g2', 'other'),
+    ]) {
       await db.cacheExpenseDocuments(group, id, [doc(id)]);
       await storeFile(db, doc(id).url, groupId: group);
     }
@@ -75,13 +85,18 @@ void main() {
     await db.replaceServerExpenses('g1', [
       expense('same', documents: 1),
       expense('changed', documents: 2),
+      expense('emptied', documents: 0),
     ]);
 
     expect((await db.watchExpenseDocuments('same').first).map((d) => d.id), ['same']);
-    expect(await db.watchExpenseDocuments('changed').first, isEmpty);
+    expect((await db.watchExpenseDocuments('changed').first).map((d) => d.id), ['changed']);
+    expect(await db.expensesWithUnreadDocuments('g1'), ['changed']);
+    expect(await db.watchExpenseDocuments('emptied').first, isEmpty);
     expect(await db.watchExpenseDocuments('gone').first, isEmpty);
     expect(await db.watchExpenseDocuments('other').first, hasLength(1));
-    expect(await storedUrls(db), {doc('same').url, doc('other').url});
+    expect(await storedUrls(db), {doc('same').url, doc('changed').url, doc('other').url});
+    // Only the known list counts as available.
+    expect(await db.receiptAvailability('g1'), (total: 3, available: 1));
   });
 
   test('a deleted expense takes its documents and files with it', () async {
@@ -125,6 +140,9 @@ void main() {
     await old.customStatement('DROP TABLE receipt_files');
     await old.customStatement('DROP TABLE cached_categories');
     await old.customStatement('DROP TABLE receipt_attachments');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipt_download_problem');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipts_checked_activity_id');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipts_checked_at');
     await old.customStatement('PRAGMA user_version = 11');
     await old.close();
 
@@ -155,6 +173,9 @@ void main() {
     await old.customStatement('ALTER TABLE expenses DROP COLUMN documents_json');
     await old.customStatement('DROP TABLE cached_categories');
     await old.customStatement('DROP TABLE receipt_attachments');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipt_download_problem');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipts_checked_activity_id');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipts_checked_at');
     await old.customStatement('PRAGMA user_version = 12');
     await old.close();
 

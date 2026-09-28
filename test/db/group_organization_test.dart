@@ -66,6 +66,9 @@ void main() {
     await old.customStatement('DROP TABLE receipt_files');
     await old.customStatement('DROP TABLE cached_categories');
     await old.customStatement('DROP TABLE receipt_attachments');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipt_download_problem');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipts_checked_activity_id');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipts_checked_at');
     await old.customStatement('PRAGMA user_version = 7');
     await old.close();
     final db = AppDatabase(NativeDatabase(file));
@@ -120,6 +123,9 @@ void main() {
     await old.customStatement('DROP TABLE receipt_files');
     await old.customStatement('DROP TABLE cached_categories');
     await old.customStatement('DROP TABLE receipt_attachments');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipt_download_problem');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipts_checked_activity_id');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipts_checked_at');
     await old.customStatement('PRAGMA user_version = 8');
     await old.close();
     final db = AppDatabase(NativeDatabase(file));

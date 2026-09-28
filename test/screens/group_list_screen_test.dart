@@ -67,14 +67,10 @@ void main() {
 
     final tiles = find.byType(ListTile);
     expect(tiles, findsNWidgets(2));
-    expect(
-      tester.widget<ListTile>(tiles.at(0)).title,
-      isA<Text>().having((t) => t.data, 'text', 'Tokyo Trip'),
-    );
-    expect(
-      tester.widget<ListTile>(tiles.at(1)).title,
-      isA<Text>().having((t) => t.data, 'text', 'Banff Trip'),
-    );
+    expect(find.descendant(of: tiles.at(0), matching: find.text('Tokyo Trip')),
+        findsOneWidget);
+    expect(find.descendant(of: tiles.at(1), matching: find.text('Banff Trip')),
+        findsOneWidget);
   });
 
   testWidgets('a cached-but-never-opened group does not show in the list',

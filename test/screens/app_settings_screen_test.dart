@@ -147,6 +147,44 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  // #127: downloading favorite groups' receipts, and the storage limit.
+  testWidgets('favorite downloads default to Wi-Fi only, and the limit to 500 MB; both can change',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final receipts = _NoFilesReceiptCache(db);
+    final settings = await AppSettings.load(SettingsService());
+    addTearDown(settings.dispose);
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+        Spliit2GoApp(settings: settings, home: AppSettingsScreen(receipts: receipts)));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Wi-Fi only ·'), findsOneWidget);
+    expect(find.text('500 MB'), findsOneWidget);
+
+    await tester.tap(find.text('Download receipts of favorite groups'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Off'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pumpAndSettle();
+    expect(await SettingsService().receiptDownloadMode(), ReceiptDownloadMode.off);
+    expect(find.textContaining('Off ·'), findsOneWidget);
+
+    await tester.tap(find.text('Receipt storage limit'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('1,000 MB'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pumpAndSettle();
+    expect(await SettingsService().receiptStorageLimitMb(), 1000);
+    expect(receipts.limit, 1000 * 1024 * 1024);
+    expect(find.text('1,000 MB'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('without a receipt cache there is no Storage section', (tester) async {
     final settings = await AppSettings.load(SettingsService());
     addTearDown(settings.dispose);

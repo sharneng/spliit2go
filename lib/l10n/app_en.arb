@@ -459,7 +459,7 @@
   "appSettingsReceiptsNone": "None",
   "appSettingsReceiptsClear": "Clear",
   "appSettingsReceiptsClearTitle": "Clear stored receipts?",
-  "appSettingsReceiptsClearBody": "They're removed from this device only, and download again when you open them.",
+  "appSettingsReceiptsClearBody": "They're removed from this device only. Opened ones download again when you open them, and favorite groups' at their next refresh. Receipts not uploaded yet stay.",
   "appSettingsReceiptsCleared": "Stored receipts cleared.",
   "appSettingsReceiptsClearFailed": "Couldn't clear stored receipts.",
   "bytesKilobytes": "{size} KB",
@@ -498,5 +498,40 @@
   "expenseReceiptsUploadOrRemove": "Wait for receipts to upload, or remove the ones that weren't.",
   "expenseReceiptNotUploadedServerEdit": "A receipt wasn't uploaded. This server may not store receipts. Tap it to try again, or remove it.",
   "expenseReceiptNotUploadedConnectionEdit": "A receipt wasn't uploaded: couldn't reach the server. Tap it to try again, or remove it.",
-  "receiptWaitingToUpload": "Not uploaded yet: it uploads once you're back online."
+  "receiptWaitingToUpload": "Not uploaded yet: it uploads once you're back online.",
+  "appSettingsReceiptDownloads": "Download receipts of favorite groups",
+  "appSettingsReceiptDownloadsHint": "To view them offline, when traveling for example.",
+  "appSettingsReceiptDownloadsOff": "Off",
+  "appSettingsReceiptDownloadsWifiOnly": "Wi-Fi only",
+  "appSettingsReceiptDownloadsAlways": "Always",
+  "appSettingsReceiptLimit": "Receipt storage limit",
+  "receiptDownloadsTooltip": "Receipts offline",
+  "receiptDownloadsRunning": "Downloading receipts: {available} of {total}",
+  "@receiptDownloadsRunning": {
+    "placeholders": {
+      "available": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "receiptDownloadsComplete": "All receipts available offline",
+  "receiptDownloadsPartial": "{available} of {total} receipts available offline",
+  "@receiptDownloadsPartial": {
+    "placeholders": {
+      "available": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "receiptDownloadsWaitingForWifi": "Waiting for Wi-Fi: nothing downloads over mobile data.",
+  "receiptDownloadsOffline": "Couldn't reach the server. Downloads continue when you're back online.",
+  "receiptDownloadsNoSpace": "Not enough space: raise the receipt storage limit in App settings, or clear stored receipts.",
+  "receiptDownloadsFailed": "Some receipts couldn't be downloaded.",
+  "receiptDownloadsUnverified": "Receipts may be out of date"
 }

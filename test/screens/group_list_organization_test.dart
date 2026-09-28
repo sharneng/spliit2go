@@ -14,6 +14,8 @@ import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/screens/group_list_screen.dart';
 import 'package:spliit2go/widgets/group_monogram.dart';
 import 'package:spliit2go/services/settings_service.dart';
+import 'package:spliit2go/services/receipt_downloader.dart';
+import 'package:spliit2go/api/spliit_client.dart';
 
 import '../support/error_log.dart';
 
@@ -481,4 +483,43 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  // #127: a favorite's receipts download ahead for offline.
+  testWidgets('favoriting starts its receipts downloading; unfavoriting, archiving and '
+      'removing stop them', (tester) async {
+    final db = await seed();
+    final downloads = _RecordingDownloader(db);
+    ReceiptDownloader.use(downloads);
+    await pump(tester, db);
+
+    await action(tester, 'Alpha', 'Favorite');
+    expect(downloads.calls, ['run Alpha https://example.test']);
+
+    await action(tester, 'Alpha', 'Unfavorite');
+    await action(tester, 'Beta', 'Favorite');
+    await action(tester, 'Beta', 'Archive');
+    expect(downloads.calls.skip(1),
+        ['unfavorited Alpha', 'run Beta https://example.test', 'unfavorited Beta']);
+
+    await action(tester, 'Alpha', 'Remove');
+    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
+    await tester.pumpAndSettle();
+    expect(downloads.calls.last, 'removed Alpha');
+  });
+}
+
+/// Records what the group list asks of the downloader (#127).
+class _RecordingDownloader extends ReceiptDownloader {
+  _RecordingDownloader(super.db);
+  final calls = <String>[];
+
+  @override
+  Future<void> run(String groupId, SpliitClient client) async =>
+      calls.add('run $groupId ${client.baseUrl}');
+
+  @override
+  Future<void> unfavorited(String groupId) async => calls.add('unfavorited $groupId');
+
+  @override
+  void removed(String groupId) => calls.add('removed $groupId');
 }

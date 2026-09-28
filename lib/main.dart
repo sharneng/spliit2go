@@ -266,7 +266,17 @@ class _RootState extends State<AppRoot> {
     });
     // Receipt files whose expense went away while the app was closed (#123).
     unawaited(ReceiptCache.of(_db).sweep());
+    // The receipt storage limit chosen in App settings (#127).
+    unawaited(_applyReceiptLimit());
     _start();
+  }
+
+  Future<void> _applyReceiptLimit() async {
+    try {
+      ReceiptCache.of(_db).limit = await SettingsService().receiptStorageLimitMb() * 1024 * 1024;
+    } catch (e, st) {
+      ErrorReporter.instance.report(e, st, operation: 'Reading the receipt storage limit');
+    }
   }
 
   Future<void> _start() async {
