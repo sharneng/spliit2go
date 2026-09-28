@@ -39,6 +39,10 @@ class _FakeScanner implements ReceiptScanner {
   /// Holds recognition until completed.
   Completer<void>? hold;
   final read = <Uint8List>[];
+  var prepared = 0;
+
+  @override
+  Future<void> prepare() async => prepared++;
 
   @override
   Future<Uint8List?> scanDocument() async {
@@ -323,10 +327,20 @@ void main() {
     await closeTree(tester);
   });
 
+  testWidgets('opening the form has the scanner downloaded ahead of the first scan', (tester) async {
+    final db = newDb();
+    final scanner = _FakeScanner();
+    await openForm(tester, db, scanner);
+    expect(scanner.prepared, 1);
+    await closeTree(tester);
+  });
+
   testWidgets('not offered when editing, or where receipts aren\'t read', (tester) async {
     final db = newDb();
-    await openForm(tester, db, _FakeScanner()..isSupported = false);
+    final unsupported = _FakeScanner()..isSupported = false;
+    await openForm(tester, db, unsupported);
     expect(find.text('Scan receipt'), findsNothing);
+    expect(unsupported.prepared, 0);
     await closeTree(tester);
 
     final existing = Expense(

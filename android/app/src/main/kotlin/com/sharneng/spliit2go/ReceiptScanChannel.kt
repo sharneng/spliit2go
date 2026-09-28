@@ -29,6 +29,10 @@ import io.flutter.plugin.common.MethodChannel
  *   Internet", and Back doesn't leave it). When it isn't there, or anything
  *   stops it starting, the error is "unavailable" and the app uses the
  *   camera instead, while Play services fetches it for next time.
+ * - prepareScanner: has Play services download the Document Scanner when it
+ *   isn't there yet, called at launch and when a new expense's form opens,
+ *   while online, so it's usually ready by the first scan. True when it's
+ *   already installed.
  * - recognizeText: ML Kit text recognition with the Latin model bundled in
  *   the app (com.google.mlkit:text-recognition), so it works offline from
  *   the first use.
@@ -45,8 +49,36 @@ class ReceiptScanChannel(private val activity: Activity) : MethodChannel.MethodC
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "scanDocument" -> scanDocument(result)
+            "prepareScanner" -> prepareScanner(result)
             "recognizeText" -> recognizeText(call.argument<ByteArray>("jpeg")!!, result)
             else -> result.notImplemented()
+        }
+    }
+
+    private fun scanner() = GmsDocumentScanning.getClient(
+        GmsDocumentScannerOptions.Builder()
+            .setGalleryImportAllowed(true)
+            .setPageLimit(1)
+            .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
+            .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
+            .build()
+    )
+
+    /** Best effort: any failure is false, and the scan falls back as usual. */
+    private fun prepareScanner(result: MethodChannel.Result) {
+        try {
+            val scanner = scanner()
+            val modules = ModuleInstall.getClient(activity)
+            modules.areModulesAvailable(scanner)
+                .addOnSuccessListener { response ->
+                    if (!response.areModulesAvailable()) {
+                        modules.installModules(ModuleInstallRequest.newBuilder().addApi(scanner).build())
+                    }
+                    result.success(response.areModulesAvailable())
+                }
+                .addOnFailureListener { result.success(false) }
+        } catch (e: Exception) {
+            result.success(false)
         }
     }
 
@@ -54,13 +86,7 @@ class ReceiptScanChannel(private val activity: Activity) : MethodChannel.MethodC
         // One scanner at a time: a second tap while one is open is ignored.
         if (pendingScan != null) return result.success(null)
         try {
-            val options = GmsDocumentScannerOptions.Builder()
-                .setGalleryImportAllowed(true)
-                .setPageLimit(1)
-                .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
-                .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
-                .build()
-            val scanner = GmsDocumentScanning.getClient(options)
+            val scanner = scanner()
             val modules = ModuleInstall.getClient(activity)
             modules.areModulesAvailable(scanner)
                 .addOnSuccessListener { response ->

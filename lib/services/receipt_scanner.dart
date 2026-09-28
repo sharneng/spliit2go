@@ -1,3 +1,4 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -21,6 +22,12 @@ abstract interface class ReceiptScanner {
   /// iPhone is #126.
   bool get isSupported;
 
+  /// Has Google Play services download the Document Scanner, when the
+  /// phone is online and it isn't there yet, so the first scan is likely
+  /// to have it. Best effort, and never throws: a scan without it falls
+  /// back to the camera and library, and asks for it again.
+  Future<void> prepare();
+
   /// ML Kit's Document Scanner: the page as JPEG, or null when the user
   /// cancelled. Throws [ReceiptScannerUnavailable] when it can't run.
   Future<Uint8List?> scanDocument();
@@ -35,12 +42,31 @@ abstract interface class ReceiptScanner {
 /// would bring CocoaPods into the SwiftPM-only iOS build (#105) for a
 /// feature iOS doesn't have yet.
 class PlatformReceiptScanner implements ReceiptScanner {
-  const PlatformReceiptScanner();
+  const PlatformReceiptScanner({this.connectivity});
+
+  /// The network, for [prepare]; connectivity_plus by default.
+  final Future<List<ConnectivityResult>> Function()? connectivity;
 
   static const _channel = MethodChannel('com.sharneng.spliit2go/receipt_scan');
 
   @override
   bool get isSupported => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  /// Called at launch (main.dart) and when a new expense's form opens,
+  /// so there's time for the download before the first scan. Offline,
+  /// nothing is asked: the next call, with a connection, asks.
+  @override
+  Future<void> prepare() async {
+    if (!isSupported) return;
+    try {
+      final network = await (connectivity ?? Connectivity().checkConnectivity)();
+      if (network.every((r) => r == ConnectivityResult.none)) return;
+      await _channel.invokeMethod<bool>('prepareScanner');
+    } catch (_) {
+      // Best effort (see ReceiptScanner.prepare): the scan falls back
+      // without it, and the bridge reports its own failures as false.
+    }
+  }
 
   @override
   Future<Uint8List?> scanDocument() async {

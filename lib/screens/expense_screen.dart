@@ -254,6 +254,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _loadDefaultSplit();
     }
     _loadCategories();
+    // Opened offline at launch, or still downloading: another chance
+    // before the first scan (#125).
+    if (_offersScan) widget.receiptScanner.prepare();
   }
 
   /// What's on this device, then the server's list if it's read now.
