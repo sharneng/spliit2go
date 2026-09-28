@@ -4,6 +4,9 @@ import android.app.Activity
 import android.content.Intent
 import android.content.IntentSender
 import android.graphics.BitmapFactory
+import com.google.android.gms.common.moduleinstall.ModuleInstall
+import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
+import com.google.android.gms.tasks.Task
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
@@ -20,9 +23,12 @@ import io.flutter.plugin.common.MethodChannel
  * would bring CocoaPods into the SwiftPM-only iOS build (#105).
  *
  * - scanDocument: ML Kit's Document Scanner, whose code and UI Google Play
- *   services downloads on first use, so it isn't in the app. When it can't
- *   start (no Play services, or never downloaded because the phone has been
- *   offline), the error is "unavailable" and the app uses the camera instead.
+ *   services downloads on first use, so it isn't in the app. It's checked
+ *   for before it's started: launched without it, Play services shows its
+ *   own download page, which offline is a dead end ("Can't reach the
+ *   Internet", and Back doesn't leave it). When it isn't there, or anything
+ *   stops it starting, the error is "unavailable" and the app uses the
+ *   camera instead, while Play services fetches it for next time.
  * - recognizeText: ML Kit text recognition with the Latin model bundled in
  *   the app (com.google.mlkit:text-recognition), so it works offline from
  *   the first use.
@@ -47,13 +53,33 @@ class ReceiptScanChannel(private val activity: Activity) : MethodChannel.MethodC
     private fun scanDocument(result: MethodChannel.Result) {
         // One scanner at a time: a second tap while one is open is ignored.
         if (pendingScan != null) return result.success(null)
-        val options = GmsDocumentScannerOptions.Builder()
-            .setGalleryImportAllowed(true)
-            .setPageLimit(1)
-            .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
-            .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
-            .build()
-        GmsDocumentScanning.getClient(options).getStartScanIntent(activity)
+        try {
+            val options = GmsDocumentScannerOptions.Builder()
+                .setGalleryImportAllowed(true)
+                .setPageLimit(1)
+                .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
+                .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
+                .build()
+            val scanner = GmsDocumentScanning.getClient(options)
+            val modules = ModuleInstall.getClient(activity)
+            modules.areModulesAvailable(scanner)
+                .addOnSuccessListener { response ->
+                    if (response.areModulesAvailable()) {
+                        start(scanner.getStartScanIntent(activity), result)
+                    } else {
+                        // In the background, with no UI; offline it just fails.
+                        modules.installModules(ModuleInstallRequest.newBuilder().addApi(scanner).build())
+                        result.error("unavailable", "The Document Scanner isn't installed yet", null)
+                    }
+                }
+                .addOnFailureListener { e -> result.error("unavailable", e.message, null) }
+        } catch (e: Exception) {
+            result.error("unavailable", e.toString(), null)
+        }
+    }
+
+    private fun start(intent: Task<IntentSender>, result: MethodChannel.Result) {
+        intent
             .addOnSuccessListener { sender ->
                 try {
                     pendingScan = result
