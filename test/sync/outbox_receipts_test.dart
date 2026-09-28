@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -86,17 +87,36 @@ class _Spliit {
   int count(String step) => calls.where((c) => c == step).length;
 }
 
+/// Holds a sweep right after it reads the stored receipts, once [hold]
+/// is set: the point where a sync could promote a photo unseen.
+class _GatedDb extends AppDatabase {
+  _GatedDb() : super(NativeDatabase.memory());
+
+  Completer<void>? hold;
+  final reached = Completer<void>();
+
+  @override
+  Future<List<ReceiptFileRow>> allReceiptFiles() async {
+    final rows = await super.allReceiptFiles();
+    if (hold case final hold?) {
+      if (!reached.isCompleted) reached.complete();
+      await hold.future;
+    }
+    return rows;
+  }
+}
+
 // Issue #124: receipt photos that aren't uploaded yet are kept on the
 // device and reach their expense later; the expense never waits for them.
 void main() {
-  late AppDatabase db;
+  late _GatedDb db;
   late Directory dir;
   late ReceiptCache cache;
   late _Spliit spliit;
   var photos = 0;
 
   setUp(() async {
-    db = AppDatabase(NativeDatabase.memory());
+    db = _GatedDb();
     dir = await Directory.systemTemp.createTemp('attachments-');
     cache = ReceiptCache(db, directory: () async => dir);
     ReceiptCache.use(cache);
@@ -309,5 +329,24 @@ void main() {
     await cache.sweep();
     expect(await attachments('local-1'), isEmpty);
     expect(await files(), 0);
+  });
+
+  // #138 review (Ezra): the sweep read the stored receipts, the sync made
+  // the photo a capture, then the sweep read the pending photos: the photo
+  // was in neither, and its file was deleted.
+  test('a sweep during the sync keeps the photo that becomes a capture', () async {
+    await pendingWith('local-1');
+    db.hold = Completer();
+    final sweeping = cache.sweep();
+    await Future.any([db.reached.future, sweeping]);
+
+    await flush();
+    db.hold!.complete();
+    await sweeping;
+
+    final url = spliit.expenses[(await onlyRow()).id]!.single['url'] as String;
+    final capture = (await db.receiptFile(url))!;
+    expect(capture.kind, ReceiptFileKind.capture);
+    expect(await (await cache.fileNamed(capture.fileName)).exists(), isTrue);
   });
 }

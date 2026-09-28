@@ -243,11 +243,9 @@ class ReceiptCache {
   Future<void> _sweep() async {
     try {
       final dir = await _receiptsDir();
-      final known = {
-        for (final f in await db.allReceiptFiles()) f.fileName,
-        // Photos not on their expense yet (#124): never swept.
-        ...await db.attachmentFileNames(),
-      };
+      // Stored receipts, and photos not on their expense yet (#124),
+      // which are never swept.
+      final known = await db.keptReceiptFileNames();
       await for (final entity in dir.list()) {
         if (entity is File && !known.contains(p.basename(entity.path))) {
           await entity.delete();
