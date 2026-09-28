@@ -18,6 +18,7 @@ import 'sync/outbox.dart';
 import 'theme.dart';
 import 'services/error_reporting.dart';
 import 'services/receipt_cache.dart';
+import 'services/receipt_scanner.dart';
 import 'widgets/error_message.dart';
 
 Future<void> main() async {
@@ -27,6 +28,9 @@ Future<void> main() async {
   installErrorHandlers(ErrorReporter.instance);
   final links = AppLinks();
   final settings = await AppSettings.load(SettingsService());
+  // The Document Scanner downloads on first use: get it as soon as the
+  // phone is online, so the first scan has it (#125).
+  ReceiptScannerWarmup(const PlatformReceiptScanner()).start();
   runApp(Spliit2GoApp(
       settings: settings,
       home: AppRoot(

@@ -272,5 +272,13 @@
   "receiptDownloadsOffline": "Impossible de joindre le serveur. Les téléchargements reprennent au retour de la connexion.",
   "receiptDownloadsNoSpace": "Pas assez d’espace : augmentez l’espace maximal pour les reçus dans les réglages, ou effacez les reçus stockés.",
   "receiptDownloadsFailed": "Certains reçus n’ont pas pu être téléchargés.",
-  "receiptDownloadsUnverified": "Les reçus ne sont peut-être pas à jour"
+  "receiptDownloadsUnverified": "Les reçus ne sont peut-être pas à jour",
+  "expenseScanReceipt": "Scanner un reçu",
+  "expenseScanIntro": "Remplit ce qui peut être lu, sur ce téléphone. La photo est gardée avec la dépense.",
+  "expenseScanReading": "Lecture du reçu…",
+  "expenseScanFilled": "Rempli à partir du reçu. Vérifiez avant d'enregistrer.",
+  "expenseScanHintsOnly": "Rien n'a été modifié. Ce qu'indique le reçu est affiché sous les champs.",
+  "expenseScanNothing": "Rien n'a pu être lu sur cette photo. La photo est gardée.",
+  "expenseScanFailed": "Impossible de lire le reçu. La photo est gardée.",
+  "expenseScanHint": "Reçu : {value}"
 }

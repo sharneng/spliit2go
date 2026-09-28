@@ -533,5 +533,20 @@
   "receiptDownloadsOffline": "Couldn't reach the server. Downloads continue when you're back online.",
   "receiptDownloadsNoSpace": "Not enough space: raise the receipt storage limit in App settings, or clear stored receipts.",
   "receiptDownloadsFailed": "Some receipts couldn't be downloaded.",
-  "receiptDownloadsUnverified": "Receipts may be out of date"
+  "receiptDownloadsUnverified": "Receipts may be out of date",
+  "expenseScanReceipt": "Scan receipt",
+  "expenseScanIntro": "Fills in what it can read, on this phone. The photo is kept with the expense.",
+  "expenseScanReading": "Reading the receipt…",
+  "expenseScanFilled": "Filled in from the receipt. Check it before saving.",
+  "expenseScanHintsOnly": "Nothing was changed. What the receipt says is shown under the fields.",
+  "expenseScanNothing": "Nothing on that photo could be read. The photo is kept.",
+  "expenseScanFailed": "Couldn't read the receipt. The photo is kept.",
+  "expenseScanHint": "Receipt: {value}",
+  "@expenseScanHint": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  }
 }

@@ -272,5 +272,13 @@
   "receiptDownloadsOffline": "无法连接服务器。联网后会继续下载。",
   "receiptDownloadsNoSpace": "空间不足：请在应用设置中提高收据存储上限，或清除已存储的收据。",
   "receiptDownloadsFailed": "部分收据无法下载。",
-  "receiptDownloadsUnverified": "收据可能不是最新的"
+  "receiptDownloadsUnverified": "收据可能不是最新的",
+  "expenseScanReceipt": "扫描收据",
+  "expenseScanIntro": "在本机识别并填写能读到的内容。照片会随支出一起保存。",
+  "expenseScanReading": "正在读取收据…",
+  "expenseScanFilled": "已根据收据填写。保存前请检查。",
+  "expenseScanHintsOnly": "未更改任何内容。收据上的信息显示在各字段下方。",
+  "expenseScanNothing": "无法从这张照片读取任何内容。照片已保留。",
+  "expenseScanFailed": "无法读取收据。照片已保留。",
+  "expenseScanHint": "收据：{value}"
 }
