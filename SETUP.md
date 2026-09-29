@@ -61,6 +61,41 @@ python3 scripts/make_icons.py
 
 It needs Pillow (`pip install pillow`) and rewrites every size: iOS's `AppIcon.appiconset`, Android's launcher and adaptive icons, the 28 pt header logo in `assets/`, and the store icons in `branding/store/` (1024 for App Store Connect, 512 for Google Play). Commit what it writes. `branding/` isn't bundled with the app.
 
+## Release build (Android)
+
+Google Play takes an app bundle (`.aab`) signed with an **upload key** (#107). With Play App Signing, which Play Console enables on the first upload, Google keeps the key that signs what users install; the upload key only proves an upload came from you, and Google can reset it if it's lost. Losing it still blocks updates until they do, so back up the keystore and its password somewhere safe outside the repo.
+
+Create the keystore once, outside the repo (`keytool` comes with Android Studio's JDK, in `Contents/jbr/Contents/Home/bin`):
+
+```
+keytool -genkeypair -v -keystore ~/keys/spliit2go-upload.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+```
+
+Then point the build at it in `android/key.properties`:
+
+```
+storeFile=/Users/<you>/keys/spliit2go-upload.jks
+storePassword=<the keystore password>
+keyAlias=upload
+keyPassword=<the key password; the same one unless you set another>
+```
+
+`storeFile` is an absolute path, or relative to `android/`. `key.properties`, `*.jks` and `*.keystore` are gitignored; never commit them. Then build:
+
+```
+flutter build appbundle --release
+```
+
+The bundle is `build/app/outputs/bundle/release/app-release.aab`. Raise the build number in `pubspec.yaml` before each upload (see App identity above). To check which key signed it:
+
+```
+keytool -printcert -jarfile build/app/outputs/bundle/release/app-release.aab
+```
+
+Without `key.properties`, release builds are signed with the debug key, so anyone can still build and run one (`flutter run --release`); Play rejects those. Release builds shrink the code with R8, which debug builds don't, so try a release build on a phone before uploading: #125's ML Kit crash only happened in release (`android/app/proguard-rules.pro`).
+
+The target API level comes from Flutter (`flutter.targetSdkVersion`, 36 with Flutter 3.47), which meets Play's rule for new apps and updates from 31 August 2026 (API 36). A newer rule would need it pinned in `android/app/build.gradle.kts`.
+
 ## iOS
 
 The iOS project (`ios/`, added in #79) needs Xcode. It uses the same bundle id as Android, `com.sharneng.spliit2go`, targets iOS 15 or later, and is iPhone only (#105). Plugins are integrated with Swift Package Manager, so there's no `Podfile` and no `pod install` step. Receipt scanning (#125) is Android only: ML Kit is called from `android/app` (`ReceiptScanChannel.kt`), not through the pub.dev plugins, which would bring CocoaPods back. To run it on a simulator:
