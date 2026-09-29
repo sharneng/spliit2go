@@ -29,7 +29,11 @@
               />
             <!-- app_links owns routing, including cold-start intents. -->
             <meta-data android:name="flutter_deeplinking_enabled" android:value="false" />
-            <intent-filter android:autoVerify="true">
+            <!-- spliit.app group links (#45). Not autoVerify (#110): only
+                 spliit.app can publish the assetlinks.json that verifies
+                 them, so Android 12+ opens them in the browser until the
+                 user adds spliit.app under Open by default; see SETUP.md. -->
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
