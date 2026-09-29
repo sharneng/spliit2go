@@ -136,13 +136,25 @@ A joined group opens using its cache; a new group opens the Join screen with its
 URL filled in. Tap Join to fetch it. Other hosts remain supported through manual
 URL entry, but are not registered as Android link domains.
 
-Automatic verified opening requires the **spliit.app domain owner** to serve
-`https://spliit.app/.well-known/assetlinks.json` with the
+The links aren't verified, and the manifest doesn't ask Android to try
+(no `android:autoVerify`, #110). Verification needs the **spliit.app domain
+owner** to serve `https://spliit.app/.well-known/assetlinks.json` with the
 `delegate_permission/common.handle_all_urls` relation, package name
-`com.sharneng.spliit2go`, and the SHA-256 fingerprint of the installed
-app's signing certificate. This repository cannot configure that domain. Until
-that association is published, users may need to enable spliit.app under Android
-Settings → Apps → Spliit2Go → Open by default → supported web addresses.
+`com.sharneng.spliit2go`, and the SHA-256 fingerprint of the app's signing
+certificate (Play App Signing's, for store installs). This repository can't
+configure that domain, so on Android 12 and later a spliit.app link opens in
+the browser until the user turns it on once: Settings → Apps → Spliit2Go →
+Open by default → Add link → spliit.app. Android 11 and earlier ask which app
+to use instead. If spliit.app ever publishes the file (it
+could come up in spliit-app/spliit#658), add `android:autoVerify="true"` back to the intent
+filter. Store listings shouldn't promise that links open the app.
+
+To turn the link on or off from the command line, e.g. on an emulator:
+
+```sh
+adb shell pm set-app-links-user-selection --user 0 --package com.sharneng.spliit2go true spliit.app
+adb shell pm get-app-links --user 0 com.sharneng.spliit2go
+```
 
 For device testing, substitute a real group ID and exercise both a stopped and
 already-running app:
@@ -151,6 +163,7 @@ already-running app:
 adb shell am start -W -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d 'https://spliit.app/groups/GROUP_ID' com.sharneng.spliit2go
 ```
 
-This package-targeted command tests intent routing, not domain verification.
-Also test an ordinary link tap after enabling the supported domain, cancellation
+This package-targeted command tests the app's routing. Without the package name,
+the same command goes where a tapped link would: the browser, or the app once
+spliit.app is turned on. Also test cancellation
 of a new-group join, repeated links, and offline opening of an existing group.
