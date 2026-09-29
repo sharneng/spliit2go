@@ -10,7 +10,10 @@ import '../models/category.dart';
 /// Pure: no plugin, no state, no clock but [today]. Latin-script
 /// receipts in English and French (the languages spliit-ios reads);
 /// another Latin-script receipt still gives up its total when a line
-/// names it in one of them. Chinese and Japanese are #126.
+/// names it in one of them. Chinese and Japanese (#153) are this app's
+/// own: spliit-ios reads neither. Their text comes from the model the
+/// user picked for the receipt, and full-width characters are read as
+/// their ASCII selves first.
 
 /// One line of text OCR found, and where: 0…1 across the image, origin
 /// at the top left (ML Kit's, unlike Vision's bottom-left).
@@ -83,8 +86,13 @@ class ReceiptTotal {
 
   const ReceiptTotal({required this.cents, required this.text, this.currency, required this.sure});
 
-  /// The total with its currency, as a hint shows it.
-  String get display => currency == null ? text : '${currency!.mark} $text';
+  /// The total with its currency, as a hint shows it: "1,234円" and
+  /// "58.50元", as they're printed, and "€ 15,95".
+  String get display => switch (currency?.mark) {
+        null => text,
+        final mark when _suffixMarks.contains(mark) => '$text$mark',
+        final mark => '$mark $text',
+      };
 }
 
 /// What a receipt says. Every field is independent and may be missing: a
@@ -111,6 +119,7 @@ class ReceiptScan {
 /// [categories] are the server's, so a guessed category is one this
 /// group can store; [today] judges which dates are plausible.
 ReceiptScan readReceipt(String transcript, {List<Category> categories = const [], required DateTime today}) {
+  transcript = receiptHalfWidth(transcript);
   final lines = [
     for (final l in transcript.split('\n'))
       if (l.trim().isNotEmpty) l.trim(),
@@ -129,10 +138,16 @@ ReceiptScan readReceipt(String transcript, {List<Category> categories = const []
 // ---------------------------------------------------------------------------
 // The total
 
-/// Lines that name a total (folded: "À PAYER" is "a payer").
+/// Lines that name a total (folded: "À PAYER" is "a payer"). Chinese and
+/// Japanese words match anywhere in the line: they aren't spaced into
+/// words. Not 实收, お預り or 实付: that's the cash handed over, often
+/// more (some tills print 实付 for it), and a total the parser was sure of
+/// is only worth filling in when it's right.
 const _totalKeywords = [
   'total', 'amount due', 'balance due', 'grand total', 'to pay', //
   'montant', 'a payer', 'somme',
+  '合计', '总计', '總計', '合計', '总额', '總額', '应付', '應付', '应收', '應收',
+  'お会計', 'ご請求', 'お支払金額', 'お買上計', '総額',
 ];
 
 /// Lines that name a total of something else. Short on purpose: the real
@@ -141,6 +156,7 @@ const _totalKeywords = [
 const _notATotalKeywords = [
   'sous-total', 'sous total', 'subtotal', 'sub total', 'total ht', 'total h.t', //
   'hors taxe', 'tva', 'vat', 'tip', 'pourboire', 'change', 'rendu',
+  '小计', '小計', '找零', '找赎', '找贖', 'お釣', 'おつり', '釣銭',
 ];
 
 ReceiptTotal? receiptTotal(List<String> lines) {
@@ -165,13 +181,19 @@ ReceiptTotal? receiptTotal(List<String> lines) {
   }
   if (best == null) return null;
   final (currency, clear) = _currencyFor(bestLine!, lines);
+  // Yen and won have no cents, so with no price showing a decimal
+  // separator, "1,234" in one is a thousand (#153).
+  final ambiguous = best.ambiguous &&
+      !(decimal == null && best.text.contains(',') && (currency?.codes.any(_noCents.contains) ?? false));
   return ReceiptTotal(
     cents: best.cents,
     text: best.text,
     currency: currency,
-    sure: named && !best.ambiguous && clear,
+    sure: named && !ambiguous && clear,
   );
 }
+
+const _noCents = {'JPY', 'KRW'};
 
 /// One number on a line.
 class ReceiptAmount {
@@ -255,6 +277,9 @@ int? receiptNumberCents(String text) => receiptAmounts(text).firstOrNull?.cents;
 // ---------------------------------------------------------------------------
 // The currency
 
+/// Marks printed after the amount.
+const _suffixMarks = {'円', '元'};
+
 /// Marks a receipt prints beside an amount, and what they can mean. The
 /// longer ones first, so "US\$" isn't read as "\$".
 final _currencyMarks = <String, Set<String>>{
@@ -266,6 +291,7 @@ final _currencyMarks = <String, Set<String>>{
   '₱': {'PHP'}, '฿': {'THB'}, '₫': {'VND'}, '₺': {'TRY'}, '₽': {'RUB'},
   'Kč': {'CZK'}, 'zł': {'PLN'}, 'Ft': {'HUF'}, 'kr': {'SEK', 'NOK', 'DKK', 'ISK'},
   'Fr.': {'CHF'}, 'RM': {'MYR'}, 'Rp': {'IDR'}, 'Rs': {'INR'}, 'TL': {'TRY'},
+  '円': {'JPY'}, '人民币': {'CNY'}, '人民幣': {'CNY'}, '元': {'CNY', 'TWD'},
   for (final code in _isoCodes) code: {code},
 };
 
@@ -282,7 +308,10 @@ final _currencyMark = RegExp([
     // A mark made of letters must stand alone: "kr" isn't "Kreme".
     RegExp(r'^[A-Za-z]').hasMatch(m)
         ? '(?<![A-Za-z])${RegExp.escape(m)}${m.endsWith('.') ? '' : '(?![A-Za-z])'}'
-        : RegExp.escape(m),
+        // 元 is a currency only right after an amount: in 元気 it isn't.
+        : m == '元'
+            ? r'(?<=\d ?)元'
+            : RegExp.escape(m),
 ].join('|'));
 
 List<ReceiptCurrency> _marksIn(String line) => [
@@ -294,7 +323,7 @@ const _currencyKeywords = ['currency', 'devise', 'monnaie', 'prices in', 'prix e
 
 /// A mark with a currency sign in it ("€", "US\$"), which nothing else
 /// on a receipt looks like; a code or "kr" needs context.
-final _currencySign = RegExp('[\$€£¥₹₩₪₱฿₫₺₽]');
+final _currencySign = RegExp('[\$€£¥₹₩₪₱฿₫₺₽円元]|人民[币幣]');
 
 /// The marks on [line] that mean a currency: every sign, and a code only
 /// beside an amount, on a line that declares the currency ("Currency:
@@ -362,11 +391,17 @@ const _months = {
 };
 
 final _monthName = '(${(_months.keys.toList()..sort((a, b) => b.length - a.length)).join('|')})';
-final _isoDate = RegExp(r'(?<!\d)(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)');
+/// A time may follow with no space: OCR drops it ("2026-09-2018:42", #153).
+final _isoDate = RegExp(r'(?<!\d)(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:(?!\d)|(?=\d{1,2}:\d{2}))');
 final _numericDate = RegExp(r'(?<![\d.,])(\d{1,2})([-/.])(\d{1,2})\2(\d{4}|\d{2})(?![\d])');
 final _dayMonthName =
     RegExp('(?<!\\d)(\\d{1,2})(?:er)?[\\s./-]*$_monthName(?![a-z])\\.?[\\s./,-]*(\\d{4}|\\d{2})(?!\\d)');
 final _monthNameDay = RegExp('(?<![a-z])$_monthName(?![a-z])\\.?\\s+(\\d{1,2}),?\\s+(\\d{4})(?!\\d)');
+
+/// 2026年9月28日, the Chinese and Japanese way (#153), and Japan's era:
+/// 令和8年 is 2026 (令和元年, its first, 2019).
+final _yearMonthDay = RegExp(r'(?<!\d)(\d{4}|\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日');
+final _reiwaDate = RegExp(r'令和\s*(\d{1,2}|元)\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日');
 
 /// The first date in [transcript] that has a plausible reading, checked
 /// against [today]. "03/04/26" is 3 April or 4 March: with both
@@ -387,6 +422,13 @@ ReceiptDate? receiptDate(String transcript, {required DateTime today}) {
   }
   for (final m in _monthNameDay.allMatches(folded)) {
     found.add((m.start, m.end, [_date(int.parse(m[3]!), _months[m[1]!]!, int.parse(m[2]!))].nonNulls.toList()));
+  }
+  for (final m in _yearMonthDay.allMatches(folded)) {
+    found.add((m.start, m.end, [_date(year(m[1]!), int.parse(m[2]!), int.parse(m[3]!))].nonNulls.toList()));
+  }
+  for (final m in _reiwaDate.allMatches(folded)) {
+    final reiwa = m[1] == '元' ? 1 : int.parse(m[1]!);
+    found.add((m.start, m.end, [_date(2018 + reiwa, int.parse(m[2]!), int.parse(m[3]!))].nonNulls.toList()));
   }
   found.sort((a, b) => a.$1.compareTo(b.$1));
 
@@ -421,7 +463,12 @@ const _notAName = [
   'receipt', 'invoice', 'tax invoice', 'customer copy', 'merchant copy', 'welcome', //
   'thank you', 'order', 'facture', 'ticket de caisse', 'recu', 'bienvenue', 'merci',
   'duplicata',
+  '收据', '收據', '发票', '發票', '小票', '欢迎', '歡迎', '谢谢', '謝謝', '顾客联', '顧客聯',
+  '領収', 'レシート', 'いらっしゃいませ', 'ありがとう', 'お買上', '御買上', '控え',
 ];
+
+/// Chinese and Japanese letters, which have no case.
+final _cjk = RegExp(r'[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]', unicode: true);
 
 final _letter = RegExp(r'\p{L}', unicode: true);
 final _lowercase = RegExp(r'\p{Ll}', unicode: true);
@@ -437,8 +484,9 @@ String? receiptMerchant(List<String> lines) {
     if (folded.contains('@') || folded.contains('www.') || folded.contains('http')) continue;
     if (receiptLineNames(_notAName, line)) continue;
     // Receipts shout: a name printed only in capitals is capitalized; one
-    // with lower case is left as its owner writes it ("eBay").
-    return _lowercase.hasMatch(line) ? line : _capitalized(line);
+    // with lower case is left as its owner writes it ("eBay"), and so is
+    // a Chinese or Japanese one ("ローソン ABC店").
+    return _lowercase.hasMatch(line) || _cjk.hasMatch(line) ? line : _capitalized(line);
   }
   return null;
 }
@@ -463,6 +511,16 @@ const _accents = {
   'ñ': 'n', 'ò': 'o', 'ó': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o', 'ø': 'o', 'œ': 'o',
   'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u', 'ý': 'y', 'ÿ': 'y', 'ß': 's',
 };
+
+/// Full-width letters, digits and punctuation ("１，２３４", "合計：") as
+/// their ASCII selves, "￥" as "¥" and the ideographic space as a space
+/// (#153), one character for one.
+String receiptHalfWidth(String text) => String.fromCharCodes(text.runes.map((c) => switch (c) {
+      >= 0xFF01 && <= 0xFF5E => c - 0xFEE0,
+      0xFFE5 => 0xA5,
+      0x3000 => 0x20,
+      _ => c,
+    }));
 
 /// Case- and accent-insensitive, one character for one, so positions in
 /// the folded text are positions in the original.
@@ -503,22 +561,44 @@ int? matchReceiptCategory(String? name, List<Category> categories) {
 /// items: a supermarket bill lists wine and coffee. Ordered: a "wine bar"
 /// is a bar only after it isn't a wine shop (spliit-ios).
 const _keywordsByCategory = <(String, List<String>)>[
-  ('Food and Drink/Groceries', ['supermarket', 'grocery', 'groceries', 'supermarche', 'epicerie', 'hypermarche']),
-  ('Food and Drink/Liquor', ['liquor', 'wines', 'spirits', 'brewery', 'cave a vin', 'caviste']),
+  (
+    'Food and Drink/Groceries',
+    ['supermarket', 'grocery', 'groceries', 'supermarche', 'epicerie', 'hypermarche', '超市', '超级市场', '超級市場', 'スーパー']
+  ),
+  // Not 酒屋: it's in 居酒屋, a pub.
+  ('Food and Drink/Liquor', ['liquor', 'wines', 'spirits', 'brewery', 'cave a vin', 'caviste', '酒行']),
   (
     'Food and Drink/Dining Out',
     [
       'restaurant', 'cafe', 'coffee', 'bistro', 'brasserie', 'pizzeria', 'pizza', 'bar', 'pub', //
       'diner', 'grill', 'sushi', 'burger', 'boulangerie', 'patisserie', 'traiteur', 'creperie',
+      '餐厅', '餐廳', '酒家', '咖啡', '茶餐厅', '茶餐廳', '火锅', '火鍋', '面馆', '麵館', '食堂', //
+      'レストラン', 'カフェ', '珈琲', '喫茶', '居酒屋', '寿司', '鮨', 'ラーメン', '焼肉', '食堂',
     ]
   ),
-  ('Transportation/Taxi', ['taxi', 'cab', 'vtc']),
-  ('Transportation/Hotel', ['hotel', 'hostel', 'auberge', 'motel']),
-  ('Transportation/Parking', ['parking', 'stationnement']),
-  ('Transportation/Gas/Fuel', ['fuel', 'petrol', 'essence', 'gas station', 'station service']),
-  ('Entertainment/Movies', ['cinema', 'cineplex', 'multiplex']),
-  ('Entertainment/Entertainment', ['theatre', 'museum', 'musee', 'concert']),
-  ('Life/Medical Expenses', ['pharmacy', 'pharmacie', 'clinic', 'clinique', 'hospital', 'dentist', 'dentiste']),
+  ('Transportation/Taxi', ['taxi', 'cab', 'vtc', '出租车', '出租車', '的士', '计程车', '計程車', 'タクシー']),
+  // 酒店 is a hotel in Chinese; 饭店 can be either, so neither list has it.
+  (
+    'Transportation/Hotel',
+    ['hotel', 'hostel', 'auberge', 'motel', '酒店', '宾馆', '賓館', '旅馆', '旅館', '民宿', 'ホテル']
+  ),
+  ('Transportation/Parking', ['parking', 'stationnement', '停车', '停車', '駐車', 'パーキング']),
+  (
+    'Transportation/Gas/Fuel',
+    ['fuel', 'petrol', 'essence', 'gas station', 'station service', '加油站', '石油', '石化', 'ガソリン']
+  ),
+  ('Entertainment/Movies', ['cinema', 'cineplex', 'multiplex', '电影', '電影', '影城', '影院', '映画', 'シネマ']),
+  (
+    'Entertainment/Entertainment',
+    ['theatre', 'museum', 'musee', 'concert', '博物馆', '博物館', '美术馆', '美術館', '剧院', '劇場']
+  ),
+  (
+    'Life/Medical Expenses',
+    [
+      'pharmacy', 'pharmacie', 'clinic', 'clinique', 'hospital', 'dentist', 'dentiste', //
+      '药店', '藥店', '药房', '藥房', '医院', '醫院', '诊所', '診所', '薬局', '病院', 'クリニック', '歯科',
+    ]
+  ),
 ];
 
 int? guessReceiptCategory(String? merchant, List<Category> categories) {

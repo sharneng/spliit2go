@@ -29,8 +29,12 @@ Future<void> main() async {
   final links = AppLinks();
   final settings = await AppSettings.load(SettingsService());
   // The Document Scanner downloads on first use: get it as soon as the
-  // phone is online, so the first scan has it (#125).
-  ReceiptScannerWarmup(const PlatformReceiptScanner()).start();
+  // phone is online, so the first scan has it (#125). The same, once, for
+  // the phone's language's receipt text model (#153).
+  ReceiptScannerWarmup(
+    const PlatformReceiptScanner(),
+    phoneScript: ReceiptScript.forLanguage(WidgetsBinding.instance.platformDispatcher.locale.languageCode),
+  ).start();
   runApp(Spliit2GoApp(
       settings: settings,
       home: AppRoot(

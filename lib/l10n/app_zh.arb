@@ -280,5 +280,22 @@
   "expenseScanHintsOnly": "未更改任何内容。收据上的信息显示在各字段下方。",
   "expenseScanNothing": "无法从这张照片读取任何内容。照片已保留。",
   "expenseScanFailed": "无法读取收据。照片已保留。",
-  "expenseScanHint": "收据：{value}"
+  "expenseScanHint": "收据：{value}",
+  "receiptLanguage": "收据语言",
+  "receiptLanguageIntro": "请选择收据上印的语言。",
+  "receiptScriptLatin": "English、Français 等拉丁字母语言",
+  "receiptLanguageBuiltIn": "内置",
+  "receiptLanguageDownloaded": "已下载",
+  "receiptLanguageNotDownloaded": "轻点下载",
+  "receiptLanguageDownloading": "正在下载…",
+  "receiptLanguageDownload": "下载",
+  "receiptLanguageRemove": "移除",
+  "receiptLanguageOffline": "请连接网络后再下载。",
+  "receiptLanguageDownloadFailed": "无法下载，请稍后再试。",
+  "receiptLanguageRemoveFailed": "无法移除。",
+  "receiptLanguageRemoveTitle": "移除{language}？",
+  "receiptLanguageRemoveBody": "在重新下载之前，将无法读取{language}收据。如果没有其他应用使用，Google Play 服务稍后会释放空间。",
+  "receiptLanguageNote": "内置语言以外的语言由 Google Play 服务下载，并与其他应用共享。",
+  "expenseScanModelMissing": "{language}尚未下载。请在“扫描收据”旁选择它以重新下载。",
+  "expenseScanTryLanguage": "语言不对？请在“扫描收据”旁选择收据的语言，重新读取照片。"
 }

@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
@@ -34,11 +35,22 @@ class _FakeScanner implements ReceiptScanner {
 
   /// The receipt's text, one line per row.
   List<String> text = [];
+
+  /// The text as read in a language, where it differs from [text] (#153).
+  final textIn = <ReceiptScript, List<String>>{};
   Object? error;
 
   /// Holds recognition until completed.
   Completer<void>? hold;
   final read = <Uint8List>[];
+
+  /// The language each read was in.
+  final scripts = <ReceiptScript>[];
+
+  /// The downloadable models on the phone; downloads fail while [offline].
+  final models = <ReceiptScript>{};
+  final downloads = <ReceiptScript>[];
+  bool offline = false;
 
   @override
   Future<bool> prepare() async => throw StateError('the form doesn\'t prepare the scanner');
@@ -50,15 +62,30 @@ class _FakeScanner implements ReceiptScanner {
   }
 
   @override
-  Future<List<ReceiptTextBlock>> recognizeText(Uint8List jpeg) async {
+  Future<List<ReceiptTextBlock>> recognizeText(Uint8List jpeg, {ReceiptScript script = ReceiptScript.latin}) async {
     read.add(jpeg);
+    scripts.add(script);
     await hold?.future;
     if (error case final error?) throw error;
+    if (script.downloadable && !models.contains(script)) throw ReceiptTextModelMissing(script);
     return [
-      for (final (i, line) in text.indexed)
+      for (final (i, line) in (textIn[script] ?? text).indexed)
         ReceiptTextBlock(text: line, minX: 0.05, midY: 0.05 + i * 0.05, height: 0.03),
     ];
   }
+
+  @override
+  Future<Set<ReceiptScript>> installedScripts() async => {ReceiptScript.latin, ...models};
+
+  @override
+  Future<void> installScript(ReceiptScript script) async {
+    downloads.add(script);
+    if (offline) throw ReceiptTextModelDownloadFailed(script, offline: true);
+    models.add(script);
+  }
+
+  @override
+  Future<void> removeScript(ReceiptScript script) async => models.remove(script);
 }
 
 class _FakePicker implements ReceiptPhotoPicker {
@@ -106,6 +133,8 @@ void main() {
     'Sandwich   12,45',
     'TOTAL   15,95',
   ];
+
+  setUp(() => SharedPreferences.setMockInitialValues({}));
 
   late List<http.Request> uploads;
   SpliitClient server() {
@@ -277,7 +306,8 @@ void main() {
 
     await scan(tester);
 
-    expect(find.text('Nothing on that photo could be read. The photo is kept.'), findsOneWidget);
+    expect(find.textContaining('Nothing on that photo could be read. The photo is kept.'), findsOneWidget);
+    expect(find.textContaining('Not the receipt\'s language?'), findsOneWidget);
     expect(uploads, hasLength(1));
     await closeTree(tester);
   });
@@ -345,5 +375,168 @@ void main() {
     await openForm(tester, db, _FakeScanner(), existing: existing);
     expect(find.text('Scan receipt'), findsNothing);
     await closeTree(tester);
+  });
+
+  // Issue #153: the receipt's language is picked beside Scan receipt.
+  group('receipt language', () {
+    Finder inSheet(String text) => find.descendant(of: find.byType(BottomSheet), matching: find.text(text));
+
+    Future<void> openPicker(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('Receipt language'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> pick(WidgetTester tester, String language) async {
+      await openPicker(tester);
+      await tester.tap(inSheet(language));
+      await tester.pumpAndSettle();
+    }
+
+    const konbini = ['ローソン 新宿三丁目店', '合計   ¥290'];
+
+    testWidgets('Latin to start; the phone\'s language when its model is there', (tester) async {
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+      tester.platformDispatcher.localeTestValue = const Locale('ja', 'JP');
+      final db = newDb();
+      await openForm(tester, db, _FakeScanner());
+      expect(find.text('ABC'), findsOneWidget);
+      await closeTree(tester);
+
+      await openForm(tester, db, _FakeScanner()..models.add(ReceiptScript.japanese));
+      expect(find.text('日本語'), findsOneWidget);
+      await closeTree(tester);
+    });
+
+    testWidgets('a scan reads in the picked language, which the group remembers', (tester) async {
+      final db = newDb();
+      final scanner = _FakeScanner()
+        ..models.add(ReceiptScript.japanese)
+        ..textIn[ReceiptScript.japanese] = konbini;
+      await openForm(tester, db, scanner);
+
+      await pick(tester, '日本語');
+      await scan(tester);
+
+      expect(scanner.scripts, [ReceiptScript.japanese]);
+      expect(field(tester, 'Title'), 'ローソン 新宿三丁目店');
+      // A EUR group: the yen total is only shown.
+      expect(find.text('Receipt: ¥ 290'), findsOneWidget);
+      await closeTree(tester);
+
+      await openForm(tester, db, scanner);
+      expect(find.text('日本語'), findsOneWidget);
+      await closeTree(tester);
+    });
+
+    testWidgets('a language that isn\'t downloaded is downloaded, then picked', (tester) async {
+      final db = newDb();
+      final scanner = _FakeScanner();
+      await openForm(tester, db, scanner);
+      await openPicker(tester);
+      expect(find.text('Tap to download'), findsNWidgets(2));
+      expect(find.text('Built in'), findsOneWidget);
+
+      await tester.tap(inSheet('中文'));
+      await tester.pumpAndSettle();
+
+      expect(scanner.downloads, [ReceiptScript.chinese]);
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.text('中文'), findsOneWidget);
+      await closeTree(tester);
+    });
+
+    testWidgets('offline, it says a connection is needed, and keeps the language', (tester) async {
+      final db = newDb();
+      final scanner = _FakeScanner()..offline = true;
+      await openForm(tester, db, scanner);
+      await openPicker(tester);
+
+      await tester.tap(find.byTooltip('Download').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Connect to the internet to download it.'), findsOneWidget);
+      await tester.tapAt(const Offset(400, 20));
+      await tester.pumpAndSettle();
+      expect(find.text('ABC'), findsOneWidget);
+      await closeTree(tester);
+    });
+
+    testWidgets('removing asks first, and the picked language goes back to Latin', (tester) async {
+      final db = newDb();
+      final scanner = _FakeScanner()..models.add(ReceiptScript.chinese);
+      await openForm(tester, db, scanner);
+      await pick(tester, '中文');
+      await openPicker(tester);
+
+      await tester.tap(find.byTooltip('Remove'));
+      await tester.pumpAndSettle();
+      expect(find.text('Remove 中文?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Remove'));
+      await tester.pumpAndSettle();
+
+      expect(scanner.models, isEmpty);
+      expect(inSheet('Tap to download'), findsNWidgets(2));
+      expect(
+          find.ancestor(
+              of: find.byIcon(Icons.radio_button_checked),
+              matching: find.widgetWithText(ListTile, 'English, Français and other Latin-script languages')),
+          findsOneWidget);
+      await tester.tapAt(const Offset(400, 20));
+      await tester.pumpAndSettle();
+      expect(find.text('ABC'), findsOneWidget);
+      await closeTree(tester);
+    });
+
+    testWidgets('another language after a scan reads the same photo again, replacing what it filled',
+        (tester) async {
+      final db = newDb();
+      final scanner = _FakeScanner()
+        ..models.add(ReceiptScript.japanese)
+        ..text = ['ROOSON', 'AAA 12']
+        ..textIn[ReceiptScript.japanese] = konbini;
+      await openForm(tester, db, scanner);
+      await scan(tester);
+      expect(field(tester, 'Title'), 'Rooson');
+
+      await pick(tester, '日本語');
+
+      expect(scanner.read, [Uint8List.fromList([7, 7, 7]), Uint8List.fromList([7, 7, 7])]);
+      expect(scanner.scripts, [ReceiptScript.latin, ReceiptScript.japanese]);
+      expect(field(tester, 'Title'), 'ローソン 新宿三丁目店');
+      // Still the one photo.
+      expect(uploads, hasLength(1));
+      await closeTree(tester);
+    });
+
+    testWidgets('what the user changed after the first reading is kept', (tester) async {
+      final db = newDb();
+      final scanner = _FakeScanner()
+        ..models.add(ReceiptScript.japanese)
+        ..text = ['ROOSON', 'AAA 12']
+        ..textIn[ReceiptScript.japanese] = konbini;
+      await openForm(tester, db, scanner);
+      await scan(tester);
+      await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Snacks');
+
+      await pick(tester, '日本語');
+
+      expect(field(tester, 'Title'), 'Snacks');
+      expect(find.text('Receipt: ローソン 新宿三丁目店'), findsOneWidget);
+      await closeTree(tester);
+    });
+
+    testWidgets('a language removed since the form opened: the scan says so', (tester) async {
+      final db = newDb();
+      final scanner = _FakeScanner()..models.add(ReceiptScript.chinese);
+      await openForm(tester, db, scanner);
+      await pick(tester, '中文');
+      scanner.models.clear();
+
+      await scan(tester);
+
+      expect(find.text("中文 isn't downloaded. Pick it next to Scan receipt to download it again."), findsOneWidget);
+      expect(uploads, hasLength(1));
+      await closeTree(tester);
+    });
   });
 }

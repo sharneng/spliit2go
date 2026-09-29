@@ -69,6 +69,47 @@ class SettingsService {
     }
   }
 
+  /// Whether the phone's language's receipt text model was downloaded at
+  /// launch (#153). Once only: removing it in the picker doesn't bring it
+  /// back.
+  Future<bool> receiptScriptAutoDownloaded() async =>
+      (await SharedPreferences.getInstance()).getBool('receipt_script_auto_downloaded') ?? false;
+
+  Future<void> setReceiptScriptAutoDownloaded() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setBool('receipt_script_auto_downloaded', true)) {
+      throw StateError('Could not save the receipt language download');
+    }
+  }
+
+  /// The receipt languages the user removed (#153), as [ReceiptScript]
+  /// names. Google Play services only frees a released model later, and
+  /// until then still reports it installed; these stay hidden until the
+  /// user downloads them again.
+  Future<Set<String>> receiptScriptsRemoved() async =>
+      ((await SharedPreferences.getInstance()).getStringList('receipt_scripts_removed') ?? const []).toSet();
+
+  Future<void> setReceiptScriptRemoved(String script, bool removed) async {
+    final prefs = await SharedPreferences.getInstance();
+    final scripts = await receiptScriptsRemoved();
+    removed ? scripts.add(script) : scripts.remove(script);
+    if (!await prefs.setStringList('receipt_scripts_removed', scripts.toList())) {
+      throw StateError('Could not save the removed receipt language');
+    }
+  }
+
+  /// The receipt language last picked in [groupId]'s expense form (#153),
+  /// as a [ReceiptScript] name, or null when none was.
+  Future<String?> receiptScript(String groupId) async =>
+      (await SharedPreferences.getInstance()).getString('receipt_script.$groupId');
+
+  Future<void> setReceiptScript(String groupId, String script) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setString('receipt_script.$groupId', script)) {
+      throw StateError('Could not save the receipt language');
+    }
+  }
+
   Future<ThemeMode> themeMode() async {
     final value =
         (await SharedPreferences.getInstance()).getString(_keyThemeMode);

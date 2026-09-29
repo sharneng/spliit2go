@@ -280,5 +280,22 @@
   "expenseScanHintsOnly": "Rien n'a été modifié. Ce qu'indique le reçu est affiché sous les champs.",
   "expenseScanNothing": "Rien n'a pu être lu sur cette photo. La photo est gardée.",
   "expenseScanFailed": "Impossible de lire le reçu. La photo est gardée.",
-  "expenseScanHint": "Reçu : {value}"
+  "expenseScanHint": "Reçu : {value}",
+  "receiptLanguage": "Langue du reçu",
+  "receiptLanguageIntro": "Choisissez la langue imprimée sur le reçu.",
+  "receiptScriptLatin": "Français, English et autres langues en alphabet latin",
+  "receiptLanguageBuiltIn": "Intégrée",
+  "receiptLanguageDownloaded": "Téléchargée",
+  "receiptLanguageNotDownloaded": "Touchez pour télécharger",
+  "receiptLanguageDownloading": "Téléchargement…",
+  "receiptLanguageDownload": "Télécharger",
+  "receiptLanguageRemove": "Retirer",
+  "receiptLanguageOffline": "Connectez-vous à Internet pour la télécharger.",
+  "receiptLanguageDownloadFailed": "Impossible de la télécharger. Réessayez plus tard.",
+  "receiptLanguageRemoveFailed": "Impossible de la retirer.",
+  "receiptLanguageRemoveTitle": "Retirer {language} ?",
+  "receiptLanguageRemoveBody": "Les reçus en {language} ne pourront plus être lus avant de la télécharger à nouveau. Les services Google Play libèrent l'espace plus tard, si aucune autre application ne l'utilise.",
+  "receiptLanguageNote": "Les langues autres que celle intégrée sont téléchargées par les services Google Play, qui les partagent avec d'autres applications.",
+  "expenseScanModelMissing": "{language} n'est pas téléchargée. Choisissez-la à côté de Scanner un reçu pour la télécharger à nouveau.",
+  "expenseScanTryLanguage": "Ce n'est pas la langue du reçu ? Choisissez-la à côté de Scanner un reçu pour relire la photo."
 }
