@@ -548,5 +548,43 @@
         "type": "String"
       }
     }
-  }
+  },
+  "receiptLanguage": "Receipt language",
+  "receiptLanguageIntro": "Pick the language printed on the receipt.",
+  "receiptScriptLatin": "English, Français and other Latin-script languages",
+  "receiptLanguageBuiltIn": "Built in",
+  "receiptLanguageDownloaded": "Downloaded",
+  "receiptLanguageNotDownloaded": "Tap to download",
+  "receiptLanguageDownloading": "Downloading…",
+  "receiptLanguageDownload": "Download",
+  "receiptLanguageRemove": "Remove",
+  "receiptLanguageOffline": "Connect to the internet to download it.",
+  "receiptLanguageDownloadFailed": "Couldn't download it. Try again later.",
+  "receiptLanguageRemoveFailed": "Couldn't remove it.",
+  "receiptLanguageRemoveTitle": "Remove {language}?",
+  "@receiptLanguageRemoveTitle": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "receiptLanguageRemoveBody": "Receipts in {language} can't be read until you download it again. Google Play services frees the space later, if no other app uses it.",
+  "@receiptLanguageRemoveBody": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "receiptLanguageNote": "Languages other than the built-in one are downloaded by Google Play services, which shares them with other apps.",
+  "expenseScanModelMissing": "{language} isn't downloaded. Pick it next to Scan receipt to download it again.",
+  "@expenseScanModelMissing": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseScanTryLanguage": "Not the receipt's language? Pick it next to Scan receipt to read the photo again."
 }

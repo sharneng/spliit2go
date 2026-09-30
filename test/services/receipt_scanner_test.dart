@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spliit2go/services/receipt_scanner.dart';
 import 'package:spliit2go/services/receipt_text.dart';
 
@@ -12,6 +13,13 @@ class _Scanner implements ReceiptScanner {
   _Scanner(this.installed);
   final List<bool> installed;
   var prepared = 0;
+
+  /// The downloadable models on the phone.
+  final models = <ReceiptScript>{};
+
+  /// Downloads asked for; each fails while [offline].
+  final downloads = <ReceiptScript>[];
+  bool offline = false;
 
   @override
   bool isSupported = true;
@@ -23,7 +31,21 @@ class _Scanner implements ReceiptScanner {
   Future<Uint8List?> scanDocument() => throw UnimplementedError();
 
   @override
-  Future<List<ReceiptTextBlock>> recognizeText(Uint8List jpeg) => throw UnimplementedError();
+  Future<List<ReceiptTextBlock>> recognizeText(Uint8List jpeg, {ReceiptScript script = ReceiptScript.latin}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Set<ReceiptScript>> installedScripts() async => {ReceiptScript.latin, ...models};
+
+  @override
+  Future<void> installScript(ReceiptScript script) async {
+    downloads.add(script);
+    if (offline) throw ReceiptTextModelDownloadFailed(script, offline: true);
+    models.add(script);
+  }
+
+  @override
+  Future<void> removeScript(ReceiptScript script) async => models.remove(script);
 }
 
 // Issue #125: the Document Scanner is downloaded ahead of the first scan,
@@ -32,16 +54,25 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const channel = MethodChannel('com.sharneng.spliit2go/receipt_scan');
   late List<String> calls;
+  late List<Object?> arguments;
   Object? failWith;
+  Object? answer;
+
+  /// Answers by method, over [answer].
+  late Map<String, Object?> answers;
 
   setUp(() {
     calls = [];
+    arguments = [];
     failWith = null;
+    answer = false;
+    answers = {};
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call.method);
-      if (failWith case final e?) throw e;
-      return false;
+      arguments.add(call.arguments);
+      if (failWith case final e? when !answers.containsKey(call.method)) throw e;
+      return answers.containsKey(call.method) ? answers[call.method] : answer;
     });
   });
   tearDown(() {
@@ -74,9 +105,90 @@ void main() {
     expect(calls, isEmpty);
   });
 
+  // Issue #153: receipt languages. Play services is asked every time.
+  group('receipt languages', () {
+    setUp(() => SharedPreferences.setMockInitialValues({}));
+
+    test('what\'s installed is what Play services says, and Latin always', () async {
+      answer = {'chinese': true, 'japanese': false};
+      expect(await scanner([ConnectivityResult.wifi]).installedScripts(), {ReceiptScript.latin, ReceiptScript.chinese});
+      expect(calls, ['textModels']);
+    });
+
+    test('a download asks for that model', () async {
+      answers = {'textModels': <String, bool>{}, 'installTextModel': true};
+      await scanner([ConnectivityResult.wifi]).installScript(ReceiptScript.japanese);
+      expect(calls, ['textModels', 'installTextModel']);
+      expect(arguments.last, {'script': 'japanese'});
+    });
+
+    test('offline, a download fails at once, asking Play services only what it has', () async {
+      answer = <String, bool>{};
+      await expectLater(scanner([ConnectivityResult.none]).installScript(ReceiptScript.chinese),
+          throwsA(isA<ReceiptTextModelDownloadFailed>().having((e) => e.offline, 'offline', isTrue)));
+      expect(calls, ['textModels']);
+    });
+
+    test('Play services failing it is a failed download', () async {
+      answers = {'textModels': <String, bool>{}};
+      failWith = PlatformException(code: 'install-failed', message: 'state 5');
+      await expectLater(scanner([ConnectivityResult.wifi]).installScript(ReceiptScript.chinese),
+          throwsA(isA<ReceiptTextModelDownloadFailed>().having((e) => e.offline, 'offline', isFalse)));
+    });
+
+    test('Latin is built in: nothing to download or remove', () async {
+      await scanner([ConnectivityResult.wifi]).installScript(ReceiptScript.latin);
+      await scanner([ConnectivityResult.wifi]).removeScript(ReceiptScript.latin);
+      expect(calls, isEmpty);
+    });
+
+    test('removing tells Play services', () async {
+      answer = null;
+      await scanner([ConnectivityResult.wifi]).removeScript(ReceiptScript.chinese);
+      expect(calls, ['removeTextModel']);
+      expect(arguments, [{'script': 'chinese'}]);
+    });
+
+    // Seen on the emulator: Play services frees a released model later, and
+    // says it's installed until then.
+    test('removed stays removed while Play services still has it, until downloaded again', () async {
+      final phone = scanner([ConnectivityResult.wifi]);
+      answer = null;
+      await phone.removeScript(ReceiptScript.chinese);
+      answer = {'chinese': true, 'japanese': true};
+      expect(await phone.installedScripts(), {ReceiptScript.latin, ReceiptScript.japanese});
+      calls.clear();
+
+      // Still there: shown again, with no install asked of Play services,
+      // offline too.
+      final offline = PlatformReceiptScanner(connectivity: () async => [ConnectivityResult.none]);
+      await offline.installScript(ReceiptScript.chinese);
+      expect(calls.where((c) => c == 'installTextModel'), isEmpty);
+      expect(await phone.installedScripts(), ReceiptScript.values.toSet());
+    });
+
+    test('reading asks for the picked language; without its model, it says so', () async {
+      answer = {'width': 100, 'height': 100, 'lines': <Object>[]};
+      await scanner([]).recognizeText(Uint8List(1), script: ReceiptScript.japanese);
+      expect((arguments.single as Map)['script'], 'japanese');
+
+      failWith = PlatformException(code: 'model-missing');
+      await expectLater(scanner([]).recognizeText(Uint8List(1), script: ReceiptScript.chinese),
+          throwsA(isA<ReceiptTextModelMissing>().having((e) => e.script, 'script', ReceiptScript.chinese)));
+    });
+
+    test('the phone\'s language: Chinese and Japanese are downloaded, Latin ones need nothing', () {
+      expect([for (final l in ['zh', 'ja', 'en', 'fr', 'ko']) ReceiptScript.forLanguage(l)],
+          [ReceiptScript.chinese, ReceiptScript.japanese, null, null, null]);
+    });
+  });
+
   group('warming up', () {
     late StreamController<List<ConnectivityResult>> network;
-    setUp(() => network = StreamController());
+    setUp(() {
+      network = StreamController();
+      SharedPreferences.setMockInitialValues({});
+    });
     // Not awaited: with no listener (the iPhone), close never completes.
     tearDown(() => unawaited(network.close()));
 
@@ -117,6 +229,67 @@ void main() {
       final warmup = ReceiptScannerWarmup(scanner, connectivityChanges: network.stream)..start();
       await settle();
       expect((scanner.prepared, warmup.listening), (1, false));
+    });
+
+    group('the phone\'s language (#153)', () {
+      test('its model is downloaded once, with the scanner', () async {
+        final scanner = _Scanner([true]);
+        final warmup =
+            ReceiptScannerWarmup(scanner, connectivityChanges: network.stream, phoneScript: ReceiptScript.japanese)
+              ..start();
+        await settle();
+        expect(scanner.downloads, [ReceiptScript.japanese]);
+        expect(scanner.models, {ReceiptScript.japanese});
+        expect(warmup.listening, isFalse);
+      });
+
+      test('offline at launch: downloaded when a connection comes, and listening until then', () async {
+        final scanner = _Scanner([true])..offline = true;
+        final warmup =
+            ReceiptScannerWarmup(scanner, connectivityChanges: network.stream, phoneScript: ReceiptScript.chinese)
+              ..start();
+        await settle();
+        expect(scanner.models, isEmpty);
+        expect(warmup.listening, isTrue);
+
+        scanner.offline = false;
+        network.add([ConnectivityResult.wifi]);
+        await settle();
+        expect(scanner.models, {ReceiptScript.chinese});
+        expect(warmup.listening, isFalse);
+      });
+
+      test('once only: removed afterwards, it isn\'t downloaded again', () async {
+        final scanner = _Scanner([true]);
+        ReceiptScannerWarmup(scanner, connectivityChanges: network.stream, phoneScript: ReceiptScript.chinese).start();
+        await settle();
+        await scanner.removeScript(ReceiptScript.chinese);
+
+        // The next launch.
+        ReceiptScannerWarmup(scanner, connectivityChanges: StreamController<List<ConnectivityResult>>().stream,
+                phoneScript: ReceiptScript.chinese)
+            .start();
+        await settle();
+        expect(scanner.downloads, [ReceiptScript.chinese]);
+        expect(scanner.models, isEmpty);
+      });
+
+      test('already there (another app asked for it): nothing to download', () async {
+        final scanner = _Scanner([true])..models.add(ReceiptScript.chinese);
+        final warmup =
+            ReceiptScannerWarmup(scanner, connectivityChanges: network.stream, phoneScript: ReceiptScript.chinese)
+              ..start();
+        await settle();
+        expect(scanner.downloads, isEmpty);
+        expect(warmup.listening, isFalse);
+      });
+
+      test('a Latin phone downloads nothing', () async {
+        final scanner = _Scanner([true]);
+        ReceiptScannerWarmup(scanner, connectivityChanges: network.stream).start();
+        await settle();
+        expect(scanner.downloads, isEmpty);
+      });
     });
 
     test('not on the iPhone (#126): no check, no listening', () async {

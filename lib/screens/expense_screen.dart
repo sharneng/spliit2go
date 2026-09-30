@@ -27,7 +27,9 @@ import '../services/receipt_fill.dart';
 import '../services/receipt_photo.dart';
 import '../services/receipt_scanner.dart';
 import '../services/receipt_text.dart';
+import '../services/settings_service.dart';
 import '../widgets/receipt_attachments.dart';
+import '../widgets/receipt_language.dart';
 
 /// Adds -- or, given [existingExpense], edits -- an expense. An expense
 /// with [Expense.isReimbursement] set is a settlement/"paid back"
@@ -70,7 +72,8 @@ import '../widgets/receipt_attachments.dart';
 ///
 /// A new expense can be filled in from a receipt (#125, Android): Scan
 /// receipt reads it on the phone, keeps the photo with the expense, and
-/// fills in only what the user hasn't; see [receiptFill].
+/// fills in only what the user hasn't; see [receiptFill]. The receipt's
+/// language is picked beside it (#153).
 class ExpenseScreen extends StatefulWidget {
   final SpliitClient client;
   final AppDatabase db;
@@ -109,6 +112,10 @@ class ExpenseScreen extends StatefulWidget {
   /// Reads receipts on the phone (#125); a fake in widget tests.
   final ReceiptScanner receiptScanner;
 
+  /// Where the receipt language picked in each group is remembered
+  /// (#153); [SettingsService] when null.
+  final SettingsService? settings;
+
   const ExpenseScreen({
     super.key,
     required this.client,
@@ -121,6 +128,7 @@ class ExpenseScreen extends StatefulWidget {
     this.receiptPicker = const ImagePickerReceiptPhotoPicker(),
     this.prepareReceipt,
     this.receiptScanner = const PlatformReceiptScanner(),
+    this.settings,
   });
 
   bool get isEditing => existingExpense != null;
@@ -169,6 +177,25 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   /// What the last scan left beside the fields it didn't fill.
   ReceiptFill? _scanFill;
+
+  /// The receipt language (#153): the one picked in this group last, or
+  /// else the phone's language when its model is there, or else Latin.
+  ReceiptScript _receiptScript = ReceiptScript.latin;
+
+  /// The languages whose models are on the phone, as Play services last
+  /// said.
+  Set<ReceiptScript> _receiptScripts = {ReceiptScript.latin};
+
+  /// The photo the last scan read, so picking another language reads it
+  /// again rather than asking for a new one (#153).
+  PreparedReceipt? _scannedPhoto;
+
+  /// What that reading put in the form, which reading it again in another
+  /// language replaces, where the user hasn't changed it.
+  _ScanFilled? _scanFilled;
+
+  /// The language the last scan found missing, for its message.
+  ReceiptScript? _missingScript;
 
   bool _isReimbursement = false;
   bool _saveDefaultSplittingOptions = false;
@@ -254,6 +281,80 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _loadDefaultSplit();
     }
     _loadCategories();
+    if (_offersScan) _loadReceiptLanguage();
+  }
+
+  SettingsService get _settings => widget.settings ?? SettingsService();
+
+  /// Best effort: without an answer from Play services, the picker offers
+  /// Latin and asks again when it opens.
+  Future<void> _loadReceiptLanguage() async {
+    final phone = ReceiptScript.forLanguage(WidgetsBinding.instance.platformDispatcher.locale.languageCode);
+    var installed = _receiptScripts;
+    ReceiptScript? picked;
+    try {
+      installed = await widget.receiptScanner.installedScripts();
+    } catch (e, st) {
+      if (!isMissingPlugin(e)) ErrorReporter.instance.report(e, st, operation: 'Listing receipt languages');
+    }
+    try {
+      picked = ReceiptScript.values.asNameMap()[await _settings.receiptScript(widget.group.id)];
+    } catch (e, st) {
+      if (!isMissingPlugin(e)) ErrorReporter.instance.report(e, st, operation: 'Loading the receipt language');
+    }
+    if (!mounted) return;
+    setState(() {
+      _receiptScripts = installed;
+      _receiptScript = [picked, phone].nonNulls.where(installed.contains).firstOrNull ?? ReceiptScript.latin;
+    });
+  }
+
+  /// The receipt language picker (#153). Picking another language after a
+  /// scan reads that scan's photo again.
+  Future<void> _pickReceiptLanguage() async {
+    final picked = await showReceiptLanguagePicker(
+      context,
+      scanner: widget.receiptScanner,
+      selected: _receiptScript,
+      installed: _receiptScripts,
+      onInstalledChanged: (installed) {
+        if (!mounted) return;
+        setState(() {
+          _receiptScripts = installed;
+          if (!installed.contains(_receiptScript)) _receiptScript = ReceiptScript.latin;
+        });
+      },
+    );
+    if (picked == null || !mounted) return;
+    final changed = picked != _receiptScript;
+    setState(() => _receiptScript = picked);
+    try {
+      await _settings.setReceiptScript(widget.group.id, picked.name);
+    } catch (e, st) {
+      // Only the remembering failed; this form still uses it.
+      if (!isMissingPlugin(e)) ErrorReporter.instance.report(e, st, operation: 'Saving the receipt language');
+    }
+    if (changed && _scannedPhoto != null && _scan != _Scan.reading && mounted) {
+      await _readReceipt(_scannedPhoto!, again: true);
+    }
+  }
+
+  /// Takes back what the last reading filled in, where the user hasn't
+  /// changed it since, before the same photo is read in another language.
+  void _undoScanFill() {
+    final filled = _scanFilled;
+    if (filled == null) return;
+    if (filled.title != null && _titleController.text == filled.title) _titleController.text = '';
+    if (filled.amount != null && _amountController.text == filled.amount) _amountController.text = '';
+    if (filled.date case (final date, final before)? when _date == date) {
+      _date = before;
+      _dateChosen = false;
+    }
+    if (filled.category case (final id, final before)? when _category == id) {
+      _category = before;
+      _categoryChosen = false;
+    }
+    _scanFilled = null;
   }
 
   /// What's on this device, then the server's list if it's read now.
@@ -410,14 +511,21 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
   }
 
-  Future<void> _readReceipt(PreparedReceipt photo) async {
+  /// Reads [photo] in the picked language and fills the form. [again]:
+  /// the same photo in another language, which replaces what the last
+  /// reading filled in.
+  Future<void> _readReceipt(PreparedReceipt photo, {bool again = false}) async {
+    final script = _receiptScript;
     setState(() {
+      if (again) _undoScanFill();
+      _scannedPhoto = photo;
+      _scanFilled = null;
       _scan = _Scan.reading;
       _scanFill = null;
       _scanDiagnostics = null;
     });
     try {
-      final blocks = await widget.receiptScanner.recognizeText(photo.bytes);
+      final blocks = await widget.receiptScanner.recognizeText(photo.bytes, script: script);
       final scan = readReceipt(receiptRows(blocks), categories: _categories, today: DateTime.now());
       if (!mounted) return;
       // The form as it is now, not as it was when the scan started: the
@@ -435,22 +543,37 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         ),
       );
       setState(() {
-        if (fill.title case final title?) _titleController.text = title;
-        if (fill.amountCents case final cents?) _amountController.text = (cents / 100).toStringAsFixed(2);
+        final filled = _ScanFilled();
+        if (fill.title case final title?) _titleController.text = filled.title = title;
+        if (fill.amountCents case final cents?) {
+          _amountController.text = filled.amount = (cents / 100).toStringAsFixed(2);
+        }
         if (fill.date case final date?) {
+          filled.date = (date, _date);
           _date = date;
           _dateChosen = true;
         }
         if (fill.categoryId case final id?) {
+          filled.category = (id, _category);
           _category = id;
           _categoryChosen = true;
         }
+        _scanFilled = filled;
         _scanFill = fill;
         _scan = scan.isEmpty
             ? _Scan.nothing
             : fill.filledAny
                 ? _Scan.filled
                 : _Scan.hintsOnly;
+      });
+    } on ReceiptTextModelMissing catch (e) {
+      // Removed, or Play services' data was cleared, since the form
+      // opened: the picker offers it for download again.
+      if (!mounted) return;
+      setState(() {
+        _scan = _Scan.modelMissing;
+        _missingScript = e.script;
+        _receiptScripts = {..._receiptScripts}..remove(e.script);
       });
     } catch (e, st) {
       final error = ErrorReporter.instance.report(e, st, operation: 'Reading a receipt');
@@ -474,21 +597,37 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _Scan.idle => l10n.expenseScanIntro,
       _Scan.reading => l10n.expenseScanReading,
       _Scan.filled => l10n.expenseScanFilled,
-      _Scan.hintsOnly => l10n.expenseScanHintsOnly,
-      _Scan.nothing => l10n.expenseScanNothing,
+      _Scan.hintsOnly => '${l10n.expenseScanHintsOnly} ${l10n.expenseScanTryLanguage}',
+      _Scan.nothing => '${l10n.expenseScanNothing} ${l10n.expenseScanTryLanguage}',
       _Scan.failed => l10n.expenseScanFailed,
+      _Scan.modelMissing => l10n.expenseScanModelMissing(receiptScriptName(context, _missingScript!)),
     };
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          OutlinedButton.icon(
-            onPressed: reading ? null : _scanReceipt,
-            icon: reading
-                ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.document_scanner_outlined),
-            label: Text(l10n.expenseScanReceipt),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: reading ? null : _scanReceipt,
+                  icon: reading
+                      ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.document_scanner_outlined),
+                  label: Text(l10n.expenseScanReceipt),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Tooltip(
+                message: l10n.receiptLanguage,
+                child: OutlinedButton.icon(
+                  onPressed: reading ? null : _pickReceiptLanguage,
+                  icon: const Icon(Icons.translate),
+                  label: Text(receiptScriptShortName(_receiptScript)),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           _scan == _Scan.failed
@@ -1352,8 +1491,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 }
 
-/// Where Scan receipt is (#125).
-enum _Scan { idle, reading, filled, hintsOnly, nothing, failed }
+/// Where Scan receipt is (#125). [modelMissing]: the picked language's
+/// model isn't on the phone any more (#153).
+enum _Scan { idle, reading, filled, hintsOnly, nothing, failed, modelMissing }
+
+/// What a reading put in the form (#153), and for the date and category
+/// what they were before, so reading the photo again can take it back.
+class _ScanFilled {
+  String? title;
+  String? amount;
+  (DateTime, DateTime)? date;
+  (int, int)? category;
+}
 
 /// The category picker's contents (issue #19): a search field followed by
 /// a scrollable, grouped list. Filtering narrows to categories whose name

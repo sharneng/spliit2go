@@ -74,6 +74,11 @@ dependencies {
     // Text recognition with the Latin model bundled (about 4 MB), so it
     // works offline from the first use.
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    // Chinese and Japanese (#153): Google Play services downloads each model
+    // when the user picks it (about 260 KB each in the app, against about
+    // 4 MB each bundled).
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition-chinese:16.0.1")
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition-japanese:16.0.1")
     // The Document Scanner: a small client; Google Play services downloads
     // the scanner itself on first use.
     implementation("com.google.android.gms:play-services-mlkit-document-scanner:16.0.0")
