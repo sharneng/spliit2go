@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spliit2go/models/category.dart';
 import 'package:spliit2go/services/receipt_fill.dart';
@@ -191,5 +193,105 @@ TEL 03-1234-5678
       expect((scan.title, scan.total!.cents, scan.total!.sure), ('居酒屋はなこ', 348000, true));
       expect((scan.date, scan.categoryId), (DateTime(2026, 9, 26), category('Dining Out')));
     });
+  });
+
+  // Kenneth's Costco receipt (#153): the Document Scanner's page of his
+  // photo, as ML Kit's Japanese model read it on the emulator, every line
+  // with its corners. The page curls, sloping 11° at the top and 6° by the
+  // total, so each price sat a row above its label; 合計 was read as 言計,
+  // and ¥1,812 as 41,812.
+  group('a photographed receipt', () {
+    const width = 359.0, height = 1156.0;
+    const ocr = <(String, List<double>)>[
+      ('岐摩羽島ガスステーション', [0, 92, 247, 43, 251, 67, 4, 116]),
+      ('岐阜県羽島市上中町長間2422-1', [2, 120, 290, 64, 294, 89, 6, 145]),
+      ('TEL 0570-200-800', [6, 151, 194, 116, 198, 138, 10, 173]),
+      ('納品書(領収書)', [81, 167, 244, 139, 248, 162, 85, 190]),
+      ('Mastercard Member', [8, 237, 170, 212, 173, 235, 11, 260]),
+      ('XXXX-XXXX-XXXX-XXXX 5 29/01 0000', [10, 265, 333, 217, 336, 238, 13, 286]),
+      ('0-その他マスター', [12, 293, 161, 272, 164, 293, 15, 314]),
+      ('レギュラー (Regular)', [15, 317, 207, 294, 210, 320, 18, 343]),
+      ('N16 12.41L', [33, 346, 174, 329, 176, 346, 35, 363]),
+      ('小 計', [54, 391, 130, 391, 130, 417, 54, 417]),
+      ('2025/11/27 12:34', [163, 184, 335, 154, 338, 176, 166, 206]),
+      ('IC', [249, 201, 268, 197, 271, 216, 252, 220]),
+      ('言計', [92, 419, 128, 415, 129, 436, 93, 440]),
+      ('(10%内消費税等', [21, 452, 146, 441, 147, 462, 22, 473]),
+      ('一括払い', [23, 649, 91, 647, 91, 668, 23, 670]),
+      ('No:0000020897 NC', [21, 677, 168, 670, 168, 688, 21, 695]),
+      ('グローバルカードをご利用の方がエ', [24, 502, 325, 479, 326, 500, 25, 523]),
+      ('グゼクティブ会員の場合、通常の1.', [25, 525, 322, 505, 323, 527, 26, 547]),
+      ('5に加えて2.0%のボーナスリワード', [26, 550, 325, 531, 326, 552, 27, 571]),
+      ('(年間上1万円)をグローバルカ', [25, 575, 318, 556, 319, 577, 26, 596]),
+      ('ード主会員に付与いたします。', [26, 598, 273, 586, 273, 606, 26, 618]),
+      ('04 A0000000041010', [21, 726, 178, 724, 178, 744, 21, 746]),
+      ('ARCOO ATCO002 MASTERCARD', [21, 702, 247, 694, 247, 714, 21, 722]),
+      ('Item #66157', [27, 869, 122, 872, 121, 895, 26, 892]),
+      ('@146.00', [227, 322, 301, 313, 303, 333, 229, 342]),
+      ('1,812', [257, 376, 320, 369, 322, 390, 259, 397]),
+      ('1,812', [225, 407, 324, 396, 326, 416, 227, 427]),
+      ('165)', [268, 429, 329, 423, 331, 445, 270, 451]),
+      ('41,812', [257, 291, 323, 279, 326, 298, 260, 310]),
+      ('事業者番号 T3020001079681', [20, 781, 260, 781, 260, 802, 20, 802]),
+      ('0001693-06 5337 1862 No:0396', [20, 808, 335, 810, 334, 829, 19, 827]),
+      ('T:04788 8', [239, 668, 329, 664, 329, 683, 239, 687]),
+      ('★ガスステーショ定クーボン★', [21, 832, 335, 838, 334, 881, 20, 875]),
+      ('めぐりズム7イマスク', [8, 896, 250, 905, 248, 946, 6, 937]),
+      ('ラベンダー·ゆず·無札', [24, 934, 253, 952, 250, 988, 21, 970]),
+      ('発行倉庫店のみ利用可', [23, 1067, 213, 1086, 210, 1109, 20, 1090]),
+      ('【有効期限】', [35, 1121, 123, 1130, 120, 1152, 32, 1143]),
+      ('EGRANYTHM EYEHASX 36Sheet', [22, 969, 266, 991, 262, 1026, 18, 1004]),
+      ('商品1点につきクーポン1枚有効', [23, 1039, 297, 1064, 294, 1090, 20, 1065]),
+    ];
+    List<ReceiptOcrLine> lines() => [
+          for (final (text, c) in ocr)
+            ReceiptOcrLine(text,
+                left: [c[0], c[6]].reduce(math.min),
+                top: [c[1], c[3]].reduce(math.min),
+                right: [c[2], c[4]].reduce(math.max),
+                bottom: [c[5], c[7]].reduce(math.max),
+                corners: c),
+        ];
+    ReceiptScan scan() => readReceipt(receiptRows(receiptTextBlocks(lines(), width: width, height: height)),
+        categories: spliitSeedCategories, today: DateTime(2025, 12, 1));
+
+    test('each price is on its label\'s row', () {
+      final rows = receiptRows(receiptTextBlocks(lines(), width: width, height: height)).split('\n');
+      expect(rows, containsAll(['小 計   1,812', '言計   1,812', '(10%内消費税等   165)', 'N16 12.41L   @146.00']));
+    });
+
+    test('the total is 合計\'s ¥1,812, in yen, and sure', () {
+      final total = scan().total!;
+      expect((total.cents, total.sure, total.text), (181200, true, '1,812'));
+      expect(total.currency?.codes, {'JPY'});
+    });
+
+    test('the date, the name and the category', () {
+      final s = scan();
+      expect((s.date, s.title, s.categoryId), (DateTime(2025, 11, 27), '岐摩羽島ガスステーション', category('Gas/Fuel')));
+    });
+
+    test('not straightened, each price lands a row up: 言計 gets the tax\'s 165', () {
+      final flat = [
+        for (final l in lines())
+          ReceiptTextBlock(
+              text: l.text,
+              minX: l.left / width,
+              midY: (l.top + l.bottom) / 2 / height,
+              height: (l.bottom - l.top) / height),
+      ];
+      final total = readReceipt(receiptRows(flat), today: DateTime(2025, 12, 1)).total!;
+      expect(total.cents, 16500);
+    });
+  });
+
+  test('spaced-out labels: 合 計 is a total, 小 計 isn\'t', () {
+    expect(read('小 計   ¥1,900\n合 計   ¥1,812').total!.cents, 181200);
+  });
+
+  test('a two-character …計 label is a total, as OCR misreads 合計; 小計 and 合計点数 aren\'t', () {
+    expect(read('小計   ¥2,000\n言計   ¥1,812').total!.cents, 181200);
+    expect(read('合計点数   12\n言計   ¥1,812').total!.cents, 181200);
+    expect(read('会計済   ¥5,000\n総 計   ¥1,812').total!.cents, 181200);
   });
 }
