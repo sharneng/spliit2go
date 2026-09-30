@@ -41,7 +41,8 @@ import io.flutter.plugin.common.MethodChannel
  *   online, at launch and whenever a connection comes back, until it's
  *   installed (ReceiptScannerWarmup in receipt_scanner.dart). True when it's
  *   already installed.
- * - recognizeText: ML Kit text recognition in the receipt language the user
+ * - recognizeText: every line of text with its box and corners, by ML Kit
+ *   text recognition in the receipt language the user
  *   picked (#153). Latin is bundled in the app (com.google.mlkit:text-
  *   recognition), so it works offline from the first use. Chinese and
  *   Japanese are models Google Play services downloads on request, shared
@@ -266,6 +267,10 @@ class ReceiptScanChannel(private val activity: Activity) : MethodChannel.MethodC
                         "top" to box.top,
                         "right" to box.right,
                         "bottom" to box.bottom,
+                        // The line's own corners, clockwise from its top left:
+                        // on a tilted photo the box above is larger than the
+                        // line, and the tilt shows (#153).
+                        "corners" to line.cornerPoints?.flatMap { listOf(it.x, it.y) },
                     )
                 }
                 result.success(mapOf("width" to bitmap.width, "height" to bitmap.height, "lines" to lines))
