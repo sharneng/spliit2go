@@ -4,7 +4,7 @@
 Run from anywhere; needs Pillow (`pip install pillow`). Writes:
 
   ios/Runner/Assets.xcassets/AppIcon.appiconset  every size its
-      Contents.json lists, on BACKGROUND, no alpha (iOS rounds the corners)
+      Contents.json lists, on ICON_BACKGROUND, no alpha (iOS rounds the corners)
   android/app/src/main/res/mipmap-*/ic_launcher.png  pre-Android 8
   android/app/src/main/res/drawable-*/ic_launcher_{foreground,monochrome}.png,
       values/ic_launcher_background.xml and mipmap-anydpi-v26/ic_launcher.xml
@@ -13,7 +13,7 @@ Run from anywhere; needs Pillow (`pip install pillow`). Writes:
   branding/store/app-store-icon-1024.png  App Store Connect (no alpha)
   branding/store/play-icon-512.png        Google Play
   assets/spliit2go-logo.png (+ 2.0x/, 3.0x/)  the group list header, 32 pt,
-      the logo in a BACKGROUND circle like the launcher icon
+      the logo in a HEADER_BACKGROUND circle like the launcher icon
 
 See SETUP.md, "App icon".
 """
@@ -33,6 +33,19 @@ OPAQUE_ALPHA = 250
 # The solid background of branding/spliit2go-icon.png, which is the logo
 # on this color; the icons are built from the transparent logo on it.
 BACKGROUND = (0xA2, 0xE0, 0xD5)
+
+
+def lighter(color, fraction):
+    """[color] moved [fraction] of the way to white."""
+    return tuple(round(c + (255 - c) * fraction) for c in color)
+
+
+# The art's teal looked dim on a phone; Ken compared mockups at 25%, 50% and
+# 75% toward white (2026-10-01) and chose 50% for the icons, #D0F0EA. The
+# header logo takes 25%, #B9E8E0: on the near-white light-mode app bar a
+# lighter circle loses its edge.
+ICON_BACKGROUND = lighter(BACKGROUND, 0.5)
+HEADER_BACKGROUND = lighter(BACKGROUND, 0.25)
 
 # Android masks the adaptive foreground (108 dp) to a shape that always
 # contains the central 66 dp circle; keep the art inside it.
@@ -66,7 +79,7 @@ BACKGROUND_XML = """<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#{:02X}{:02X}{:02X}</color>
 </resources>
-""".format(*BACKGROUND)
+""".format(*ICON_BACKGROUND)
 
 
 def clean(img):
@@ -82,8 +95,8 @@ def resized(img, size):
 
 
 def flatten(img):
-    """On BACKGROUND, without an alpha channel (the App Store rejects one)."""
-    square = Image.new('RGBA', img.size, BACKGROUND + (255,))
+    """On ICON_BACKGROUND, without an alpha channel (the App Store rejects one)."""
+    square = Image.new('RGBA', img.size, ICON_BACKGROUND + (255,))
     square.alpha_composite(img)
     return square.convert('RGB')
 
@@ -135,11 +148,11 @@ def centered(art, reach, size=1024):
 
 
 def header_logo(art, size=1024):
-    """The logo in a BACKGROUND circle, transparent outside it, so it sits on
+    """The logo in a HEADER_BACKGROUND circle, transparent outside it, so it sits on
     the header in light and dark mode and matches the launcher icon."""
     circle = Image.new('L', (size * 4, size * 4), 0)
     ImageDraw.Draw(circle).ellipse((0, 0, size * 4 - 1, size * 4 - 1), fill=255)
-    logo = Image.new('RGBA', (size, size), BACKGROUND + (255,))
+    logo = Image.new('RGBA', (size, size), HEADER_BACKGROUND + (255,))
     logo.alpha_composite(centered(art, HEADER_REACH, size))
     logo.putalpha(circle.resize((size, size), Image.LANCZOS))
     return logo
