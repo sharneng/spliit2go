@@ -53,7 +53,7 @@ Both platforms use the app id `com.sharneng.spliit2go` and the display name **Sp
 
 ### App icon
 
-The icon and the group list's header logo come from the art in `branding/` (#106): `spliit2go-logo.png`, the logo on a transparent background, is the source for all of them, and the icons put it on the background color `BACKGROUND` in the script (`#A2E0D5`, taken from `spliit2go-icon.png`, the same logo on its background). To change the icon, replace those and run:
+The icon and the group list's header logo come from the art in `branding/` (#106): `spliit2go-logo.png`, the logo on a transparent background, is the source for all of them, `BACKGROUND` in the script is the teal of `spliit2go-icon.png` (`#A2E0D5`, the same logo on its background), and the icons and the header logo sit on lighter versions of it: `ICON_BACKGROUND` (`#D0F0EA`, half way to white) and `HEADER_BACKGROUND` (`#B9E8E0`, a quarter of the way). To change the icon, replace those and run:
 
 ```
 python3 scripts/make_icons.py
