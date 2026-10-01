@@ -12,14 +12,15 @@ Run from anywhere; needs Pillow (`pip install pillow`). Writes:
       monochrome layer Android 13+ tints for themed icons)
   branding/store/app-store-icon-1024.png  App Store Connect (no alpha)
   branding/store/play-icon-512.png        Google Play
-  assets/spliit2go-logo.png (+ 2.0x/, 3.0x/)  the group list header, 28 pt
+  assets/spliit2go-logo.png (+ 2.0x/, 3.0x/)  the group list header, 32 pt,
+      the logo in a BACKGROUND circle like the launcher icon
 
 See SETUP.md, "App icon".
 """
 import json
 from pathlib import Path
 
-from PIL import Image, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parent.parent
 BRANDING = ROOT / 'branding'
@@ -41,7 +42,10 @@ ADAPTIVE_SAFE_RADIUS = 33 / 108
 # the edges of iOS's rounded icon.
 ICON_REACH = 0.40
 
-HEADER_POINTS = 28
+HEADER_POINTS = 32
+# The header's circle frames the art as Android's launcher does: the safe
+# circle's 33 dp within the 36 dp radius it shows.
+HEADER_REACH = 33 / 72
 
 IOS_ICONS = ROOT / 'ios' / 'Runner' / 'Assets.xcassets' / 'AppIcon.appiconset'
 ANDROID_RES = ROOT / 'android' / 'app' / 'src' / 'main' / 'res'
@@ -130,13 +134,15 @@ def centered(art, reach, size=1024):
     return canvas
 
 
-def header_logo(art):
-    """Cropped to the art and padded square, so 28 pt is all logo."""
-    art = art.crop(art.getbbox())
-    side = max(art.size)
-    square = Image.new('RGBA', (side, side), (0, 0, 0, 0))
-    square.alpha_composite(art, ((side - art.width) // 2, (side - art.height) // 2))
-    return square
+def header_logo(art, size=1024):
+    """The logo in a BACKGROUND circle, transparent outside it, so it sits on
+    the header in light and dark mode and matches the launcher icon."""
+    circle = Image.new('L', (size * 4, size * 4), 0)
+    ImageDraw.Draw(circle).ellipse((0, 0, size * 4 - 1, size * 4 - 1), fill=255)
+    logo = Image.new('RGBA', (size, size), BACKGROUND + (255,))
+    logo.alpha_composite(centered(art, HEADER_REACH, size))
+    logo.putalpha(circle.resize((size, size), Image.LANCZOS))
+    return logo
 
 
 def save(img, path):

@@ -59,7 +59,7 @@ The icon and the group list's header logo come from the art in `branding/` (#106
 python3 scripts/make_icons.py
 ```
 
-It needs Pillow (`pip install pillow`) and rewrites every size: iOS's `AppIcon.appiconset`, Android's launcher icons and the adaptive icon's three layers (background color, foreground, and the monochrome layer for Android 13+ themed icons), the 28 pt header logo in `assets/`, and the store icons in `branding/store/` (1024 for App Store Connect, 512 for Google Play). Commit what it writes. `branding/` isn't bundled with the app.
+It needs Pillow (`pip install pillow`) and rewrites every size: iOS's `AppIcon.appiconset`, Android's launcher icons and the adaptive icon's three layers (background color, foreground, and the monochrome layer for Android 13+ themed icons), the 32 pt header logo in `assets/`, and the store icons in `branding/store/` (1024 for App Store Connect, 512 for Google Play). Commit what it writes. `branding/` isn't bundled with the app.
 
 ## Release build (Android)
 

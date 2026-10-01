@@ -13,6 +13,10 @@ const monogramPalette = <Color>[
   Color(0xff7C3AED),
 ];
 
+/// The green of the "Spliit" wordmark in spliit-ios (its `Logo` image,
+/// sampled), used for the "Spliit2Go" title on the group list.
+const spliitWordmarkGreen = Color(0xff56BC9C);
+
 ThemeData _appTheme(Brightness brightness) {
   final theme = ThemeData(
     useMaterial3: true,
