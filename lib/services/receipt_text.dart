@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../models/category.dart';
 
 /// Reading a photographed receipt's text (#125): a port of spliit-ios's
@@ -23,6 +25,73 @@ class ReceiptTextBlock {
   final double midY;
   final double height;
   const ReceiptTextBlock({required this.text, required this.minX, required this.midY, required this.height});
+}
+
+/// A line as OCR found it (#153): its box in the image's pixels, and its
+/// own corners, clockwise from its top left, when OCR gives them.
+class ReceiptOcrLine {
+  final String text;
+  final double left, top, right, bottom;
+  final List<double>? corners;
+  const ReceiptOcrLine(this.text,
+      {required this.left, required this.top, required this.right, required this.bottom, this.corners});
+}
+
+/// [lines] as [ReceiptTextBlock]s, straightened (#153). A photographed
+/// receipt is tilted, and curls: a price on the right sits higher or lower
+/// than its label on the left, enough to land on the wrong row (a Costco
+/// receipt, Kenneth's, sloped 11° at the top and 6° lower down). Each line
+/// is placed where it meets the left edge along the slope of the lines
+/// around it (the width-weighted median of its eight nearest), and its
+/// height is its own, not its box's, which grows with the tilt.
+List<ReceiptTextBlock> receiptTextBlocks(List<ReceiptOcrLine> lines, {required double width, required double height}) {
+  final shapes = [
+    for (final l in lines)
+      if (l.corners case final c? when c.length == 8 && c[2] != c[0])
+        (
+          line: l,
+          x: (c[0] + c[2] + c[4] + c[6]) / 4,
+          y: (c[1] + c[3] + c[5] + c[7]) / 4,
+          slope: (c[3] - c[1]) / (c[2] - c[0]),
+          weight: (c[2] - c[0]).abs(),
+          height: _distance(c[0], c[1], c[6], c[7]),
+        )
+      else
+        (
+          line: l,
+          x: (l.left + l.right) / 2,
+          y: (l.top + l.bottom) / 2,
+          slope: 0.0,
+          weight: 0.0,
+          height: l.bottom - l.top,
+        ),
+  ];
+  return [
+    for (final s in shapes)
+      ReceiptTextBlock(
+        text: s.line.text,
+        minX: s.line.left / width,
+        midY: (s.y - s.x * _localSlope(s.y, shapes)) / height,
+        height: s.height / height,
+      ),
+  ];
+}
+
+double _distance(double x0, double y0, double x1, double y1) {
+  final (dx, dy) = (x1 - x0, y1 - y0);
+  return math.sqrt(dx * dx + dy * dy);
+}
+
+double _localSlope(double y, List<({ReceiptOcrLine line, double x, double y, double slope, double weight, double height})> shapes) {
+  final near = ([...shapes]..sort((a, b) => (a.y - y).abs().compareTo((b.y - y).abs()))).take(8).where((s) => s.weight > 0).toList()
+    ..sort((a, b) => a.slope.compareTo(b.slope));
+  final total = near.fold(0.0, (sum, s) => sum + s.weight);
+  var seen = 0.0;
+  for (final s in near) {
+    seen += s.weight;
+    if (seen >= total / 2) return s.slope;
+  }
+  return 0;
 }
 
 /// A receipt's rows, put back together from the lines OCR found.
@@ -147,7 +216,9 @@ const _totalKeywords = [
   'total', 'amount due', 'balance due', 'grand total', 'to pay', //
   'montant', 'a payer', 'somme',
   '合计', '总计', '總計', '合計', '总额', '總額', '应付', '應付', '应收', '應收',
-  'お会計', 'ご請求', 'お支払金額', 'お買上計', '総額',
+  'お会計', 'ご請求', 'お支払金額', 'お買上計', '総額', '総計',
+  // OCR misreads of 合計 seen on real receipts (Kenneth's Costco one).
+  '言計',
 ];
 
 /// Lines that name a total of something else. Short on purpose: the real
@@ -163,14 +234,18 @@ ReceiptTotal? receiptTotal(List<String> lines) {
   final decimal = _decimalSeparator(lines);
   ReceiptAmount? best;
   String? bestLine;
-  for (final line in lines) {
-    if (!receiptLineNames(_totalKeywords, line) || receiptLineNames(_notATotalKeywords, line)) continue;
-    for (final a in receiptAmounts(line, decimalSeparator: decimal)) {
-      if (best == null || a.cents > best.cents) (best, bestLine) = (a, line);
+  for (final namesTotal in [_namesTotal, _mayNameTotal]) {
+    for (final line in lines) {
+      if (!namesTotal(line) || receiptLineNames(_notATotalKeywords, line)) continue;
+      for (final a in receiptAmounts(line, decimalSeparator: decimal)) {
+        if (best == null || a.cents > best.cents) (best, bestLine) = (a, line);
+      }
     }
+    if (best != null) break;
   }
-  final named = best != null;
-  if (!named) {
+  // Only a keyword makes the total sure: a …計 label is a hint.
+  final named = best != null && _namesTotal(bestLine!);
+  if (best == null) {
     // Nothing names a total: the largest price is a guess, offered as a
     // hint, never filled in.
     for (final line in lines) {
@@ -194,6 +269,18 @@ ReceiptTotal? receiptTotal(List<String> lines) {
 }
 
 const _noCents = {'JPY', 'KRW'};
+
+bool _namesTotal(String line) => receiptLineNames(_totalKeywords, line);
+
+/// A Chinese or Japanese label of two characters ending in 計, other than
+/// 小計: maybe 合計 misread in a way not yet seen, but maybe an item,
+/// 時計 (a watch) or 設計 (design), so it's only a hint (Ezra, #157).
+bool _mayNameTotal(String line) {
+  final label = _cjkLabel.firstMatch(line.trim());
+  return label != null && label[1] != '小';
+}
+
+final _cjkLabel = RegExp(r'^(\p{Script=Han})\s*計(?![\p{L}])', unicode: true);
 
 /// One number on a line.
 class ReceiptAmount {
@@ -536,7 +623,14 @@ String foldReceiptText(String text) => text.split('').map((c) {
 bool receiptLineNames(List<String> keywords, String line) {
   final folded = foldReceiptText(line);
   final words = folded.split(RegExp(r'\P{L}+', unicode: true)).toSet();
-  return keywords.any((k) => k.contains(RegExp(r'[^a-z]')) ? folded.contains(k) : words.contains(k));
+  // Receipts space labels out ("合 計"): a Chinese or Japanese keyword is
+  // matched with the spaces taken out (#153).
+  final unspaced = folded.replaceAll(RegExp(r'\s+'), '');
+  return keywords.any((k) => _cjk.hasMatch(k)
+      ? unspaced.contains(k)
+      : k.contains(RegExp(r'[^a-z]'))
+          ? folded.contains(k)
+          : words.contains(k));
 }
 
 // ---------------------------------------------------------------------------
@@ -585,7 +679,7 @@ const _keywordsByCategory = <(String, List<String>)>[
   ('Transportation/Parking', ['parking', 'stationnement', '停车', '停車', '駐車', 'パーキング']),
   (
     'Transportation/Gas/Fuel',
-    ['fuel', 'petrol', 'essence', 'gas station', 'station service', '加油站', '石油', '石化', 'ガソリン']
+    ['fuel', 'petrol', 'essence', 'gas station', 'station service', '加油站', '石油', '石化', 'ガソリン', 'ガスステーション']
   ),
   ('Entertainment/Movies', ['cinema', 'cineplex', 'multiplex', '电影', '電影', '影城', '影院', '映画', 'シネマ']),
   (

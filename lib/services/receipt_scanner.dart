@@ -203,15 +203,17 @@ class PlatformReceiptScanner implements ReceiptScanner {
     }
     final width = (result!['width'] as num).toDouble();
     final height = (result['height'] as num).toDouble();
-    return [
+    return receiptTextBlocks([
       for (final line in (result['lines'] as List).cast<Map<Object?, Object?>>())
-        ReceiptTextBlock(
-          text: line['text'] as String,
-          minX: (line['left'] as num) / width,
-          midY: ((line['top'] as num) + (line['bottom'] as num)) / 2 / height,
-          height: ((line['bottom'] as num) - (line['top'] as num)) / height,
+        ReceiptOcrLine(
+          line['text'] as String,
+          left: (line['left'] as num).toDouble(),
+          top: (line['top'] as num).toDouble(),
+          right: (line['right'] as num).toDouble(),
+          bottom: (line['bottom'] as num).toDouble(),
+          corners: [for (final c in (line['corners'] as List?) ?? const []) (c as num).toDouble()],
         ),
-    ];
+    ], width: width, height: height);
   }
 }
 
