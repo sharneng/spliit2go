@@ -53,13 +53,13 @@ Both platforms use the app id `com.sharneng.spliit2go` and the display name **Sp
 
 ### App icon
 
-The icon and the group list's header logo come from the art in `branding/` (#106): `spliit2go-logo-serious.png`, the logo on a transparent background, is the source for all of them. To change the icon, replace that file and run:
+The icon and the group list's header logo come from the art in `branding/` (#106): `spliit2go-logo.png`, the logo on a transparent background, is the source for all of them, and the icons put it on the background color `BACKGROUND` in the script (`#A2E0D5`, taken from `spliit2go-icon.png`, the same logo on its background). To change the icon, replace those and run:
 
 ```
 python3 scripts/make_icons.py
 ```
 
-It needs Pillow (`pip install pillow`) and rewrites every size: iOS's `AppIcon.appiconset`, Android's launcher and adaptive icons, the 28 pt header logo in `assets/`, and the store icons in `branding/store/` (1024 for App Store Connect, 512 for Google Play). Commit what it writes. `branding/` isn't bundled with the app.
+It needs Pillow (`pip install pillow`) and rewrites every size: iOS's `AppIcon.appiconset`, Android's launcher icons and the adaptive icon's three layers (background color, foreground, and the monochrome layer for Android 13+ themed icons), the 28 pt header logo in `assets/`, and the store icons in `branding/store/` (1024 for App Store Connect, 512 for Google Play). Commit what it writes. `branding/` isn't bundled with the app.
 
 ## Release build (Android)
 
