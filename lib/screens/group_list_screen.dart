@@ -15,6 +15,7 @@ import '../services/settings_service.dart';
 import '../widgets/group_monogram.dart';
 import '../widgets/group_row_actions.dart';
 import '../sync/outbox.dart';
+import '../theme.dart';
 import '../utils/date_format.dart';
 import 'group_screen.dart';
 import 'app_settings_screen.dart';
@@ -172,13 +173,15 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
       appBar: AppBar(
         title: Row(children: [
           Image.asset('assets/spliit2go-logo.png',
-              width: 28, height: 28, excludeFromSemantics: true),
+              width: 32, height: 32, excludeFromSemantics: true),
           const SizedBox(width: 8),
           const Flexible(
               child: FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text('Spliit2Go',
-                      style: TextStyle(fontWeight: FontWeight.w700)))),
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: spliitWordmarkGreen)))),
         ]),
         actions: [
           PopupMenuButton<GroupListSort>(
