@@ -289,9 +289,27 @@ TEL 03-1234-5678
     expect(read('小 計   ¥1,900\n合 計   ¥1,812').total!.cents, 181200);
   });
 
-  test('a two-character …計 label is a total, as OCR misreads 合計; 小計 and 合計点数 aren\'t', () {
-    expect(read('小計   ¥2,000\n言計   ¥1,812').total!.cents, 181200);
-    expect(read('合計点数   12\n言計   ¥1,812').total!.cents, 181200);
-    expect(read('会計済   ¥5,000\n総 計   ¥1,812').total!.cents, 181200);
+  test('言計, a misread 合計, is a sure total; 小計 and 合計点数 aren\'t totals', () {
+    for (final text in ['小計   ¥2,000\n言計   ¥1,812', '合計点数   12\n言計   ¥1,812']) {
+      final total = read(text).total!;
+      expect(total.cents, 181200, reason: text);
+      expect(total.sure, isTrue, reason: text);
+    }
+  });
+
+  test('総計 is a sure total', () {
+    final total = read('会計済   ¥5,000\n総 計   ¥1,812').total!;
+    expect(total.cents, 181200);
+    expect(total.sure, isTrue);
+  });
+
+  // Ezra on #157: 時計 (a watch) and 設計 (design) end in 計 too.
+  test('another …計 word is only a hint, not a sure total', () {
+    for (final text in ['時計   ¥50,000', '設計   ¥120,000\nご来店ありがとうございます']) {
+      final total = read(text).total!;
+      expect(total.sure, isFalse, reason: text);
+    }
+    expect(read('時計   ¥50,000\n合計   ¥1,812').total!.cents, 181200);
+    expect(read('時計   ¥50,000\n合計   ¥1,812').total!.sure, isTrue);
   });
 }

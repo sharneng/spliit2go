@@ -216,7 +216,9 @@ const _totalKeywords = [
   'total', 'amount due', 'balance due', 'grand total', 'to pay', //
   'montant', 'a payer', 'somme',
   '合计', '总计', '總計', '合計', '总额', '總額', '应付', '應付', '应收', '應收',
-  'お会計', 'ご請求', 'お支払金額', 'お買上計', '総額',
+  'お会計', 'ご請求', 'お支払金額', 'お買上計', '総額', '総計',
+  // OCR misreads of 合計 seen on real receipts (Kenneth's Costco one).
+  '言計',
 ];
 
 /// Lines that name a total of something else. Short on purpose: the real
@@ -232,14 +234,18 @@ ReceiptTotal? receiptTotal(List<String> lines) {
   final decimal = _decimalSeparator(lines);
   ReceiptAmount? best;
   String? bestLine;
-  for (final line in lines) {
-    if (!_namesTotal(line) || receiptLineNames(_notATotalKeywords, line)) continue;
-    for (final a in receiptAmounts(line, decimalSeparator: decimal)) {
-      if (best == null || a.cents > best.cents) (best, bestLine) = (a, line);
+  for (final namesTotal in [_namesTotal, _mayNameTotal]) {
+    for (final line in lines) {
+      if (!namesTotal(line) || receiptLineNames(_notATotalKeywords, line)) continue;
+      for (final a in receiptAmounts(line, decimalSeparator: decimal)) {
+        if (best == null || a.cents > best.cents) (best, bestLine) = (a, line);
+      }
     }
+    if (best != null) break;
   }
-  final named = best != null;
-  if (!named) {
+  // Only a keyword makes the total sure: a …計 label is a hint.
+  final named = best != null && _namesTotal(bestLine!);
+  if (best == null) {
     // Nothing names a total: the largest price is a guess, offered as a
     // hint, never filled in.
     for (final line in lines) {
@@ -264,11 +270,12 @@ ReceiptTotal? receiptTotal(List<String> lines) {
 
 const _noCents = {'JPY', 'KRW'};
 
-/// A line that names a total: a keyword, or a Chinese or Japanese label of
-/// two characters ending in 計, as OCR misreads 合計 (言計 on Kenneth's
-/// Costco receipt), other than 小計.
-bool _namesTotal(String line) {
-  if (receiptLineNames(_totalKeywords, line)) return true;
+bool _namesTotal(String line) => receiptLineNames(_totalKeywords, line);
+
+/// A Chinese or Japanese label of two characters ending in 計, other than
+/// 小計: maybe 合計 misread in a way not yet seen, but maybe an item,
+/// 時計 (a watch) or 設計 (design), so it's only a hint (Ezra, #157).
+bool _mayNameTotal(String line) {
   final label = _cjkLabel.firstMatch(line.trim());
   return label != null && label[1] != '小';
 }
