@@ -306,8 +306,6 @@
   "aboutSourceCode": "源代码",
   "aboutSupport": "帮助与反馈",
   "aboutSupportSubtitle": "在 GitHub 上报告问题或提问",
-  "aboutPrivacyPolicy": "隐私政策",
-  "aboutPrivacyPolicySubtitle": "无账户、无广告、无跟踪",
   "aboutLicenses": "开源许可",
   "aboutLicensesSubtitle": "Spliit 及本应用所用软件包的许可",
   "aboutLinkFailed": "无法打开 {url}。"
