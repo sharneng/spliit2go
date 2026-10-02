@@ -29,7 +29,7 @@ Full reasoning for these choices, and for other design calls (multiple groups, d
 - **Balances:** who owes whom, computed on-device from the cached expenses (so it works offline and includes pending ones), with one-tap "mark as paid" reimbursements. A "You" section at the top shows your own balance and is where you change who you are in the group.
 - **Stats and Activity:** the group's total spending (reimbursements left out), then spending per participant (paid and share) and per category; the group's activity log in date sections, loading more as you scroll (online only), where tapping an entry opens that expense's details.
 - **Group settings:** rename the group, change its currency, add, rename, or remove participants (online only). The same form creates a group.
-- **App settings:** light, dark, or system theme; language; the space stored receipts use, with Clear; and About: the version, a notice that this is an unofficial client not affiliated with the Spliit project, links to Spliit, the source and support, and the open-source licenses, Spliit's and spliit-ios's included.
+- **App settings:** light, dark, or system theme; language; the space stored receipts use, with Clear; and About: the version, a notice that this is an unofficial client not affiliated with the Spliit project, links to Spliit, the source, support and the privacy policy, and the open-source licenses, Spliit's and spliit-ios's included.
 - **Languages:** English, French, and Simplified Chinese, with locale-aware amounts and dates, switchable in the app without a restart.
 
 ## Status
@@ -53,6 +53,11 @@ flutter test --coverage
 ```
 
 CI (`.github/workflows/ci.yml`) runs `flutter analyze` and this test suite on every push and PR, and uploads the coverage report as a build artifact. See [SETUP.md](SETUP.md) to run the same checks locally (`scripts/run_test`).
+
+## Support and privacy
+
+- **Help, bugs and questions:** [GitHub issues](https://github.com/sharneng/spliit2go/issues).
+- **Privacy policy:** [`docs/privacy.md`](docs/privacy.md). In short: no accounts, ads or analytics; group data goes only to the group's Spliit server; on Android, Google's ML Kit (receipt scanning) sends Google diagnostic data. Keep it in step with the code and with the store privacy answers when either changes.
 
 ## License
 
