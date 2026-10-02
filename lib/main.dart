@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'api/spliit_client.dart';
 import 'db/app_database.dart';
 import 'db/connection.dart';
+import 'legal/upstream_licenses.dart';
 import 'l10n/app_localizations.dart';
 import 'screens/group_list_screen.dart';
 import 'screens/group_screen.dart';
@@ -26,6 +27,8 @@ Future<void> main() async {
   // Errors nothing caught, framework and async alike, go through the same
   // reporter the screens use (issue #119 review).
   installErrorHandlers(ErrorReporter.instance);
+  // Spliit's and spliit-ios's notices on the licenses page (#109).
+  registerUpstreamLicenses();
   final links = AppLinks();
   final settings = await AppSettings.load(SettingsService());
   // The Document Scanner downloads on first use: get it as soon as the

@@ -29,7 +29,7 @@ Full reasoning for these choices, and for other design calls (multiple groups, d
 - **Balances:** who owes whom, computed on-device from the cached expenses (so it works offline and includes pending ones), with one-tap "mark as paid" reimbursements. A "You" section at the top shows your own balance and is where you change who you are in the group.
 - **Stats and Activity:** the group's total spending (reimbursements left out), then spending per participant (paid and share) and per category; the group's activity log in date sections, loading more as you scroll (online only), where tapping an entry opens that expense's details.
 - **Group settings:** rename the group, change its currency, add, rename, or remove participants (online only). The same form creates a group.
-- **App settings:** light, dark, or system theme; language; the space stored receipts use, with Clear.
+- **App settings:** light, dark, or system theme; language; the space stored receipts use, with Clear; and About: the version, a notice that this is an unofficial client not affiliated with the Spliit project, links to Spliit, the source and support, and the open-source licenses, Spliit's and spliit-ios's included.
 - **Languages:** English, French, and Simplified Chinese, with locale-aware amounts and dates, switchable in the app without a restart.
 
 ## Status
@@ -56,4 +56,4 @@ CI (`.github/workflows/ci.yml`) runs `flutter analyze` and this test suite on ev
 
 ## License
 
-MIT — see `LICENSE`.
+MIT — see `LICENSE`. Parts are adapted from [Spliit](https://github.com/spliit-app/spliit) and [spliit-ios](https://github.com/spliit-app/spliit-ios), both MIT; their notices are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and on the app's licenses page.

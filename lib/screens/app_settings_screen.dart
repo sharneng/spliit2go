@@ -11,6 +11,7 @@ import '../services/receipt_downloader.dart';
 import '../services/settings_service.dart';
 import '../utils/byte_size.dart';
 import '../widgets/error_message.dart';
+import 'about_screen.dart';
 
 /// App-wide preferences, separate from an individual group's settings.
 class AppSettingsScreen extends StatelessWidget {
@@ -69,6 +70,14 @@ class AppSettingsScreen extends StatelessWidget {
             _ReceiptStorageTile(receipts),
             _ReceiptDownloadSettings(receipts),
           ],
+          const Divider(height: 32),
+          _sectionHeading(context, l10n.aboutTitle),
+          ListTile(
+            title: Text(l10n.appSettingsAbout),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const AboutScreen())),
+          ),
         ],
       ),
     );

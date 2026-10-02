@@ -586,5 +586,33 @@
       }
     }
   },
-  "expenseScanTryLanguage": "Not the receipt's language? Pick it next to Scan receipt to read the photo again."
+  "expenseScanTryLanguage": "Not the receipt's language? Pick it next to Scan receipt to read the photo again.",
+  "appSettingsAbout": "About Spliit2Go",
+  "aboutTitle": "About",
+  "aboutVersion": "Version {version} ({build})",
+  "@aboutVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      },
+      "build": {
+        "type": "String"
+      }
+    }
+  },
+  "aboutUnofficial": "An unofficial, community-made client for Spliit. It isn't affiliated with or endorsed by the Spliit project.",
+  "aboutSpliitSubtitle": "Free, open-source expense sharing by Sebastien Castiel and contributors",
+  "aboutSourceCode": "Source code",
+  "aboutSupport": "Help and feedback",
+  "aboutSupportSubtitle": "Report a problem or ask a question on GitHub",
+  "aboutLicenses": "Open-source licenses",
+  "aboutLicensesSubtitle": "Spliit's and those of the packages this app uses",
+  "aboutLinkFailed": "Couldn't open {url}.",
+  "@aboutLinkFailed": {
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  }
 }
