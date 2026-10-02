@@ -199,7 +199,7 @@ void main() {
 
     testWidgets('Simplified Chinese', (tester) async {
       await pumpGroupScreen(tester, const Locale('zh'));
-      expect(find.text('消费'), findsWidgets);
+      expect(find.text('花费'), findsWidgets);
       expect(find.text('余额'), findsWidgets);
       expect(find.text('统计'), findsWidgets);
       expect(find.text('Expenses'), findsNothing);

@@ -24,7 +24,7 @@ void main() {
     });
 
     test('corrects the two spliit-web zh-CN mistranslations', () {
-      expect(categoryNameForLocale(zh, electronics), '电子产品');
+      expect(categoryNameForLocale(zh, electronics), '电器');
       expect(categoryNameForLocale(zh, groceries), isNot('便利店'));
     });
 
@@ -118,7 +118,7 @@ void main() {
     testWidgets('unfetched id 0 is the localized General', (tester) async {
       expect(await labelFor(tester, en, 0, null), 'General');
       expect(await labelFor(tester, fr, 0, null), 'Général');
-      expect(await labelFor(tester, zh, 0, null), '一般');
+      expect(await labelFor(tester, zh, 0, null), '通用');
     });
 
     testWidgets('an unfetched other id is a localized "Category N"',

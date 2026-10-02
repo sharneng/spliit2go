@@ -11,11 +11,11 @@ import 'context_l10n.dart';
 // English `Category.name` string, which the server may return with slightly
 // different spelling. Translations are sourced from spliit-web's own
 // `messages/fr-FR.json` and `messages/zh-CN.json` (`Categories`
-// namespace), so the app and the web client use the same wording, with two
-// corrections in the Chinese list: spliit-web's zh-CN file renders
-// "Electronics" (id 12) as 电费 (an electricity bill, which is what
-// "Electricity" is already called) and "Groceries" (id 9) as 便利店
-// (convenience store); this file uses 电子产品 and 杂货 instead.
+// namespace). The French matches spliit-web. The Chinese started from
+// spliit-web too, which renders "Electronics" (id 12) as 电费 (an
+// electricity bill) and "Groceries" (id 9) as 便利店 (convenience store);
+// this file uses 电器 and 杂货, and Kenneth polished the rest of the list on
+// #62, so several Chinese names now differ from the web client.
 //
 // Translation happens ONLY at presentation/search time (see the helpers
 // below). `Category.name` / `Category.grouping` on the model stay the
