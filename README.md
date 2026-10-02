@@ -56,7 +56,7 @@ CI (`.github/workflows/ci.yml`) runs `flutter analyze` and this test suite on ev
 
 ## Support and privacy
 
-- **Help, bugs and questions:** [GitHub issues](https://github.com/sharneng/spliit2go/issues).
+- **Help, bugs and questions:** [GitHub issues](https://github.com/sharneng/spliit2go/issues), or email [support@sharneng.com](mailto:support@sharneng.com).
 - **Privacy policy:** [`docs/privacy.md`](docs/privacy.md). In short: no accounts, ads or analytics; group data goes only to the group's Spliit server; on Android, Google's ML Kit (receipt scanning) sends Google diagnostic data. Keep it in step with the code and with the store privacy answers when either changes.
 
 ## License

@@ -31,6 +31,7 @@ Spliit2Go is a client: it reads and changes your groups on the Spliit server eac
 - **Group data:** when you view a group, the app downloads it from the server; when you add, edit or delete an expense, change a group's settings, or create a group, it sends that to the server.
 - **Receipt photos:** photos you attach are made smaller and have all their embedded metadata removed, including where they were taken, before they are uploaded to the server's file storage.
 - Like any app that uses the internet, your phone's IP address is visible to the server it connects to.
+- **Security:** the app talks to spliit.app over HTTPS, which encrypts the connection. For another server it uses the address you entered, which is encrypted when it starts with `https://`.
 
 The default server is spliit.app, operated by Sebastien Castiel, and its [privacy policy](https://spliit.app/privacy) applies to what is stored there. If you use a group on another Spliit server, that server's operator decides what happens to it. On Spliit, anyone with a group's link can see and change the group, so share links only with people you trust.
 
@@ -49,7 +50,9 @@ Receipt scanning isn't available on iPhone yet.
 
 Sharing a group's link goes through your phone's share sheet, only when you tap Share. Links on the About screen open in your browser.
 
-## Removing your data
+## Keeping and removing your data
+
+What the app keeps on your phone stays there until you remove it or uninstall the app; copies of receipts are also removed as needed to stay under the storage limit you set.
 
 - Removing a group from the app's group list deletes its copy on your phone, including its stored receipts. Clear, under Storage in App settings, deletes stored receipts. Uninstalling the app deletes everything it kept.
 - Data on a Spliit server stays there when you remove a group from the app. For spliit.app, see its [privacy policy](https://spliit.app/privacy); for another server, ask its operator.
@@ -64,4 +67,4 @@ Changes to this policy are published at this address, with a new date at the top
 
 ## Contact
 
-Questions or problems: open an issue at [github.com/sharneng/spliit2go/issues](https://github.com/sharneng/spliit2go/issues).
+Questions about privacy, or anything else: email [support@sharneng.com](mailto:support@sharneng.com), or open an issue at [github.com/sharneng/spliit2go/issues](https://github.com/sharneng/spliit2go/issues).
