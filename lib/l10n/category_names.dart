@@ -79,7 +79,7 @@ const Map<String, Map<int, String>> _categoryNames = {
     43: 'Don',  // Life/Donation
   },
   'zh': {
-    0: '一般',  // Uncategorized/General
+    0: '通用',  // Uncategorized/General
     1: '支付',  // Uncategorized/Payment
     2: '娱乐',  // Entertainment/Entertainment
     3: '游戏',  // Entertainment/Games
@@ -91,24 +91,24 @@ const Map<String, Map<int, String>> _categoryNames = {
     9: '杂货',  // Food and Drink/Groceries
     10: '酒水',  // Food and Drink/Liquor
     11: '居家',  // Home/Home
-    12: '电子产品',  // Home/Electronics
+    12: '电器',  // Home/Electronics
     13: '家具',  // Home/Furniture
-    14: '家庭日用品',  // Home/Household Supplies
-    15: '维护',  // Home/Maintenance
+    14: '日用品',  // Home/Household Supplies
+    15: '维修',  // Home/Maintenance
     16: '贷款',  // Home/Mortgage
     17: '宠物',  // Home/Pets
     18: '租金',  // Home/Rent
     19: '服务',  // Home/Services
-    20: '儿童保育',  // Life/Childcare
+    20: '育儿',  // Life/Childcare
     21: '衣物',  // Life/Clothing
     22: '教育',  // Life/Education
     23: '礼物',  // Life/Gifts
     24: '保险',  // Life/Insurance
-    25: '医疗支出',  // Life/Medical Expenses
-    26: '税',  // Life/Taxes
+    25: '医疗',  // Life/Medical Expenses
+    26: '税务',  // Life/Taxes
     27: '交通',  // Transportation/Transportation
     28: '自行车',  // Transportation/Bicycle
-    29: '巴士/列车',  // Transportation/Bus/Train
+    29: '巴士/火车',  // Transportation/Bus/Train
     30: '汽车',  // Transportation/Car
     31: '燃料',  // Transportation/Gas/Fuel
     32: '旅馆',  // Transportation/Hotel
@@ -116,12 +116,12 @@ const Map<String, Map<int, String>> _categoryNames = {
     34: '飞机',  // Transportation/Plane
     35: '出租车',  // Transportation/Taxi
     36: '日常账单',  // Utilities/Utilities
-    37: '清洁费',  // Utilities/Cleaning
-    38: '电费',  // Utilities/Electricity
-    39: '暖气/瓦斯',  // Utilities/Heat/Gas
+    37: '清洁',  // Utilities/Cleaning
+    38: '供电',  // Utilities/Electricity
+    39: '供暖/瓦斯',  // Utilities/Heat/Gas
     40: '垃圾',  // Utilities/Trash
     41: '电视/手机/互联网',  // Utilities/TV/Phone/Internet
-    42: '水',  // Utilities/Water
+    42: '供/排水',  // Utilities/Water
     43: '捐赠',  // Life/Donation
   },
 };
