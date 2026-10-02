@@ -22,7 +22,7 @@ The app keeps, on your phone only:
 
 Errors the app didn't expect are written to the phone's own log, which stays on the phone.
 
-Your phone's own backup (Android's backup to your Google account, or iCloud on an iPhone) may include this data, depending on your phone's settings.
+Your phone's own backup (Android's backup to your Google account, or iCloud on an iPhone) may include this data, depending on your phone's settings. Those backups are kept by Google or Apple under your account, not by Spliit2Go, and you manage them in your phone's or account's settings.
 
 ## What goes to your Spliit server
 
@@ -54,7 +54,8 @@ Sharing a group's link goes through your phone's share sheet, only when you tap 
 
 What the app keeps on your phone stays there until you remove it or uninstall the app; copies of receipts are also removed as needed to stay under the storage limit you set.
 
-- Removing a group from the app's group list deletes its copy on your phone, including its stored receipts. Clear, under Storage in App settings, deletes stored receipts. Uninstalling the app deletes everything it kept.
+- Removing a group from the app's group list deletes its copy on your phone, including its stored receipts. Clear, under Storage in App settings, deletes stored receipts. Uninstalling the app deletes everything it kept on the phone.
+- Neither removing data in the app nor uninstalling it deletes your phone's backups. A backup that includes the app's data can still hold it afterwards, and Android restores it when you install the app again. To remove it there, delete the backup, or the app's data in it, in your phone's or account's backup settings ([Android](https://support.google.com/android/answer/2819582), [iCloud](https://support.apple.com/108922)).
 - Data on a Spliit server stays there when you remove a group from the app. For spliit.app, see its [privacy policy](https://spliit.app/privacy); for another server, ask its operator.
 
 ## Children
