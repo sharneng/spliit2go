@@ -10,6 +10,9 @@ const spliitUrl = 'https://spliit.app';
 const sourceCodeUrl = 'https://github.com/sharneng/spliit2go';
 const supportUrl = 'https://github.com/sharneng/spliit2go/issues';
 
+/// The privacy policy (#111), published as the rendered file in the repo.
+const privacyPolicyUrl = 'https://github.com/sharneng/spliit2go/blob/main/docs/privacy.md';
+
 /// Opens [url] outside the app; false if nothing could.
 typedef LinkOpener = Future<bool> Function(Uri url);
 
@@ -24,8 +27,7 @@ Future<bool> _openExternally(Uri url) async {
 
 /// The app's name and version, the "unofficial client" notice Spliit's
 /// author asked for (spliit-app/spliit#658), and links to Spliit, the
-/// source, support and the licenses page (#109). The privacy policy joins
-/// them with #111, once it's published.
+/// source, support, the privacy policy (#111) and the licenses page (#109).
 class AboutScreen extends StatefulWidget {
   const AboutScreen({super.key, this.openLink = _openExternally});
 
@@ -104,6 +106,8 @@ class _AboutScreenState extends State<AboutScreen> {
           link(Icons.public, 'Spliit', l10n.aboutSpliitSubtitle, spliitUrl),
           link(Icons.code, l10n.aboutSourceCode, 'github.com/sharneng/spliit2go', sourceCodeUrl),
           link(Icons.help_outline, l10n.aboutSupport, l10n.aboutSupportSubtitle, supportUrl),
+          link(Icons.privacy_tip_outlined, l10n.aboutPrivacyPolicy, l10n.aboutPrivacyPolicySubtitle,
+              privacyPolicyUrl),
           ListTile(
             leading: const Icon(Icons.description_outlined),
             title: Text(l10n.aboutLicenses),

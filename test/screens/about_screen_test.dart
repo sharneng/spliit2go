@@ -73,7 +73,7 @@ void main() {
       return true;
     });
 
-    for (final title in ['Spliit', 'Source code', 'Help and feedback']) {
+    for (final title in ['Spliit', 'Source code', 'Help and feedback', 'Privacy policy']) {
       await tester.ensureVisible(find.widgetWithText(ListTile, title));
       await tester.tap(find.widgetWithText(ListTile, title));
       await tester.pump();
@@ -82,9 +82,8 @@ void main() {
       Uri.parse('https://spliit.app'),
       Uri.parse('https://github.com/sharneng/spliit2go'),
       Uri.parse('https://github.com/sharneng/spliit2go/issues'),
+      Uri.parse('https://github.com/sharneng/spliit2go/blob/main/docs/privacy.md'),
     ]);
-    // No privacy policy row until #111 publishes one (Ezra, #161).
-    expect(find.text('Privacy policy'), findsNothing);
     expect(find.byType(SnackBar), findsNothing);
   });
 

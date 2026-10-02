@@ -605,6 +605,8 @@
   "aboutSourceCode": "Source code",
   "aboutSupport": "Help and feedback",
   "aboutSupportSubtitle": "Report a problem or ask a question on GitHub",
+  "aboutPrivacyPolicy": "Privacy policy",
+  "aboutPrivacyPolicySubtitle": "What the app keeps and what it sends",
   "aboutLicenses": "Open-source licenses",
   "aboutLicensesSubtitle": "Spliit's and those of the packages this app uses",
   "aboutLinkFailed": "Couldn't open {url}.",

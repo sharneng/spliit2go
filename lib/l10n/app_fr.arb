@@ -306,6 +306,8 @@
   "aboutSourceCode": "Code source",
   "aboutSupport": "Aide et commentaires",
   "aboutSupportSubtitle": "Signaler un problème ou poser une question sur GitHub",
+  "aboutPrivacyPolicy": "Politique de confidentialité",
+  "aboutPrivacyPolicySubtitle": "Ce que l'application garde et ce qu'elle envoie",
   "aboutLicenses": "Licences open source",
   "aboutLicensesSubtitle": "Celles de Spliit et des bibliothèques utilisées par l'application",
   "aboutLinkFailed": "Impossible d'ouvrir {url}."
