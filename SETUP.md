@@ -61,6 +61,8 @@ python3 scripts/make_icons.py
 
 It needs Pillow (`pip install pillow`) and rewrites every size: iOS's `AppIcon.appiconset`, Android's launcher icons and the adaptive icon's three layers (background color, foreground, and the monochrome layer for Android 13+ themed icons), the 32 pt header logo in `assets/`, and the store icons in `branding/store/` (1024 for App Store Connect, 512 for Google Play). Commit what it writes. `branding/` isn't bundled with the app.
 
+The store listings' screenshots, feature graphic and text are in `branding/store/` too (#112); its README says how the screenshots were taken. After new raw captures or caption changes, rebuild the framed images with `python3 scripts/make_store_assets.py` (also Pillow).
+
 ## Release build (Android)
 
 Google Play takes an app bundle (`.aab`) signed with an **upload key** (#107). With Play App Signing, which Play Console enables on the first upload, Google keeps the key that signs what users install; the upload key only proves an upload came from you, and Google can reset it if it's lost. Losing it still blocks updates until they do, so back up the keystore and its password somewhere safe outside the repo.
