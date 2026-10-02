@@ -297,5 +297,18 @@
   "receiptLanguageRemoveBody": "Les reçus en {language} ne pourront plus être lus avant de la télécharger à nouveau. Les services Google Play libèrent l'espace plus tard, si aucune autre application ne l'utilise.",
   "receiptLanguageNote": "Les langues autres que celle intégrée sont téléchargées par les services Google Play, qui les partagent avec d'autres applications.",
   "expenseScanModelMissing": "{language} n'est pas téléchargée. Choisissez-la à côté de Scanner un reçu pour la télécharger à nouveau.",
-  "expenseScanTryLanguage": "Ce n'est pas la langue du reçu ? Choisissez-la à côté de Scanner un reçu pour relire la photo."
+  "expenseScanTryLanguage": "Ce n'est pas la langue du reçu ? Choisissez-la à côté de Scanner un reçu pour relire la photo.",
+  "appSettingsAbout": "À propos de Spliit2Go",
+  "aboutTitle": "À propos",
+  "aboutVersion": "Version {version} ({build})",
+  "aboutUnofficial": "Un client Spliit non officiel, créé par la communauté. Il n'est ni affilié au projet Spliit ni approuvé par celui-ci.",
+  "aboutSpliitSubtitle": "Partage de dépenses libre et open source, par Sebastien Castiel et ses contributeurs",
+  "aboutSourceCode": "Code source",
+  "aboutSupport": "Aide et commentaires",
+  "aboutSupportSubtitle": "Signaler un problème ou poser une question sur GitHub",
+  "aboutPrivacyPolicy": "Politique de confidentialité",
+  "aboutPrivacyPolicySubtitle": "Ni compte, ni publicité, ni pistage",
+  "aboutLicenses": "Licences open source",
+  "aboutLicensesSubtitle": "Celles de Spliit et des bibliothèques utilisées par l'application",
+  "aboutLinkFailed": "Impossible d'ouvrir {url}."
 }

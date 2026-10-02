@@ -297,5 +297,18 @@
   "receiptLanguageRemoveBody": "在重新下载之前，将无法读取{language}收据。如果没有其他应用使用，Google Play 服务稍后会释放空间。",
   "receiptLanguageNote": "内置语言以外的语言由 Google Play 服务下载，并与其他应用共享。",
   "expenseScanModelMissing": "{language}尚未下载。请在“扫描收据”旁选择它以重新下载。",
-  "expenseScanTryLanguage": "语言不对？请在“扫描收据”旁选择收据的语言，重新读取照片。"
+  "expenseScanTryLanguage": "语言不对？请在“扫描收据”旁选择收据的语言，重新读取照片。",
+  "appSettingsAbout": "关于 Spliit2Go",
+  "aboutTitle": "关于",
+  "aboutVersion": "版本 {version}（{build}）",
+  "aboutUnofficial": "这是由社区开发的非官方 Spliit 客户端，与 Spliit 项目无关联，也未获其认可。",
+  "aboutSpliitSubtitle": "由 Sebastien Castiel 及贡献者开发的免费开源分账应用",
+  "aboutSourceCode": "源代码",
+  "aboutSupport": "帮助与反馈",
+  "aboutSupportSubtitle": "在 GitHub 上报告问题或提问",
+  "aboutPrivacyPolicy": "隐私政策",
+  "aboutPrivacyPolicySubtitle": "无账户、无广告、无跟踪",
+  "aboutLicenses": "开源许可",
+  "aboutLicensesSubtitle": "Spliit 及本应用所用软件包的许可",
+  "aboutLinkFailed": "无法打开 {url}。"
 }
