@@ -90,7 +90,7 @@ Kenneth asked for spliit-ios's "You" section on Balances (`BalancesView.youSecti
 - **Someone picked:** "You are owed" / "You owe" / "You’re settled up", then the amount **unsigned**, green when owed and in the error color when owing. As in spliit-ios, the sentence carries the direction, so a sign would say it twice. The amount is the on-device balance (`computeBalances`, pending expenses included), the same figure as that person's row below. Their row reads "Name (you)".
 - **A "You · Name" row opens the same "Who are you?" picker** (`_pickActiveUser(firstAsk: false)`, so dismissing changes nothing). With nobody picked, only this row shows ("You · Nobody"), with spliit-ios's line on why to pick.
 - **No "Say who you are" state.** spliit-ios has a third label for a group never asked. Here the prompt above stores Nobody even when dismissed, so the only unanswered group is one whose prompt hasn't shown yet; it shows "Nobody" too.
-- **"Nobody" in the row is its own short string** (Personne / 无): the picker's French and Chinese wording ("Je ne suis pas dans la liste", "我不在名单中") is too long for a row value.
+- **"Nobody" in the row is its own short string** (Personne / 未选): the picker's French and Chinese wording ("Je ne suis pas dans la liste", "我不在名单中") is too long for a row value.
 - **The name wraps beside the label** rather than sitting in `ListTile.trailing`, which has no width limit: a long name at large text took the whole row (Ezra, #101 review; regression test in `balances_screen_test.dart`).
 
 ## Creating a group (2026-09-25, issue #115)

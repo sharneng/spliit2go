@@ -131,9 +131,9 @@ void main() {
 
   testWidgets('Simplified Chinese: names, headings and search', (tester) async {
     await pumpForm(tester, const Locale('zh'));
-    expect(find.widgetWithText(InputDecorator, '一般'), findsOneWidget);
+    expect(find.widgetWithText(InputDecorator, '通用'), findsOneWidget);
 
-    await openPicker(tester, '一般');
+    await openPicker(tester, '通用');
     expect(find.text('饮食'), findsOneWidget);
     expect(find.text('杂货'), findsOneWidget);
     expect(find.text('交通'), findsOneWidget);
