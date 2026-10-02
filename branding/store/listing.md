@@ -72,10 +72,10 @@ Share expenses, even offline
 An unofficial community app for Spliit, the free and open-source way to share expenses. Works offline; no account, no ads.
 ```
 
-**Keywords** (100 max, comma-separated, 93 used; the name and category are indexed already):
+**Keywords** (100 max, comma-separated, 90 used; the name and category are indexed already, and other apps' names aren't allowed):
 
 ```
-split,bill,expenses,share,group,trip,travel,roommates,splitwise,iou,debt,offline,receipt,cost
+split,bill,expenses,share,group,trip,travel,roommates,settle,iou,debt,offline,receipt,cost
 ```
 
 **Description:** the Play full description above, minus "Scan a receipt to fill in…": receipt scanning isn't on iPhone yet (#155).
