@@ -249,6 +249,8 @@
   "expenseReceiptCameraAccessOff": "L’accès à l’appareil photo est désactivé pour Spliit2Go.",
   "expenseReceiptPhotoAccessOff": "L’accès aux photos est désactivé pour Spliit2Go.",
   "expenseReceiptAccessSettings": "Réglages",
+  "expenseReceiptAccessRestart": "Le modifier dans Réglages redémarre Spliit2Go, et les modifications non enregistrées ici sont perdues.",
+  "expenseReceiptAccessOk": "OK",
   "expenseReceiptsWaitBeforeSave": "Attendez la fin de l’envoi des reçus.",
   "expenseReceiptsDiscardTitle": "Abandonner les nouveaux reçus ?",
   "expenseReceiptsDiscardBody": "Les reçus ajoutés n’ont pas été enregistrés avec cette dépense.",

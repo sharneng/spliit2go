@@ -249,6 +249,8 @@
   "expenseReceiptCameraAccessOff": "Spliit2Go 的相机权限已关闭。",
   "expenseReceiptPhotoAccessOff": "Spliit2Go 的照片权限已关闭。",
   "expenseReceiptAccessSettings": "设置",
+  "expenseReceiptAccessRestart": "在设置中更改此权限会重启 Spliit2Go，此处未保存的更改将会丢失。",
+  "expenseReceiptAccessOk": "好",
   "expenseReceiptsWaitBeforeSave": "请等待收据上传完成。",
   "expenseReceiptsDiscardTitle": "放弃新添加的收据？",
   "expenseReceiptsDiscardBody": "你添加的收据尚未随此项花费保存。",

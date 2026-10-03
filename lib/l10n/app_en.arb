@@ -490,6 +490,8 @@
   "expenseReceiptCameraAccessOff": "Camera access is off for Spliit2Go.",
   "expenseReceiptPhotoAccessOff": "Photo access is off for Spliit2Go.",
   "expenseReceiptAccessSettings": "Settings",
+  "expenseReceiptAccessRestart": "Changing it in Settings restarts Spliit2Go, and changes you haven't saved here are lost.",
+  "expenseReceiptAccessOk": "OK",
   "expenseReceiptsWaitBeforeSave": "Wait for receipts to finish uploading.",
   "expenseReceiptsDiscardTitle": "Discard new receipts?",
   "expenseReceiptsDiscardBody": "The receipts you added haven't been saved with this expense.",

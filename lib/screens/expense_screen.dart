@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/foundation.dart' show TargetPlatform, Uint8List, defaultTargetPlatform, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
@@ -492,8 +494,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   void _photoFailed(Object e, StackTrace st) {
     if (e is ReceiptAccessOff) {
       if (mounted) {
-        showReceiptAccessOff(context, e.source,
-            openSettings: widget.openSettings ?? (defaultTargetPlatform == TargetPlatform.iOS ? openAppSettings : null));
+        unawaited(showReceiptAccessOff(context, e.source,
+            openSettings: widget.openSettings ?? (defaultTargetPlatform == TargetPlatform.iOS ? openAppSettings : null)));
       }
       return;
     }

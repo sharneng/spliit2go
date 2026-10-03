@@ -413,16 +413,30 @@ class _AddTile extends StatelessWidget {
   }
 }
 
-/// Says the camera or photo library is off for the app, with Settings
-/// when [openSettings] is given.
-void showReceiptAccessOff(BuildContext context, ReceiptSource source, {Future<bool> Function()? openSettings}) {
+/// Says the camera or photo library is off for the app, in a dialog that
+/// stays until closed. With [openSettings] (the iPhone), it offers Settings
+/// and warns that changing it there restarts the app, losing what isn't
+/// saved: iOS ends an app when its permissions change (#171).
+Future<void> showReceiptAccessOff(BuildContext context, ReceiptSource source,
+    {Future<bool> Function()? openSettings}) async {
   final l10n = context.l10n;
-  ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-    content: Text(source == ReceiptSource.camera ? l10n.expenseReceiptCameraAccessOff : l10n.expenseReceiptPhotoAccessOff),
-    action: openSettings == null
-        ? null
-        : SnackBarAction(label: l10n.expenseReceiptAccessSettings, onPressed: () => unawaited(openSettings())),
-  ));
+  final settings = await showAdaptiveDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog.adaptive(
+      title: Text(source == ReceiptSource.camera ? l10n.expenseReceiptCameraAccessOff : l10n.expenseReceiptPhotoAccessOff),
+      content: openSettings == null ? null : Text(l10n.expenseReceiptAccessRestart),
+      actions: [
+        if (openSettings == null)
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(l10n.expenseReceiptAccessOk))
+        else ...[
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(l10n.commonCancel)),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true), child: Text(l10n.expenseReceiptAccessSettings)),
+        ],
+      ],
+    ),
+  );
+  if (settings == true) await openSettings?.call();
 }
 
 /// This app's page in the iPhone's Settings; false if it didn't open.
