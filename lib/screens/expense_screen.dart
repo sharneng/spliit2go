@@ -491,18 +491,30 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   bool get _offersScan => !widget.isEditing && widget.initialDraft == null && widget.receiptScanner.isSupported;
 
   /// Scan receipt (#125): the Document Scanner, or the camera and library
-  /// when it can't run. The photo joins the receipts like any other, and
-  /// is read as soon as it's prepared, while it uploads.
+  /// when it can't run. On the iPhone, whose document camera can't import
+  /// a photo, camera or library is asked first, and the camera is the
+  /// document camera (#155). The photo joins the receipts like any other,
+  /// and is read as soon as it's prepared, while it uploads.
   Future<void> _scanReceipt() async {
     try {
+      final scanner = widget.receiptScanner;
+      ReceiptSource? asked;
+      if (!scanner.scannerImportsPhotos) {
+        asked = await chooseReceiptSource(context);
+        if (asked == null || !mounted) return;
+      }
       Uint8List? photo;
-      try {
-        photo = await widget.receiptScanner.scanDocument();
-      } on ReceiptScannerUnavailable {
-        if (!mounted) return;
-        final source = await chooseReceiptSource(context);
-        if (source == null) return;
-        photo = await widget.receiptPicker.pick(source);
+      if (asked == ReceiptSource.library) {
+        photo = await widget.receiptPicker.pick(ReceiptSource.library);
+      } else {
+        try {
+          photo = await scanner.scanDocument();
+        } on ReceiptScannerUnavailable {
+          if (!mounted) return;
+          final source = asked ?? await chooseReceiptSource(context);
+          if (source == null) return;
+          photo = await widget.receiptPicker.pick(source);
+        }
       }
       if (photo == null || !mounted) return;
       await _receipts.add(photo, onPrepared: _readReceipt);

@@ -12,5 +12,9 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    // Receipt scanning (#155): this app's own bridge, not a plugin.
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ReceiptScanChannel") {
+      ReceiptScanChannel.register(with: registrar)
+    }
   }
 }

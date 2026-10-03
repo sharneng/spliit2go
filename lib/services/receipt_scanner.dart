@@ -19,7 +19,8 @@ class ReceiptScannerUnavailable implements Exception {
 }
 
 /// A receipt language (#153): one of ML Kit's text models, which read a
-/// script rather than a language, and each also reads Latin text. Only
+/// script rather than a language, and each also reads Latin text. On the
+/// iPhone, the languages Vision reads for it (#155). Only
 /// the scripts the parser understands are offered; Korean and Devanagari
 /// can follow once it does.
 enum ReceiptScript {
@@ -29,8 +30,9 @@ enum ReceiptScript {
   chinese,
   japanese;
 
-  /// Downloaded by Google Play services when picked, not bundled.
-  bool get downloadable => this != latin;
+  /// Downloaded by Google Play services when picked, not bundled. On the
+  /// iPhone none is: Vision reads them all (#155).
+  bool get downloadable => this != latin && defaultTargetPlatform == TargetPlatform.android;
 
   /// The script for a language code (the phone's), or null for one the
   /// app has no model for. Latin languages are null too: Latin needs no
@@ -68,8 +70,8 @@ class ReceiptTextModelDownloadFailed implements Exception {
 /// Scanning a receipt on the phone (#125); a seam so widget tests don't
 /// need the platform.
 abstract interface class ReceiptScanner {
-  /// Whether this platform reads receipts at all. Android only: the
-  /// iPhone is #126.
+  /// Whether this platform reads receipts at all: Android and the
+  /// iPhone (#155).
   bool get isSupported;
 
   /// Has Google Play services download the Document Scanner, when the
@@ -79,8 +81,14 @@ abstract interface class ReceiptScanner {
   /// camera and library, and asks for it again.
   Future<bool> prepare();
 
-  /// ML Kit's Document Scanner: the page as JPEG, or null when the user
-  /// cancelled. Throws [ReceiptScannerUnavailable] when it can't run.
+  /// Whether [scanDocument] can also import a photo from the library.
+  /// Android's Document Scanner can; the iPhone's document camera can't,
+  /// so there Scan receipt asks first: the camera or the library (#155).
+  bool get scannerImportsPhotos;
+
+  /// The document scanner (ML Kit's, or VisionKit's document camera on the
+  /// iPhone): the page as JPEG, or null when the user cancelled. Throws
+  /// [ReceiptScannerUnavailable] when it can't run.
   Future<Uint8List?> scanDocument();
 
   /// ML Kit text recognition, on the phone, in [script] (#153). Latin is
@@ -104,10 +112,11 @@ abstract interface class ReceiptScanner {
   Future<void> removeScript(ReceiptScript script);
 }
 
-/// The Android bridge, `MainActivity.kt` / `ReceiptScanChannel.kt`: ML
-/// Kit is called directly rather than through the pub.dev plugins, which
-/// would bring CocoaPods into the SwiftPM-only iOS build (#105) for a
-/// feature iOS doesn't have yet.
+/// The platform bridges, on one channel: Android's `ReceiptScanChannel.kt`
+/// calls ML Kit directly rather than through the pub.dev plugins, which
+/// would bring CocoaPods into the SwiftPM-only iOS build (#105); the
+/// iPhone's `ReceiptScanChannel.swift` calls VisionKit and Vision (#155),
+/// which are part of iOS, so nothing is downloaded there.
 class PlatformReceiptScanner implements ReceiptScanner {
   const PlatformReceiptScanner({this.connectivity, this.settings});
 
@@ -123,7 +132,13 @@ class PlatformReceiptScanner implements ReceiptScanner {
   static const _channel = MethodChannel('com.sharneng.spliit2go/receipt_scan');
 
   @override
-  bool get isSupported => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  bool get isSupported =>
+      !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
+
+  bool get _iPhone => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
+  @override
+  bool get scannerImportsPhotos => !_iPhone;
 
   Future<bool> _online() async {
     final network = await (connectivity ?? Connectivity().checkConnectivity)();
@@ -135,6 +150,8 @@ class PlatformReceiptScanner implements ReceiptScanner {
   @override
   Future<bool> prepare() async {
     if (!isSupported) return false;
+    // The document camera is part of iOS.
+    if (_iPhone) return true;
     try {
       if (!await _online()) return false;
       return await _channel.invokeMethod<bool>('prepareScanner') ?? false;
@@ -157,6 +174,8 @@ class PlatformReceiptScanner implements ReceiptScanner {
 
   @override
   Future<Set<ReceiptScript>> installedScripts() async {
+    // Vision reads them all.
+    if (_iPhone) return ReceiptScript.values.toSet();
     final installed = await _channel.invokeMapMethod<String, bool>('textModels');
     final removed = await _settings.receiptScriptsRemoved();
     return {

@@ -25,6 +25,9 @@ class _Scanner implements ReceiptScanner {
   bool isSupported = true;
 
   @override
+  bool scannerImportsPhotos = true;
+
+  @override
   Future<bool> prepare() async => installed[prepared++ < installed.length ? prepared - 1 : installed.length - 1];
 
   @override
@@ -99,10 +102,53 @@ void main() {
     expect(calls, ['prepareScanner']);
   });
 
-  test('not on the iPhone (#126)', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-    await scanner([ConnectivityResult.wifi]).prepare();
-    expect(calls, isEmpty);
+  // Issue #155: VisionKit and Vision are part of iOS.
+  group('on the iPhone', () {
+    setUp(() {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test('it scans, and the scanner is ready at once, offline too, asking nothing', () async {
+      final iPhone = scanner([ConnectivityResult.none]);
+      expect((iPhone.isSupported, await iPhone.prepare()), (true, true));
+      expect(calls, isEmpty);
+    });
+
+    test('every language is built in: nothing to download or remove', () async {
+      final iPhone = scanner([ConnectivityResult.none]);
+      expect(ReceiptScript.values.where((s) => s.downloadable), isEmpty);
+      expect(await iPhone.installedScripts(), ReceiptScript.values.toSet());
+      await iPhone.installScript(ReceiptScript.japanese);
+      await iPhone.removeScript(ReceiptScript.chinese);
+      expect(calls, isEmpty);
+      expect(await iPhone.installedScripts(), ReceiptScript.values.toSet());
+    });
+
+    test('scanning and reading go through the same channel as Android', () async {
+      answers = {
+        'scanDocument': Uint8List.fromList([1, 2]),
+        'recognizeText': {
+          'width': 100,
+          'height': 200,
+          'lines': [
+            {'text': '合計', 'left': 10, 'top': 20, 'right': 40, 'bottom': 30, 'corners': [10, 20, 40, 20, 40, 30, 10, 30]},
+          ],
+        },
+      };
+      final iPhone = scanner([]);
+      expect(await iPhone.scanDocument(), [1, 2]);
+      final blocks = await iPhone.recognizeText(Uint8List(1), script: ReceiptScript.japanese);
+      expect(calls, ['scanDocument', 'recognizeText']);
+      expect((arguments.last as Map)['script'], 'japanese');
+      expect(blocks.single.text, '合計');
+    });
+
+    test('no document camera (the simulator): the camera and library instead', () async {
+      answers = {};
+      failWith = PlatformException(code: 'unavailable');
+      await expectLater(scanner([]).scanDocument(), throwsA(isA<ReceiptScannerUnavailable>()));
+    });
   });
 
   // Issue #153: receipt languages. Play services is asked every time.
@@ -292,7 +338,17 @@ void main() {
       });
     });
 
-    test('not on the iPhone (#126): no check, no listening', () async {
+    test('on the iPhone (#155): ready at once, nothing to download, no listening', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      final warmup = ReceiptScannerWarmup(PlatformReceiptScanner(connectivity: () async => [ConnectivityResult.none]),
+          connectivityChanges: network.stream, phoneScript: ReceiptScript.japanese)
+        ..start();
+      await settle();
+      expect(calls, isEmpty);
+      expect(warmup.listening, isFalse);
+    });
+
+    test('where scanning isn\'t supported: no check, no listening', () async {
       final scanner = _Scanner([false])..isSupported = false;
       final warmup = ReceiptScannerWarmup(scanner, connectivityChanges: network.stream)..start();
       await settle();

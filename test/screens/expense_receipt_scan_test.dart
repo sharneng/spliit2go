@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,6 +29,9 @@ import '../support/error_log.dart';
 class _FakeScanner implements ReceiptScanner {
   @override
   bool isSupported = true;
+
+  @override
+  bool scannerImportsPhotos = true;
 
   /// Throws [ReceiptScannerUnavailable] from scanDocument.
   bool unavailable = false;
@@ -330,6 +334,79 @@ void main() {
     await closeTree(tester);
   });
 
+  // #155: the iPhone's document camera can't import a photo.
+  group('where the scanner can\'t import a photo (the iPhone)', () {
+    testWidgets('Take photo is the document scanner', (tester) async {
+      final db = newDb();
+      final picker = _FakePicker();
+      final scanner = _FakeScanner()
+        ..scannerImportsPhotos = false
+        ..text = receipt;
+      await openForm(tester, db, scanner, picker: picker);
+
+      await scan(tester);
+      await tester.tap(find.text('Take photo'));
+      await tester.pumpAndSettle();
+
+      expect(picker.sources, isEmpty);
+      expect(scanner.read, [Uint8List.fromList([7, 7, 7])]);
+      expect(field(tester, 'Title'), 'Café Du Coin');
+      await closeTree(tester);
+    });
+
+    testWidgets('Choose from library is the library, and is read the same', (tester) async {
+      final db = newDb();
+      final picker = _FakePicker();
+      final scanner = _FakeScanner()
+        ..scannerImportsPhotos = false
+        ..text = receipt;
+      await openForm(tester, db, scanner, picker: picker);
+
+      await scan(tester);
+      await tester.tap(find.text('Choose from library'));
+      await tester.pumpAndSettle();
+
+      expect(picker.sources, [ReceiptSource.library]);
+      expect(scanner.read, [Uint8List.fromList([5, 5, 5])]);
+      expect(field(tester, 'Title'), 'Café Du Coin');
+      await closeTree(tester);
+    });
+
+    testWidgets('no document camera: Take photo is the plain camera, not asked twice', (tester) async {
+      final db = newDb();
+      final picker = _FakePicker();
+      final scanner = _FakeScanner()
+        ..scannerImportsPhotos = false
+        ..unavailable = true
+        ..text = receipt;
+      await openForm(tester, db, scanner, picker: picker);
+
+      await scan(tester);
+      await tester.tap(find.text('Take photo'));
+      await tester.pumpAndSettle();
+
+      expect(picker.sources, [ReceiptSource.camera]);
+      expect(find.text('Take photo'), findsNothing);
+      expect(field(tester, 'Title'), 'Café Du Coin');
+      await closeTree(tester);
+    });
+
+    testWidgets('dismissing the choice changes nothing', (tester) async {
+      final db = newDb();
+      final picker = _FakePicker();
+      final scanner = _FakeScanner()..scannerImportsPhotos = false;
+      await openForm(tester, db, scanner, picker: picker);
+
+      await scan(tester);
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+
+      expect(picker.sources, isEmpty);
+      expect(scanner.read, isEmpty);
+      await closeTree(tester);
+    });
+  });
+
   testWidgets('cancelling the scanner changes nothing', (tester) async {
     final db = newDb();
     final scanner = _FakeScanner()..page = null;
@@ -443,6 +520,29 @@ void main() {
       expect(find.byType(BottomSheet), findsNothing);
       expect(find.text('中文'), findsOneWidget);
       await closeTree(tester);
+    });
+
+    // #155: Vision reads every language, with nothing to download.
+    testWidgets('on the iPhone, every language is built in: no downloads, removals or Play services',
+        (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final db = newDb();
+      final scanner = _FakeScanner()..models.addAll([ReceiptScript.chinese, ReceiptScript.japanese]);
+      await openForm(tester, db, scanner);
+      await openPicker(tester);
+
+      expect(find.text('Built in'), findsNWidgets(3));
+      expect(find.text('Tap to download'), findsNothing);
+      expect(find.byTooltip('Remove'), findsNothing);
+      expect(find.textContaining('Google Play'), findsNothing);
+
+      await tester.tap(inSheet('日本語'));
+      await tester.pumpAndSettle();
+      expect(scanner.downloads, isEmpty);
+      expect(find.text('日本語'), findsOneWidget);
+      await closeTree(tester);
+      debugDefaultTargetPlatformOverride = null;
     });
 
     testWidgets('offline, it says a connection is needed, and keeps the language', (tester) async {
