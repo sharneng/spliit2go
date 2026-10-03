@@ -94,6 +94,7 @@ class ReceiptDownloader {
     Future<List<ConnectivityResult>> Function()? connectivity,
     Stream<List<ConnectivityResult>>? connectivityChanges,
     http.Client Function()? httpClient,
+    this.networkSettle = const Duration(seconds: 3),
   })  : _cache = cache,
         _settings = settings ?? SettingsService(),
         _connectivity = connectivity ?? (() => Connectivity().checkConnectivity()),
@@ -106,6 +107,10 @@ class ReceiptDownloader {
   final Future<List<ConnectivityResult>> Function() _connectivity;
   final Stream<List<ConnectivityResult>>? _connectivityChanges;
   final http.Client Function() _newHttpClient;
+
+  /// How long a "none" reading waits for the network to show up before
+  /// it's believed (#164).
+  final Duration networkSettle;
 
   ReceiptCache get _receipts => _cache ?? ReceiptCache.of(db);
 
@@ -141,7 +146,8 @@ class ReceiptDownloader {
       final row = await db.groupRow(groupId);
       final mode = await _settings.receiptDownloadMode();
       final counts = await db.receiptAvailability(groupId);
-      final running = _runs.containsKey(groupId);
+      // Not while it's still checking the network.
+      final running = _runs[groupId]?.downloading ?? false;
       final problem = ReceiptDownloadProblem.values.asNameMap()[row?.receiptDownloadProblem];
       _statuses[groupId]?.value = ReceiptDownloadStatus(
         shown: row?.organization == GroupOrganization.favorite &&
@@ -177,30 +183,54 @@ class ReceiptDownloader {
   /// allow. Returns when the run ends; a run already going is joined.
   Future<void> run(String groupId, SpliitClient client) async {
     if (_runs[groupId] case final running?) return running.done.future;
+    // Registered before anything is awaited, so Clear, turning downloads
+    // off, unfavoriting and removing the group cancel it while it's still
+    // checking the network too (#166 review).
+    final run = _runs[groupId] = _Run(_newHttpClient());
+    ({ReceiptDownloadProblem? problem, String? diagnostics})? result;
+    try {
+      result = await _runSteps(groupId, client, run);
+    } finally {
+      run.client.close();
+      _runs.remove(groupId);
+      run.done.complete();
+    }
+    if (run.removed) return;
+    if (run.cancelled) return _finish(groupId, run.reason);
+    if (result == null) return refreshStatus(groupId);
+    await _finish(groupId, result.problem, diagnostics: result.diagnostics);
+  }
+
+  /// [run]'s work: what to store when it ends, or null for nothing (not a
+  /// favorite, downloads off, the network unknown). Overridden by a
+  /// cancellation's reason.
+  Future<({ReceiptDownloadProblem? problem, String? diagnostics})?> _runSteps(
+      String groupId, SpliitClient client, _Run run) async {
     final row = await db.groupRow(groupId);
     final mode = await _settings.receiptDownloadMode();
     if (row?.organization != GroupOrganization.favorite || mode == ReceiptDownloadMode.off) {
-      return refreshStatus(groupId);
+      return null;
     }
     final List<ConnectivityResult> network;
     try {
-      network = await _connectivity();
+      network = await _network(run);
     } catch (e, st) {
       // No plugin (widget tests): unknown, so nothing is downloaded.
       if (!isMissingPlugin(e)) {
         ErrorReporter.instance.report(e, st, operation: 'Checking connectivity');
       }
-      return;
+      return null;
     }
+    if (run.cancelled) return null;
     if (!_allowed(mode, network)) {
       final offline = network.every((r) => r == ConnectivityResult.none);
-      await _finish(groupId,
-          offline ? ReceiptDownloadProblem.offline : ReceiptDownloadProblem.waitingForWifi);
-      return;
+      return (
+        problem: offline ? ReceiptDownloadProblem.offline : ReceiptDownloadProblem.waitingForWifi,
+        diagnostics: null,
+      );
     }
-    if (_runs.containsKey(groupId)) return _runs[groupId]!.done.future;
 
-    final run = _runs[groupId] = _Run(_newHttpClient());
+    run.downloading = true;
     // Only moving onto mobile data under "Wi-Fi only" cancels: going
     // offline fails the transfer by itself, and iOS reports "none" when
     // this starts listening on the simulator, which mustn't stop a run.
@@ -211,28 +241,50 @@ class ReceiptDownloader {
       }
     });
     await refreshStatus(groupId);
-    ReceiptDownloadProblem? problem;
-    String? diagnostics;
     try {
-      (problem, diagnostics) = await _download(groupId, client, run);
+      final (problem, diagnostics) = await _download(groupId, client, run);
+      return (problem: problem, diagnostics: diagnostics);
     } catch (e, st) {
-      if (run.cancelled) {
-        problem = run.reason;
-      } else {
-        final error = ErrorReporter.instance.report(e, st, operation: 'Downloading receipts of $groupId');
-        problem = error.kind == ErrorKind.connection
+      if (run.cancelled) return null;
+      final error = ErrorReporter.instance.report(e, st, operation: 'Downloading receipts of $groupId');
+      return (
+        problem: error.kind == ErrorKind.connection
             ? ReceiptDownloadProblem.offline
-            : ReceiptDownloadProblem.failed;
-        diagnostics = error.diagnostics;
-      }
+            : ReceiptDownloadProblem.failed,
+        diagnostics: error.diagnostics,
+      );
     } finally {
       await watch?.cancel();
-      run.client.close();
-      _runs.remove(groupId);
-      run.done.complete();
     }
-    if (run.removed) return;
-    await _finish(groupId, run.cancelled ? run.reason : problem, diagnostics: diagnostics);
+  }
+
+  /// The network now. On iOS a check reads "none" until the system first
+  /// reports the network, which comes just after the plugin starts
+  /// watching, at launch and again after the last listener stops; taken
+  /// at its word, that marked every favorite offline at launch (#164).
+  /// So "none" is believed only if nothing better shows up within
+  /// [networkSettle]. Cancelling [run] ends the wait.
+  Future<List<ConnectivityResult>> _network(_Run run) async {
+    final now = await _connectivity();
+    bool connected(List<ConnectivityResult> n) => n.any((r) => r != ConnectivityResult.none);
+    if (connected(now)) return now;
+    final changes = _connectivityChanges ?? _platformChanges();
+    if (changes == null) return now;
+    final settled = Completer<List<ConnectivityResult>>();
+    final watch = changes.listen((n) {
+      if (connected(n) && !settled.isCompleted) settled.complete(n);
+    }, onError: (Object _) {});
+    void giveUp() {
+      if (!settled.isCompleted) settled.complete(now);
+    }
+    final timer = Timer(networkSettle, giveUp);
+    unawaited(run.whenCancelled.then((_) => giveUp()));
+    try {
+      return await settled.future;
+    } finally {
+      timer.cancel();
+      await watch.cancel();
+    }
   }
 
   Stream<List<ConnectivityResult>>? _platformChanges() {
@@ -398,14 +450,21 @@ class _Run {
   _Run(this.client);
   final http.Client client;
   final done = Completer<void>();
+  final _cancelled = Completer<void>();
   bool cancelled = false;
   bool removed = false;
+
+  /// Past checking the network: downloading.
+  bool downloading = false;
   ReceiptDownloadProblem? reason;
+
+  Future<void> get whenCancelled => _cancelled.future;
 
   void cancel(ReceiptDownloadProblem? why) {
     if (cancelled) return;
     cancelled = true;
     reason = why;
+    _cancelled.complete();
     // Aborts the transfer in flight: nothing more over mobile data.
     client.close();
   }

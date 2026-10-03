@@ -157,6 +157,7 @@ void main() {
   ReceiptDownloader downloader() => ReceiptDownloader(
         db,
         cache: cache,
+        networkSettle: const Duration(milliseconds: 200),
         connectivity: () async => network,
         connectivityChanges: changes.stream,
         httpClient: () => MockClient((req) async {
@@ -266,6 +267,108 @@ void main() {
 
     final status = await statusOf(d);
     expect((status.complete, status.problem), (true, null));
+  });
+
+  // #164, on an iPhone: at launch a check reads "none" until iOS first
+  // reports the network, which turned every favorite's 📎 red.
+  test('a "none" check that the network soon follows: it downloads, no error', () async {
+    network = [ConnectivityResult.none];
+    final d = downloader();
+
+    final running = d.run('g1', server);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    changes.add([ConnectivityResult.none]);
+    changes.add(wifi);
+    await running;
+
+    expect(downloads, hasLength(3));
+    final status = await statusOf(d);
+    expect((status.complete, status.problem, status.isError), (true, null, false));
+  });
+
+  test('"none" that lasts: it says offline, downloads nothing', () async {
+    network = [ConnectivityResult.none];
+    final d = downloader();
+
+    await d.run('g1', server);
+
+    expect(reads, isEmpty);
+    expect(downloads, isEmpty);
+    expect((await statusOf(d)).problem, ReceiptDownloadProblem.offline);
+  });
+
+  group('cancelled while a "none" check waits for the network (#166 review)', () {
+    late ReceiptDownloader d;
+    late Future<void> running;
+
+    setUp(() async {
+      network = [ConnectivityResult.none];
+      d = downloader();
+      running = d.run('g1', server);
+      while (!changes.hasListener) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    });
+
+    test('downloads turned off: it ends at once, downloads nothing', () async {
+      await SettingsService().setReceiptDownloadMode(ReceiptDownloadMode.off);
+      d.cancelAll();
+      // Ended without waiting out the settle time.
+      await running.timeout(const Duration(milliseconds: 100));
+      changes.add(wifi);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(reads, isEmpty);
+      expect(downloads, isEmpty);
+      expect(await stored(), isEmpty);
+      expect(changes.hasListener, isFalse);
+    });
+
+    test('Clear: nothing comes back until the next run', () async {
+      d.cancelAll();
+      await cache.clear();
+      changes.add(wifi);
+      await running;
+
+      expect(downloads, isEmpty);
+      final status = await statusOf(d);
+      expect((status.running, status.available, status.problem), (false, 0, null));
+    });
+
+    test('unfavorited: no favorite downloads, no problem stored', () async {
+      await db.setGroupOrganization('g1', GroupOrganization.active);
+      await d.unfavorited('g1');
+      changes.add(wifi);
+      await running;
+
+      expect(downloads, isEmpty);
+      expect(await stored(), isEmpty);
+      final status = await statusOf(d);
+      expect((status.shown, status.problem), (false, null));
+    });
+
+    test('the group removed: nothing downloads or is written', () async {
+      d.removed('g1');
+      await db.leaveGroup('g1');
+      changes.add(wifi);
+      await running;
+
+      expect(reads, isEmpty);
+      expect(downloads, isEmpty);
+      expect(await stored(), isEmpty);
+    });
+  });
+
+  test('while a "none" check waits, the 📎 isn\'t shown as downloading', () async {
+    network = [ConnectivityResult.none];
+    final d = downloader();
+    final running = d.run('g1', server);
+    while (!changes.hasListener) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    expect((await statusOf(d)).running, isFalse);
+    changes.add(wifi);
+    await running;
   });
 
   test('a receipt that fails is reported, the rest download, and Retry finishes it', () async {
