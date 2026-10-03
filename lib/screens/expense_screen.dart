@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show Uint8List, visibleForTesting;
+import 'package:flutter/foundation.dart' show TargetPlatform, Uint8List, defaultTargetPlatform, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
@@ -112,6 +112,13 @@ class ExpenseScreen extends StatefulWidget {
   /// Reads receipts on the phone (#125); a fake in widget tests.
   final ReceiptScanner receiptScanner;
 
+  /// Opens this app's page in the phone's Settings, offered when the
+  /// camera or photo library is off for it; [openAppSettings] on the
+  /// iPhone when null, and nothing on Android, where image_picker uses
+  /// other apps and doesn't ask.
+  @visibleForTesting
+  final Future<bool> Function()? openSettings;
+
   /// Where the receipt language picked in each group is remembered
   /// (#153); [SettingsService] when null.
   final SettingsService? settings;
@@ -129,6 +136,7 @@ class ExpenseScreen extends StatefulWidget {
     this.prepareReceipt,
     this.receiptScanner = const PlatformReceiptScanner(),
     this.settings,
+    this.openSettings,
   });
 
   bool get isEditing => existingExpense != null;
@@ -478,8 +486,17 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   /// The picker or an unreadable photo; upload failures stay on the
-  /// photo instead. A missing camera (a simulator) lands here too.
+  /// photo instead. A missing camera (a simulator) lands here too. The
+  /// camera or library being off for the app is explained, with a way to
+  /// Settings, rather than reported.
   void _photoFailed(Object e, StackTrace st) {
+    if (e is ReceiptAccessOff) {
+      if (mounted) {
+        showReceiptAccessOff(context, e.source,
+            openSettings: widget.openSettings ?? (defaultTargetPlatform == TargetPlatform.iOS ? openAppSettings : null));
+      }
+      return;
+    }
     final error = ErrorReporter.instance.report(e, st, operation: 'Adding a receipt photo');
     if (mounted) {
       showErrorSnackBar(context, context.l10n.expenseReceiptPhotoFailed, diagnostics: error.diagnostics);

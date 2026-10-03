@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:spliit2go/services/receipt_photo.dart';
@@ -43,5 +44,19 @@ void main() {
   test('something that isn\'t an image is refused', () async {
     await expectLater(prepareReceiptPhoto(Uint8List.fromList([1, 2, 3])),
         throwsA(isA<UnreadableReceiptPhotoException>()));
+  });
+
+  test('image_picker\'s refused or restricted access is ReceiptAccessOff; other errors aren\'t', () {
+    ReceiptSource? off(String code) => ImagePickerReceiptPhotoPicker.accessOff(PlatformException(code: code))?.source;
+    expect([
+      for (final code in [
+        'camera_access_denied',
+        'camera_access_restricted',
+        'photo_access_denied',
+        'photo_access_restricted',
+        'no_available_camera',
+      ])
+        off(code),
+    ], [ReceiptSource.camera, ReceiptSource.camera, ReceiptSource.library, ReceiptSource.library, null]);
   });
 }

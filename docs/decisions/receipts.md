@@ -21,7 +21,7 @@ A receipt is an expense *document*: `{id, url, width, height}` (`src/lib/schemas
 
 ## Attaching (built)
 
-- **Adding:** the form's Receipts field has Add receipt, which offers Take photo or Choose from library (image_picker; the system picker on iOS, so no photo-library permission is needed to choose one).
+- **Adding:** the form's Receipts field has Add receipt, which offers Take photo or Choose from library (image_picker; the system picker on iOS, so no photo-library permission is needed to choose one). With the camera (or, where it's asked for, the photo library) off for the app, refused when the phone asked or turned off since, the form says so ("Camera access is off for Spliit2Go.") rather than "Couldn't add this photo." with an error's details, and isn't reported as an error: it's the user's choice. On the iPhone the message has Settings, which opens iOS's Settings (`app-settings:`); on Android image_picker hands the camera to another app and doesn't ask, so it doesn't come up there.
 - **Shrinking before upload**, as spliit-ios does (`DocumentImage.swift`):
   - the camera's orientation is applied;
   - it's at most 2048 px on the long side, as JPEG, about 400 KB for a receipt;

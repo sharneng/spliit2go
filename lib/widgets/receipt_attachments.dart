@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
@@ -408,6 +410,27 @@ class _AddTile extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Says the camera or photo library is off for the app, with Settings
+/// when [openSettings] is given.
+void showReceiptAccessOff(BuildContext context, ReceiptSource source, {Future<bool> Function()? openSettings}) {
+  final l10n = context.l10n;
+  ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+    content: Text(source == ReceiptSource.camera ? l10n.expenseReceiptCameraAccessOff : l10n.expenseReceiptPhotoAccessOff),
+    action: openSettings == null
+        ? null
+        : SnackBarAction(label: l10n.expenseReceiptAccessSettings, onPressed: () => unawaited(openSettings())),
+  ));
+}
+
+/// This app's page in the iPhone's Settings; false if it didn't open.
+Future<bool> openAppSettings() async {
+  try {
+    return await launchUrl(Uri.parse('app-settings:'));
+  } catch (_) {
+    return false;
   }
 }
 

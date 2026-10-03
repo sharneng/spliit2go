@@ -120,7 +120,7 @@ void main() {
   /// Opens the form from a stub home, so leaving it can be seen.
   Future<List<bool?>> openForm(WidgetTester tester, AppDatabase db, SpliitClient client,
       _FakePicker picker,
-      {Expense? existing}) async {
+      {Expense? existing, Future<bool> Function()? openSettings}) async {
     tester.view.physicalSize = const Size(800, 3000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -144,6 +144,7 @@ void main() {
                   existingExpense: existing,
                   receiptPicker: picker,
                   prepareReceipt: prepare,
+                  openSettings: openSettings,
                 ),
               ),
             )),
@@ -436,6 +437,47 @@ void main() {
     await addReceipt(tester);
     expect(find.text("Couldn't add this photo."), findsOneWidget);
     expect(s.requests.where((r) => r.url.path == '/api/s3-upload'), isEmpty);
+    await closeTree(tester);
+  });
+
+  // Refused when the phone asked, or turned off since: explained, with a
+  // way to Settings on the iPhone, and not reported as an error.
+  testWidgets('camera access off: it says so, and Settings opens the app\'s settings', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final s = server();
+    final picker = _FakePicker()..error = const ReceiptAccessOff(ReceiptSource.camera);
+    var opened = 0;
+    await openForm(tester, db, s.client, picker, openSettings: () async {
+      opened++;
+      return true;
+    });
+
+    await addReceipt(tester, from: 'Take photo');
+
+    expect(find.text('Camera access is off for Spliit2Go.'), findsOneWidget);
+    expect(find.text("Couldn't add this photo."), findsNothing);
+    expect(find.text('Details'), findsNothing);
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    expect(opened, 1);
+    expect(loggedUnexpectedErrors, isEmpty);
+    expect(s.requests.where((r) => r.url.path == '/api/s3-upload'), isEmpty);
+    await closeTree(tester);
+  });
+
+  testWidgets('photo access off, where there\'s no settings link: only the message', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final s = server();
+    final picker = _FakePicker()..error = const ReceiptAccessOff(ReceiptSource.library);
+    await openForm(tester, db, s.client, picker);
+
+    await addReceipt(tester);
+
+    expect(find.text('Photo access is off for Spliit2Go.'), findsOneWidget);
+    expect(find.text('Settings'), findsNothing);
+    expect(loggedUnexpectedErrors, isEmpty);
     await closeTree(tester);
   });
 
