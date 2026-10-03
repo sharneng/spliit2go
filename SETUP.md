@@ -127,7 +127,11 @@ Without a team, `flutter build ipa --no-codesign` still checks that the release 
 
 Already set for upload:
 - **Export compliance:** `ITSAppUsesNonExemptEncryption` is false in `ios/Runner/Info.plist`, since the app only uses the system's HTTPS. App Store Connect doesn't ask about encryption on each upload.
-- **Privacy manifest:** `ios/Runner/PrivacyInfo.xcprivacy` declares no tracking and no collected data, plus the required-reason APIs that bundled code uses without declaring them itself (SQLite's file and file system checks, package_info_plus's app bundle dates). Most plugins ship their own manifest. If an upload's email from Apple lists a missing API declaration (ITMS-91053), add it there. To see what a build calls, run `nm -u` on the binaries in `Runner.app` and `Runner.app/Frameworks`.
+- **Privacy manifest:** `ios/Runner/PrivacyInfo.xcprivacy` declares no tracking and no collected data, plus the required-reason APIs in the app's own executable, which includes the plugins (statically linked Swift packages): package_info_plus reads the app bundle's dates, and shared_preferences uses UserDefaults. A manifest covers only its own bundle, so each framework in `Runner.app/Frameworks` needs its own; the app's can't stand in for it. That's why SQLite on iOS is the system's (the `hooks:` section in `pubspec.yaml`): a bundled copy is a framework without a manifest (#108). If Apple's email after an upload lists a missing API declaration (ITMS-91053), check which binary it names:
+  - `Runner`: add the declaration to the app's manifest.
+  - A framework: it needs a manifest inside that framework. Update or replace the package that brings it, rather than adding the declaration to the app's manifest.
+
+  To see what a build calls, run `nm -u` on `Runner.app/Runner` and on the binaries in `Runner.app/Frameworks` of `build/ios/archive/Runner.xcarchive`, and check which frameworks contain a `PrivacyInfo.xcprivacy`.
 
 ## Diagnosing errors on a device
 
