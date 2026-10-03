@@ -89,19 +89,19 @@ class ImagePickerReceiptPhotoPicker implements ReceiptPhotoPicker {
         requestFullMetadata: false,
       );
     } on PlatformException catch (e) {
-      if (accessOff(e) case final off?) throw off;
+      if (receiptAccessOff(e) case final off?) throw off;
       rethrow;
     }
     return file?.readAsBytes();
   }
-
-  /// image_picker's codes for access that's off: the camera on both
-  /// platforms (on Android only when the app declares the camera
-  /// permission), and the library on iOS.
-  @visibleForTesting
-  static ReceiptAccessOff? accessOff(PlatformException e) => switch (e.code) {
-        'camera_access_denied' || 'camera_access_restricted' => const ReceiptAccessOff(ReceiptSource.camera),
-        'photo_access_denied' || 'photo_access_restricted' => const ReceiptAccessOff(ReceiptSource.library),
-        _ => null,
-      };
 }
+
+/// image_picker's codes for access that's off: the camera on both
+/// platforms (on Android only when the app declares the camera
+/// permission), and the library on iOS. The iPhone's document camera
+/// answers with the same camera codes.
+ReceiptAccessOff? receiptAccessOff(PlatformException e) => switch (e.code) {
+      'camera_access_denied' || 'camera_access_restricted' => const ReceiptAccessOff(ReceiptSource.camera),
+      'photo_access_denied' || 'photo_access_restricted' => const ReceiptAccessOff(ReceiptSource.library),
+      _ => null,
+    };

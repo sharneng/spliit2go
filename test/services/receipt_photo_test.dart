@@ -47,7 +47,7 @@ void main() {
   });
 
   test('image_picker\'s refused or restricted access is ReceiptAccessOff; other errors aren\'t', () {
-    ReceiptSource? off(String code) => ImagePickerReceiptPhotoPicker.accessOff(PlatformException(code: code))?.source;
+    ReceiptSource? off(String code) => receiptAccessOff(PlatformException(code: code))?.source;
     expect([
       for (final code in [
         'camera_access_denied',
