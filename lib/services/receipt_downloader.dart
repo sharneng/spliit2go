@@ -94,6 +94,7 @@ class ReceiptDownloader {
     Future<List<ConnectivityResult>> Function()? connectivity,
     Stream<List<ConnectivityResult>>? connectivityChanges,
     http.Client Function()? httpClient,
+    this.networkSettle = const Duration(seconds: 3),
   })  : _cache = cache,
         _settings = settings ?? SettingsService(),
         _connectivity = connectivity ?? (() => Connectivity().checkConnectivity()),
@@ -106,6 +107,10 @@ class ReceiptDownloader {
   final Future<List<ConnectivityResult>> Function() _connectivity;
   final Stream<List<ConnectivityResult>>? _connectivityChanges;
   final http.Client Function() _newHttpClient;
+
+  /// How long a "none" reading waits for the network to show up before
+  /// it's believed (#164).
+  final Duration networkSettle;
 
   ReceiptCache get _receipts => _cache ?? ReceiptCache.of(db);
 
@@ -184,7 +189,7 @@ class ReceiptDownloader {
     }
     final List<ConnectivityResult> network;
     try {
-      network = await _connectivity();
+      network = await _network();
     } catch (e, st) {
       // No plugin (widget tests): unknown, so nothing is downloaded.
       if (!isMissingPlugin(e)) {
@@ -233,6 +238,33 @@ class ReceiptDownloader {
     }
     if (run.removed) return;
     await _finish(groupId, run.cancelled ? run.reason : problem, diagnostics: diagnostics);
+  }
+
+  /// The network now. On iOS a check reads "none" until the system first
+  /// reports the network, which comes just after the plugin starts
+  /// watching, at launch and again after the last listener stops; taken
+  /// at its word, that marked every favorite offline at launch (#164).
+  /// So "none" is believed only if nothing better shows up within
+  /// [networkSettle].
+  Future<List<ConnectivityResult>> _network() async {
+    final now = await _connectivity();
+    bool connected(List<ConnectivityResult> n) => n.any((r) => r != ConnectivityResult.none);
+    if (connected(now)) return now;
+    final changes = _connectivityChanges ?? _platformChanges();
+    if (changes == null) return now;
+    final settled = Completer<List<ConnectivityResult>>();
+    final watch = changes.listen((n) {
+      if (connected(n) && !settled.isCompleted) settled.complete(n);
+    }, onError: (Object _) {});
+    final timer = Timer(networkSettle, () {
+      if (!settled.isCompleted) settled.complete(now);
+    });
+    try {
+      return await settled.future;
+    } finally {
+      timer.cancel();
+      await watch.cancel();
+    }
   }
 
   Stream<List<ConnectivityResult>>? _platformChanges() {

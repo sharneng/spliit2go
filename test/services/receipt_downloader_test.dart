@@ -157,6 +157,7 @@ void main() {
   ReceiptDownloader downloader() => ReceiptDownloader(
         db,
         cache: cache,
+        networkSettle: const Duration(milliseconds: 200),
         connectivity: () async => network,
         connectivityChanges: changes.stream,
         httpClient: () => MockClient((req) async {
@@ -266,6 +267,34 @@ void main() {
 
     final status = await statusOf(d);
     expect((status.complete, status.problem), (true, null));
+  });
+
+  // #164, on an iPhone: at launch a check reads "none" until iOS first
+  // reports the network, which turned every favorite's 📎 red.
+  test('a "none" check that the network soon follows: it downloads, no error', () async {
+    network = [ConnectivityResult.none];
+    final d = downloader();
+
+    final running = d.run('g1', server);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    changes.add([ConnectivityResult.none]);
+    changes.add(wifi);
+    await running;
+
+    expect(downloads, hasLength(3));
+    final status = await statusOf(d);
+    expect((status.complete, status.problem, status.isError), (true, null, false));
+  });
+
+  test('"none" that lasts: it says offline, downloads nothing', () async {
+    network = [ConnectivityResult.none];
+    final d = downloader();
+
+    await d.run('g1', server);
+
+    expect(reads, isEmpty);
+    expect(downloads, isEmpty);
+    expect((await statusOf(d)).problem, ReceiptDownloadProblem.offline);
   });
 
   test('a receipt that fails is reported, the rest download, and Retry finishes it', () async {
