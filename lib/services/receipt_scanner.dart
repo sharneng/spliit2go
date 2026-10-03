@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'receipt_photo.dart';
 import 'receipt_text.dart';
 import 'settings_service.dart';
 
@@ -88,7 +89,8 @@ abstract interface class ReceiptScanner {
 
   /// The document scanner (ML Kit's, or VisionKit's document camera on the
   /// iPhone): the page as JPEG, or null when the user cancelled. Throws
-  /// [ReceiptScannerUnavailable] when it can't run.
+  /// [ReceiptScannerUnavailable] when it can't run, and [ReceiptAccessOff]
+  /// when the iPhone's camera is off for the app.
   Future<Uint8List?> scanDocument();
 
   /// ML Kit text recognition, on the phone, in [script] (#153). Latin is
@@ -168,6 +170,7 @@ class PlatformReceiptScanner implements ReceiptScanner {
       return await _channel.invokeMethod<Uint8List>('scanDocument');
     } on PlatformException catch (e) {
       if (e.code == 'unavailable') throw ReceiptScannerUnavailable(e.message);
+      if (receiptAccessOff(e) case final off?) throw off;
       rethrow;
     }
   }

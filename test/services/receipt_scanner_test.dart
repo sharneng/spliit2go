@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:spliit2go/services/receipt_photo.dart';
 import 'package:spliit2go/services/receipt_scanner.dart';
 import 'package:spliit2go/services/receipt_text.dart';
 
@@ -148,6 +149,15 @@ void main() {
       answers = {};
       failWith = PlatformException(code: 'unavailable');
       await expectLater(scanner([]).scanDocument(), throwsA(isA<ReceiptScannerUnavailable>()));
+    });
+
+    test('camera access off: the document camera isn\'t opened, and the app is told why', () async {
+      answers = {};
+      for (final code in ['camera_access_denied', 'camera_access_restricted']) {
+        failWith = PlatformException(code: code);
+        await expectLater(scanner([]).scanDocument(),
+            throwsA(isA<ReceiptAccessOff>().having((e) => e.source, 'source', ReceiptSource.camera)));
+      }
     });
   });
 

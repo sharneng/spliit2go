@@ -12,9 +12,10 @@ import VisionKit
 /// call here (the Dart side doesn't make them on iOS).
 ///
 /// - scanDocument: VisionKit's document camera; the first page as JPEG, or
-///   nil when cancelled, or when camera access is refused (it says so
-///   itself). "unavailable" where it can't run or fails otherwise, and the
-///   app uses the plain camera instead. It can't import a photo, so the
+///   nil when cancelled. image_picker's camera_access_denied or _restricted
+///   when camera access is refused, without opening it. "unavailable"
+///   where it can't run or fails otherwise, and the app uses the plain
+///   camera instead. It can't import a photo, so the
 ///   app asks camera or library first.
 /// - recognizeText: every line of text Vision reads, with its box and
 ///   corners in the image's pixels, top-left origin, as ML Kit gives them.
@@ -53,6 +54,18 @@ final class ReceiptScanChannel: NSObject, VNDocumentCameraViewControllerDelegate
     if pendingScan != nil { return result(nil) }
     guard VNDocumentCameraViewController.isSupported else {
       return result(FlutterError(code: "unavailable", message: "No document camera on this device", details: nil))
+    }
+    // Camera access refused: the document camera would open only to say
+    // so in its own alert and then sit on a black screen until cancelled.
+    // image_picker's code instead, so the app explains it with a way to
+    // Settings, as it does for the plain camera.
+    switch AVCaptureDevice.authorizationStatus(for: .video) {
+    case .denied:
+      return result(FlutterError(code: "camera_access_denied", message: "Camera access is off", details: nil))
+    case .restricted:
+      return result(FlutterError(code: "camera_access_restricted", message: "Camera access is restricted", details: nil))
+    default:
+      break
     }
     guard let presenter = Self.topViewController() else {
       return result(FlutterError(code: "unavailable", message: "Nothing to present the camera from", details: nil))
@@ -96,9 +109,9 @@ final class ReceiptScanChannel: NSObject, VNDocumentCameraViewControllerDelegate
   func documentCameraViewController(
     _ controller: VNDocumentCameraViewController, didFailWithError error: Error
   ) {
-    // Camera access refused: the document camera has already said so, with
-    // a way to Settings. The plain camera would only be refused too, so
-    // it's a cancel, and the library is still there.
+    // Camera access refused while it was open (asked for the first time
+    // and declined): the document camera has already said so. The plain
+    // camera would only be refused too, so it's a cancel.
     switch AVCaptureDevice.authorizationStatus(for: .video) {
     case .denied, .restricted:
       finish(controller, nil)

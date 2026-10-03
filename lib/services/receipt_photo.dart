@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
@@ -53,9 +54,21 @@ PreparedReceipt _prepare(Uint8List original) {
 /// Where a receipt photo comes from.
 enum ReceiptSource { camera, library }
 
+/// The camera or the photo library is off for the app: refused when the
+/// phone asked, turned off in Settings since, or restricted. The user's
+/// choice, not a failure: it's explained, not reported.
+class ReceiptAccessOff implements Exception {
+  const ReceiptAccessOff(this.source);
+  final ReceiptSource source;
+
+  @override
+  String toString() => 'ReceiptAccessOff: ${source.name}';
+}
+
 /// Picks a receipt photo; a seam so widget tests don't need the plugin.
 abstract interface class ReceiptPhotoPicker {
-  /// The picked photo's bytes, or null when the user cancelled.
+  /// The picked photo's bytes, or null when the user cancelled. Throws
+  /// [ReceiptAccessOff] when the app may not use [source].
   Future<Uint8List?> pick(ReceiptSource source);
 }
 
@@ -67,12 +80,28 @@ class ImagePickerReceiptPhotoPicker implements ReceiptPhotoPicker {
 
   @override
   Future<Uint8List?> pick(ReceiptSource source) async {
-    final file = await ImagePicker().pickImage(
-      source: source == ReceiptSource.camera ? ImageSource.camera : ImageSource.gallery,
-      maxWidth: receiptMaxSide.toDouble(),
-      maxHeight: receiptMaxSide.toDouble(),
-      requestFullMetadata: false,
-    );
+    final XFile? file;
+    try {
+      file = await ImagePicker().pickImage(
+        source: source == ReceiptSource.camera ? ImageSource.camera : ImageSource.gallery,
+        maxWidth: receiptMaxSide.toDouble(),
+        maxHeight: receiptMaxSide.toDouble(),
+        requestFullMetadata: false,
+      );
+    } on PlatformException catch (e) {
+      if (receiptAccessOff(e) case final off?) throw off;
+      rethrow;
+    }
     return file?.readAsBytes();
   }
 }
+
+/// image_picker's codes for access that's off: the camera on both
+/// platforms (on Android only when the app declares the camera
+/// permission), and the library on iOS. The iPhone's document camera
+/// answers with the same camera codes.
+ReceiptAccessOff? receiptAccessOff(PlatformException e) => switch (e.code) {
+      'camera_access_denied' || 'camera_access_restricted' => const ReceiptAccessOff(ReceiptSource.camera),
+      'photo_access_denied' || 'photo_access_restricted' => const ReceiptAccessOff(ReceiptSource.library),
+      _ => null,
+    };

@@ -35,6 +35,9 @@ class _FakeScanner implements ReceiptScanner {
 
   /// Throws [ReceiptScannerUnavailable] from scanDocument.
   bool unavailable = false;
+
+  /// Throws [ReceiptAccessOff] from scanDocument: the iPhone's camera off.
+  bool cameraOff = false;
   Uint8List? page = Uint8List.fromList([7, 7, 7]);
 
   /// The receipt's text, one line per row.
@@ -62,6 +65,7 @@ class _FakeScanner implements ReceiptScanner {
   @override
   Future<Uint8List?> scanDocument() async {
     if (unavailable) throw const ReceiptScannerUnavailable('not downloaded');
+    if (cameraOff) throw const ReceiptAccessOff(ReceiptSource.camera);
     return page;
   }
 
@@ -388,6 +392,25 @@ void main() {
       expect(picker.sources, [ReceiptSource.camera]);
       expect(find.text('Take photo'), findsNothing);
       expect(field(tester, 'Title'), 'Café Du Coin');
+      await closeTree(tester);
+    });
+
+    testWidgets('camera off: Take photo says so, without the plain camera or a report', (tester) async {
+      final db = newDb();
+      final picker = _FakePicker();
+      final scanner = _FakeScanner()
+        ..scannerImportsPhotos = false
+        ..cameraOff = true;
+      await openForm(tester, db, scanner, picker: picker);
+
+      await scan(tester);
+      await tester.tap(find.text('Take photo'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Camera access is off for Spliit2Go.'), findsOneWidget);
+      expect(picker.sources, isEmpty);
+      expect(scanner.read, isEmpty);
+      expect(loggedUnexpectedErrors, isEmpty);
       await closeTree(tester);
     });
 
