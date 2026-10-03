@@ -8,7 +8,7 @@ Spliit2Go is an unofficial, community-made mobile app for [Spliit](https://splii
 
 - Spliit2Go has no accounts and no ads, and its developers collect nothing: no analytics, no crash reports.
 - Your groups and expenses go to the Spliit server the group lives on (spliit.app unless you chose another), and are covered by that server's privacy policy.
-- On Android, receipt scanning reads the photo on your phone. The photo isn't sent to Google, but Google's ML Kit, which does the reading, sends Google some diagnostic data (see below).
+- Receipt scanning reads the photo on your phone. On Android the photo isn't sent to Google, but Google's ML Kit, which does the reading, sends Google some diagnostic data (see below). On iPhone nothing is sent.
 
 ## What stays on your phone
 
@@ -35,13 +35,15 @@ Spliit2Go is a client: it reads and changes your groups on the Spliit server eac
 
 The default server is spliit.app, operated by Sebastien Castiel, and its [privacy policy](https://spliit.app/privacy) applies to what is stored there. If you use a group on another Spliit server, that server's operator decides what happens to it. On Spliit, anyone with a group's link can see and change the group, so share links only with people you trust.
 
-## Receipt scanning (Android)
+## Receipt scanning on Android
 
 Scan receipt uses Google's [ML Kit](https://developers.google.com/ml-kit) and the Document Scanner from Google Play services, both running on your phone. The photo and the text read from it are not sent to Google or anyone else: the app only fills in the expense form with what it read.
 
 Google Play services downloads the Document Scanner, and the text recognition models for Chinese and Japanese, from Google. So that the first scan works offline, the app asks for the Document Scanner, and for your phone's language's model if it is Chinese or Japanese, in the background when it starts; the other model downloads when you pick its language. The Latin-script model is built into the app. ML Kit also sends Google diagnostic and usage data: the device's make, model and Android version, the app's package name and version, performance figures such as how long a scan took, the image format and resolution, and an identifier for the installation that is not meant to identify you. It is encrypted in transit and is not shared with third parties ([Google's disclosure](https://developers.google.com/ml-kit/android-data-disclosure)). Spliit2Go doesn't receive any of it.
 
-Receipt scanning isn't available on iPhone yet.
+## Receipt scanning on iPhone
+
+Scan receipt uses Apple's VisionKit and Vision, which are part of iOS and run on your phone. Nothing is downloaded, and the photo and the text read from it are not sent to Apple or anyone else: the app only fills in the expense form with what it read.
 
 ## Permissions
 

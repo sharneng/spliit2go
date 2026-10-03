@@ -78,4 +78,4 @@ An unofficial community app for Spliit, the free and open-source way to share ex
 split,bill,expenses,share,group,trip,travel,roommates,settle,iou,debt,offline,receipt,cost
 ```
 
-**Description:** the Play full description above, minus "Scan a receipt to fill in…": receipt scanning isn't on iPhone yet (#155).
+**Description:** the Play full description above (receipt scanning is on the iPhone too since #155), with "your gallery" as "your photo library".

@@ -175,10 +175,15 @@ class _ReceiptLanguageSheetState extends State<_ReceiptLanguageSheet> {
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
               child: ErrorMessage(message, diagnostics: _diagnostics),
             ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-            child: Text(l10n.receiptLanguageNote, style: theme.textTheme.bodySmall),
-          ),
+          // About Google Play services' downloads: none on the iPhone,
+          // where Vision has them all (#155).
+          if (ReceiptScript.values.any((s) => s.downloadable))
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+              child: Text(l10n.receiptLanguageNote, style: theme.textTheme.bodySmall),
+            )
+          else
+            const SizedBox(height: 16),
         ],
       ),
     );
