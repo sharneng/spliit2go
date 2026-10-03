@@ -100,7 +100,7 @@ The target API level comes from Flutter (`flutter.targetSdkVersion`, 36 with Flu
 
 ## iOS
 
-The iOS project (`ios/`, added in #79) needs Xcode. It uses the same bundle id as Android, `com.sharneng.spliit2go`, targets iOS 15 or later, and is iPhone only (#105). Plugins are integrated with Swift Package Manager, so there's no `Podfile` and no `pod install` step. Receipt scanning (#125) is Android only: ML Kit is called from `android/app` (`ReceiptScanChannel.kt`), not through the pub.dev plugins, which would bring CocoaPods back. To run it on a simulator:
+The iOS project (`ios/`, added in #79) needs Xcode. It uses the same bundle id as Android, `com.sharneng.spliit2go`, targets iOS 16 or later, and is iPhone only (#105). Plugins are integrated with Swift Package Manager, so there's no `Podfile` and no `pod install` step. Receipt scanning uses Apple's VisionKit and Vision on the iPhone (#155, `ios/Runner/ReceiptScanChannel.swift`) and ML Kit on Android (#125, `ReceiptScanChannel.kt`), each called from the app rather than through pub.dev plugins, which would bring CocoaPods back. To run it on a simulator:
 
 ```
 open -a Simulator
@@ -108,6 +108,30 @@ flutter run
 ```
 
 Don't re-run `flutter create` on this repo. If you ever do, don't commit the `pubspec.lock` it rewrites: it re-resolves every package and silently downgrades unrelated transitive ones (found in #80). A plain `flutter pub get` leaves the lockfile alone.
+
+## Release build (iOS)
+
+App Store Connect takes an archive signed by the Apple Developer team (#108). Signing is automatic: Xcode makes and renews the certificate and provisioning profile once a team is set.
+
+1. In Xcode (`open ios/Runner.xcworkspace`), signed in with the developer account under Settings → Accounts, select the Runner target → Signing & Capabilities → Team. This writes `DEVELOPMENT_TEAM` (the team's 10-character id, which isn't secret) into `ios/Runner.xcodeproj/project.pbxproj`; commit it.
+2. Create the app in App Store Connect with bundle id `com.sharneng.spliit2go` (#150).
+3. Raise the build number in `pubspec.yaml` (see App identity above), then build:
+
+```
+flutter build ipa --release
+```
+
+4. Upload `build/ios/ipa/*.ipa` with Apple's Transporter app, or open `build/ios/archive/Runner.xcarchive` in Xcode's Organizer and choose Distribute App. It shows in TestFlight after Apple processes it.
+
+Without a team, `flutter build ipa --no-codesign` still checks that the release archive builds (no `.ipa`).
+
+Already set for upload:
+- **Export compliance:** `ITSAppUsesNonExemptEncryption` is false in `ios/Runner/Info.plist`, since the app only uses the system's HTTPS. App Store Connect doesn't ask about encryption on each upload.
+- **Privacy manifest:** `ios/Runner/PrivacyInfo.xcprivacy` declares no tracking and no collected data, plus the required-reason APIs in the app's own executable, which includes the plugins (statically linked Swift packages): package_info_plus reads the app bundle's dates, and shared_preferences uses UserDefaults. A manifest covers only its own bundle, so each framework in `Runner.app/Frameworks` needs its own; the app's can't stand in for it. That's why SQLite on iOS is the system's (the `hooks:` section in `pubspec.yaml`): a bundled copy is a framework without a manifest (#108). If Apple's email after an upload lists a missing API declaration (ITMS-91053), check which binary it names:
+  - `Runner`: add the declaration to the app's manifest.
+  - A framework: it needs a manifest inside that framework. Update or replace the package that brings it, rather than adding the declaration to the app's manifest.
+
+  To see what a build calls, run `nm -u` on `Runner.app/Runner` and on the binaries in `Runner.app/Frameworks` of `build/ios/archive/Runner.xcarchive`, and check which frameworks contain a `PrivacyInfo.xcprivacy`.
 
 ## Diagnosing errors on a device
 
