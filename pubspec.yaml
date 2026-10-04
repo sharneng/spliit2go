@@ -1,7 +1,10 @@
 name: spliit2go
 description: Unofficial, offline-capable Flutter client for Spliit.
 publish_to: 'none'
-version: 1.0.0+1
+# Build 300: above every build #174's scripts/flutter_stamped numbered by
+# commit count (249-252 seen), so a plain build over one is an upgrade, not a
+# downgrade that makes `flutter run` uninstall the app (#176).
+version: 1.0.0+300
 
 environment:
   sdk: '>=3.3.0 <4.0.0'

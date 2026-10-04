@@ -315,5 +315,8 @@
   "aboutPrivacyPolicySubtitle": "本应用保存和发送哪些数据",
   "aboutLicenses": "开源许可",
   "aboutLicensesSubtitle": "Spliit 及本应用所用软件包的许可",
-  "aboutLinkFailed": "无法打开 {url}。"
+  "aboutLinkFailed": "无法打开 {url}。",
+  "aboutCommitUnknown": "未知",
+  "aboutCopyVersion": "复制版本和提交",
+  "aboutVersionCopied": "已复制版本和提交"
 }

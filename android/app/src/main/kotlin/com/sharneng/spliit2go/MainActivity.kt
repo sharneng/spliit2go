@@ -14,6 +14,11 @@ class MainActivity : FlutterActivity() {
         receiptScan = channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ReceiptScanChannel.NAME)
             .setMethodCallHandler(channel)
+        // The commit this build is from (#176), set by build.gradle.kts.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.sharneng.spliit2go/build_info")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "gitCommit") result.success(BuildConfig.GIT_COMMIT) else result.notImplemented()
+            }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

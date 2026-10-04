@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/context_l10n.dart';
+import '../services/build_info.dart';
 import '../theme.dart';
 
 /// Where About's links go (#109).
@@ -12,10 +14,6 @@ const supportUrl = 'https://github.com/sharneng/spliit2go/issues';
 
 /// The privacy policy (#111), published as the rendered file in the repo.
 const privacyPolicyUrl = 'https://github.com/sharneng/spliit2go/blob/main/docs/privacy.md';
-
-/// The commit the app was built from, set by `scripts/flutter_stamped`
-/// (#174); empty in a plain `flutter run` or `flutter build`.
-const gitSha = String.fromEnvironment('GIT_SHA');
 
 /// Opens [url] outside the app; false if nothing could.
 typedef LinkOpener = Future<bool> Function(Uri url);
@@ -33,12 +31,12 @@ Future<bool> _openExternally(Uri url) async {
 /// author asked for (spliit-app/spliit#658), and links to Spliit, the
 /// source, support, the privacy policy (#111) and the licenses page (#109).
 class AboutScreen extends StatefulWidget {
-  const AboutScreen({super.key, this.openLink = _openExternally, this.commit = gitSha});
+  const AboutScreen({super.key, this.openLink = _openExternally, this.loadCommit = loadBuildCommit});
 
   final LinkOpener openLink;
 
-  /// Shown after the build number when set, e.g. "1.0.0 (249 · a1b2c3d)".
-  final String commit;
+  /// The commit shown after the build number, e.g. "1.0.0 (1 · a1b2c3d)" (#176).
+  final Future<BuildCommit> Function() loadCommit;
 
   @override
   State<AboutScreen> createState() => _AboutScreenState();
@@ -46,11 +44,13 @@ class AboutScreen extends StatefulWidget {
 
 class _AboutScreenState extends State<AboutScreen> {
   PackageInfo? _info;
+  BuildCommit? _commit;
 
   @override
   void initState() {
     super.initState();
     _loadVersion();
+    _loadCommit();
   }
 
   Future<void> _loadVersion() async {
@@ -63,11 +63,26 @@ class _AboutScreenState extends State<AboutScreen> {
     }
   }
 
+  Future<void> _loadCommit() async {
+    final commit = await widget.loadCommit();
+    if (!mounted) return;
+    setState(() => _commit = commit);
+  }
+
   Future<void> _open(String url) async {
     if (await widget.openLink(Uri.parse(url))) return;
     if (!mounted) return;
     ScaffoldMessenger.maybeOf(context)
         ?.showSnackBar(SnackBar(content: Text(context.l10n.aboutLinkFailed(url))));
+  }
+
+  /// Copies the version with the full commit, for bug reports (#176).
+  Future<void> _copyVersion(PackageInfo info, BuildCommit commit) async {
+    await Clipboard.setData(
+        ClipboardData(text: 'Spliit2Go ${info.version} (${info.buildNumber} · ${commit.full})'));
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)
+        ?.showSnackBar(SnackBar(content: Text(context.l10n.aboutVersionCopied)));
   }
 
   Widget _logo(double size) =>
@@ -78,11 +93,14 @@ class _AboutScreenState extends State<AboutScreen> {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final info = _info;
-    final commit = widget.commit;
-    final version = info == null
-        ? null
-        : l10n.aboutVersion(
-            info.version, commit.isEmpty ? info.buildNumber : '${info.buildNumber} · $commit');
+    final commit = _commit;
+    String? version;
+    if (info != null) {
+      // The build number alone until the commit has loaded.
+      final shown = commit == null ? null : (commit.known ? commit.short : l10n.aboutCommitUnknown);
+      version = l10n.aboutVersion(
+          info.version, shown == null ? info.buildNumber : '${info.buildNumber} · $shown');
+    }
     Widget link(IconData icon, String title, String subtitle, String url) => ListTile(
           leading: Icon(icon),
           title: Text(title),
@@ -103,10 +121,24 @@ class _AboutScreenState extends State<AboutScreen> {
                   ?.copyWith(fontWeight: FontWeight.w700, color: spliitWordmarkGreen)),
           if (version != null) ...[
             const SizedBox(height: 4),
-            Text(version,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(version,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                ),
+                if (commit != null && commit.known)
+                  IconButton(
+                    icon: const Icon(Icons.copy, size: 18),
+                    tooltip: l10n.aboutCopyVersion,
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _copyVersion(info!, commit),
+                  ),
+              ],
+            ),
           ],
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
