@@ -13,6 +13,10 @@ const supportUrl = 'https://github.com/sharneng/spliit2go/issues';
 /// The privacy policy (#111), published as the rendered file in the repo.
 const privacyPolicyUrl = 'https://github.com/sharneng/spliit2go/blob/main/docs/privacy.md';
 
+/// The commit the app was built from, set by `scripts/flutter_stamped`
+/// (#174); empty in a plain `flutter run` or `flutter build`.
+const gitSha = String.fromEnvironment('GIT_SHA');
+
 /// Opens [url] outside the app; false if nothing could.
 typedef LinkOpener = Future<bool> Function(Uri url);
 
@@ -29,9 +33,12 @@ Future<bool> _openExternally(Uri url) async {
 /// author asked for (spliit-app/spliit#658), and links to Spliit, the
 /// source, support, the privacy policy (#111) and the licenses page (#109).
 class AboutScreen extends StatefulWidget {
-  const AboutScreen({super.key, this.openLink = _openExternally});
+  const AboutScreen({super.key, this.openLink = _openExternally, this.commit = gitSha});
 
   final LinkOpener openLink;
+
+  /// Shown after the build number when set, e.g. "1.0.0 (249 · a1b2c3d)".
+  final String commit;
 
   @override
   State<AboutScreen> createState() => _AboutScreenState();
@@ -71,7 +78,11 @@ class _AboutScreenState extends State<AboutScreen> {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final info = _info;
-    final version = info == null ? null : l10n.aboutVersion(info.version, info.buildNumber);
+    final commit = widget.commit;
+    final version = info == null
+        ? null
+        : l10n.aboutVersion(
+            info.version, commit.isEmpty ? info.buildNumber : '${info.buildNumber} · $commit');
     Widget link(IconData icon, String title, String subtitle, String url) => ListTile(
           leading: Icon(icon),
           title: Text(title),
