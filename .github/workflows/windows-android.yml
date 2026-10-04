@@ -5,7 +5,6 @@ name: Windows Android build
 # than on every push.
 on:
   workflow_dispatch:
-  pull_request:  # TEMPORARY: first run in the #176 PR; removed before merge.
 
 jobs:
   build-apk:
