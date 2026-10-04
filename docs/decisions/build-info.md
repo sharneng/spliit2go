@@ -4,7 +4,7 @@ Written 2026-10-04 for [#176](https://github.com/sharneng/spliit2go/issues/176),
 
 ## What it's for
 
-To tell which code a build came from, both for testing on our own phones and in bug reports. About shows the commit after the build number, `Version 1.0.0 (1 · a1b2c3d)`, and its copy button copies `Spliit2Go 1.0.0 (1 · <full hash>)`.
+To tell which code a build came from, both for testing on our own phones and in bug reports. About shows the commit after the build number, `Version 1.0.0 (300 · a1b2c3d)`, and its copy button copies `Spliit2Go 1.0.0 (300 · <full hash>)`.
 
 ## What gets recorded
 
@@ -33,7 +33,7 @@ The commit is native data, read when About opens, so a hot reload or hot restart
 
 ## The build number
 
-The stores only see the version and build number, `1.0.0 (1)`, which still come from `pubspec.yaml`. Raise `+N` before each store upload. #174 used the commit count as the build number, through `scripts/flutter_stamped`. That wrapper didn't run on Windows and replaced the standard commands. Its counts could also go down: after a squash merge, or with a plain `flutter run` over a stamped build. On Android, `flutter run` gets past a lower build by uninstalling the app, which removes its data. The hash alone identifies the build, so the count and the script were dropped.
+The stores only see the version and build number, e.g. `1.0.0 (300)`, which still come from `pubspec.yaml`. Raise `+N` before each store upload. #174 used the commit count as the build number, through `scripts/flutter_stamped`. That wrapper didn't run on Windows and replaced the standard commands. Its counts could also go down: after a squash merge, or with a plain `flutter run` over a stamped build. On Android, `flutter run` gets past a lower build by uninstalling the app, which removes its data. The hash alone identifies the build, so the count and the script were dropped. `pubspec.yaml` moved to build 300 to stay above every stamped build (249–252 were seen), so the first plain build over one is an upgrade and keeps the app's data.
 
 ## Ruled out
 
