@@ -621,5 +621,11 @@
         "type": "String"
       }
     }
-  }
+  },
+  "aboutCommitUnknown": "unknown",
+  "@aboutCommitUnknown": {
+    "description": "Shown in place of the commit hash after the build number when the build has none, e.g. \"Version 1.0.0 (1 · unknown)\"."
+  },
+  "aboutCopyVersion": "Copy version and commit",
+  "aboutVersionCopied": "Version and commit copied"
 }

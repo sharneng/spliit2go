@@ -1,4 +1,6 @@
+import java.io.ByteArrayOutputStream
 import java.util.Properties
+import javax.inject.Inject
 
 plugins {
     id("com.android.application")
@@ -13,6 +15,54 @@ plugins {
 val keyProperties = Properties().apply {
     val file = rootProject.file("key.properties")
     if (file.exists()) file.inputStream().use { load(it) }
+}
+
+// The commit this build is from, for About (#176): the full hash, with
+// "-dirty" when tracked files have uncommitted changes, or "?" when git
+// couldn't tell; empty without git. A ValueSource, so git runs on every
+// build and both HEAD and the dirty state are inputs Gradle tracks (also
+// under the configuration cache). See docs/decisions/build-info.md.
+abstract class GitCommitSource : ValueSource<String, GitCommitSource.Params> {
+    interface Params : ValueSourceParameters {
+        val repoDir: DirectoryProperty
+    }
+
+    @get:Inject
+    abstract val execOperations: ExecOperations
+
+    private fun git(vararg args: String): Pair<Int, String> {
+        val out = ByteArrayOutputStream()
+        val result = execOperations.exec {
+            commandLine("git", *args)
+            workingDir = parameters.repoDir.get().asFile
+            standardOutput = out
+            errorOutput = ByteArrayOutputStream()
+            isIgnoreExitValue = true
+        }
+        return result.exitValue to out.toString().trim()
+    }
+
+    override fun obtain(): String = try {
+        val (status, sha) = git("rev-parse", "HEAD")
+        if (status != 0 || sha.isEmpty()) {
+            ""
+        } else {
+            when (git("diff", "--quiet", "HEAD", "--").first) {
+                0 -> sha
+                1 -> "$sha-dirty"
+                else -> "$sha?"
+            }
+        }
+    } catch (e: Exception) {
+        "" // No git on PATH.
+    }
+}
+
+val gitCommit: String = providers.of(GitCommitSource::class) {
+    parameters.repoDir.set(rootProject.layout.projectDirectory.dir(".."))
+}.get()
+if (gitCommit.isEmpty() || gitCommit.endsWith("?")) {
+    logger.warn("Couldn't read the git commit; About will show it as unknown.")
 }
 
 android {
@@ -37,6 +87,11 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     signingConfigs {

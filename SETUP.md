@@ -51,13 +51,9 @@ There's no server to configure in code. In the app, tap **+** and paste a group'
 
 Both platforms use the app id `com.sharneng.spliit2go` and the display name **Spliit2Go**; the version comes from `pubspec.yaml` (`1.0.0+1` is version 1.0.0, build 1). Every store upload needs a higher build number.
 
-`scripts/flutter_stamped` runs `flutter run` or `flutter build` with the build number set to the commit count (`git rev-list --count HEAD`) and the short commit hash passed in as `GIT_SHA`, with `-dirty` added when tracked files have uncommitted changes (#174). About then shows which code a phone has, e.g. `Version 1.0.0 (249 · a1b2c3d)`; a plain `flutter run` still shows `Version 1.0.0 (1)`. Anything after `build` goes to `flutter build`. `flutter run` can't set a build number, so `run` builds a stamped APK in the mode given (`--debug`, the default, `--profile` or `--release`) and runs that with `--use-application-binary`, passing every argument on to `flutter run`. That's Android only; on an iPhone, use a stamped `build ipa` through TestFlight (Release build (iOS) below):
+Every Android and iOS build also records the commit it was built from, and About shows it after the build number: `Version 1.0.0 (1 · a1b2c3d)`, with `-dirty` when tracked files had uncommitted changes (#176). The copy button next to it copies the version with the full hash, for bug reports. Gradle (`android/app/build.gradle.kts`) and an Xcode build phase (`ios/scripts/write_build_info.sh`) run `git` themselves, so plain `flutter run` and `flutter build`, an IDE, or an archive from Xcode all include it. Without git (a source download, or no `git` on PATH), the build warns and About shows `unknown`. The commit comes from the last Android or iOS build, so a hot reload or hot restart keeps the old one. The stores don't see it: they get `1.0.0 (1)`. Details are in [docs/decisions/build-info.md](docs/decisions/build-info.md).
 
-```
-scripts/flutter_stamped run --release -d <device>
-```
-
-The stores need a number that only goes up, which a hash isn't, so the hash is shown but never used as the build number. The count only goes up along one line of history: a branch with several commits counts higher than `main` does right after its squash merge. Build store uploads from `main`. On Android, installing a lower build over a higher one is a downgrade, which `flutter run` gets past by uninstalling the app first, and that removes its data. That includes a plain `flutter run` (build 1) over a stamped build, so once a phone has one, keep using the script there. When going back to `main` from a branch build, either wait until `main` has passed the branch's count or keep the data in mind. The script refuses a shallow clone, where the count would be wrong. The id is permanent once the app is published. Before #105 the id was `com.sharneng.spliit2go.spliit2go`: a build from before then is a different app to the phone, so it installs alongside the new one with its own data. Uninstall it, or re-join your groups in the new one.
+The id is permanent once the app is published. Before #105 the id was `com.sharneng.spliit2go.spliit2go`: a build from before then is a different app to the phone, so it installs alongside the new one with its own data. Uninstall it, or re-join your groups in the new one.
 
 ### App icon
 
@@ -93,10 +89,10 @@ keyPassword=<the key password; the same one unless you set another>
 `storeFile` is an absolute path, or relative to `android/`. `key.properties`, `*.jks` and `*.keystore` are gitignored; never commit them. Then build:
 
 ```
-scripts/flutter_stamped build appbundle --release
+flutter build appbundle --release
 ```
 
-The bundle is `build/app/outputs/bundle/release/app-release.aab`. Its build number is the commit count, so build it from `main` (see App identity above). To check which key signed it:
+The bundle is `build/app/outputs/bundle/release/app-release.aab`. Raise the build number in `pubspec.yaml` before each upload (see App identity above). To check which key signed it:
 
 ```
 keytool -printcert -jarfile build/app/outputs/bundle/release/app-release.aab
@@ -123,10 +119,10 @@ App Store Connect takes an archive signed by the Apple Developer team (#108). Si
 
 1. In Xcode (`open ios/Runner.xcworkspace`), signed in with the developer account under Settings → Accounts, select the Runner target → Signing & Capabilities → Team. This writes `DEVELOPMENT_TEAM` (the team's 10-character id, which isn't secret) into `ios/Runner.xcodeproj/project.pbxproj`; commit it.
 2. Create the app in App Store Connect with bundle id `com.sharneng.spliit2go` (#150).
-3. Build from `main` (the build number is the commit count, see App identity above):
+3. Raise the build number in `pubspec.yaml` (see App identity above), then build:
 
 ```
-scripts/flutter_stamped build ipa --release
+flutter build ipa --release
 ```
 
 4. Upload `build/ios/ipa/*.ipa` with Apple's Transporter app, or open `build/ios/archive/Runner.xcarchive` in Xcode's Organizer and choose Distribute App. It shows in TestFlight after Apple processes it.

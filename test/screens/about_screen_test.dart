@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +10,7 @@ import 'package:spliit2go/legal/upstream_licenses.dart';
 import 'package:spliit2go/main.dart';
 import 'package:spliit2go/screens/about_screen.dart';
 import 'package:spliit2go/screens/app_settings_screen.dart';
+import 'package:spliit2go/services/build_info.dart';
 import 'package:spliit2go/services/app_settings.dart';
 import 'package:spliit2go/services/settings_service.dart';
 
@@ -14,6 +18,9 @@ import 'package:spliit2go/services/settings_service.dart';
 // Spliit's and spliit-ios's notices on the licenses page.
 void main() {
   setUp(() {
+    // The real loader, through App settings: a build without a commit.
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('com.sharneng.spliit2go/build_info'), (call) async => '');
     SharedPreferences.setMockInitialValues({});
     PackageInfo.setMockInitialValues(
       appName: 'Spliit2Go',
@@ -25,15 +32,15 @@ void main() {
   });
 
   Future<void> pumpAbout(WidgetTester tester,
-      {Locale? locale, LinkOpener? openLink, String commit = ''}) async {
+      {Locale? locale, LinkOpener? openLink, BuildCommit commit = const BuildCommit('')}) async {
     final settings = await AppSettings.load(SettingsService());
     addTearDown(settings.dispose);
     if (locale != null) await settings.setLocale(locale);
     await tester.pumpWidget(Spliit2GoApp(
         settings: settings,
         home: openLink == null
-            ? AboutScreen(commit: commit)
-            : AboutScreen(openLink: openLink, commit: commit)));
+            ? AboutScreen(loadCommit: () async => commit)
+            : AboutScreen(openLink: openLink, loadCommit: () async => commit)));
     await tester.pumpAndSettle();
   }
 
@@ -49,7 +56,8 @@ void main() {
 
     expect(find.byType(AboutScreen), findsOneWidget);
     expect(find.text('Spliit2Go'), findsOneWidget);
-    expect(find.text('Version 1.2.3 (45)'), findsOneWidget);
+    expect(find.text('Version 1.2.3 (45 · unknown)'), findsOneWidget);
+    expect(find.byTooltip('Copy version and commit'), findsNothing);
     expect(
         find.text('An unofficial, community-made client for Spliit. '
             "It isn't affiliated with or endorsed by the Spliit project."),
@@ -60,21 +68,56 @@ void main() {
     await pumpAbout(tester, locale: const Locale('fr'));
     expect(find.text('À propos'), findsOneWidget);
     expect(find.textContaining('Un client Spliit non officiel'), findsOneWidget);
-    expect(find.text('Version 1.2.3 (45)'), findsOneWidget);
+    expect(find.text('Version 1.2.3 (45 · inconnu)'), findsOneWidget);
 
     await pumpAbout(tester, locale: const Locale('zh'));
     expect(find.text('关于'), findsOneWidget);
     expect(find.textContaining('非官方 Spliit 客户端'), findsOneWidget);
-    expect(find.text('版本 1.2.3（45）'), findsOneWidget);
+    expect(find.text('版本 1.2.3（45 · 未知）'), findsOneWidget);
   });
 
-  // #174: scripts/flutter_stamped passes the commit as GIT_SHA.
-  testWidgets('the commit follows the build number when the build has one', (tester) async {
-    await pumpAbout(tester, commit: 'a1b2c3d');
-    expect(find.text('Version 1.2.3 (45 · a1b2c3d)'), findsOneWidget);
+  // #176: the commit the Android or iOS build wrote, shortened, with a
+  // button that copies it in full.
+  const sha = '2d83fa3c4b5a69788796a5b4c3d2e1f00a1b2c3d';
 
-    await pumpAbout(tester, commit: 'a1b2c3d-dirty', locale: const Locale('zh'));
-    expect(find.text('版本 1.2.3（45 · a1b2c3d-dirty）'), findsOneWidget);
+  testWidgets('the short commit follows the build number, and Copy copies it all',
+      (tester) async {
+    final copied = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform,
+        (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied.add((call.arguments as Map)['text'] as String);
+      }
+      return null;
+    });
+    addTearDown(() =>
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+
+    await pumpAbout(tester, commit: const BuildCommit('$sha-dirty'));
+    expect(find.text('Version 1.2.3 (45 · 2d83fa3-dirty)'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Copy version and commit'));
+    await tester.pump();
+    expect(copied, ['Spliit2Go 1.2.3 (45 · $sha-dirty)']);
+    expect(find.text('Version and commit copied'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpAbout(tester, commit: const BuildCommit(sha), locale: const Locale('zh'));
+    expect(find.text('版本 1.2.3（45 · 2d83fa3）'), findsOneWidget);
+  });
+
+  testWidgets('the version shows before the commit has loaded', (tester) async {
+    final settings = await AppSettings.load(SettingsService());
+    addTearDown(settings.dispose);
+    final commit = Completer<BuildCommit>();
+    await tester.pumpWidget(Spliit2GoApp(
+        settings: settings, home: AboutScreen(loadCommit: () => commit.future)));
+    await tester.pumpAndSettle();
+    expect(find.text('Version 1.2.3 (45)'), findsOneWidget);
+
+    commit.complete(const BuildCommit(sha));
+    await tester.pumpAndSettle();
+    expect(find.text('Version 1.2.3 (45 · 2d83fa3)'), findsOneWidget);
   });
 
   testWidgets('each link opens its page', (tester) async {

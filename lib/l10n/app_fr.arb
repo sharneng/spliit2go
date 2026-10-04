@@ -315,5 +315,8 @@
   "aboutPrivacyPolicySubtitle": "Ce que l'application garde et ce qu'elle envoie",
   "aboutLicenses": "Licences open source",
   "aboutLicensesSubtitle": "Celles de Spliit et des bibliothèques utilisées par l'application",
-  "aboutLinkFailed": "Impossible d'ouvrir {url}."
+  "aboutLinkFailed": "Impossible d'ouvrir {url}.",
+  "aboutCommitUnknown": "inconnu",
+  "aboutCopyVersion": "Copier la version et le commit",
+  "aboutVersionCopied": "Version et commit copiés"
 }
