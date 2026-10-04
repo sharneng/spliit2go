@@ -1,0 +1,39 @@
+#!/bin/sh
+# Runs `flutter run` or `flutter build` stamped with the commit it was
+# built from (#174): the build number is the commit count, and the
+# short hash goes in as GIT_SHA, with "-dirty" when tracked files have
+# uncommitted changes. About shows both, e.g. "Version 1.0.0 (249 ·
+# a1b2c3d)". Everything after the subcommand is passed to flutter:
+#
+#   scripts/flutter_stamped run --release
+#   scripts/flutter_stamped build appbundle --release
+#   scripts/flutter_stamped build ipa --release
+#
+# The count only grows along one line of history, so store uploads
+# should be built from main (see SETUP.md, App identity).
+set -eu
+
+REPO_ROOT="$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+case "${1:-}" in
+  run|build) ;;
+  *)
+    echo "usage: scripts/flutter_stamped run|build [flutter args...]" >&2
+    exit 2
+    ;;
+esac
+
+if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+  echo "This is a shallow clone, so the commit count would be wrong; run 'git fetch --unshallow' first." >&2
+  exit 1
+fi
+
+COUNT="$(git rev-list --count HEAD)"
+SHA="$(git rev-parse --short=7 HEAD)"
+if ! git diff --quiet HEAD --; then
+  SHA="$SHA-dirty"
+fi
+
+echo "Build $COUNT, commit $SHA" >&2
+exec flutter "$@" --build-number="$COUNT" --dart-define=GIT_SHA="$SHA"

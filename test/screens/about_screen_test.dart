@@ -25,13 +25,15 @@ void main() {
   });
 
   Future<void> pumpAbout(WidgetTester tester,
-      {Locale? locale, LinkOpener? openLink}) async {
+      {Locale? locale, LinkOpener? openLink, String commit = ''}) async {
     final settings = await AppSettings.load(SettingsService());
     addTearDown(settings.dispose);
     if (locale != null) await settings.setLocale(locale);
     await tester.pumpWidget(Spliit2GoApp(
         settings: settings,
-        home: openLink == null ? const AboutScreen() : AboutScreen(openLink: openLink)));
+        home: openLink == null
+            ? AboutScreen(commit: commit)
+            : AboutScreen(openLink: openLink, commit: commit)));
     await tester.pumpAndSettle();
   }
 
@@ -64,6 +66,15 @@ void main() {
     expect(find.text('关于'), findsOneWidget);
     expect(find.textContaining('非官方 Spliit 客户端'), findsOneWidget);
     expect(find.text('版本 1.2.3（45）'), findsOneWidget);
+  });
+
+  // #174: scripts/flutter_stamped passes the commit as GIT_SHA.
+  testWidgets('the commit follows the build number when the build has one', (tester) async {
+    await pumpAbout(tester, commit: 'a1b2c3d');
+    expect(find.text('Version 1.2.3 (45 · a1b2c3d)'), findsOneWidget);
+
+    await pumpAbout(tester, commit: 'a1b2c3d-dirty', locale: const Locale('zh'));
+    expect(find.text('版本 1.2.3（45 · a1b2c3d-dirty）'), findsOneWidget);
   });
 
   testWidgets('each link opens its page', (tester) async {
