@@ -18,9 +18,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # The pub cache goes on the checkout's drive (D:): Kotlin's
+      # incremental compiler fails on plugin sources on another drive
+      # ("this and base files have different roots").
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          pub-cache-path: D:\pub-cache
 
       - name: Install dependencies
         run: flutter pub get
