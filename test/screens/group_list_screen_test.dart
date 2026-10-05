@@ -11,6 +11,7 @@ import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/group_list_screen.dart';
+import '../support/haptics.dart';
 
 void main() {
   // Opening a group navigates into GroupScreen, whose
@@ -152,9 +153,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byWidgetPredicate((w) => w is AlertDialog), findsOneWidget);
+    final haptics = recordHaptics(tester);
     await tester.tap(find.widgetWithText(TextButton, 'Remove'));
     await tester.pumpAndSettle();
 
+    expect(haptics, ['HapticFeedbackType.lightImpact']); // #179
     expect(find.text('No groups yet.'), findsOneWidget);
     expect(await db.groupRow('gA'), isNull);
   });

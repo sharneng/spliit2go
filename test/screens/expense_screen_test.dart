@@ -18,6 +18,7 @@ import 'package:spliit2go/sync/outbox.dart';
 import 'package:spliit2go/widgets/category_icon.dart';
 
 import '../support/error_log.dart';
+import '../support/haptics.dart';
 
 void main() {
   const group = Group(
@@ -152,6 +153,7 @@ void main() {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     await pumpScreen(tester, db);
+    final haptics = recordHaptics(tester);
 
     await fillCommonFields(tester, amount: '90');
     await selectSplitMode(tester, 'Amount');
@@ -168,6 +170,8 @@ void main() {
 
     expect(await db.pendingExpenses(), isEmpty);
     expect(find.textContaining('must add up to the total'), findsOneWidget);
+    // The refusal is felt too (#179).
+    expect(haptics, ['HapticFeedbackType.errorNotification']);
   });
 
   testWidgets('by-amount split with matching amounts saves with exact per-person shares',
@@ -175,6 +179,7 @@ void main() {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     await pumpScreen(tester, db);
+    final haptics = recordHaptics(tester);
 
     await fillCommonFields(tester, amount: '90');
     await selectSplitMode(tester, 'Amount');
@@ -193,6 +198,7 @@ void main() {
     expect(expense.splitMode, SplitMode.byAmount);
     final byId = {for (final s in expense.paidFor) s.participantId: s.shares};
     expect(byId, {'alex': 5000, 'bea': 3000, 'cid': 1000});
+    expect(haptics, ['HapticFeedbackType.successNotification']); // #179
   });
 
   testWidgets('by-percentage split rejects percentages that don\'t sum to 100',

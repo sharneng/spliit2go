@@ -28,6 +28,8 @@ import '../services/error_reporting.dart';
 import '../services/receipt_cache.dart';
 import '../services/receipt_downloader.dart';
 import '../widgets/receipt_download_indicator.dart';
+import '../widgets/empty_state.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// A single group's expenses, offline-first -- reached by pushing on top
 /// of GroupListScreen (the app's actual root; see main.dart and
@@ -481,7 +483,7 @@ class _GroupScreenState extends State<GroupScreen> {
       );
     }
     if (_expenses.isEmpty) {
-      return Center(child: Text(context.l10n.commonNoExpensesYet));
+      return EmptyState(icon: LucideIcons.receiptText, title: context.l10n.commonNoExpensesYet);
     }
     return ExpenseDateList(
       expenses: _expenses,

@@ -33,6 +33,7 @@ import '../services/receipt_text.dart';
 import '../services/settings_service.dart';
 import '../widgets/receipt_attachments.dart';
 import '../widgets/receipt_language.dart';
+import '../utils/haptics.dart';
 
 /// Adds -- or, given [existingExpense], edits -- an expense. An expense
 /// with [Expense.isReimbursement] set is a settlement/"paid back"
@@ -1310,17 +1311,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _saveErrorDiagnostics = null;
       _originalCurrencyError = null;
     });
-    if (!_formKey.currentState!.validate()) return;
+    // Each refusal below says why on screen; the haptic says to look.
+    if (!_formKey.currentState!.validate()) return _refuse();
     if (_paidInOtherCurrency &&
         _hasGroupCurrencyCode &&
         _originalCurrencyController.text.trim().isEmpty) {
       setState(() => _originalCurrencyError = context.l10n.commonRequired);
-      return;
+      return _refuse();
     }
 
     final amountCents = (parseFlexibleDecimal(_amountController.text)! * 100).round();
     final paidFor = _buildPaidFor(amountCents);
-    if (paidFor == null) return;
+    if (paidFor == null) return _refuse();
 
     int? originalAmountCents;
     String? originalCurrency;
@@ -1343,11 +1345,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     // online-only: each new photo is uploaded or removed first, as before.
     if (_receipts.busy) {
       setState(() => _saveError = context.l10n.expenseReceiptsWaitBeforeSave);
-      return;
+      return _refuse();
     }
     if (widget.isEditing && _receipts.hasFailed) {
       setState(() => _saveError = context.l10n.expenseReceiptsUploadOrRemove);
-      return;
+      return _refuse();
     }
 
     setState(() => _saving = true);
@@ -1386,6 +1388,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       });
     }
   }
+
+  void _refuse() => unawaited(Haptics.refused());
 
   /// Only takes effect after a save actually *succeeds* -- a split
   /// remembered from a save the server rejected would wrongly go on
@@ -1459,6 +1463,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             addedByParticipantId: addedBy, attachments: attachments));
     await _rememberDefaultSplitIfRequested(paidFor);
 
+    unawaited(Haptics.saved());
     if (mounted) Navigator.of(context).pop(true);
   }
 
@@ -1521,6 +1526,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       ErrorReporter.instance.report(e, st, operation: 'Storing an edited expense\'s receipts');
     }
     await _rememberDefaultSplitIfRequested(paidFor);
+    unawaited(Haptics.saved());
     if (mounted) Navigator.of(context).pop(true);
   }
 }

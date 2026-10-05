@@ -38,7 +38,8 @@ SOFTWARE.
 Monogram behavior and palette, the receipt text parser, and the "Paid for"
 wording adapted from spliit-app/spliit-ios
 (80b2e984b3dc07782983f24586d7e4568ada2a02). The accent, money and brand
-colors and the treatment of amounts adapted from spliit-ios
+colors, the treatment of amounts, empty states, haptics and motion
+adapted from spliit-ios
 (dd77c854929a2322a69521e5a553a7b9852055b9).
 
 MIT License

@@ -13,6 +13,8 @@ import '../widgets/money.dart';
 import '../widgets/section_heading.dart';
 import 'expense_screen.dart';
 import '../services/error_reporting.dart';
+import '../widgets/empty_state.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// Who-owes-whom for the group, plus one-tap "mark as paid" for the
 /// suggested settlements -- mirrors the web app's Balances tab.
@@ -311,10 +313,7 @@ class _BalancesScreenState extends State<BalancesScreen> {
                      ),
                 ],
                 if (balances.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Center(child: Text(context.l10n.commonNoExpensesYet)),
-                  ),
+                  EmptyState(icon: LucideIcons.scale, title: context.l10n.commonNoExpensesYet),
               ],
             ),
           );

@@ -12,6 +12,8 @@ import '../services/expense_search.dart';
 import '../sync/outbox.dart';
 import '../widgets/expense_list.dart';
 import 'expense_details_sheet.dart';
+import '../widgets/empty_state.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// Searches a group's expenses by title (issue #39), from the search
 /// button in GroupScreen's bottom bar.
@@ -130,28 +132,12 @@ class _ExpenseSearchScreenState extends State<ExpenseSearchScreen> {
     );
   }
 
-  Widget _message(BuildContext context, String title, String body) {
-    final theme = Theme.of(context);
-    return Center(
-      child: SingleChildScrollView(
+  Widget _message(BuildContext context, String title, String body) => EmptyState(
+        icon: LucideIcons.search,
+        title: title,
+        description: body,
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.search, size: 48, color: theme.colorScheme.outline),
-            const SizedBox(height: 12),
-            Text(title, style: theme.textTheme.titleMedium, textAlign: TextAlign.center),
-            const SizedBox(height: 4),
-            Text(body,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                textAlign: TextAlign.center),
-          ],
-        ),
-      ),
-    );
-  }
+      );
 
   Future<void> _openExpenseDetails(Expense e) async {
     // The keyboard would otherwise sit over the sheet.

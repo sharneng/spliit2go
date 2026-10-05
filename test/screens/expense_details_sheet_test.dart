@@ -17,6 +17,7 @@ import 'package:spliit2go/services/receipt_cache.dart';
 import 'package:spliit2go/sync/outbox.dart';
 
 import '../support/error_log.dart';
+import '../support/haptics.dart';
 
 // Issue #90: tapping an expense shows its details in a sheet, with Edit,
 // Retry and Discard inside it depending on the expense's state.
@@ -632,10 +633,12 @@ void main() {
         return http.Response(ok, 200);
       }));
 
+      final haptics = recordHaptics(tester);
       await tapDelete(tester);
       await tester.tap(inDialog(find.text('Delete')));
       await tester.pumpAndSettle();
 
+      expect(haptics, ['HapticFeedbackType.lightImpact']); // #179
       final sent = (jsonDecode(deleteRequest!.body) as Map<String, dynamic>)['0']['json'];
       expect(sent, {'groupId': 'g1', 'expenseId': 'e1', 'participantId': 'bea'});
       expect(find.byType(BottomSheet), findsNothing);
