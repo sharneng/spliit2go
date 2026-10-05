@@ -12,6 +12,7 @@ import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/group_list_screen.dart';
 import '../support/haptics.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 void main() {
   // Opening a group navigates into GroupScreen, whose
@@ -203,6 +204,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Jan 2, 2026 – Jun 15, 2026'), findsOneWidget);
+  });
+
+  testWidgets('caption icons are sized from the caption text and grow with it (#180)',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.cacheGroup(const Group(
+        id: 'gA', name: 'Banff Trip', currency: '\$', participants: []));
+    await db.recordGroupOpened('gA', serverUrl: 'https://example.test');
+
+    Future<double> iconSize(double textScale) async {
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!),
+        home: GroupListScreen(db: db, clientFactory: (_) => offlineClient()),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(LucideIcons.calendar), findsOneWidget);
+      return tester.widget<Icon>(find.byIcon(LucideIcons.users)).size!;
+    }
+
+    final normal = await iconSize(1);
+    expect(normal, greaterThan(14)); // was a fixed 14 px
+    expect(await iconSize(2), closeTo(normal * 2, 0.01));
   });
 
   testWidgets(

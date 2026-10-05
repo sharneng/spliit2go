@@ -34,17 +34,23 @@ void main() {
   );
   const diningOut = Category(id: 8, name: 'Dining Out', grouping: 'Food and Drink');
 
-  Expense dinner({String title = 'Dinner'}) => Expense(
+  Expense dinner({String title = 'Dinner', SplitMode splitMode = SplitMode.byShares}) => Expense(
         id: 'e1',
         groupId: 'g1',
         title: title,
         amountCents: 6000,
         paidBy: 'bea',
-        paidFor: const [
-          ExpenseShare(participantId: 'alex', shares: 2),
-          ExpenseShare(participantId: 'bea', shares: 1),
-        ],
-        splitMode: SplitMode.byShares,
+        paidFor: splitMode == SplitMode.byPercentage
+            // Basis points.
+            ? const [
+                ExpenseShare(participantId: 'alex', shares: 6667),
+                ExpenseShare(participantId: 'bea', shares: 3333),
+              ]
+            : const [
+                ExpenseShare(participantId: 'alex', shares: 2),
+                ExpenseShare(participantId: 'bea', shares: 1),
+              ],
+        splitMode: splitMode,
         category: 8,
         notes: 'Birthday dinner',
         date: DateTime(2026, 9, 16),
@@ -559,14 +565,21 @@ void main() {
     await closeTree(tester);
   });
 
-  for (final locale in const [Locale('en'), Locale('fr'), Locale('zh')]) {
-    testWidgets('fits a narrow phone at double text size ($locale)', (tester) async {
+  // Every split mode: its label sits beside "Paid for" in the section's
+  // caption, and "Pourcentage" is the longest (#183 review).
+  for (final (locale, splitMode) in [
+    for (final locale in const [Locale('en'), Locale('fr'), Locale('zh')])
+      for (final splitMode in SplitMode.values) (locale, splitMode),
+  ]) {
+    testWidgets('fits a narrow phone at double text size ($locale, ${splitMode.name})',
+        (tester) async {
       tester.view.physicalSize = const Size(360, 740);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
-      await db.replaceServerExpenses('g1', [dinner(title: 'A long expense title that wraps')]);
+      await db.replaceServerExpenses(
+          'g1', [dinner(title: 'A long expense title that wraps', splitMode: splitMode)]);
       await openSheet(tester, db,
           locale: locale,
           activeUserId: 'bea',
@@ -576,11 +589,15 @@ void main() {
                 child: child!,
               ));
 
-      // Drag the sheet open fully and scroll it to the end.
+      // Drag the sheet open fully, then scroll its list to the notes, its
+      // last part: the list is lazy, so the Paid for section on the way
+      // isn't laid out until it's scrolled to.
       await tester.drag(find.byType(BottomSheet), const Offset(0, -600));
       await tester.pumpAndSettle();
-      await tester.drag(find.byType(BottomSheet), const Offset(0, -3000));
+      await tester.dragUntilVisible(
+          find.text('Birthday dinner'), find.byType(BottomSheet), const Offset(0, -200));
       await tester.pumpAndSettle();
+      expect(find.text('Birthday dinner'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await closeTree(tester);
     });

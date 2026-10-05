@@ -25,6 +25,7 @@ import '../services/receipt_cache.dart';
 import '../widgets/error_message.dart';
 import '../widgets/receipts.dart';
 import '../utils/haptics.dart';
+import '../widgets/grouped_section.dart';
 
 /// What tapping an expense does, from both the expense list and the
 /// Activity tab (issue #90): a bottom sheet showing the expense's details,
@@ -72,6 +73,7 @@ Future<bool> showExpenseDetails(
     isScrollControlled: true,
     useSafeArea: true,
     showDragHandle: true,
+    backgroundColor: GroupedSection.backgroundColor(context),
     builder: (_) => _ExpenseDetailsSheet(
       expenseId: expenseId,
       group: group,
@@ -681,41 +683,45 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       ..._badges(context, e),
       const SizedBox(height: 12),
       ..._actions(context, e),
-      const Divider(height: 32),
-      _info(context, Icons.calendar_today_outlined, l10n.expenseDateLabel,
-          formatDate(e.date, locale: locale)),
-      _info(context, Icons.category_outlined, l10n.expenseCategoryLabel,
-          localizedCategoryLabel(context, e.category, known)),
-      _info(context, Icons.person_outline, l10n.expensePaidByLabel, _name(e.paidBy)),
-      const SizedBox(height: 16),
-      Row(
+      const SizedBox(height: 20),
+      GroupedSection(
+        margin: _sectionMargin,
+        dividerIndent: 56,
         children: [
-          Expanded(child: Text(l10n.expensePaidForHeading, style: theme.textTheme.titleSmall)),
-          Text(_splitLabel(context, e.splitMode),
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          _info(context, Icons.calendar_today_outlined, l10n.expenseDateLabel,
+              formatDate(e.date, locale: locale)),
+          _info(context, Icons.category_outlined, l10n.expenseCategoryLabel,
+              localizedCategoryLabel(context, e.category, known)),
+          _info(context, Icons.person_outline, l10n.expensePaidByLabel, _name(e.paidBy)),
         ],
       ),
-      const SizedBox(height: 4),
-      for (final share in e.paidFor)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            children: [
-              Expanded(child: Text(_name(share.participantId))),
-              const SizedBox(width: 12),
-              Money(formatMoney(shares[share.participantId] ?? 0, currency, locale: locale)),
-            ],
-          ),
+      GroupedSection(
+        margin: _sectionMargin,
+        caption: l10n.expensePaidForHeading,
+        captionTrailing: Text(_splitLabel(context, e.splitMode),
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        children: [
+          for (final share in e.paidFor)
+            GroupedRow(
+              title: Text(_name(share.participantId)),
+              trailing:
+                  Money(formatMoney(shares[share.participantId] ?? 0, currency, locale: locale)),
+            ),
+        ],
+      ),
+      if (e.notes.isNotEmpty)
+        GroupedSection(
+          margin: _sectionMargin,
+          caption: l10n.expenseNotesLabel,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SelectableText(e.notes),
+            ),
+          ],
         ),
-      if (e.notes.isNotEmpty) ...[
-        const SizedBox(height: 16),
-        Text(l10n.expenseNotesLabel, style: theme.textTheme.titleSmall),
-        const SizedBox(height: 4),
-        SelectableText(e.notes),
-      ],
       if (e.documentCount > 0 || (_documentsOf(e)?.isNotEmpty ?? false) || _attachments.isNotEmpty) ...[
-        const SizedBox(height: 16),
         ReceiptsSection(
           cache: ReceiptCache.of(widget.db),
           groupId: widget.group.id,
@@ -830,28 +836,18 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     ];
   }
 
+  /// The sheet already has its own side padding.
+  static const _sectionMargin = EdgeInsets.only(bottom: 20);
+
+  /// A labeled value: the label small above it, the icon leading.
   Widget _info(BuildContext context, IconData icon, String label, String value) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: theme.textTheme.labelMedium
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                Text(value, style: theme.textTheme.bodyLarge),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return GroupedRow(
+      leading: Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
+      title: Text(label,
+          style: theme.textTheme.labelMedium
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+      subtitle: Text(value, style: theme.textTheme.bodyLarge),
     );
   }
 

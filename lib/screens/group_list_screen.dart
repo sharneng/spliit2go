@@ -27,6 +27,7 @@ import '../widgets/receipt_download_indicator.dart';
 import '../widgets/error_message.dart';
 import '../widgets/empty_state.dart';
 import '../utils/haptics.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// Registered as a `MaterialApp.navigatorObservers` entry (main.dart) so
 /// [_GroupListScreenState] can hear about routes pushed *on top of* it by
@@ -439,12 +440,12 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
                 label: context.l10n.groupListParticipantCount(count),
                 excludeSemantics: true,
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.people_outline, size: 14),
+                  const _CaptionIcon(LucideIcons.users),
                   const SizedBox(width: 4),
                   Text('$count'),
                 ])),
             Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.calendar_today_outlined, size: 14),
+              const _CaptionIcon(LucideIcons.calendar),
               const SizedBox(width: 4),
               Flexible(
                   child: Text(formatDateSpan(_dateSpans[row.id],
@@ -456,5 +457,22 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
         onLongPress: openMenu,
       ),
     );
+  }
+}
+
+/// An icon in a row's caption, sized from the caption's own text so it
+/// grows with the system text size, in the caption's color (#180). Lucide,
+/// whose line drawings sit next to text the way spliit-ios's SF Symbols
+/// do; Material's, drawn for 24 px, thinned to faint lines at 14.
+class _CaptionIcon extends StatelessWidget {
+  const _CaptionIcon(this.icon);
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = DefaultTextStyle.of(context).style;
+    final fontSize = MediaQuery.textScalerOf(context).scale(style.fontSize ?? 14);
+    return Icon(icon, size: fontSize * 1.15, color: style.color);
   }
 }

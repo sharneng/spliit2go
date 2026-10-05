@@ -17,6 +17,7 @@ import '../widgets/currency_picker.dart';
 import '../widgets/error_message.dart';
 import 'join_group_screen.dart' show cacheJoinedGroup;
 import '../services/error_reporting.dart';
+import '../widgets/grouped_section.dart';
 
 /// Group settings: rename the group, add or change its notes, change its
 /// currency, and add, rename, or remove participants -- mirrors the web
@@ -436,6 +437,12 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
 
   /// Locked, and dimmed, once a group has been created but not yet loaded
   /// (see [_created]): only retrying the load is left to do.
+  /// A field on a section's card, inset like a row's text.
+  Widget _cell(Widget field) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: field,
+      );
+
   Widget _lockable(Widget field) => _created == null
       ? field
       : IgnorePointer(child: Opacity(opacity: 0.5, child: field));
@@ -466,7 +473,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
           onChanged: (value) => setState(() => _server = value),
         ),
         if (_server == null) ...[
-          const SizedBox(height: 12),
+          const GroupedDivider(indent: 0),
           TextField(
             controller: _otherServerController,
             decoration: InputDecoration(
@@ -487,6 +494,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_creating ? context.l10n.createGroupTitle : context.l10n.groupSettingsTitle),
+        backgroundColor: GroupedSection.backgroundColor(context),
         actions: [
           _saving
               ? const Padding(
@@ -506,118 +514,129 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                 ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (_error != null) ...[
-            // After a create whose load failed it carries the new group's
-            // link (#116 review): selectable, or in the details sheet
-            // (message first) when there are details.
-            ErrorMessage(_error!, diagnostics: _errorDiagnostics),
-            const SizedBox(height: 12),
-          ],
-          for (final field in <Widget>[
-          TextField(
-            controller: _nameController,
-            decoration: InputDecoration(labelText: context.l10n.groupSettingsNameLabel),
+      backgroundColor: GroupedSection.backgroundColor(context),
+      body: Theme(
+        // Fields sit on the cards, so they draw no box of their own.
+        data: Theme.of(context).copyWith(
+          inputDecorationTheme: const InputDecorationTheme(
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            disabledBorder: InputBorder.none,
+            errorBorder: InputBorder.none,
+            focusedErrorBorder: InputBorder.none,
+            filled: false,
           ),
-          const SizedBox(height: 12),
-          InkWell(
-            onTap: _pickCurrency,
-            child: InputDecorator(
-              decoration: InputDecoration(labelText: context.l10n.groupSettingsCurrencyLabel),
-              child: Row(
-                children: [
-                  if (_selectedCurrency.flagEmoji.isNotEmpty) ...[
-                    Text(_selectedCurrency.flagEmoji, style: const TextStyle(fontSize: 18)),
-                    const SizedBox(width: 8),
-                  ],
-                  Expanded(child: Text(_selectedCurrency.toString())),
-                  const Icon(Icons.arrow_drop_down),
-                ],
+        ),
+        child: ListView(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          children: [
+            if (_error != null)
+              // After a create whose load failed it carries the new group's
+              // link (#116 review): selectable, or in the details sheet
+              // (message first) when there are details.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: ErrorMessage(_error!, diagnostics: _errorDiagnostics),
               ),
-            ),
-          ),
-          if (isCustom) ...[
-            const SizedBox(height: 12),
-            TextField(
-              controller: _customSymbolController,
-              decoration: InputDecoration(
-                labelText: context.l10n.groupSettingsSymbolLabel,
-                hintText: context.l10n.groupSettingsSymbolHint,
-                helperText: context.l10n.groupSettingsSymbolHelper,
+            _lockable(GroupedSection(children: [
+              _cell(TextField(
+                controller: _nameController,
+                decoration: InputDecoration(labelText: context.l10n.groupSettingsNameLabel),
+              )),
+              InkWell(
+                onTap: _pickCurrency,
+                child: _cell(InputDecorator(
+                  decoration: InputDecoration(labelText: context.l10n.groupSettingsCurrencyLabel),
+                  child: Row(
+                    children: [
+                      if (_selectedCurrency.flagEmoji.isNotEmpty) ...[
+                        Text(_selectedCurrency.flagEmoji, style: const TextStyle(fontSize: 18)),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(child: Text(_selectedCurrency.toString())),
+                      const Icon(Icons.arrow_drop_down),
+                    ],
+                  ),
+                )),
               ),
-              maxLength: 5,
-            ),
-          ],
-          const SizedBox(height: 12),
-          // Creating: where the group is made, in place of the date span a
-          // new group doesn't have yet.
-          if (_creating)
-            _serverField(context)
-          else
-            // Read-only -- the date span is derived entirely from cached
-            // expense dates (issue #55), there's nothing here to edit.
-            InputDecorator(
-              decoration: InputDecoration(labelText: context.l10n.groupSettingsDateSpanLabel),
-              child: Text(formatDateSpan(_dateSpan, locale: context.appLocale)),
-            ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _informationController,
-            decoration: InputDecoration(
-              labelText: context.l10n.groupSettingsInfoLabel,
-              hintText: context.l10n.groupSettingsInfoHint,
-              alignLabelWithHint: true,
-            ),
-            minLines: 2,
-            maxLines: 6,
-            maxLength: 10000,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Text(context.l10n.groupSettingsParticipantsHeading,
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-              const Spacer(),
-              IconButton(
+              if (isCustom)
+                _cell(TextField(
+                  controller: _customSymbolController,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.groupSettingsSymbolLabel,
+                    hintText: context.l10n.groupSettingsSymbolHint,
+                    helperText: context.l10n.groupSettingsSymbolHelper,
+                  ),
+                  maxLength: 5,
+                )),
+              // Creating: where the group is made, in place of the date
+              // span a new group doesn't have yet.
+              if (_creating)
+                _cell(_serverField(context))
+              else
+                // Read-only -- the date span is derived entirely from
+                // cached expense dates (issue #55), there's nothing here
+                // to edit.
+                _cell(InputDecorator(
+                  decoration:
+                      InputDecoration(labelText: context.l10n.groupSettingsDateSpanLabel),
+                  child: Text(formatDateSpan(_dateSpan, locale: context.appLocale)),
+                )),
+            ])),
+            _lockable(GroupedSection(children: [
+              _cell(TextField(
+                controller: _informationController,
+                decoration: InputDecoration(
+                  labelText: context.l10n.groupSettingsInfoLabel,
+                  hintText: context.l10n.groupSettingsInfoHint,
+                  alignLabelWithHint: true,
+                ),
+                minLines: 2,
+                maxLines: 6,
+                maxLength: 10000,
+              )),
+            ])),
+            _lockable(GroupedSection(
+              caption: context.l10n.groupSettingsParticipantsHeading,
+              captionTrailing: IconButton(
                 icon: const Icon(Icons.person_add_outlined),
                 tooltip: context.l10n.groupSettingsAddParticipantTooltip,
                 onPressed: _addParticipant,
               ),
-            ],
-          ),
-          for (var i = 0; i < _participants.length; i++)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _participants[i].controller,
-                      decoration: const InputDecoration(isDense: true),
+              children: [
+                for (var i = 0; i < _participants.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 16, right: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _participants[i].controller,
+                            decoration: const InputDecoration(isDense: true),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          // Disabled rather than hidden (issue #46) -- still
+                          // visible where every other participant's remove
+                          // button is, but greyed out and inert, so a
+                          // participant with expenses reads as "protected"
+                          // rather than as a row that's simply missing a
+                          // control.
+                          tooltip: _hasExpenses(_participants[i])
+                              ? context.l10n.groupSettingsCantRemoveTooltip
+                              : context.l10n.groupSettingsRemoveTooltip,
+                          onPressed:
+                              _hasExpenses(_participants[i]) ? null : () => _removeParticipant(i),
+                        ),
+                      ],
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    // Disabled rather than hidden (issue #46) -- still
-                    // visible where every other participant's remove
-                    // button is, but greyed out and inert, so a
-                    // participant with expenses reads as "protected"
-                    // rather than as a row that's simply missing a
-                    // control.
-                    tooltip: _hasExpenses(_participants[i])
-                        ? context.l10n.groupSettingsCantRemoveTooltip
-                        : context.l10n.groupSettingsRemoveTooltip,
-                    onPressed:
-                        _hasExpenses(_participants[i]) ? null : () => _removeParticipant(i),
-                  ),
-                ],
-              ),
-            ),
-          ])
-            _lockable(field),
-        ],
+              ],
+            )),
+          ],
+        ),
       ),
     );
   }
