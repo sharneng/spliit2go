@@ -73,8 +73,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(bar().color, theme.scaffoldBackgroundColor, reason: '${theme.brightness}');
       expect(bar().surfaceTintColor, Colors.transparent, reason: '${theme.brightness}');
-      // A faint shadow marks the edge instead.
-      expect(bar().elevation, greaterThan(0), reason: '${theme.brightness}');
+      // And stays flat: no shadow either (#188 review).
+      expect(bar().elevation, 0, reason: '${theme.brightness}');
     }
   });
 
