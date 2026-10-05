@@ -51,6 +51,9 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(find.text('About Spliit2Go'), 200);
+    // All of it, not just its top edge, so the tap lands on it.
+    await tester.ensureVisible(find.text('About Spliit2Go'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('About Spliit2Go'));
     await tester.pumpAndSettle();
 

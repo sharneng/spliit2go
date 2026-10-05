@@ -12,6 +12,7 @@ import '../services/settings_service.dart';
 import '../utils/byte_size.dart';
 import '../widgets/error_message.dart';
 import 'about_screen.dart';
+import '../widgets/grouped_section.dart';
 
 /// App-wide preferences, separate from an individual group's settings.
 class AppSettingsScreen extends StatelessWidget {
@@ -26,67 +27,65 @@ class AppSettingsScreen extends StatelessWidget {
     final settings = AppSettingsScope.of(context);
     final l10n = context.l10n;
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.appSettingsTitle)),
+      appBar: AppBar(
+          title: Text(l10n.appSettingsTitle),
+          backgroundColor: GroupedSection.backgroundColor(context)),
+      backgroundColor: GroupedSection.backgroundColor(context),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 16),
         children: [
-          _sectionHeading(context, l10n.appSettingsTheme),
-          for (final option in [
-            (ThemeMode.light, l10n.appSettingsThemeLight),
-            (ThemeMode.dark, l10n.appSettingsThemeDark),
-            (ThemeMode.system, l10n.appSettingsThemeSystem),
-          ])
-            _optionTile(
-              context,
-              settings: settings,
-              label: option.$2,
-              selected: settings.themeMode == option.$1,
-              onSelected: () => settings.setThemeMode(option.$1),
-            ),
-          const Divider(height: 32),
+          GroupedSection(caption: l10n.appSettingsTheme, children: [
+            for (final option in [
+              (ThemeMode.light, l10n.appSettingsThemeLight),
+              (ThemeMode.dark, l10n.appSettingsThemeDark),
+              (ThemeMode.system, l10n.appSettingsThemeSystem),
+            ])
+              _optionTile(
+                context,
+                settings: settings,
+                label: option.$2,
+                selected: settings.themeMode == option.$1,
+                onSelected: () => settings.setThemeMode(option.$1),
+              ),
+          ]),
           // Issue #51: explicit language override. "System default" first
           // (clears the override); the language names are each language's
           // own name for itself, deliberately untranslated, so the list
           // stays findable from any UI language.
-          _sectionHeading(context, l10n.appSettingsLanguage),
-          _optionTile(
-            context,
-            settings: settings,
-            label: l10n.appSettingsLanguageSystem,
-            selected: settings.locale == null,
-            onSelected: () => settings.setLocale(null),
-          ),
-          for (final option in appLocaleOptions)
+          GroupedSection(caption: l10n.appSettingsLanguage, children: [
             _optionTile(
               context,
               settings: settings,
-              label: option.nativeName,
-              selected: settings.locale == option.locale,
-              onSelected: () => settings.setLocale(option.locale),
+              label: l10n.appSettingsLanguageSystem,
+              selected: settings.locale == null,
+              onSelected: () => settings.setLocale(null),
             ),
-          if (receipts case final receipts?) ...[
-            const Divider(height: 32),
-            _sectionHeading(context, l10n.appSettingsStorage),
-            _ReceiptStorageTile(receipts),
-            _ReceiptDownloadSettings(receipts),
-          ],
-          const Divider(height: 32),
-          _sectionHeading(context, l10n.aboutTitle),
-          ListTile(
-            title: Text(l10n.appSettingsAbout),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const AboutScreen())),
-          ),
+            for (final option in appLocaleOptions)
+              _optionTile(
+                context,
+                settings: settings,
+                label: option.nativeName,
+                selected: settings.locale == option.locale,
+                onSelected: () => settings.setLocale(option.locale),
+              ),
+          ]),
+          if (receipts case final receipts?)
+            GroupedSection(caption: l10n.appSettingsStorage, children: [
+              _ReceiptStorageTile(receipts),
+              _ReceiptDownloadSettings(receipts),
+            ]),
+          GroupedSection(caption: l10n.aboutTitle, children: [
+            GroupedRow(
+              title: Text(l10n.appSettingsAbout),
+              navigates: true,
+              onTap: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => const AboutScreen())),
+            ),
+          ]),
         ],
       ),
     );
   }
-
-  Widget _sectionHeading(BuildContext context, String text) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Text(text, style: Theme.of(context).textTheme.titleMedium),
-      );
 
   /// One selectable row: runs [onSelected] and, if persisting the choice
   /// fails (the setting reverts itself before rethrowing), tells the user.
@@ -97,7 +96,7 @@ class AppSettingsScreen extends StatelessWidget {
     required bool selected,
     required Future<void> Function() onSelected,
   }) =>
-      ListTile(
+      GroupedRow(
         title: Text(label),
         selected: selected,
         trailing: selected ? const Icon(Icons.check) : null,
@@ -210,7 +209,7 @@ class _ReceiptStorageTileState extends State<_ReceiptStorageTile> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final bytes = _bytes;
-    return ListTile(
+    return GroupedRow(
       title: Text(l10n.appSettingsReceipts),
       subtitle: Text(bytes == null
           ? ''
@@ -333,14 +332,15 @@ class _ReceiptDownloadSettingsState extends State<_ReceiptDownloadSettings> {
     final l10n = context.l10n;
     final mode = _mode, limit = _limitMb;
     return Column(children: [
-      ListTile(
+      GroupedRow(
         title: Text(l10n.appSettingsReceiptDownloads),
         subtitle: Text(mode == null
             ? l10n.appSettingsReceiptDownloadsHint
             : '${_modeLabel(mode)} · ${l10n.appSettingsReceiptDownloadsHint}'),
         onTap: mode == null ? null : _chooseMode,
       ),
-      ListTile(
+      const GroupedDivider(),
+      GroupedRow(
         title: Text(l10n.appSettingsReceiptLimit),
         subtitle: limit == null ? null : Text(_limitLabel(limit)),
         onTap: limit == null ? null : _chooseLimit,
