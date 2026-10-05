@@ -19,6 +19,7 @@ import '../services/expense_shares.dart';
 import '../sync/outbox.dart';
 import '../utils/date_format.dart';
 import '../utils/money.dart';
+import '../widgets/money.dart';
 import '../utils/decimal_input.dart';
 import '../widgets/currency_picker.dart';
 import '../widgets/category_icon.dart';
@@ -1226,8 +1227,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             // anything that doesn't yet satisfy [_showsLivePreview].
             subtitle:
                 preview != null
-                    ? Text(formatMoney(preview, widget.group.currency,
-                        locale: context.appLocale))
+                    ? Money(
+                        formatMoney(preview, widget.group.currency,
+                            locale: context.appLocale),
+                        size: MoneySize.support)
                     : null,
             controlAffinity: ListTileControlAffinity.leading,
             contentPadding: EdgeInsets.zero,

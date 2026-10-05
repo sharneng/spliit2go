@@ -9,6 +9,7 @@ import '../models/group.dart';
 import '../services/balance_calculator.dart';
 import '../sync/outbox.dart';
 import '../utils/money.dart';
+import '../widgets/money.dart';
 import '../widgets/section_heading.dart';
 import 'expense_screen.dart';
 import '../services/error_reporting.dart';
@@ -195,17 +196,11 @@ class _BalancesScreenState extends State<BalancesScreen> {
                     ),
                     const SizedBox(height: 4),
                     // Unsigned: the line above already says which way.
-                    Text(
+                    Money(
                       formatMoney(net.abs(), widget.group.currency,
                           locale: context.appLocale),
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: net > 0
-                            ? Colors.green.shade700
-                            : net < 0
-                                ? theme.colorScheme.error
-                                : null,
-                      ),
+                      size: MoneySize.hero,
+                      sign: MoneySign.ofBalance(net),
                     ),
                   ],
                 ),
@@ -285,15 +280,10 @@ class _BalancesScreenState extends State<BalancesScreen> {
                     title: Text(b.participantId == widget.activeUserId
                         ? context.l10n.expenseDetailsYou(_name(b.participantId))
                         : _name(b.participantId)),
-                    trailing: Text(
+                    trailing: Money(
                       formatMoney(b.netCents, widget.group.currency,
                           locale: context.appLocale),
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: b.netCents < 0
-                            ? Theme.of(context).colorScheme.error
-                            : Colors.green.shade700,
-                      ),
+                      sign: MoneySign.ofBalance(b.netCents),
                     ),
                   ),
                 if (settlements.isNotEmpty) ...[

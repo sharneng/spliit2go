@@ -14,6 +14,7 @@ import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/stats_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
+import 'package:spliit2go/widgets/money.dart';
 
 // Flat testWidgets calls, not group() -- `group` is also the fixture
 // constant name below (see activity_screen_test.dart for the same note).
@@ -253,7 +254,7 @@ void main() {
       );
 
   Finder headline(String amount) => find.byWidgetPredicate(
-      (w) => w is Text && w.data == amount && w.style?.fontWeight == FontWeight.bold);
+      (w) => w is Money && w.value == amount && w.size == MoneySize.hero);
 
   testWidgets('the group total leaves reimbursements out (#103)', (tester) async {
     final db = AppDatabase(NativeDatabase.memory());

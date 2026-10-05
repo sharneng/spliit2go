@@ -13,6 +13,8 @@ import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/balances_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
+import 'package:spliit2go/theme.dart';
+import 'package:spliit2go/widgets/money.dart';
 
 void main() {
   const group = Group(
@@ -243,9 +245,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   }
 
-  Text amountText(WidgetTester tester, String amount) => tester
-      .widgetList<Text>(find.text(amount))
-      .firstWhere((t) => t.style?.fontWeight == FontWeight.bold);
+  // The You headline: the hero-sized amount, not the participant's row.
+  Finder headline(String amount) => find.descendant(
+      of: find.byWidgetPredicate(
+          (w) => w is Money && w.value == amount && w.size == MoneySize.hero),
+      matching: find.text(amount));
+
+  Color? amountColor(WidgetTester tester, String amount) =>
+      tester.widget<Text>(headline(amount)).style!.color;
 
   testWidgets('with nobody picked: "You · Nobody" and why to pick, no amount',
       (tester) async {
@@ -262,7 +269,7 @@ void main() {
     await teardown(tester);
   });
 
-  testWidgets('owed: says so, the amount unsigned in green, and marks your row',
+  testWidgets('owed: says so, the amount unsigned in the positive money color, and marks your row',
       (tester) async {
     final db = await dbWithEvenExpense();
     addTearDown(db.close);
@@ -270,25 +277,22 @@ void main() {
 
     expect(find.text('You are owed'), findsOneWidget);
     // Alex's own row shows $60.00 too; the You amount is the bold headline.
-    expect(amountText(tester, '\$60.00').style!.color, Colors.green.shade700);
+    expect(amountColor(tester, '\$60.00'), SpliitColors.light.moneyPositive);
     expect(find.widgetWithText(ListTile, 'Alex'), findsOneWidget); // the You row
     expect(find.text('Alex (you)'), findsOneWidget);
     expect(find.text(hint), findsNothing);
     await teardown(tester);
   });
 
-  testWidgets('owing: says so, the amount unsigned in the error color', (tester) async {
+  testWidgets('owing: says so, the amount unsigned in the negative money color', (tester) async {
     final db = await dbWithEvenExpense();
     addTearDown(db.close);
     await pumpBalances(tester, db, activeUserId: 'bea');
 
     expect(find.text('You owe'), findsOneWidget);
     // Bea's row says -$30.00; the You headline drops the sign.
-    final headline = find.byWidgetPredicate((w) =>
-        w is Text && w.data == '\$30.00' && w.style?.fontWeight == FontWeight.bold);
-    expect(headline, findsOneWidget);
-    expect(tester.widget<Text>(headline).style!.color,
-        Theme.of(tester.element(headline)).colorScheme.error);
+    expect(headline('\$30.00'), findsOneWidget);
+    expect(amountColor(tester, '\$30.00'), SpliitColors.light.moneyNegative);
     expect(find.text('Bea (you)'), findsOneWidget);
     await teardown(tester);
   });

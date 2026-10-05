@@ -17,6 +17,7 @@ import '../services/expense_shares.dart';
 import '../sync/outbox.dart';
 import '../utils/date_format.dart';
 import '../utils/money.dart';
+import '../widgets/money.dart';
 import '../widgets/category_icon.dart';
 import 'expense_screen.dart';
 import '../services/error_reporting.dart';
@@ -665,8 +666,8 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
         ],
       ),
       const SizedBox(height: 12),
-      Text(formatMoney(e.amountCents, currency, locale: locale),
-          style: theme.textTheme.headlineSmall),
+      Money(formatMoney(e.amountCents, currency, locale: locale),
+          size: MoneySize.hero, isReimbursement: e.isReimbursement),
       if (originalAmount != null && originalCurrency != null)
         Text(
           l10n.expenseDetailsOriginalAmount(
@@ -700,7 +701,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
             children: [
               Expanded(child: Text(_name(share.participantId))),
               const SizedBox(width: 12),
-              Text(formatMoney(shares[share.participantId] ?? 0, currency, locale: locale)),
+              Money(formatMoney(shares[share.participantId] ?? 0, currency, locale: locale)),
             ],
           ),
         ),
