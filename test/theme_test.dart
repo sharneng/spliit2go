@@ -53,6 +53,31 @@ void main() {
     expect(spliit2goDarkTheme.scaffoldBackgroundColor, spliit2goDarkTheme.colorScheme.surface);
   });
 
+  testWidgets("the app bar keeps the page's color when content scrolls under it (#188)",
+      (tester) async {
+    for (final theme in [spliit2goLightTheme, spliit2goDarkTheme]) {
+      // A fresh list each time, at its top.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(MaterialApp(
+        theme: theme,
+        home: Scaffold(
+          appBar: AppBar(title: const Text('Title')),
+          body: ListView(children: [for (var i = 0; i < 60; i++) Text('row $i')]),
+        ),
+      ));
+      Material bar() => tester.widget<Material>(
+          find.descendant(of: find.byType(AppBar), matching: find.byType(Material)).first);
+      expect(bar().elevation, 0, reason: '${theme.brightness}: at rest');
+
+      await tester.drag(find.byType(ListView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+      expect(bar().color, theme.scaffoldBackgroundColor, reason: '${theme.brightness}');
+      expect(bar().surfaceTintColor, Colors.transparent, reason: '${theme.brightness}');
+      // A faint shadow marks the edge instead.
+      expect(bar().elevation, greaterThan(0), reason: '${theme.brightness}');
+    }
+  });
+
   test('each theme carries its own spliit-ios colors (#178)', () {
     expect(spliit2goLightTheme.extension<SpliitColors>(), SpliitColors.light);
     expect(spliit2goDarkTheme.extension<SpliitColors>(), SpliitColors.dark);
