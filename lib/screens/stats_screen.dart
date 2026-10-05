@@ -13,6 +13,8 @@ import '../services/stats_calculator.dart';
 import '../sync/outbox.dart';
 import '../utils/money.dart';
 import '../widgets/money.dart';
+import '../widgets/empty_state.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// A first pass at the web app's Stats tab (issue #27, split from #6
 /// alongside Activity -- see issue #26): the group's total spending
@@ -131,7 +133,7 @@ class _StatsScreenState extends State<StatsScreen> {
     List<CategorySpending> categories,
   ) {
     if (noExpenses) {
-      return Center(child: Text(context.l10n.commonNoExpensesYet));
+      return EmptyState(icon: LucideIcons.chartColumn, title: context.l10n.commonNoExpensesYet);
     }
     return ListView(
       padding: const EdgeInsets.all(16),

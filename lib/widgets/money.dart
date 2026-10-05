@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import '../utils/motion.dart';
 
 /// How much an amount matters on the screen it's on (#178).
 enum MoneySize {
@@ -37,7 +38,8 @@ enum MoneySign {
 /// spliit-ios's `Money` (see THIRD_PARTY_NOTICES.md): tabular figures,
 /// semibold, slightly tightened, in one of four text-theme sizes so it
 /// follows the system text size. Reimbursements read as an aside:
-/// regular weight, italic.
+/// regular weight, italic. A changed amount fades to its new value
+/// ([Motion]).
 ///
 /// An amount inside a sentence stays plain text in that sentence.
 class Money extends StatelessWidget {
@@ -72,14 +74,32 @@ class Money extends StatelessWidget {
       MoneySign.negative => colors.moneyNegative,
       MoneySign.settled => theme.colorScheme.onSurfaceVariant,
     };
-    return Text(
+    final amount = Text(
       value,
+      key: ValueKey(value),
       style: base?.copyWith(
         fontWeight: isReimbursement ? FontWeight.w400 : FontWeight.w600,
         fontStyle: isReimbursement ? FontStyle.italic : null,
         fontFeatures: const [FontFeature.tabularFigures()],
         letterSpacing: -0.2,
         color: color,
+      ),
+    );
+    // Its own width, where a plain Text would be: at the start of a
+    // stretched column, not across it.
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      widthFactor: 1,
+      child: AnimatedSwitcher(
+        duration: Motion.duration,
+        switchInCurve: Motion.curve,
+        switchOutCurve: Motion.curve,
+        // Right-aligned, as amounts are, while the two overlap.
+        layoutBuilder: (current, previous) => Stack(
+          alignment: AlignmentDirectional.centerEnd,
+          children: [...previous, if (current != null) current],
+        ),
+        child: amount,
       ),
     );
   }

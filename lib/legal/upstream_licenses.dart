@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 /// Spliit's source (the share math, date sections, the expense form's live
 /// amounts) and from spliit-ios's (the receipt parser, group monograms, the
 /// "Paid for" wording, the accent and money colors, the treatment of
-/// amounts). Both licenses ask that their notice travel with
+/// amounts, empty states, haptics and motion). Both licenses ask that their notice travel with
 /// substantial portions of the software. THIRD_PARTY_NOTICES.md carries the
 /// same notices in the repo.
 void registerUpstreamLicenses() {

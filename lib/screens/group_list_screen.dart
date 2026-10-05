@@ -25,6 +25,8 @@ import '../services/receipt_cache.dart';
 import '../services/receipt_downloader.dart';
 import '../widgets/receipt_download_indicator.dart';
 import '../widgets/error_message.dart';
+import '../widgets/empty_state.dart';
+import '../utils/haptics.dart';
 
 /// Registered as a `MaterialApp.navigatorObservers` entry (main.dart) so
 /// [_GroupListScreenState] can hear about routes pushed *on top of* it by
@@ -221,20 +223,13 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
       return const Center(child: CircularProgressIndicator());
     }
     if (_groups.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(context.l10n.groupListEmpty),
-              const SizedBox(height: 12),
-              FilledButton(
-                  onPressed: _joinAnother,
-                  child: Text(context.l10n.groupListEmptyJoinButton)),
-            ],
-          ),
-        ),
+      return EmptyState.logo(
+        title: context.l10n.groupListEmpty,
+        actions: [
+          FilledButton(
+              onPressed: _joinAnother,
+              child: Text(context.l10n.groupListEmptyJoinButton)),
+        ],
       );
     }
     final sorted = [..._groups]
@@ -364,6 +359,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
           if (!await _confirmRemove(row)) return;
           ReceiptDownloader.of(widget.db).removed(row.id);
           await widget.db.leaveGroup(row.id);
+          unawaited(Haptics.deleted());
           unawaited(ReceiptCache.of(widget.db).sweep());
       }
     } catch (e, st) {

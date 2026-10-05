@@ -66,4 +66,33 @@ void main() {
     expect(style.fontWeight, FontWeight.w400);
     expect(style.fontStyle, FontStyle.italic);
   });
+
+  testWidgets('in a stretched column it keeps its own width, at the start (#179)',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: spliit2goLightTheme,
+      home: const Scaffold(
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [Money('\$100.00', size: MoneySize.hero)],
+        ),
+      ),
+    ));
+    expect(tester.getTopLeft(find.text('\$100.00')).dx, 0);
+  });
+
+  testWidgets('a changed amount fades to its new value, then only the new one is left',
+      (tester) async {
+    Future<void> show(String value) => tester.pumpWidget(MaterialApp(
+          theme: spliit2goLightTheme,
+          home: Scaffold(body: Money(value)),
+        ));
+    await show('\$1.00');
+    await show('\$2.00');
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('\$1.00'), findsOneWidget); // still fading out
+    await tester.pumpAndSettle();
+    expect(find.text('\$1.00'), findsNothing);
+    expect(find.text('\$2.00'), findsOneWidget);
+  });
 }

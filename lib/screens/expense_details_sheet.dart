@@ -24,6 +24,7 @@ import '../services/error_reporting.dart';
 import '../services/receipt_cache.dart';
 import '../widgets/error_message.dart';
 import '../widgets/receipts.dart';
+import '../utils/haptics.dart';
 
 /// What tapping an expense does, from both the expense list and the
 /// Activity tab (issue #90): a bottom sheet showing the expense's details,
@@ -457,6 +458,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       // Activity) is closed below.
       _closeWith = const _Changed();
       await widget.db.removeDeletedExpense(widget.group.id, widget.expenseId);
+      unawaited(Haptics.deleted());
       if (mounted) _close(const _Changed());
       return;
     }
@@ -590,6 +592,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     // just makes that close report the change.
     _closeWith = const _Changed();
     final discarded = await widget.db.deleteFailedExpense(widget.expenseId);
+    if (discarded) unawaited(Haptics.deleted());
     // Nothing matched: the expense stopped being a failed one while the
     // sheet was open (a retry and sync elsewhere). The row watch already
     // shows its new state.

@@ -14,6 +14,8 @@ import '../widgets/section_heading.dart';
 import 'expense_details_sheet.dart';
 import '../widgets/error_message.dart';
 import '../services/error_reporting.dart';
+import '../widgets/empty_state.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// The group's server-side activity log (issue #26) -- who changed what
 /// and when. Read-only and **online-only**: unlike expenses, activity
@@ -260,7 +262,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
         );
       }
       if (_loading || _hasMore) return const Center(child: CircularProgressIndicator());
-      return Center(child: Text(context.l10n.activityEmpty));
+      return EmptyState(icon: LucideIcons.history, title: context.l10n.activityEmpty);
     }
 
     // The whole loaded log is grouped on every build, so a section that
