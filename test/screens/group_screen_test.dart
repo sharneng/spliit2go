@@ -696,7 +696,7 @@ void main() {
       expect(find.byType(BalancesScreen), findsOneWidget);
       // Embedded (not pushed): still just the one GroupScreen AppBar
       // titled with the group's name, not a second "Balances" AppBar.
-      expect(find.text('Balances'), findsNothing);
+      expect(find.widgetWithText(AppBar, 'Balances'), findsNothing);
       expect(find.text('Banff Trip'), findsOneWidget);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());

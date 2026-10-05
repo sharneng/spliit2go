@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
@@ -133,6 +134,18 @@ void main() {
     expect(find.text('Groceries'), findsWidgets);
     expect(find.text('Alex'), findsOneWidget);
     expect(find.text('Bea'), findsOneWidget);
+    // #187: each a grouped section under its caption, the note under the
+    // group's card.
+    String? captionOf(String text) => tester
+        .widget<GroupedSection>(find.ancestor(of: find.text(text), matching: find.byType(GroupedSection)))
+        .caption;
+    expect(captionOf('Total group spending'), 'The group');
+    expect(captionOf('Alex'), 'By participant');
+    expect(find.byType(GroupedSection), findsNWidgets(3));
+    expect(find.byType(Card), findsNothing);
+    expect(
+        tester.getTopLeft(find.textContaining('Settling up is not spending')).dy,
+        greaterThan(tester.getBottomLeft(find.text('\$170.00')).dy));
     // Drift's watch() stream (issue #47) schedules an internal
     // debounce/reconnect Timer when a subscriber cancels, which
     // happens when this widget is disposed. flutter_test's automatic

@@ -12,6 +12,7 @@ import '../services/category_store.dart';
 import '../services/stats_calculator.dart';
 import '../sync/outbox.dart';
 import '../utils/money.dart';
+import '../widgets/grouped_section.dart';
 import '../widgets/money.dart';
 import '../widgets/empty_state.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -135,40 +136,19 @@ class _StatsScreenState extends State<StatsScreen> {
     if (noExpenses) {
       return EmptyState(icon: LucideIcons.chartColumn, title: context.l10n.commonNoExpensesYet);
     }
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _sectionTitle(context, context.l10n.statsSectionGroup),
-        _groupCard(context, groupTotalCents),
-        const SizedBox(height: 20),
-        _sectionTitle(context, context.l10n.statsSectionByParticipant),
-        for (final p in participants) _participantTile(context, p),
-        const SizedBox(height: 20),
-        _sectionTitle(context, context.l10n.statsSectionByCategory),
-        for (final c in categories) _categoryTile(context, c),
-      ],
-    );
-  }
-
-  Widget _sectionTitle(BuildContext context, String title) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(title, style: Theme.of(context).textTheme.titleMedium),
-      );
-
-  /// One figure, like spliit-ios's StatsView "The group" section (issue
-  /// #103): the group's total, unsigned, under a label that says which
-  /// way it goes. Negative only if refunds outweigh spending, which
-  /// spliit-ios calls earnings. Replaces the old Summary and Totals cards.
-  Widget _groupCard(BuildContext context, int groupTotalCents) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ListView(
+      padding: const EdgeInsets.only(top: 16),
       children: [
-        Card(
-          margin: EdgeInsets.zero,
-          child: SizedBox(
-            width: double.infinity,
-            child: Padding(
+        // One figure, like spliit-ios's StatsView "The group" section
+        // (issue #103): the group's total, unsigned, under a label that
+        // says which way it goes. Negative only if refunds outweigh
+        // spending, which spliit-ios calls earnings.
+        GroupedSection(
+          caption: context.l10n.statsSectionGroup,
+          footer: context.l10n.statsGroupFooter,
+          children: [
+            Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -185,15 +165,15 @@ class _StatsScreenState extends State<StatsScreen> {
                 ],
               ),
             ),
-          ),
+          ],
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: Text(
-            context.l10n.statsGroupFooter,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
+        GroupedSection(
+          caption: context.l10n.statsSectionByParticipant,
+          children: [for (final p in participants) _participantTile(context, p)],
+        ),
+        GroupedSection(
+          caption: context.l10n.statsSectionByCategory,
+          children: [for (final c in categories) _categoryTile(context, c)],
         ),
       ],
     );
@@ -205,7 +185,7 @@ class _StatsScreenState extends State<StatsScreen> {
   // (#103).
   Widget _participantTile(BuildContext context, ParticipantSpending p) {
     final small = Theme.of(context).textTheme.bodySmall;
-    return ListTile(
+    return GroupedRow(
       title: _pair(Text(p.name),
           Money(_money(p.paidCents))),
       subtitle: _pair(Text(context.l10n.statsParticipantPaidCount(p.paidCount)),
@@ -214,7 +194,7 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   Widget _categoryTile(BuildContext context, CategorySpending c) {
-    return ListTile(
+    return GroupedRow(
       title: _pair(Text(_categoryLabel(c.categoryId)),
           Money(_money(c.totalCents))),
     );

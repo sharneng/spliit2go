@@ -10,7 +10,7 @@ import '../services/balance_calculator.dart';
 import '../sync/outbox.dart';
 import '../utils/money.dart';
 import '../widgets/money.dart';
-import '../widgets/section_heading.dart';
+import '../widgets/grouped_section.dart';
 import 'expense_screen.dart';
 import '../services/error_reporting.dart';
 import '../widgets/empty_state.dart';
@@ -162,7 +162,7 @@ class _BalancesScreenState extends State<BalancesScreen> {
   /// spliit-ios's BalancesView "You" section: which way the money goes
   /// and how much, then a row saying who "you" are that opens the
   /// picker. Unpicked, only that row shows, with a line on why to pick.
-  List<Widget> _youSection(BuildContext context, List<Balance> balances) {
+  Widget _youSection(BuildContext context, List<Balance> balances) {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final you = widget.group.participants
@@ -173,78 +173,60 @@ class _BalancesScreenState extends State<BalancesScreen> {
             .firstOrNull
             ?.netCents ??
         0;
-    return [
-      SectionHeading(l10n.balancesYouSection),
-      Card(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (you != null) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      net > 0
-                          ? l10n.balancesYouAreOwed
-                          : net < 0
-                              ? l10n.balancesYouOwe
-                              : l10n.balancesYouSettled,
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                    ),
-                    const SizedBox(height: 4),
-                    // Unsigned: the line above already says which way.
-                    Money(
-                      formatMoney(net.abs(), widget.group.currency,
-                          locale: context.appLocale),
-                      size: MoneySize.hero,
-                      sign: MoneySign.ofBalance(net),
-                    ),
-                  ],
+    return GroupedSection(
+      caption: l10n.balancesYouSection,
+      footer: you == null ? l10n.balancesYouHint : null,
+      children: [
+        if (you != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  net > 0
+                      ? l10n.balancesYouAreOwed
+                      : net < 0
+                          ? l10n.balancesYouOwe
+                          : l10n.balancesYouSettled,
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 4),
+                // Unsigned: the line above already says which way.
+                Money(
+                  formatMoney(net.abs(), widget.group.currency,
+                      locale: context.appLocale),
+                  size: MoneySize.hero,
+                  sign: MoneySign.ofBalance(net),
+                ),
+              ],
+            ),
+          ),
+        // One row in the title, not a trailing widget: a trailing
+        // Text is unconstrained, and a long name at large text took
+        // the whole tile (#101 review). Here the name gets what's
+        // left beside the label and wraps.
+        ListTile(
+          title: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(l10n.balancesYouLabel,
+                  style: TextStyle(color: theme.colorScheme.primary)),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  you?.name ?? l10n.balancesYouNobody,
+                  textAlign: TextAlign.end,
+                  style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ),
-              const Divider(height: 1, indent: 16, endIndent: 16),
             ],
-            // One row in the title, not a trailing widget: a trailing
-            // Text is unconstrained, and a long name at large text took
-            // the whole tile (#101 review). Here the name gets what's
-            // left beside the label and wraps.
-            ListTile(
-              title: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(l10n.balancesYouLabel,
-                      style: TextStyle(color: theme.colorScheme.primary)),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Text(
-                      you?.name ?? l10n.balancesYouNobody,
-                      textAlign: TextAlign.end,
-                      style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-                    ),
-                  ),
-                ],
-              ),
-              onTap: widget.onPickActiveUser,
-            ),
-          ],
-        ),
-      ),
-      if (you == null)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-          child: Text(
-            l10n.balancesYouHint,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
+          onTap: widget.onPickActiveUser,
         ),
-      const SizedBox(height: 8),
-    ];
+      ],
+    );
   }
 
   @override
@@ -268,50 +250,49 @@ class _BalancesScreenState extends State<BalancesScreen> {
             // scrollable list (issue #47).
             onRefresh: () async {},
             child: ListView(
+              padding: const EdgeInsets.only(top: 16),
               children: [
-                ..._youSection(context, balances),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                  child: Text(
-                    context.l10n.balancesExplainer,
-                    style: const TextStyle(color: Colors.grey),
+                _youSection(context, balances),
+                if (balances.isNotEmpty)
+                  GroupedSection(
+                    caption: context.l10n.balancesTitle,
+                    footer: context.l10n.balancesExplainer,
+                    children: [
+                      for (final b in balances)
+                        GroupedRow(
+                          title: Text(b.participantId == widget.activeUserId
+                              ? context.l10n.expenseDetailsYou(_name(b.participantId))
+                              : _name(b.participantId)),
+                          trailing: Money(
+                            formatMoney(b.netCents, widget.group.currency,
+                                locale: context.appLocale),
+                            sign: MoneySign.ofBalance(b.netCents),
+                          ),
+                        ),
+                    ],
                   ),
-                ),
-                for (final b in balances)
-                  ListTile(
-                    title: Text(b.participantId == widget.activeUserId
-                        ? context.l10n.expenseDetailsYou(_name(b.participantId))
-                        : _name(b.participantId)),
-                    trailing: Money(
-                      formatMoney(b.netCents, widget.group.currency,
-                          locale: context.appLocale),
-                      sign: MoneySign.ofBalance(b.netCents),
-                    ),
-                  ),
-                if (settlements.isNotEmpty) ...[
-                  const Divider(),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                    child: Text(context.l10n.balancesSuggestedReimbursements,
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                  for (final s in settlements)
-                    ListTile(
-                      title: Text(context.l10n.balancesOwes(_name(s.fromId), _name(s.toId))),
-                      trailing: _settlingKey == '${s.fromId}->${s.toId}'
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : TextButton(
-                              onPressed: () => _openSettleUp(s),
-                              child: Text(context.l10n
-                                  .balancesMarkAsPaid(formatMoney(s.amountCents, widget.group.currency,
+                if (settlements.isNotEmpty)
+                  GroupedSection(
+                    caption: context.l10n.balancesSuggestedReimbursements,
+                    children: [
+                      for (final s in settlements)
+                        GroupedRow(
+                          title: Text(context.l10n.balancesOwes(_name(s.fromId), _name(s.toId))),
+                          trailing: _settlingKey == '${s.fromId}->${s.toId}'
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : TextButton(
+                                  onPressed: () => _openSettleUp(s),
+                                  child: Text(context.l10n.balancesMarkAsPaid(formatMoney(
+                                      s.amountCents, widget.group.currency,
                                       locale: context.appLocale))),
-                            ),
-                     ),
-                ],
+                                ),
+                        ),
+                    ],
+                  ),
                 if (balances.isEmpty)
                   EmptyState(icon: LucideIcons.scale, title: context.l10n.commonNoExpensesYet),
               ],

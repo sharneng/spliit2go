@@ -95,6 +95,21 @@ void main() {
         greaterThan(tester.getBottomLeft(find.text('Payé pour')).dy - 1));
   });
 
+  testWidgets('a footer sits under the card, muted, at the caption\'s inset (#187)',
+      (tester) async {
+    await pump(
+      tester,
+      const GroupedSection(
+          caption: 'Balances', footer: 'What each paid.', children: [Text('row')]),
+    );
+    final footer = find.text('What each paid.');
+    expect(tester.getTopLeft(footer).dy, greaterThan(tester.getBottomLeft(find.text('row')).dy));
+    expect(tester.getTopLeft(footer).dx, tester.getTopLeft(find.text('Balances')).dx);
+    final context = tester.element(footer);
+    expect(tester.widget<Text>(footer).style?.color,
+        Theme.of(context).colorScheme.onSurfaceVariant);
+  });
+
   group('GroupedItem (#185)', () {
     BorderRadius corners(WidgetTester tester, String title) {
       final material = tester.widget<Material>(find
