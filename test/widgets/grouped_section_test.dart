@@ -94,4 +94,61 @@ void main() {
     expect(tester.getTopLeft(find.text('Pourcentage')).dy,
         greaterThan(tester.getBottomLeft(find.text('Payé pour')).dy - 1));
   });
+
+  group('GroupedItem (#185)', () {
+    BorderRadius corners(WidgetTester tester, String title) {
+      final material = tester.widget<Material>(find
+          .ancestor(of: find.text(title), matching: find.byType(Material))
+          .first);
+      return (material.shape! as RoundedRectangleBorder).borderRadius as BorderRadius;
+    }
+
+    Widget items(List<String> titles) => Column(children: [
+          for (var i = 0; i < titles.length; i++)
+            GroupedItem(
+              first: i == 0,
+              last: i == titles.length - 1,
+              child: GroupedRow(title: Text(titles[i])),
+            ),
+        ]);
+
+    testWidgets("each row is its piece of the section's card", (tester) async {
+      await pump(tester, items(['One', 'Two', 'Three']));
+      const corner = Radius.circular(GroupedSection.radius);
+      expect(corners(tester, 'One'), const BorderRadius.vertical(top: corner));
+      expect(corners(tester, 'Two'), BorderRadius.zero);
+      expect(corners(tester, 'Three'), const BorderRadius.vertical(bottom: corner));
+      expect(find.byType(GroupedDivider), findsNWidgets(2), reason: 'between rows only');
+    });
+
+    testWidgets('a section of one row is a whole card', (tester) async {
+      await pump(tester, items(['Only']));
+      expect(corners(tester, 'Only'), BorderRadius.circular(GroupedSection.radius));
+      expect(find.byType(GroupedDivider), findsNothing);
+    });
+
+    testWidgets('rows built one at a time sit where a GroupedSection puts them', (tester) async {
+      const titles = ['One', 'Two', 'Three'];
+      Future<List<Rect>> rects(Widget section) async {
+        await pump(tester, Column(children: [const GroupedCaption('Caption'), section]));
+        return [for (final t in [...titles, 'Caption']) tester.getRect(find.text(t))];
+      }
+
+      final whole = await rects(const GroupedSection(children: [
+        GroupedRow(title: Text('One')),
+        GroupedRow(title: Text('Two')),
+        GroupedRow(title: Text('Three')),
+      ]));
+      final lazy = await rects(items(titles));
+      expect(lazy, whole);
+    });
+
+    testWidgets("a list's caption lines up with a section's", (tester) async {
+      await pump(tester, const GroupedSection(caption: 'Section', children: [Text('row')]));
+      final section = tester.getTopLeft(find.text('Section')).dx;
+      await pump(tester, const GroupedCaption('List', margin: GroupedCaption.listMargin));
+      expect(tester.getTopLeft(find.text('List')).dx, section);
+      expect(find.bySemanticsLabel('List'), findsOneWidget);
+    });
+  });
 }

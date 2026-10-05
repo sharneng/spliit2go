@@ -490,6 +490,8 @@ class _GroupScreenState extends State<GroupScreen> {
       currency: _group?.currency ?? '\$',
       categoryFor: _categoryFor,
       onTap: _openExpenseDetails,
+      // Clear of the add button, as the group list is.
+      bottomPadding: 88,
     );
   }
 

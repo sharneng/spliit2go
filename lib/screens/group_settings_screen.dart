@@ -494,7 +494,6 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_creating ? context.l10n.createGroupTitle : context.l10n.groupSettingsTitle),
-        backgroundColor: GroupedSection.backgroundColor(context),
         actions: [
           _saving
               ? const Padding(
@@ -514,7 +513,6 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                 ),
         ],
       ),
-      backgroundColor: GroupedSection.backgroundColor(context),
       body: Theme(
         // Fields sit on the cards, so they draw no box of their own.
         data: Theme.of(context).copyWith(

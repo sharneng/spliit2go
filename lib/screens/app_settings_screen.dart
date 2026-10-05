@@ -27,10 +27,7 @@ class AppSettingsScreen extends StatelessWidget {
     final settings = AppSettingsScope.of(context);
     final l10n = context.l10n;
     return Scaffold(
-      appBar: AppBar(
-          title: Text(l10n.appSettingsTitle),
-          backgroundColor: GroupedSection.backgroundColor(context)),
-      backgroundColor: GroupedSection.backgroundColor(context),
+      appBar: AppBar(title: Text(l10n.appSettingsTitle)),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 16),
         children: [

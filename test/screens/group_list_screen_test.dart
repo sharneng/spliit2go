@@ -11,6 +11,7 @@ import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/group_list_screen.dart';
+import 'package:spliit2go/widgets/grouped_section.dart';
 import '../support/haptics.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -73,6 +74,36 @@ void main() {
         findsOneWidget);
     expect(find.descendant(of: tiles.at(1), matching: find.text('Banff Trip')),
         findsOneWidget);
+  });
+
+  testWidgets('each section is a grouped card, hairlines under the names (#185)',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    for (final (id, name) in [('gA', 'Banff Trip'), ('gB', 'Tokyo Trip')]) {
+      await db.cacheGroup(Group(id: id, name: name, currency: '\$', participants: const []));
+      await db.recordGroupOpened(id, serverUrl: 'https://example.test');
+    }
+
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: GroupListScreen(db: db, clientFactory: (_) => offlineClient()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(GroupedItem), findsNWidgets(2));
+    expect(find.widgetWithText(GroupedCaption, 'Active'), findsOneWidget);
+    final divider = find.byType(Divider);
+    expect(divider, findsOneWidget, reason: 'between the two rows only');
+    final second = find.ancestor(of: divider, matching: find.byType(GroupedItem));
+    final name = find.descendant(
+        of: second, matching: find.byWidgetPredicate((w) => w is Text && w.data!.endsWith('Trip')));
+    expect(tester.widget<Divider>(divider).indent,
+        tester.getTopLeft(name).dx - tester.getTopLeft(divider).dx);
+    // Each row opens the group's screen, so has a chevron (#186 review).
+    expect(find.byIcon(Icons.chevron_right), findsNWidgets(2));
   });
 
   testWidgets('a cached-but-never-opened group does not show in the list',

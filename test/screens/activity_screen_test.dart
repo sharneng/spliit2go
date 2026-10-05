@@ -231,7 +231,10 @@ void main() {
     expect(find.text('Group settings were modified by Someone.'), findsOneWidget);
     // Both activities happened today, so they share a single "Today"
     // header rather than one each.
-    expect(find.text('TODAY'), findsOneWidget);
+    expect(find.text('Today'), findsOneWidget);
+    // An expense opens in a sheet, not a screen, so no row promises one
+    // with a chevron (#186 review).
+    expect(find.byIcon(Icons.chevron_right), findsNothing);
   });
 
   testWidgets('an activity for a since-deleted expense is not tappable', (tester) async {
@@ -294,7 +297,7 @@ void main() {
     expect(find.byType(ListTile), findsNWidgets(5));
     expect(find.text('Load more'), findsNothing);
     // A section continuing across pages keeps a single heading.
-    expect(find.text('TODAY'), findsOneWidget);
+    expect(find.text('Today'), findsOneWidget);
   });
 
   testWidgets('scrolling near the end loads the next page, one request at a time (#91)',
@@ -421,9 +424,9 @@ void main() {
         now: () => DateTime(2026, 9, 24, 12), toLocal: newYork);
 
     double top(Finder f) => tester.getTopLeft(f).dy;
-    expect(top(find.text('TODAY')), lessThan(top(find.text('00:30'))));
-    expect(top(find.text('00:30')), lessThan(top(find.text('YESTERDAY'))));
-    expect(top(find.text('YESTERDAY')), lessThan(top(find.text('23:30'))));
+    expect(top(find.text('Today')), lessThan(top(find.text('00:30'))));
+    expect(top(find.text('00:30')), lessThan(top(find.text('Yesterday'))));
+    expect(top(find.text('Yesterday')), lessThan(top(find.text('23:30'))));
   });
 
   testWidgets('the night clocks go back, both 01:30s are yesterday (#91)', (tester) async {
@@ -439,7 +442,7 @@ void main() {
     await pumpActivity(tester, server.client, db,
         now: () => DateTime(2026, 11, 2, 9), toLocal: newYork);
 
-    expect(find.text('YESTERDAY'), findsOneWidget);
+    expect(find.text('Yesterday'), findsOneWidget);
     expect(find.text('01:30'), findsNWidgets(2));
   });
 
@@ -458,7 +461,7 @@ void main() {
         now: () => DateTime(2026, 9, 24, 12), toLocal: wallClock);
 
     expect(find.text('09:05'), findsOneWidget);
-    expect(find.text('EARLIER THIS MONTH'), findsOneWidget);
+    expect(find.text('Earlier this month'), findsOneWidget);
     expect(find.text('Sep 10, 2026 09:05'), findsOneWidget);
   });
 
@@ -486,7 +489,7 @@ void main() {
         builder: spliit2goAppBuilder);
 
     expect(tester.takeException(), isNull);
-    expect(find.text('PLUS TÔT CETTE SEMAINE'), findsOneWidget);
+    expect(find.text('Plus tôt cette semaine'), findsOneWidget);
     // Read as a heading, in its natural case.
     expect(find.bySemanticsLabel('Plus tôt cette semaine'), findsOneWidget);
     semantics.dispose();

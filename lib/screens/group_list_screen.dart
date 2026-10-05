@@ -26,6 +26,7 @@ import '../services/receipt_downloader.dart';
 import '../widgets/receipt_download_indicator.dart';
 import '../widgets/error_message.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/grouped_section.dart';
 import '../utils/haptics.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -255,20 +256,21 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
     ];
     return SlidableAutoCloseBehavior(
         child: ListView(
-      padding: const EdgeInsets.only(bottom: 88),
+      padding: const EdgeInsets.only(top: 16, bottom: 88),
       children: [
-        for (final section in sections)
-          if (section.$2.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-              child: Text(section.$1,
-                  style: Theme.of(context).textTheme.titleSmall),
-            ),
-            for (var i = 0; i < section.$2.length; i++) ...[
-              _groupTile(section.$2[i]),
-              if (i < section.$2.length - 1)
-                const Divider(height: 1, indent: 72, endIndent: 16),
-            ],
+        for (final (caption, groups) in sections)
+          if (groups.isNotEmpty) ...[
+            GroupedCaption(caption, margin: GroupedCaption.listMargin),
+            for (var i = 0; i < groups.length; i++)
+              // The card, not the row, so a swipe slides the row within it.
+              GroupedItem(
+                key: ValueKey(groups[i].id),
+                first: i == 0,
+                last: i == groups.length - 1,
+                // Past the monogram, under the name.
+                dividerIndent: 80,
+                child: _groupTile(groups[i]),
+              ),
           ],
       ],
     ));
@@ -453,6 +455,8 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
             ]),
           ]),
         ),
+        // Opens the group's screen (#186 review).
+        trailing: GroupedRow.chevron(context),
         onTap: () => _openGroup(row),
         onLongPress: openMenu,
       ),

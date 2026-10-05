@@ -1032,11 +1032,11 @@ void main() {
       await tester.pumpAndSettle();
 
       double top(String text) => tester.getTopLeft(find.text(text)).dy;
-      final order = ['UPCOMING', 'Tomorrow', 'THIS WEEK', 'Today', 'OLDER', 'Long ago'];
+      final order = ['Upcoming', 'Tomorrow', 'This week', 'Today', 'Older', 'Long ago'];
       for (var i = 1; i < order.length; i++) {
         expect(top(order[i]), greaterThan(top(order[i - 1])), reason: '${order[i]} after ${order[i - 1]}');
       }
-      expect(find.text('EARLIER THIS MONTH'), findsNothing, reason: 'empty sections are skipped');
+      expect(find.text('Earlier this month'), findsNothing, reason: 'empty sections are skipped');
       // Read as a heading, in its natural case.
       expect(find.bySemanticsLabel('This week'), findsOneWidget);
       semantics.dispose();

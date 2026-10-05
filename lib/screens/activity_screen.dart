@@ -10,7 +10,7 @@ import '../services/activity_date_group.dart';
 import '../services/expense_date_group.dart' show firstWeekdayFor;
 import '../sync/outbox.dart';
 import '../utils/date_format.dart';
-import '../widgets/section_heading.dart';
+import '../widgets/grouped_section.dart';
 import 'expense_details_sheet.dart';
 import '../widgets/error_message.dart';
 import '../services/error_reporting.dart';
@@ -241,7 +241,9 @@ class _ActivityScreenState extends State<ActivityScreen> {
   Widget build(BuildContext context) {
     final body = _body();
     if (widget.embedded) return body;
-    return Scaffold(appBar: AppBar(title: Text(context.l10n.activityTitle)), body: body);
+    return Scaffold(
+        appBar: AppBar(title: Text(context.l10n.activityTitle)),
+        body: body);
   }
 
   Widget _body() {
@@ -273,30 +275,40 @@ class _ActivityScreenState extends State<ActivityScreen> {
       firstWeekday: firstWeekdayFor(View.of(context).platformDispatcher.locale),
       toLocal: widget.toLocal,
     );
+    // Each row is a section's caption or an entry, with where it sits in
+    // its section's card (#185).
     final rows = <Object>[
       for (final (group, activities) in sections) ...[
         group,
-        for (final a in activities) (a, group.needsDate),
+        for (var i = 0; i < activities.length; i++)
+          (activities[i], group.needsDate, i == 0, i == activities.length - 1),
       ],
     ];
 
     return ListView.builder(
       controller: _scroll,
+      padding: const EdgeInsets.only(top: 16),
       itemCount: rows.length + 1, // +1 for the footer (loading / error)
       itemBuilder: (context, i) {
         if (i == rows.length) return _footer();
         final row = rows[i];
-        if (row is ActivityDateGroup) return SectionHeading(_sectionTitle(row));
-        final (a, needsDate) = row as (Activity, bool);
+        if (row is ActivityDateGroup) {
+          return GroupedCaption(_sectionTitle(row), margin: GroupedCaption.listMargin);
+        }
+        final (a, needsDate, first, last) = row as (Activity, bool, bool, bool);
         final local = widget.toLocal(a.time);
         final locale = context.appLocale;
-        return ListTile(
-          title: Text(_summary(a)),
-          subtitle: Text(needsDate
-              ? formatDateTime(local, locale: locale)
-              : formatTimeOfDay(local, locale: locale)),
-          trailing: a.expenseExists ? const Icon(Icons.chevron_right) : null,
-          onTap: a.expenseExists ? () => _openExpense(a) : null,
+        return GroupedItem(
+          first: first,
+          last: last,
+          child: GroupedRow(
+            title: Text(_summary(a)),
+            subtitle: Text(needsDate
+                ? formatDateTime(local, locale: locale)
+                : formatTimeOfDay(local, locale: locale)),
+            // No chevron: the expense opens in a sheet, not a screen.
+            onTap: a.expenseExists ? () => _openExpense(a) : null,
+          ),
         );
       },
     );

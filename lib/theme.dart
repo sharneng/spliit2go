@@ -36,7 +36,17 @@ ThemeData _appTheme(Brightness brightness) {
     colorScheme: colorScheme,
     extensions: [dark ? SpliitColors.dark : SpliitColors.light],
   );
+  // One base background for every screen, its app bar, the group
+  // screen's tab bar and sheets (#186 review), so nothing changes color
+  // from screen to screen, nor in the strip under them that the app
+  // paints in this color (main.dart). Grouped cards (GroupedSection)
+  // stand a step lighter off it.
+  final base = dark ? colorScheme.surface : colorScheme.surfaceContainer;
   return theme.copyWith(
+    scaffoldBackgroundColor: base,
+    appBarTheme: AppBarTheme(backgroundColor: base),
+    navigationBarTheme: NavigationBarThemeData(backgroundColor: base),
+    bottomSheetTheme: BottomSheetThemeData(backgroundColor: base),
     dividerTheme: DividerThemeData(
       color: theme.colorScheme.outlineVariant,
       thickness: 1,
