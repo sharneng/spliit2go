@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 /// this way, and Pixel's rounded sections are close, so it's one design
 /// for both platforms rather than a platform branch.
 ///
-/// Put the screen on [GroupedSection.backgroundColor] so the cards stand
-/// off it.
+/// The cards stand off every screen's background ([backgroundColor], the
+/// theme's).
 class GroupedSection extends StatelessWidget {
   const GroupedSection({
     super.key,
@@ -47,13 +47,9 @@ class GroupedSection extends StatelessWidget {
         : scheme.surfaceContainerHigh;
   }
 
-  /// The page behind the cards.
-  static Color backgroundColor(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return scheme.brightness == Brightness.light
-        ? scheme.surfaceContainer
-        : scheme.surface;
-  }
+  /// The page behind the cards: every screen's, from the theme.
+  static Color backgroundColor(BuildContext context) =>
+      Theme.of(context).scaffoldBackgroundColor;
 
   @override
   Widget build(BuildContext context) {

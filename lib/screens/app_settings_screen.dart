@@ -10,7 +10,6 @@ import '../services/receipt_cache.dart';
 import '../services/receipt_downloader.dart';
 import '../services/settings_service.dart';
 import '../utils/byte_size.dart';
-import '../widgets/bottom_inset_fill.dart';
 import '../widgets/error_message.dart';
 import 'about_screen.dart';
 import '../widgets/grouped_section.dart';
@@ -28,12 +27,7 @@ class AppSettingsScreen extends StatelessWidget {
     final settings = AppSettingsScope.of(context);
     final l10n = context.l10n;
     return Scaffold(
-      appBar: AppBar(
-          title: Text(l10n.appSettingsTitle),
-          backgroundColor: GroupedSection.backgroundColor(context)),
-      backgroundColor: GroupedSection.backgroundColor(context),
-      // The strip under the screen in the same color (#186 review).
-      bottomNavigationBar: BottomInsetFill.bar(color: GroupedSection.backgroundColor(context)),
+      appBar: AppBar(title: Text(l10n.appSettingsTitle)),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 16),
         children: [

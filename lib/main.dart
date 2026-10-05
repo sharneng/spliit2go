@@ -20,7 +20,6 @@ import 'theme.dart';
 import 'services/error_reporting.dart';
 import 'services/receipt_cache.dart';
 import 'services/receipt_scanner.dart';
-import 'widgets/bottom_inset_fill.dart';
 import 'widgets/error_message.dart';
 
 Future<void> main() async {
@@ -167,12 +166,7 @@ Widget spliit2goAppBuilder(BuildContext context, Widget? child) {
     value: spliit2goSystemUiOverlayStyle(theme),
     child: Container(
       color: theme.scaffoldBackgroundColor,
-      // A screen with another color at its bottom paints over the
-      // backdrop's strip with BottomInsetFill (#186 review).
-      child: AppBottomInset(
-        height: MediaQuery.viewPaddingOf(context).bottom,
-        child: SafeArea(top: false, child: child!),
-      ),
+      child: SafeArea(top: false, child: child!),
     ),
   );
 }

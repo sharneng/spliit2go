@@ -39,6 +39,20 @@ void main() {
     expect(spliit2goDarkTheme.colorScheme.primary, const Color(0xff10B981));
   });
 
+  test('one base background for screens, app bars, the tab bar and sheets (#186 review)', () {
+    for (final theme in [spliit2goLightTheme, spliit2goDarkTheme]) {
+      final base = theme.scaffoldBackgroundColor;
+      final reason = '${theme.brightness}';
+      expect(theme.appBarTheme.backgroundColor, base, reason: reason);
+      expect(theme.navigationBarTheme.backgroundColor, base, reason: reason);
+      expect(theme.bottomSheetTheme.backgroundColor, base, reason: reason);
+    }
+    // Grouped cards stand off it: lighter in light mode, a step up in dark.
+    expect(spliit2goLightTheme.scaffoldBackgroundColor,
+        spliit2goLightTheme.colorScheme.surfaceContainer);
+    expect(spliit2goDarkTheme.scaffoldBackgroundColor, spliit2goDarkTheme.colorScheme.surface);
+  });
+
   test('each theme carries its own spliit-ios colors (#178)', () {
     expect(spliit2goLightTheme.extension<SpliitColors>(), SpliitColors.light);
     expect(spliit2goDarkTheme.extension<SpliitColors>(), SpliitColors.dark);

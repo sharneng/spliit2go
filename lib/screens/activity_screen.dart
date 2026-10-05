@@ -10,7 +10,6 @@ import '../services/activity_date_group.dart';
 import '../services/expense_date_group.dart' show firstWeekdayFor;
 import '../sync/outbox.dart';
 import '../utils/date_format.dart';
-import '../widgets/bottom_inset_fill.dart';
 import '../widgets/grouped_section.dart';
 import 'expense_details_sheet.dart';
 import '../widgets/error_message.dart';
@@ -242,12 +241,8 @@ class _ActivityScreenState extends State<ActivityScreen> {
   Widget build(BuildContext context) {
     final body = _body();
     if (widget.embedded) return body;
-    final background = GroupedSection.backgroundColor(context);
     return Scaffold(
-        appBar: AppBar(title: Text(context.l10n.activityTitle), backgroundColor: background),
-        backgroundColor: background,
-        // The strip under the screen in the same color (#186 review).
-        bottomNavigationBar: BottomInsetFill.bar(color: background),
+        appBar: AppBar(title: Text(context.l10n.activityTitle)),
         body: body);
   }
 

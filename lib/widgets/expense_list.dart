@@ -13,7 +13,7 @@ import 'grouped_section.dart';
 /// Expenses in date sections (issue #88), each a grouped card under its
 /// caption (#185), built lazily. Shared by the Expenses tab and search
 /// (issue #39), so a search result looks and sits exactly as it does in
-/// the full list. Put it on [GroupedSection.backgroundColor].
+/// the full list.
 class ExpenseDateList extends StatelessWidget {
   const ExpenseDateList({
     super.key,

@@ -15,7 +15,6 @@ import '../services/category_store.dart';
 import '../services/group_url.dart';
 import '../services/settings_service.dart';
 import '../sync/outbox.dart';
-import '../widgets/bottom_inset_fill.dart';
 import '../widgets/expense_list.dart';
 import 'expense_details_sheet.dart';
 import 'expense_search_screen.dart';
@@ -30,7 +29,6 @@ import '../services/receipt_cache.dart';
 import '../services/receipt_downloader.dart';
 import '../widgets/receipt_download_indicator.dart';
 import '../widgets/empty_state.dart';
-import '../widgets/grouped_section.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// A single group's expenses, offline-first -- reached by pushing on top
@@ -236,15 +234,8 @@ class _GroupScreenState extends State<GroupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Expenses and Activities are grouped lists (#185); Balances and
-    // Stats aren't yet, so they keep the plain surface.
-    final background = _tabIndex == 0 || _tabIndex == 3
-        ? GroupedSection.backgroundColor(context)
-        : null;
     return Scaffold(
-      backgroundColor: background,
       appBar: AppBar(
-        backgroundColor: background,
         title: Text(_group?.name ?? 'Spliit2Go'),
         // A meatballs menu, like spliit-ios's group toolbar (issue #3):
         // group settings, and sharing the group's link. Room for more
@@ -317,66 +308,61 @@ class _GroupScreenState extends State<GroupScreen> {
       context.l10n.groupScreenTabStats,
       context.l10n.groupScreenTabActivities,
     ];
-    final color = NavigationBarTheme.of(context).backgroundColor ??
-        Theme.of(context).colorScheme.surfaceContainer;
-    // The bar continues into the strip under it (#186 review).
-    return BottomInsetFill(
-      color: color,
-      child: ColoredBox(
-        color: color,
-        // spliit2goAppBuilder already removes these insets app-wide; this
-        // keeps the whole row (search included) inside them on its own too.
-        child: SafeArea(
-          top: false,
-          child: LayoutBuilder(builder: (context, constraints) {
-            final tabWidth =
-                (constraints.maxWidth - _searchSlotWidth) / labels.length;
-            return Row(
-              children: [
-                Expanded(
-                  child: NavigationBar(
-                    selectedIndex: _tabIndex,
-                    onDestinationSelected: (i) => setState(() => _tabIndex = i),
-                    // Hidden labels stay available as each tab's tooltip.
-                    labelBehavior: _labelsFit(context, labels, tabWidth)
-                        ? NavigationDestinationLabelBehavior.alwaysShow
-                        : NavigationDestinationLabelBehavior.alwaysHide,
-                    destinations: [
-                      NavigationDestination(
-                        icon: const Icon(Icons.receipt_long_outlined),
-                        selectedIcon: const Icon(Icons.receipt_long),
-                        label: labels[0],
-                      ),
-                      NavigationDestination(
-                        icon: const Icon(Icons.account_balance_wallet_outlined),
-                        selectedIcon: const Icon(Icons.account_balance_wallet),
-                        label: labels[1],
-                      ),
-                      NavigationDestination(
-                        icon: const Icon(Icons.bar_chart_outlined),
-                        selectedIcon: const Icon(Icons.bar_chart),
-                        label: labels[2],
-                      ),
-                      NavigationDestination(
-                          icon: const Icon(Icons.history), label: labels[3]),
-                    ],
-                  ),
-                ),
-                SizedBox(
-                  width: _searchSlotWidth,
-                  child: Center(
-                    heightFactor: 1,
-                    child: IconButton.filledTonal(
-                      icon: const Icon(Icons.search),
-                      tooltip: context.l10n.groupScreenSearchTooltip,
-                      onPressed: _group == null ? null : _openSearch,
+    return ColoredBox(
+      color: NavigationBarTheme.of(context).backgroundColor ??
+          Theme.of(context).colorScheme.surfaceContainer,
+      // spliit2goAppBuilder already removes these insets app-wide; this
+      // keeps the whole row (search included) inside them on its own too.
+      child: SafeArea(
+        top: false,
+        child: LayoutBuilder(builder: (context, constraints) {
+          final tabWidth =
+              (constraints.maxWidth - _searchSlotWidth) / labels.length;
+          return Row(
+            children: [
+              Expanded(
+                child: NavigationBar(
+                  selectedIndex: _tabIndex,
+                  onDestinationSelected: (i) => setState(() => _tabIndex = i),
+                  // Hidden labels stay available as each tab's tooltip.
+                  labelBehavior: _labelsFit(context, labels, tabWidth)
+                      ? NavigationDestinationLabelBehavior.alwaysShow
+                      : NavigationDestinationLabelBehavior.alwaysHide,
+                  destinations: [
+                    NavigationDestination(
+                      icon: const Icon(Icons.receipt_long_outlined),
+                      selectedIcon: const Icon(Icons.receipt_long),
+                      label: labels[0],
                     ),
+                    NavigationDestination(
+                      icon: const Icon(Icons.account_balance_wallet_outlined),
+                      selectedIcon: const Icon(Icons.account_balance_wallet),
+                      label: labels[1],
+                    ),
+                    NavigationDestination(
+                      icon: const Icon(Icons.bar_chart_outlined),
+                      selectedIcon: const Icon(Icons.bar_chart),
+                      label: labels[2],
+                    ),
+                    NavigationDestination(
+                        icon: const Icon(Icons.history), label: labels[3]),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: _searchSlotWidth,
+                child: Center(
+                  heightFactor: 1,
+                  child: IconButton.filledTonal(
+                    icon: const Icon(Icons.search),
+                    tooltip: context.l10n.groupScreenSearchTooltip,
+                    onPressed: _group == null ? null : _openSearch,
                   ),
                 ),
-              ],
-            );
-          }),
-        ),
+              ),
+            ],
+          );
+        }),
       ),
     );
   }

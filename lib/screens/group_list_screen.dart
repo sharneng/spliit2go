@@ -12,7 +12,6 @@ import '../l10n/context_l10n.dart';
 import '../services/date_span_calculator.dart';
 import '../services/group_list_order.dart';
 import '../services/settings_service.dart';
-import '../widgets/bottom_inset_fill.dart';
 import '../widgets/group_monogram.dart';
 import '../widgets/group_row_actions.dart';
 import '../sync/outbox.dart';
@@ -174,13 +173,8 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
 
   @override
   Widget build(BuildContext context) {
-    final background = GroupedSection.backgroundColor(context);
     return Scaffold(
-      backgroundColor: background,
-      // The strip under the screen in the same color (#186 review).
-      bottomNavigationBar: BottomInsetFill.bar(color: background),
       appBar: AppBar(
-        backgroundColor: background,
         title: Row(children: [
           Image.asset('assets/spliit2go-logo.png',
               width: 32, height: 32, excludeFromSemantics: true),

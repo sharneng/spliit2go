@@ -73,7 +73,6 @@ Future<bool> showExpenseDetails(
     isScrollControlled: true,
     useSafeArea: true,
     showDragHandle: true,
-    backgroundColor: GroupedSection.backgroundColor(context),
     builder: (_) => _ExpenseDetailsSheet(
       expenseId: expenseId,
       group: group,

@@ -13,7 +13,6 @@ import '../services/date_span_calculator.dart';
 import '../services/group_url.dart';
 import '../services/settings_service.dart';
 import '../utils/date_format.dart';
-import '../widgets/bottom_inset_fill.dart';
 import '../widgets/currency_picker.dart';
 import '../widgets/error_message.dart';
 import 'join_group_screen.dart' show cacheJoinedGroup;
@@ -495,7 +494,6 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_creating ? context.l10n.createGroupTitle : context.l10n.groupSettingsTitle),
-        backgroundColor: GroupedSection.backgroundColor(context),
         actions: [
           _saving
               ? const Padding(
@@ -515,9 +513,6 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                 ),
         ],
       ),
-      backgroundColor: GroupedSection.backgroundColor(context),
-      // The strip under the screen in the same color (#186 review).
-      bottomNavigationBar: BottomInsetFill.bar(color: GroupedSection.backgroundColor(context)),
       body: Theme(
         // Fields sit on the cards, so they draw no box of their own.
         data: Theme.of(context).copyWith(
