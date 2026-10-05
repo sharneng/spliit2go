@@ -197,7 +197,9 @@ class GroupedDivider extends StatelessWidget {
 
 /// One row of a [GroupedSection]: a [ListTile] on the card. A row that
 /// opens another screen ([navigates]) gets a chevron on both platforms,
-/// decided here only (#180), unless it has a [trailing] of its own.
+/// decided here only (#180), unless it has a [trailing] of its own. A row
+/// that opens a sheet over this screen doesn't: the chevron promises a new
+/// screen (#186 review).
 class GroupedRow extends StatelessWidget {
   const GroupedRow({
     super.key,
@@ -220,16 +222,16 @@ class GroupedRow extends StatelessWidget {
   final bool selected;
   final bool enabled;
 
+  /// The chevron, for a row that opens a screen but isn't a [GroupedRow].
+  static Widget chevron(BuildContext context) =>
+      Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onSurfaceVariant);
+
   @override
   Widget build(BuildContext context) => ListTile(
         leading: leading,
         title: title,
         subtitle: subtitle,
-        trailing: trailing ??
-            (navigates
-                ? Icon(Icons.chevron_right,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant)
-                : null),
+        trailing: trailing ?? (navigates ? chevron(context) : null),
         onTap: onTap,
         selected: selected,
         enabled: enabled,

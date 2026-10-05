@@ -232,6 +232,9 @@ void main() {
     // Both activities happened today, so they share a single "Today"
     // header rather than one each.
     expect(find.text('Today'), findsOneWidget);
+    // An expense opens in a sheet, not a screen, so no row promises one
+    // with a chevron (#186 review).
+    expect(find.byIcon(Icons.chevron_right), findsNothing);
   });
 
   testWidgets('an activity for a since-deleted expense is not tappable', (tester) async {

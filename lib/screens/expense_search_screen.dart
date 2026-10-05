@@ -10,6 +10,7 @@ import '../models/expense.dart';
 import '../models/group.dart';
 import '../services/expense_search.dart';
 import '../sync/outbox.dart';
+import '../widgets/bottom_inset_fill.dart';
 import '../widgets/expense_list.dart';
 import 'expense_details_sheet.dart';
 import '../widgets/empty_state.dart';
@@ -85,6 +86,8 @@ class _ExpenseSearchScreenState extends State<ExpenseSearchScreen> {
     final background = GroupedSection.backgroundColor(context);
     return Scaffold(
       backgroundColor: background,
+      // The strip under the screen in the same color (#186 review).
+      bottomNavigationBar: BottomInsetFill.bar(color: background),
       appBar: AppBar(
         backgroundColor: background,
         title: TextField(

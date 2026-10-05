@@ -11,6 +11,7 @@ import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/group_list_screen.dart';
+import 'package:spliit2go/widgets/bottom_inset_fill.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
 import '../support/haptics.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -102,6 +103,12 @@ void main() {
         of: second, matching: find.byWidgetPredicate((w) => w is Text && w.data!.endsWith('Trip')));
     expect(tester.widget<Divider>(divider).indent,
         tester.getTopLeft(name).dx - tester.getTopLeft(divider).dx);
+    // Each row opens the group's screen, so has a chevron (#186 review).
+    expect(find.byIcon(Icons.chevron_right), findsNWidgets(2));
+    // The page's color continues under the home indicator (#186 review).
+    final context = tester.element(find.byType(GroupedItem).first);
+    expect(tester.widget<BottomInsetFill>(find.byType(BottomInsetFill)).color,
+        GroupedSection.backgroundColor(context));
   });
 
   testWidgets('a cached-but-never-opened group does not show in the list',

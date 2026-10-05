@@ -10,6 +10,7 @@ import '../services/activity_date_group.dart';
 import '../services/expense_date_group.dart' show firstWeekdayFor;
 import '../sync/outbox.dart';
 import '../utils/date_format.dart';
+import '../widgets/bottom_inset_fill.dart';
 import '../widgets/grouped_section.dart';
 import 'expense_details_sheet.dart';
 import '../widgets/error_message.dart';
@@ -245,6 +246,8 @@ class _ActivityScreenState extends State<ActivityScreen> {
     return Scaffold(
         appBar: AppBar(title: Text(context.l10n.activityTitle), backgroundColor: background),
         backgroundColor: background,
+        // The strip under the screen in the same color (#186 review).
+        bottomNavigationBar: BottomInsetFill.bar(color: background),
         body: body);
   }
 
@@ -308,7 +311,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
             subtitle: Text(needsDate
                 ? formatDateTime(local, locale: locale)
                 : formatTimeOfDay(local, locale: locale)),
-            navigates: a.expenseExists,
+            // No chevron: the expense opens in a sheet, not a screen.
             onTap: a.expenseExists ? () => _openExpense(a) : null,
           ),
         );
