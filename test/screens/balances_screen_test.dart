@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
@@ -70,6 +71,20 @@ void main() {
     expect(find.text('Bea owes Alex'), findsOneWidget);
     expect(find.text('Cid owes Alex'), findsOneWidget);
     expect(find.textContaining('Mark as paid'), findsNWidgets(2));
+    // #187: You, the balances and the suggestions are each a grouped
+    // section; the explainer is the balances' footer.
+    String? captionOf(String text) => tester
+        .widget<GroupedSection>(find.ancestor(of: find.text(text), matching: find.byType(GroupedSection)))
+        .caption;
+    expect(captionOf('Alex'), 'Balances');
+    expect(captionOf('Bea owes Alex'), 'Suggested reimbursements');
+    expect(find.byType(GroupedSection), findsNWidgets(3));
+    expect(
+        tester
+            .widget<GroupedSection>(
+                find.ancestor(of: find.text('Alex'), matching: find.byType(GroupedSection)))
+            .footer,
+        'This is the amount each participant paid or was paid for.');
     // Drift's watch() stream (issue #47) schedules an internal
     // debounce/reconnect Timer when a subscriber cancels, which
     // happens when this widget is disposed. flutter_test's automatic
@@ -371,12 +386,14 @@ void main() {
 
       expect(tester.takeException(), isNull);
       final you = locale.languageCode == 'fr' ? 'Vous' : 'You';
-      final label = find.text(you);
+      // The row's label, not the section's caption of the same word.
+      final label = find.descendant(of: find.byType(ListTile), matching: find.text(you));
       final name = find.text(longName);
       expect(label, findsOneWidget);
       expect(name, findsOneWidget);
       // Both get real room, side by side or stacked, inside the card.
-      final card = tester.getRect(find.byType(Card));
+      final card = tester.getRect(
+          find.ancestor(of: label, matching: find.byType(Material)).first);
       for (final f in [label, name]) {
         final r = tester.getRect(f);
         expect(r.width, greaterThan(40));
