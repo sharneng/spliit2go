@@ -69,4 +69,29 @@ void main() {
       expect(GroupedSection.cardColor(context), isNot(GroupedSection.backgroundColor(context)));
     }
   });
+
+  testWidgets("a caption's trailing goes under it when both don't fit (#183 review)",
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+      theme: spliit2goLightTheme,
+      home: MediaQuery(
+        data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+        child: Scaffold(
+          body: ListView(children: const [
+            GroupedSection(
+              caption: 'Payé pour',
+              captionTrailing: Text('Pourcentage'),
+              children: [GroupedRow(title: Text('Alex'))],
+            ),
+          ]),
+        ),
+      ),
+    ));
+    expect(tester.takeException(), isNull);
+    expect(tester.getTopLeft(find.text('Pourcentage')).dy,
+        greaterThan(tester.getBottomLeft(find.text('Payé pour')).dy - 1));
+  });
 }

@@ -61,18 +61,24 @@ class GroupedSection extends StatelessWidget {
           if (caption != null || captionTrailing != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 8, 6),
-              child: Row(
+              // A Wrap, not a Row: when the two don't fit on one line (a
+              // long split mode at large text, #183 review), the trailing
+              // one goes under the caption instead of overflowing, and
+              // each wraps within the width.
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
                 children: [
-                  Expanded(
-                    child: caption == null
-                        ? const SizedBox.shrink()
-                        : Semantics(
-                            header: true,
-                            child: Text(caption,
-                                style: theme.textTheme.labelLarge
-                                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                          ),
-                  ),
+                  if (caption != null)
+                    Semantics(
+                      header: true,
+                      child: Text(caption,
+                          style: theme.textTheme.labelLarge
+                              ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                    )
+                  else
+                    const SizedBox.shrink(),
                   if (captionTrailing case final trailing?) trailing,
                 ],
               ),
