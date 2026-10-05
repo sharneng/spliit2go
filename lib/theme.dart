@@ -17,11 +17,24 @@ const monogramPalette = <Color>[
 /// sampled), used for the "Spliit2Go" title on the group list.
 const spliitWordmarkGreen = Color(0xff56BC9C);
 
+/// spliit-ios's `AccentColor`: emerald, lightened for dark mode (#178).
+const _accentLight = Color(0xff059669);
+const _accentDark = Color(0xff10B981);
+
 ThemeData _appTheme(Brightness brightness) {
+  final dark = brightness == Brightness.dark;
+  final accent = dark ? _accentDark : _accentLight;
+  // Seeded from the accent, with the accent itself as primary: a seeded
+  // scheme alone would shift it to Material's own tone of that hue.
+  final colorScheme = ColorScheme.fromSeed(
+    seedColor: accent,
+    brightness: brightness,
+    primary: accent,
+  );
   final theme = ThemeData(
     useMaterial3: true,
-    colorSchemeSeed: Colors.teal,
-    brightness: brightness,
+    colorScheme: colorScheme,
+    extensions: [dark ? SpliitColors.dark : SpliitColors.light],
   );
   return theme.copyWith(
     dividerTheme: DividerThemeData(
@@ -31,14 +44,87 @@ ThemeData _appTheme(Brightness brightness) {
   );
 }
 
-/// spliit2go's light theme -- Material 3, seeded from [Colors.teal].
+/// The colors spliit-ios adds on top of the system palette (its
+/// `Palette.swift`; see THIRD_PARTY_NOTICES.md): the money axis and two
+/// brand accents. Everything else comes from the color scheme.
+@immutable
+class SpliitColors extends ThemeExtension<SpliitColors> {
+  const SpliitColors({
+    required this.moneyPositive,
+    required this.moneyNegative,
+    required this.brandSecondary,
+    required this.brandAccentSoft,
+  });
+
+  /// Owed to you.
+  final Color moneyPositive;
+
+  /// You owe.
+  final Color moneyNegative;
+
+  /// Rare by design: the occasional accent that isn't about money.
+  final Color brandSecondary;
+
+  /// The accent at a whisper, behind an empty state's icon.
+  final Color brandAccentSoft;
+
+  static const light = SpliitColors(
+    moneyPositive: Color(0xff047857),
+    moneyNegative: Color(0xffC2334A),
+    brandSecondary: Color(0xffBE185D),
+    brandAccentSoft: Color(0xffECFDF5),
+  );
+
+  static const dark = SpliitColors(
+    moneyPositive: Color(0xff34D399),
+    moneyNegative: Color(0xffFF8A9B),
+    brandSecondary: Color(0xffEC4899),
+    brandAccentSoft: Color(0x2910B981),
+  );
+
+  /// The app theme's colors, or the defaults for the ambient brightness
+  /// where the theme has none (a test's bare MaterialApp).
+  static SpliitColors of(BuildContext context) {
+    final theme = Theme.of(context);
+    return theme.extension<SpliitColors>() ??
+        (theme.brightness == Brightness.dark ? dark : light);
+  }
+
+  @override
+  SpliitColors copyWith({
+    Color? moneyPositive,
+    Color? moneyNegative,
+    Color? brandSecondary,
+    Color? brandAccentSoft,
+  }) =>
+      SpliitColors(
+        moneyPositive: moneyPositive ?? this.moneyPositive,
+        moneyNegative: moneyNegative ?? this.moneyNegative,
+        brandSecondary: brandSecondary ?? this.brandSecondary,
+        brandAccentSoft: brandAccentSoft ?? this.brandAccentSoft,
+      );
+
+  @override
+  SpliitColors lerp(SpliitColors? other, double t) {
+    if (other == null) return this;
+    return SpliitColors(
+      moneyPositive: Color.lerp(moneyPositive, other.moneyPositive, t)!,
+      moneyNegative: Color.lerp(moneyNegative, other.moneyNegative, t)!,
+      brandSecondary: Color.lerp(brandSecondary, other.brandSecondary, t)!,
+      brandAccentSoft: Color.lerp(brandAccentSoft, other.brandAccentSoft, t)!,
+    );
+  }
+}
+
+/// spliit2go's light theme -- Material 3, seeded from spliit-ios's
+/// emerald accent.
 /// Paired with [spliit2goDarkTheme] below so the app actually has
 /// something to switch to when the system is in dark mode (issue #25;
 /// see the doc comment on [Spliit2GoApp]'s `MaterialApp` for why a
 /// `darkTheme` was the whole bug).
 ThemeData get spliit2goLightTheme => _appTheme(Brightness.light);
 
-/// spliit2go's dark theme -- same Material 3 + teal seed as
+/// spliit2go's dark theme -- same Material 3 + emerald seed as
 /// [spliit2goLightTheme], opposite [Brightness.dark], so system dark
 /// mode gets a genuinely dark version of this app's own look rather
 /// than a generic Material dark theme.

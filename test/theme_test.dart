@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spliit2go/theme.dart';
 
@@ -17,7 +16,7 @@ void main() {
     // tone for dark mode (roughly tone 80 vs. light mode's tone 40) so
     // it reads clearly against a dark surface -- the reverse of the
     // background relationship, which is the opposite way round. Both
-    // colors tracing back to the same teal seed is checked by the
+    // colors tracing back to the same emerald seed is checked by the
     // regression test below (distinct scaffold backgrounds would also
     // catch two completely unrelated ThemeData instances).
     expect(spliit2goDarkTheme.colorScheme.primary.computeLuminance(),
@@ -33,6 +32,36 @@ void main() {
     // distinct scaffold backgrounds, not the same ThemeData used twice.
     expect(spliit2goLightTheme.scaffoldBackgroundColor,
         isNot(spliit2goDarkTheme.scaffoldBackgroundColor));
+  });
+
+  test("primary is spliit-ios's accent exactly, in both modes (#178)", () {
+    expect(spliit2goLightTheme.colorScheme.primary, const Color(0xff059669));
+    expect(spliit2goDarkTheme.colorScheme.primary, const Color(0xff10B981));
+  });
+
+  test('each theme carries its own spliit-ios colors (#178)', () {
+    expect(spliit2goLightTheme.extension<SpliitColors>(), SpliitColors.light);
+    expect(spliit2goDarkTheme.extension<SpliitColors>(), SpliitColors.dark);
+    expect(SpliitColors.light.moneyPositive, isNot(SpliitColors.dark.moneyPositive));
+  });
+
+  testWidgets('SpliitColors.of falls back by brightness without the app theme', (tester) async {
+    late SpliitColors light, dark;
+    await tester.pumpWidget(MaterialApp(
+      theme: ThemeData(),
+      home: Builder(builder: (context) {
+        light = SpliitColors.of(context);
+        return Theme(
+          data: ThemeData(brightness: Brightness.dark),
+          child: Builder(builder: (context) {
+            dark = SpliitColors.of(context);
+            return const SizedBox();
+          }),
+        );
+      }),
+    ));
+    expect(light, SpliitColors.light);
+    expect(dark, SpliitColors.dark);
   });
 
   group('spliit2goSystemUiOverlayStyle', () {

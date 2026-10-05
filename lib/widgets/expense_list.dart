@@ -6,6 +6,7 @@ import '../models/expense.dart';
 import '../services/expense_date_group.dart';
 import '../utils/date_format.dart';
 import '../utils/money.dart';
+import 'money.dart';
 import 'category_icon.dart';
 import 'section_heading.dart';
 
@@ -103,7 +104,8 @@ class ExpenseTile extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(formatMoney(e.amountCents, currency, locale: context.appLocale)),
+          Money(formatMoney(e.amountCents, currency, locale: context.appLocale),
+              isReimbursement: e.isReimbursement),
           if (e.syncFailed)
             Row(
               mainAxisSize: MainAxisSize.min,

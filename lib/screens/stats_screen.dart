@@ -12,6 +12,7 @@ import '../services/category_store.dart';
 import '../services/stats_calculator.dart';
 import '../sync/outbox.dart';
 import '../utils/money.dart';
+import '../widgets/money.dart';
 
 /// A first pass at the web app's Stats tab (issue #27, split from #6
 /// alongside Activity -- see issue #26): the group's total spending
@@ -178,11 +179,7 @@ class _StatsScreenState extends State<StatsScreen> {
                         ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    _money(groupTotalCents.abs()),
-                    style: theme.textTheme.headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
+                  Money(_money(groupTotalCents.abs()), size: MoneySize.hero),
                 ],
               ),
             ),
@@ -208,7 +205,7 @@ class _StatsScreenState extends State<StatsScreen> {
     final small = Theme.of(context).textTheme.bodySmall;
     return ListTile(
       title: _pair(Text(p.name),
-          Text(_money(p.paidCents), style: const TextStyle(fontWeight: FontWeight.w600))),
+          Money(_money(p.paidCents))),
       subtitle: _pair(Text(context.l10n.statsParticipantPaidCount(p.paidCount)),
           Text(context.l10n.statsParticipantShare(_money(p.shareCents)), style: small)),
     );
@@ -217,7 +214,7 @@ class _StatsScreenState extends State<StatsScreen> {
   Widget _categoryTile(BuildContext context, CategorySpending c) {
     return ListTile(
       title: _pair(Text(_categoryLabel(c.categoryId)),
-          Text(_money(c.totalCents), style: const TextStyle(fontWeight: FontWeight.w600))),
+          Money(_money(c.totalCents))),
     );
   }
 
