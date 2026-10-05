@@ -8,11 +8,12 @@ import '../utils/date_format.dart';
 import '../utils/money.dart';
 import 'money.dart';
 import 'category_icon.dart';
-import 'section_heading.dart';
+import 'grouped_section.dart';
 
-/// Expenses under date-section headings (issue #88), built lazily. Shared
-/// by the Expenses tab and search (issue #39), so a search result looks
-/// and sits exactly as it does in the full list.
+/// Expenses in date sections (issue #88), each a grouped card under its
+/// caption (#185), built lazily. Shared by the Expenses tab and search
+/// (issue #39), so a search result looks and sits exactly as it does in
+/// the full list. Put it on [GroupedSection.backgroundColor].
 class ExpenseDateList extends StatelessWidget {
   const ExpenseDateList({
     super.key,
@@ -21,6 +22,7 @@ class ExpenseDateList extends StatelessWidget {
     required this.categoryFor,
     required this.onTap,
     this.keyboardDismissBehavior = ScrollViewKeyboardDismissBehavior.manual,
+    this.bottomPadding = 0,
   });
 
   /// Newest first, as the db returns them.
@@ -30,28 +32,44 @@ class ExpenseDateList extends StatelessWidget {
   final void Function(Expense) onTap;
   final ScrollViewKeyboardDismissBehavior keyboardDismissBehavior;
 
+  /// Room under the last card, so a floating button doesn't cover its
+  /// amount.
+  final double bottomPadding;
+
   @override
   Widget build(BuildContext context) {
-    // Each row is an ExpenseDateGroup header or an Expense.
+    // Each row is an ExpenseDateGroup caption or an expense, with where
+    // it sits in its section's card.
     final rows = <Object>[
       for (final (group, expenses) in groupExpensesByDate(
         expenses,
         today: DateTime.now(),
         firstWeekday: firstWeekdayFor(View.of(context).platformDispatcher.locale),
-      )) ...[group, ...expenses],
+      )) ...[
+        group,
+        for (var i = 0; i < expenses.length; i++)
+          (expenses[i], i == 0, i == expenses.length - 1),
+      ],
     ];
     return ListView.builder(
       keyboardDismissBehavior: keyboardDismissBehavior,
+      padding: EdgeInsets.only(top: 16, bottom: bottomPadding),
       itemCount: rows.length,
       itemBuilder: (context, i) {
         final row = rows[i];
         if (row is ExpenseDateGroup) return _sectionHeader(context, row);
-        final e = row as Expense;
-        return ExpenseTile(
-          expense: e,
-          category: categoryFor(e.category),
-          currency: currency,
-          onTap: () => onTap(e),
+        final (e, first, last) = row as (Expense, bool, bool);
+        return GroupedItem(
+          first: first,
+          last: last,
+          // Past the category icon, under the title.
+          dividerIndent: 66,
+          child: ExpenseTile(
+            expense: e,
+            category: categoryFor(e.category),
+            currency: currency,
+            onTap: () => onTap(e),
+          ),
         );
       },
     );
@@ -59,7 +77,7 @@ class ExpenseDateList extends StatelessWidget {
 
   Widget _sectionHeader(BuildContext context, ExpenseDateGroup group) {
     final l10n = context.l10n;
-    return SectionHeading(switch (group) {
+    return GroupedCaption(switch (group) {
       ExpenseDateGroup.upcoming => l10n.dateSectionUpcoming,
       ExpenseDateGroup.thisWeek => l10n.dateSectionThisWeek,
       ExpenseDateGroup.earlierThisMonth => l10n.dateSectionEarlierThisMonth,
@@ -67,7 +85,7 @@ class ExpenseDateList extends StatelessWidget {
       ExpenseDateGroup.earlierThisYear => l10n.dateSectionEarlierThisYear,
       ExpenseDateGroup.lastYear => l10n.dateSectionLastYear,
       ExpenseDateGroup.older => l10n.dateSectionOlder,
-    });
+    }, margin: GroupedCaption.listMargin);
   }
 }
 

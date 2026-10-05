@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-/// A date-section heading in a list ("THIS WEEK", "LAST MONTH"): small
+/// A section heading in a list ("THIS WEEK", "LAST MONTH"): small
 /// bold capitals in a muted color, like spliit-ios's DateBucketHeader, so
 /// it reads as a divider rather than an entry. Screen readers get [title]
-/// in its natural case, as a heading. Shared by the expense list and the
-/// activity log (issues #88, #91).
+/// in its natural case, as a heading. Used by Balances; the date lists
+/// it was made for (issues #88, #91) use `GroupedCaption` since #185.
 class SectionHeading extends StatelessWidget {
   const SectionHeading(this.title, {super.key});
 

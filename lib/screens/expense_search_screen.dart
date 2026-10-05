@@ -13,6 +13,7 @@ import '../sync/outbox.dart';
 import '../widgets/expense_list.dart';
 import 'expense_details_sheet.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/grouped_section.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// Searches a group's expenses by title (issue #39), from the search
@@ -81,8 +82,11 @@ class _ExpenseSearchScreenState extends State<ExpenseSearchScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final background = GroupedSection.backgroundColor(context);
     return Scaffold(
+      backgroundColor: background,
       appBar: AppBar(
+        backgroundColor: background,
         title: TextField(
           controller: _controller,
           focusNode: _focus,

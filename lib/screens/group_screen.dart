@@ -29,6 +29,7 @@ import '../services/receipt_cache.dart';
 import '../services/receipt_downloader.dart';
 import '../widgets/receipt_download_indicator.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/grouped_section.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// A single group's expenses, offline-first -- reached by pushing on top
@@ -234,8 +235,15 @@ class _GroupScreenState extends State<GroupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Expenses and Activities are grouped lists (#185); Balances and
+    // Stats aren't yet, so they keep the plain surface.
+    final background = _tabIndex == 0 || _tabIndex == 3
+        ? GroupedSection.backgroundColor(context)
+        : null;
     return Scaffold(
+      backgroundColor: background,
       appBar: AppBar(
+        backgroundColor: background,
         title: Text(_group?.name ?? 'Spliit2Go'),
         // A meatballs menu, like spliit-ios's group toolbar (issue #3):
         // group settings, and sharing the group's link. Room for more
@@ -490,6 +498,8 @@ class _GroupScreenState extends State<GroupScreen> {
       currency: _group?.currency ?? '\$',
       categoryFor: _categoryFor,
       onTap: _openExpenseDetails,
+      // Clear of the add button, as the group list is.
+      bottomPadding: 88,
     );
   }
 

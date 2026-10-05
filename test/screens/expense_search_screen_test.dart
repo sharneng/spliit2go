@@ -10,7 +10,7 @@ import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/expense_search_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
-import 'package:spliit2go/widgets/section_heading.dart';
+import 'package:spliit2go/widgets/grouped_section.dart';
 
 // Issue #39: search filters the group's cached expenses by title as you
 // type, offline too.
@@ -105,13 +105,30 @@ void main() {
     expect(find.widgetWithText(ListTile, 'Pending DINNER'), findsOneWidget);
     // A match in the notes only doesn't count, as in Spliit.
     expect(find.widgetWithText(ListTile, 'Groceries'), findsNothing);
-    expect(find.byType(SectionHeading), findsWidgets);
+    expect(find.byType(GroupedCaption), findsWidgets);
 
     await tester.enterText(find.byType(TextField), 'dinner at');
     await tester.pump();
 
     expect(find.widgetWithText(ListTile, 'Dinner at Lupo'), findsOneWidget);
     expect(find.widgetWithText(ListTile, 'Late dinner'), findsNothing);
+    await teardown(tester);
+  });
+
+  testWidgets('results sit in grouped cards, hairlines under the titles (#185)', (tester) async {
+    final db = await seededDb();
+    addTearDown(db.close);
+    await pumpSearch(tester, db);
+    await tester.enterText(find.byType(TextField), 'dinner');
+    await tester.pump();
+
+    // Dinner at Lupo and Pending DINNER share a date, so a section.
+    final divider = find.descendant(
+        of: find.ancestor(of: find.text('Pending DINNER'), matching: find.byType(GroupedItem)),
+        matching: find.byType(Divider));
+    final card = tester.getTopLeft(divider).dx;
+    expect(tester.widget<Divider>(divider).indent,
+        tester.getTopLeft(find.text('Pending DINNER')).dx - card);
     await teardown(tester);
   });
 

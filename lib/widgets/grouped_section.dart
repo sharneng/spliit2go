@@ -15,7 +15,7 @@ class GroupedSection extends StatelessWidget {
     this.captionTrailing,
     required this.children,
     this.dividerIndent = 16,
-    this.margin = const EdgeInsets.fromLTRB(16, 0, 16, 24),
+    this.margin = const EdgeInsets.fromLTRB(16, 0, 16, spacing),
   });
 
   /// Above the card, in its natural case.
@@ -32,6 +32,12 @@ class GroupedSection extends StatelessWidget {
   final double dividerIndent;
 
   final EdgeInsetsGeometry margin;
+
+  /// The card's corners.
+  static const double radius = 20;
+
+  /// The space under a card, before the next caption.
+  static const double spacing = 24;
 
   /// The card's color, a step lighter than [backgroundColor].
   static Color cardColor(BuildContext context) {
@@ -51,41 +57,16 @@ class GroupedSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final caption = this.caption;
     return Padding(
       padding: margin,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (caption != null || captionTrailing != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 8, 6),
-              // A Wrap, not a Row: when the two don't fit on one line (a
-              // long split mode at large text, #183 review), the trailing
-              // one goes under the caption instead of overflowing, and
-              // each wraps within the width.
-              child: Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 12,
-                children: [
-                  if (caption != null)
-                    Semantics(
-                      header: true,
-                      child: Text(caption,
-                          style: theme.textTheme.labelLarge
-                              ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                    )
-                  else
-                    const SizedBox.shrink(),
-                  if (captionTrailing case final trailing?) trailing,
-                ],
-              ),
-            ),
+            GroupedCaption(caption, trailing: captionTrailing),
           Material(
             color: cardColor(context),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
             clipBehavior: Clip.antiAlias,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -98,6 +79,101 @@ class GroupedSection extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A section's caption: its title in natural case, with an optional
+/// [trailing] value or button at the other end. [GroupedSection] draws its
+/// own; a lazy list ([GroupedItem]) puts one before each section's rows.
+class GroupedCaption extends StatelessWidget {
+  const GroupedCaption(this.caption, {super.key, this.trailing, this.margin = EdgeInsets.zero});
+
+  final String? caption;
+  final Widget? trailing;
+
+  /// Outside the caption's own padding: a lazy list's inset from the
+  /// screen's edges, which [GroupedSection] gives it otherwise.
+  final EdgeInsetsGeometry margin;
+
+  /// A lazy list's caption, inset like its [GroupedItem]s.
+  static const listMargin = EdgeInsets.symmetric(horizontal: 16);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final caption = this.caption;
+    return Padding(
+      padding: margin.add(const EdgeInsets.fromLTRB(16, 0, 8, 6)),
+      // A Wrap, not a Row: when the two don't fit on one line (a long
+      // split mode at large text, #183 review), the trailing one goes
+      // under the caption instead of overflowing, and each wraps within
+      // the width.
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        children: [
+          if (caption != null)
+            Semantics(
+              header: true,
+              child: Text(caption,
+                  style: theme.textTheme.labelLarge
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            )
+          else
+            const SizedBox.shrink(),
+          if (trailing case final trailing?) trailing,
+        ],
+      ),
+    );
+  }
+}
+
+/// One row of a section in a long, lazily built list (#185), drawn as its
+/// piece of the section's card: the [first] row has the card's top
+/// corners, the [last] its bottom ones and the space after it, and every
+/// other row starts with a hairline. A [GroupedSection] builds all its rows
+/// at once; this lets a [ListView.builder] build only the visible ones and
+/// still look the same.
+class GroupedItem extends StatelessWidget {
+  const GroupedItem({
+    super.key,
+    required this.first,
+    required this.last,
+    required this.child,
+    this.dividerIndent = 16,
+  });
+
+  final bool first;
+  final bool last;
+  final Widget child;
+
+  /// As [GroupedSection.dividerIndent].
+  final double dividerIndent;
+
+  @override
+  Widget build(BuildContext context) {
+    const corner = Radius.circular(GroupedSection.radius);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 0, 16, last ? GroupedSection.spacing : 0),
+      child: Material(
+        color: GroupedSection.cardColor(context),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: first ? corner : Radius.zero,
+            bottom: last ? corner : Radius.zero,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!first) GroupedDivider(indent: dividerIndent),
+            child,
+          ],
+        ),
       ),
     );
   }
