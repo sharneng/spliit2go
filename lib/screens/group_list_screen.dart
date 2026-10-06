@@ -425,7 +425,12 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
             onSelected: () => _performGroupAction(row, 'remove')),
       ],
       builder: (context, openMenu) => ListTile(
-        leading: Semantics(
+        // A tighter gap before the chevron (#201 review); the monogram's
+        // padding keeps the name at 80.
+        horizontalTitleGap: 8,
+        leading: Padding(
+          padding: const EdgeInsetsDirectional.only(end: 8),
+          child: Semantics(
             button: true,
             label: context.l10n.groupListActions(row.name),
             child: Tooltip(
@@ -438,7 +443,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
                         height: 48,
                         child: Center(
                             child:
-                                GroupMonogram(id: row.id, name: row.name)))))),
+                                GroupMonogram(id: row.id, name: row.name))))))),
         // The clip and the date sit at the right edge, next to the
         // chevron (#201 review).
         title: Row(children: [

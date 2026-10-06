@@ -26,6 +26,10 @@ class ReceiptDownloadIndicator extends StatelessWidget {
   /// Beside a title, not in an app bar: no extra height.
   final bool compact;
 
+  /// How far, per point of [size], a compact clip shifts toward its end.
+  @visibleForTesting
+  static const compactInkNudge = 3.3 / 18;
+
   /// On the 📎 while it blinks.
   @visibleForTesting
   static const blinking = ValueKey('receipt-downloads-blinking');
@@ -45,7 +49,7 @@ class ReceiptDownloadIndicator extends StatelessWidget {
                   ? null
                   : theme.disabledColor;
           final icon = Icon(Icons.attach_file, size: size, color: color);
-          return IconButton(
+          final button = IconButton(
             tooltip: l10n.receiptDownloadsTooltip,
             // Small in the group list, so the row keeps its height, and
             // flush with the row's right-aligned date (#201 review).
@@ -59,6 +63,15 @@ class ReceiptDownloadIndicator extends StatelessWidget {
             onPressed: () => _showDetails(context),
             icon: s.running ? _Blinking(key: blinking, child: icon) : icon,
           );
+          if (!compact) return button;
+          // The clip's ink stops short of its box's end; nudged out so it
+          // ends where the date's digits below do (measured, #201 review).
+          final nudge = size * compactInkNudge;
+          return Transform.translate(
+              offset: Offset(
+                  Directionality.of(context) == TextDirection.rtl ? -nudge : nudge,
+                  0),
+              child: button);
         },
       );
 

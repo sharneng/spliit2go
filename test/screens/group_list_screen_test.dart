@@ -256,6 +256,15 @@ void main() {
           tester.getTopRight(find.text('Banff Trip')).dx);
       expect(tester.getTopRight(find.text(shown)).dx,
           greaterThan(tester.getTopRight(find.text('0')).dx + 100));
+      // 8 to the chevron, not ListTile's 16; the name still starts at 80.
+      expect(
+          tester.getTopLeft(find.byIcon(Icons.chevron_right)).dx -
+              tester.getTopRight(find.text(shown)).dx,
+          8);
+      expect(
+          tester.getTopLeft(find.text('Banff Trip')).dx -
+              tester.getTopLeft(find.byType(ListTile)).dx,
+          80);
     }
     SharedPreferences.setMockInitialValues({});
   });

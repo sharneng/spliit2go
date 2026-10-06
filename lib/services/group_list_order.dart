@@ -22,10 +22,12 @@ int compareGroupRows(
     GroupRow a, GroupRow b, GroupListSort sort, Map<String, DateSpan?> spans) {
   final ad = groupSortDate(a, sort, spans);
   final bd = groupSortDate(b, sort, spans);
+  // No date first: most likely a group just created or joined, with no
+  // expenses yet (#201 review).
   final order = ad == null
-      ? (bd == null ? 0 : 1)
+      ? (bd == null ? 0 : -1)
       : bd == null
-          ? -1
+          ? 1
           : bd.compareTo(ad);
   return order != 0 ? order : a.id.compareTo(b.id);
 }
