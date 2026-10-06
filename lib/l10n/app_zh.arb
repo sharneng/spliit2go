@@ -318,5 +318,17 @@
   "aboutLinkFailed": "无法打开 {url}。",
   "aboutCommitUnknown": "未知",
   "aboutCopyVersion": "复制版本和提交",
-  "aboutVersionCopied": "已复制版本和提交"
+  "aboutVersionCopied": "已复制版本和提交",
+  "expenseRowYouLent": "你借出 {amount}",
+  "expenseRowYouOwe": "你应付 {amount}",
+  "expenseRowPaidByYou": "你",
+  "expenseRowRecurring": "重复",
+  "expenseRowHasReceipts": "有收据",
+  "expenseRowHasNotes": "有备注",
+  "expenseRowSpokenPaid": "{payer} 于 {date} 支付 {amount}，{category}",
+  "expenseRowSpokenYouPaid": "你于 {date} 支付 {amount}，{category}",
+  "expenseRowSpokenPaidBack": "{payer} 于 {date} 还款 {amount}，{category}",
+  "expenseRowSpokenYouPaidBack": "你于 {date} 还款 {amount}，{category}",
+  "expenseRowSpokenNoPayer": "{date} {amount}，{category}",
+  "expenseRowSpokenSentenceEnd": "。"
 }

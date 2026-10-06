@@ -525,6 +525,8 @@ class _GroupScreenState extends State<GroupScreen> {
       expenses: _expenses,
       currency: _group?.currency ?? '\$',
       categoryFor: _categoryFor,
+      participants: _group?.participants ?? const [],
+      activeUserId: _activeUserId,
       onTap: _openExpenseDetails,
       // Clear of the add button, as the group list is.
       bottomPadding: 88,

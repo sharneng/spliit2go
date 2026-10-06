@@ -127,6 +127,8 @@ class _ExpenseSearchScreenState extends State<ExpenseSearchScreen> {
       expenses: matches,
       currency: widget.group.currency,
       categoryFor: _categoryFor,
+      participants: widget.group.participants,
+      activeUserId: widget.activeUserId,
       onTap: _openExpenseDetails,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
     );

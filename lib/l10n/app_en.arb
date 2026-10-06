@@ -627,5 +627,113 @@
     "description": "Shown in place of the commit hash after the build number when the build has none, e.g. \"Version 1.0.0 (300 · unknown)\"."
   },
   "aboutCopyVersion": "Copy version and commit",
-  "aboutVersionCopied": "Version and commit copied"
+  "aboutVersionCopied": "Version and commit copied",
+  "expenseRowYouLent": "You lent {amount}",
+  "@expenseRowYouLent": {
+    "description": "Read out for an expense row's green amount: what the others owe you for it.",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseRowYouOwe": "You owe {amount}",
+  "@expenseRowYouOwe": {
+    "description": "Read out for an expense row's red amount: your share of an expense someone else paid.",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseRowPaidByYou": "You",
+  "@expenseRowPaidByYou": {
+    "description": "An expense row's payer when it's you. Short: it sits under the amount."
+  },
+  "expenseRowRecurring": "Repeats",
+  "expenseRowHasReceipts": "Has receipts",
+  "expenseRowHasNotes": "Has notes",
+  "expenseRowSpokenPaid": "{payer} paid {amount} on {date}, {category}",
+  "@expenseRowSpokenPaid": {
+    "description": "Read out for an expense row, after its title: who paid, how much, when, and the category's name.",
+    "placeholders": {
+      "payer": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "category": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseRowSpokenYouPaid": "You paid {amount} on {date}, {category}",
+  "@expenseRowSpokenYouPaid": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "category": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseRowSpokenPaidBack": "{payer} paid back {amount} on {date}, {category}",
+  "@expenseRowSpokenPaidBack": {
+    "description": "As expenseRowSpokenPaid, for a reimbursement.",
+    "placeholders": {
+      "payer": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "category": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseRowSpokenYouPaidBack": "You paid back {amount} on {date}, {category}",
+  "@expenseRowSpokenYouPaidBack": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "category": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseRowSpokenNoPayer": "{amount} on {date}, {category}",
+  "@expenseRowSpokenNoPayer": {
+    "description": "As expenseRowSpokenPaid, when the group doesn't know who paid.",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "category": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseRowSpokenSentenceEnd": ".",
+  "@expenseRowSpokenSentenceEnd": {
+    "description": "Ends each sentence of an expense row's spoken label, so a screen reader pauses between them."
+  }
 }

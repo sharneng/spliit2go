@@ -13,10 +13,10 @@ import '../services/date_span_calculator.dart';
 /// an already-correct date is displayed (issue #51, item 5), not any date
 /// semantics.
 ///
-/// The abbreviated-month form (`yMMMd`) rather than an all-numeric one:
-/// it's unambiguous in every locale (`1/2/2026` is January 2nd in en-US
-/// and February 1st in en-GB), and it's the same pattern everywhere so
-/// there's one place to change it.
+/// The abbreviated-month form (`yMMMd`) wherever a date stands on its
+/// own: it reads at a glance, and it's the same pattern everywhere, so
+/// there's one place to change it. A list row, where dates are read down
+/// a column, uses [formatShortDate] instead.
 ///
 /// [locale] is required, for the same reason as `formatMoney`'s: it must
 /// be the resolved app locale (`Localizations.localeOf(context)`), and a
@@ -27,6 +27,28 @@ import '../services/date_span_calculator.dart';
 /// `initializeDateFormatting` first.
 String formatDate(DateTime d, {required Locale locale}) =>
     DateFormat.yMMMd(locale.toString()).format(d);
+
+/// Formats [d] as [locale]'s own all-numeric date, zero-padded so every
+/// date has the same width (#207): `09/09/2026` (en-US), `09/09/2026`
+/// (fr, en-GB: day first), `2026/09/09` (zh). For the expense list, where
+/// what follows the date should line up row to row; drawn with tabular
+/// figures, so the digits are equal widths too.
+///
+/// The order and separators are CLDR's for [locale] (`DateFormat.yMd`),
+/// only padded, so each reader sees their own convention: `09/10/2026` is
+/// September 10th in en-US and October 9th in en-GB, which is only
+/// ambiguous to someone reading another locale's dates. Like
+/// [formatDate], a date-only value, formatted without conversion.
+String formatShortDate(DateTime d, {required Locale locale}) {
+  final pattern = DateFormat.yMd(locale.toString()).pattern!;
+  // A lone M or d (CLDR's unpadded month or day) becomes MM or dd. Quoted
+  // literal text, which these patterns don't use today, is left alone.
+  final padded = pattern.splitMapJoin(RegExp(r"'[^']*'"),
+      onMatch: (m) => m[0]!,
+      onNonMatch: (text) =>
+          text.replaceAllMapped(RegExp(r'(?<![Md])([Md])(?![Md])'), (m) => '${m[1]}${m[1]}'));
+  return DateFormat(padded, locale.toString()).format(d);
+}
 
 /// Formats [t]'s time of day as 24-hour `HH:mm` in [locale]'s digits.
 String formatTimeOfDay(DateTime t, {required Locale locale}) =>
