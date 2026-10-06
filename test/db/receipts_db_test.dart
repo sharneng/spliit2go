@@ -4,6 +4,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/models/expense.dart';
+import 'package:spliit2go/models/group.dart';
 
 // Issue #123: what the cache knows about an expense's receipts, and when
 // it stops knowing it.
@@ -184,5 +185,43 @@ void main() {
     final row = (await db.pendingExpensesForGroup('g1')).single;
     expect(row.documentsJson, isNull);
     expect(db.rowToExpense(row).documents, isEmpty);
+  });
+
+  // #203: a device that ran PR #144's first build is at version 16
+  // without the activity-log columns.
+  test('a version 16 cache missing the activity-log columns gets them', () async {
+    final dir = await Directory.systemTemp.createTemp('receipts-v16-repair-');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/db.sqlite');
+    final old = AppDatabase(NativeDatabase(file));
+    await old.cacheGroup(const Group(id: 'g1', name: 'Trip', currency: r'$', participants: []));
+    await old.recordGroupOpened('g1', serverUrl: 'https://example.test');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipts_checked_activity_id');
+    await old.customStatement('ALTER TABLE groups DROP COLUMN receipts_checked_at');
+    await old.customStatement('PRAGMA user_version = 16');
+    await old.close();
+
+    final db = AppDatabase(NativeDatabase(file));
+    addTearDown(db.close);
+    await db.setReceiptsChecked('g1', activityId: 'a1', at: DateTime.utc(2026, 10, 6));
+    final row = (await db.groupRow('g1'))!;
+    expect(row.receiptsCheckedActivityId, 'a1');
+    expect(row.serverUrl, 'https://example.test');
+  });
+
+  test('a complete version 16 cache upgrades untouched', () async {
+    final dir = await Directory.systemTemp.createTemp('receipts-v16-upgrade-');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/db.sqlite');
+    final old = AppDatabase(NativeDatabase(file));
+    await old.cacheGroup(const Group(id: 'g1', name: 'Trip', currency: r'$', participants: []));
+    await old.recordGroupOpened('g1', serverUrl: 'https://example.test');
+    await old.setReceiptsChecked('g1', activityId: 'a1', at: DateTime.utc(2026, 10, 6));
+    await old.customStatement('PRAGMA user_version = 16');
+    await old.close();
+
+    final db = AppDatabase(NativeDatabase(file));
+    addTearDown(db.close);
+    expect((await db.groupRow('g1'))!.receiptsCheckedActivityId, 'a1');
   });
 }
