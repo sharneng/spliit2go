@@ -338,13 +338,15 @@ class _GroupScreenState extends State<GroupScreen> {
           removeBottom: true,
           removeLeft: true,
           removeRight: true,
-          // Off the rounded ends, so the end tabs' highlight isn't cut.
+          // Off the rounded ends, so the end tabs sit well inside the curve.
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: NavigationBar(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: LayoutBuilder(builder: (context, constraints) {
+            final tabWidth = constraints.maxWidth / labels.length;
+            return NavigationBar(
               backgroundColor: Colors.transparent,
               elevation: 0,
-              height: 60,
+              height: 68,
               selectedIndex: _tabIndex,
               onDestinationSelected: (i) {
                 if (i == labels.length - 1) {
@@ -353,9 +355,10 @@ class _GroupScreenState extends State<GroupScreen> {
                   setState(() => _tabIndex = i);
                 }
               },
-              // Icons only (#198 review); each label stays as the tab's
-              // tooltip, which screen readers announce.
-              labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
+              // Hidden labels stay available as each tab's tooltip.
+              labelBehavior: _labelsFit(context, labels, tabWidth)
+                  ? NavigationDestinationLabelBehavior.alwaysShow
+                  : NavigationDestinationLabelBehavior.alwaysHide,
               destinations: [
                 NavigationDestination(
                   icon: const Icon(Icons.receipt_long_outlined),
@@ -379,7 +382,8 @@ class _GroupScreenState extends State<GroupScreen> {
                   enabled: _group != null,
                 ),
               ],
-            ),
+            );
+          }),
           ),
         ),
       ),
@@ -397,6 +401,31 @@ class _GroupScreenState extends State<GroupScreen> {
       TargetPlatform.iOS => math.max(inset - 14, 12),
       _ => inset,
     };
+  }
+
+  /// NavigationBar never ellipsizes a label: one too wide for its tab
+  /// wraps mid-word ("Statistiq/ues" in French on a narrow phone), so
+  /// labels are measured up front and hidden if any doesn't fit.
+  bool _labelsFit(BuildContext context, List<String> labels, double tabWidth) {
+    final style = NavigationBarTheme.of(context)
+            .labelTextStyle
+            ?.resolve({WidgetState.selected}) ??
+        Theme.of(context).textTheme.labelMedium;
+    // NavigationBar caps label text scaling at 1.3 (its private
+    // _kMaxLabelTextScaleFactor); measure the same way.
+    final scaler = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3);
+    for (final label in labels) {
+      final painter = TextPainter(
+        text: TextSpan(text: label, style: style),
+        textDirection: Directionality.of(context),
+        textScaler: scaler,
+        maxLines: 1,
+      )..layout();
+      final width = painter.width;
+      painter.dispose();
+      if (width > tabWidth - 8) return false;
+    }
+    return true;
   }
 
   /// This tab's content, resolved fresh on every switch rather than kept

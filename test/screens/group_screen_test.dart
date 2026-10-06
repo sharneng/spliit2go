@@ -652,12 +652,8 @@ void main() {
       await pumpGroupScreen(tester, db);
 
       expect(find.byType(NavigationDestination), findsNWidgets(5));
-      // Icons only; the labels are the tooltips screen readers announce
-      // (#198 review).
-      expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).labelBehavior,
-          NavigationDestinationLabelBehavior.alwaysHide);
       for (final label in ['Expenses', 'Balance', 'Stats', 'Activities', 'Search']) {
-        expect(find.byTooltip(label), findsOneWidget, reason: label);
+        expect(find.text(label), findsOneWidget, reason: label);
       }
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
@@ -887,6 +883,42 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
     });
 
+    NavigationDestinationLabelBehavior labelBehavior(WidgetTester tester) =>
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).labelBehavior!;
+
+    testWidgets('tab labels show when they fit (#84)', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpGroupScreen(tester, db);
+
+      expect(labelBehavior(tester), NavigationDestinationLabelBehavior.alwaysShow);
+      expect(tester.getSize(find.byType(NavigationBar)).height, 68,
+          reason: 'the bottom bar must stay at its own height, not take over the screen');
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('tab labels hide, but stay as tooltips, when a label is too wide for its tab (#84)',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await pumpGroupScreen(tester, db);
+
+      expect(labelBehavior(tester), NavigationDestinationLabelBehavior.alwaysHide);
+      expect(find.byTooltip('Stats'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.bar_chart_outlined));
+      await tester.pumpAndSettle();
+      expect(find.byType(StatsScreen), findsOneWidget);
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
     testWidgets('on iPhone the bar sits lower in the home indicator inset; on Android, on it (#198 review)',
         (tester) async {
       tester.view.physicalSize = const Size(400, 800);
@@ -973,7 +1005,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
     });
 
-    testWidgets('French at double text size on a narrow phone fits without overflowing (#84 review)',
+    testWidgets('French at double text size on a narrow phone hides labels without overflowing (#84 review)',
         (tester) async {
       tester.view.physicalSize = const Size(360, 800);
       tester.view.devicePixelRatio = 1;
@@ -985,6 +1017,7 @@ void main() {
       await pumpWithBuilder(tester, db, locale: const Locale('fr'));
 
       expect(tester.takeException(), isNull);
+      expect(labelBehavior(tester), NavigationDestinationLabelBehavior.alwaysHide);
       expect(find.byTooltip('Statistiques'), findsOneWidget);
       expect(tester.getRect(find.byIcon(Icons.search)).right, lessThanOrEqualTo(360));
       // See the first test above for why. (issue #47)
