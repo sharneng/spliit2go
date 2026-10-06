@@ -58,7 +58,7 @@ void main() {
       ]),
     );
     final icon = tester.widget<Icon>(find.byIcon(Icons.chevron_right));
-    expect(icon.color, spliit2goLightTheme.colorScheme.outline);
+    expect(icon.color, spliit2goLightTheme.colorScheme.onSurface.withValues(alpha: 0.3));
     final card = tester.getRect(find.byType(Material).last);
     final chevron = tester.getRect(find.byIcon(Icons.chevron_right));
     // The row's trailing end is the card's inset, as its leading end.

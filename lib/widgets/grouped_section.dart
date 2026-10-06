@@ -244,7 +244,12 @@ class GroupedRow extends StatelessWidget {
   /// dim, near the card's edge, as iOS's (#195). It hints; the row's own
   /// text and value come first.
   static Widget chevron(BuildContext context) =>
-      Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.outline);
+      Icon(Icons.chevron_right, color: chevronColor(context));
+
+  /// The text color at 30%, as iOS's tertiary label, which its chevrons
+  /// use (#196 review).
+  static Color chevronColor(BuildContext context) =>
+      Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3);
 
   @override
   Widget build(BuildContext context) => ListTile(
