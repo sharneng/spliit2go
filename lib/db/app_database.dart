@@ -319,7 +319,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -422,6 +422,20 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(groups, groups.receiptDownloadProblem);
             await m.addColumn(groups, groups.receiptsCheckedActivityId);
             await m.addColumn(groups, groups.receiptsCheckedAt);
+          }
+          if (from == 16) {
+            // #203: PR #144's first build was already schema 16 with only
+            // receiptDownloadProblem; its activity-log columns joined the
+            // same step later, so a device that ran that build never got
+            // them. Add whichever is missing. A step, once built, is never
+            // changed again: a new column takes a new version.
+            final present = {
+              for (final c in await customSelect('PRAGMA table_info(groups)').get())
+                c.read<String>('name'),
+            };
+            for (final column in [groups.receiptsCheckedActivityId, groups.receiptsCheckedAt]) {
+              if (!present.contains(column.name)) await m.addColumn(groups, column);
+            }
           }
         },
       );
