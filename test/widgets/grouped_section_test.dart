@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:spliit2go/theme.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
 
@@ -47,22 +46,21 @@ void main() {
         ]),
         theme: spliit2goLightTheme.copyWith(platform: platform),
       );
-      expect(find.byIcon(LucideIcons.chevronRight), findsOneWidget, reason: '$platform');
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget, reason: '$platform');
     }
   });
 
-  testWidgets('the chevron is small and faint, near the card\'s edge (#195)', (tester) async {
+  testWidgets('the chevron is dim, near the card\'s edge (#195)', (tester) async {
     await pump(
       tester,
       GroupedSection(children: [
         GroupedRow(title: const Text('About'), navigates: true, onTap: () {}),
       ]),
     );
-    final icon = tester.widget<Icon>(find.byIcon(LucideIcons.chevronRight));
-    expect(icon.size, 18);
+    final icon = tester.widget<Icon>(find.byIcon(Icons.chevron_right));
     expect(icon.color, spliit2goLightTheme.colorScheme.outline);
     final card = tester.getRect(find.byType(Material).last);
-    final chevron = tester.getRect(find.byIcon(LucideIcons.chevronRight));
+    final chevron = tester.getRect(find.byIcon(Icons.chevron_right));
     // The row's trailing end is the card's inset, as its leading end.
     expect(card.right - chevron.right, GroupedSection.inset);
   });
@@ -74,7 +72,7 @@ void main() {
         GroupedRow(title: Text('English'), navigates: true, trailing: Icon(Icons.check)),
       ]),
     );
-    expect(find.byIcon(LucideIcons.chevronRight), findsNothing);
+    expect(find.byIcon(Icons.chevron_right), findsNothing);
     expect(find.byIcon(Icons.check), findsOneWidget);
   });
 

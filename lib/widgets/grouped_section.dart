@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// A settings-style section (#180): one rounded card, inset from the
 /// screen's edges, its rows divided by hairlines, with an optional
@@ -242,10 +241,10 @@ class GroupedRow extends StatelessWidget {
   final bool enabled;
 
   /// The chevron, for a row that opens a screen but isn't a [GroupedRow]:
-  /// small, thin and faint, near the card's edge, as iOS's (#195). It hints;
-  /// the row's own text and value come first.
-  static Widget chevron(BuildContext context) => Icon(LucideIcons.chevronRight,
-      size: 18, color: Theme.of(context).colorScheme.outline);
+  /// dim, near the card's edge, as iOS's (#195). It hints; the row's own
+  /// text and value come first.
+  static Widget chevron(BuildContext context) =>
+      Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.outline);
 
   @override
   Widget build(BuildContext context) => ListTile(

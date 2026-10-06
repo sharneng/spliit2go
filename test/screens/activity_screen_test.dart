@@ -241,7 +241,7 @@ void main() {
     expect(find.text('Today'), findsOneWidget);
     // An expense opens in a sheet, not a screen, so no row promises one
     // with a chevron (#186 review).
-    expect(find.byIcon(LucideIcons.chevronRight), findsNothing);
+    expect(find.byIcon(Icons.chevron_right), findsNothing);
   });
 
   testWidgets('who did what, in the active voice, with an icon per kind, in en/fr/zh (#189)',
