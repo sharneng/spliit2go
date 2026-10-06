@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// A settings-style section (#180): one rounded card, inset from the
 /// screen's edges, its rows divided by hairlines, with an optional
@@ -16,7 +17,7 @@ class GroupedSection extends StatelessWidget {
     this.footer,
     required this.children,
     this.dividerIndent = 16,
-    this.margin = const EdgeInsets.fromLTRB(16, 0, 16, spacing),
+    this.margin = const EdgeInsets.fromLTRB(inset, 0, inset, spacing),
   });
 
   /// Above the card, in its natural case.
@@ -38,8 +39,11 @@ class GroupedSection extends StatelessWidget {
 
   final EdgeInsetsGeometry margin;
 
-  /// The card's corners.
-  static const double radius = 20;
+  /// The card's corners: as round as iOS's and One UI's (#195).
+  static const double radius = 26;
+
+  /// The cards' distance from the screen's sides.
+  static const double inset = 16;
 
   /// The space under a card, before the next caption.
   static const double spacing = 24;
@@ -69,14 +73,16 @@ class GroupedSection extends StatelessWidget {
             color: cardColor(context),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
             clipBehavior: Clip.antiAlias,
-            child: Column(
+            child: _CardRows(
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (var i = 0; i < children.length; i++) ...[
-                  if (i > 0) GroupedDivider(indent: dividerIndent),
-                  children[i],
+                  for (var i = 0; i < children.length; i++) ...[
+                    if (i > 0) GroupedDivider(indent: dividerIndent),
+                    children[i],
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
           if (footer case final footer?)
@@ -108,7 +114,7 @@ class GroupedCaption extends StatelessWidget {
   final EdgeInsetsGeometry margin;
 
   /// A lazy list's caption, inset like its [GroupedItem]s.
-  static const listMargin = EdgeInsets.symmetric(horizontal: 16);
+  static const listMargin = EdgeInsets.symmetric(horizontal: GroupedSection.inset);
 
   @override
   Widget build(BuildContext context) {
@@ -167,7 +173,8 @@ class GroupedItem extends StatelessWidget {
   Widget build(BuildContext context) {
     const corner = Radius.circular(GroupedSection.radius);
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 0, 16, last ? GroupedSection.spacing : 0),
+      padding: EdgeInsets.fromLTRB(GroupedSection.inset, 0, GroupedSection.inset,
+          last ? GroupedSection.spacing : 0),
       child: Material(
         color: GroupedSection.cardColor(context),
         shape: RoundedRectangleBorder(
@@ -177,12 +184,14 @@ class GroupedItem extends StatelessWidget {
           ),
         ),
         clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (!first) GroupedDivider(indent: dividerIndent),
-            child,
-          ],
+        child: _CardRows(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!first) GroupedDivider(indent: dividerIndent),
+              child,
+            ],
+          ),
         ),
       ),
     );
@@ -232,9 +241,11 @@ class GroupedRow extends StatelessWidget {
   final bool selected;
   final bool enabled;
 
-  /// The chevron, for a row that opens a screen but isn't a [GroupedRow].
-  static Widget chevron(BuildContext context) =>
-      Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onSurfaceVariant);
+  /// The chevron, for a row that opens a screen but isn't a [GroupedRow]:
+  /// small, thin and faint, near the card's edge, as iOS's (#195). It hints;
+  /// the row's own text and value come first.
+  static Widget chevron(BuildContext context) => Icon(LucideIcons.chevronRight,
+      size: 18, color: Theme.of(context).colorScheme.outline);
 
   @override
   Widget build(BuildContext context) => ListTile(
@@ -246,4 +257,45 @@ class GroupedRow extends StatelessWidget {
         selected: selected,
         enabled: enabled,
       );
+}
+
+/// A card's rows: their trailing ends ([GroupedRow.chevron], a value or a
+/// switch) [GroupedSection.inset] from the card's edge, as their leading
+/// ones, rather than [ListTile]'s wider 24 (#195).
+class _CardRows extends StatelessWidget {
+  const _CardRows({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ListTileTheme.merge(
+        contentPadding: const EdgeInsetsDirectional.symmetric(horizontal: GroupedSection.inset),
+        child: child,
+      );
+}
+
+/// Clips a grouped list's scroll view to a rounded rectangle at the cards'
+/// inset (#193), as One UI does: a card scrolling under the app bar or off
+/// the bottom goes out through a curve matching its corners rather than a
+/// straight cut across the screen. Wrap the scroll view, inside any
+/// [RefreshIndicator] so the indicator isn't clipped.
+class GroupedScrollClip extends StatelessWidget {
+  const GroupedScrollClip({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      ClipRRect(clipper: const _InsetClipper(), child: child);
+}
+
+class _InsetClipper extends CustomClipper<RRect> {
+  const _InsetClipper();
+
+  @override
+  RRect getClip(Size size) => RRect.fromLTRBR(GroupedSection.inset, 0,
+      size.width - GroupedSection.inset, size.height, const Radius.circular(GroupedSection.radius));
+
+  @override
+  bool shouldReclip(_InsetClipper oldClipper) => false;
 }

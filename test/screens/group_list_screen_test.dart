@@ -103,7 +103,7 @@ void main() {
     expect(tester.widget<Divider>(divider).indent,
         tester.getTopLeft(name).dx - tester.getTopLeft(divider).dx);
     // Each row opens the group's screen, so has a chevron (#186 review).
-    expect(find.byIcon(Icons.chevron_right), findsNWidgets(2));
+    expect(find.byIcon(LucideIcons.chevronRight), findsNWidgets(2));
   });
 
   testWidgets('a cached-but-never-opened group does not show in the list',

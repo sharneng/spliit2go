@@ -51,7 +51,8 @@ class ExpenseDateList extends StatelessWidget {
           (expenses[i], i == 0, i == expenses.length - 1),
       ],
     ];
-    return ListView.builder(
+    return GroupedScrollClip(
+        child: ListView.builder(
       keyboardDismissBehavior: keyboardDismissBehavior,
       padding: EdgeInsets.only(top: 16, bottom: bottomPadding),
       itemCount: rows.length,
@@ -72,7 +73,7 @@ class ExpenseDateList extends StatelessWidget {
           ),
         );
       },
-    );
+    ));
   }
 
   Widget _sectionHeader(BuildContext context, ExpenseDateGroup group) {
