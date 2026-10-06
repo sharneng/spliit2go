@@ -14,6 +14,7 @@ import 'package:spliit2go/screens/group_list_screen.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
 import '../support/haptics.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:spliit2go/services/group_list_order.dart';
 
 void main() {
   // Opening a group navigates into GroupScreen, whose
@@ -194,17 +195,23 @@ void main() {
     expect(await db.groupRow('gA'), isNull);
   });
 
-  // Issue #55: date span shown next to participant metadata.
+  // Issue #55 showed the first-to-last span beside the participant count;
+  // #201 shows only the date the list is sorted by, which fits.
   // Local, date-only DateTimes -- see date_span_calculator_test.dart's
   // expense() helper comment: a DateTime.utc(...) fixture doesn't survive
   // AppDatabase's drift round-trip intact on a machine west of UTC.
-  testWidgets("shows each group's date span without a currency symbol",
+  testWidgets('shows the one date each sort orders by (#201)',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
-    await db.cacheGroup(const Group(
-        id: 'gA', name: 'Banff Trip', currency: '\$', participants: []));
-    await db.recordGroupOpened('gA', serverUrl: 'https://example.test');
+    await db.cacheGroup(Group(
+        id: 'gA',
+        name: 'Banff Trip',
+        currency: '\$',
+        participants: const [],
+        createdAt: DateTime(2026, 4, 5, 12)));
+    await db.recordGroupOpened('gA',
+        serverUrl: 'https://example.test', at: DateTime(2026, 9, 3, 12));
     await db.replaceServerExpenses('gA', [
       Expense(
         id: 'e1',
@@ -226,15 +233,26 @@ void main() {
       ),
     ]);
 
-    await tester.pumpWidget(MaterialApp(
-      locale: const Locale('en'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: GroupListScreen(db: db, clientFactory: (_) => offlineClient()),
-    ));
-    await tester.pumpAndSettle();
+    for (final (sort, shown) in [
+      (GroupListSort.firstExpense, 'Jan 2, 2026'),
+      (GroupListSort.lastExpense, 'Jun 15, 2026'),
+      (GroupListSort.created, 'Apr 5, 2026'),
+      (GroupListSort.lastOpened, 'Sep 3, 2026'),
+    ]) {
+      SharedPreferences.setMockInitialValues({'group_list_sort': sort.name});
+      await tester.pumpWidget(MaterialApp(
+        key: ValueKey(sort),
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: GroupListScreen(db: db, clientFactory: (_) => offlineClient()),
+      ));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Jan 2, 2026 – Jun 15, 2026'), findsOneWidget);
+      expect(find.text(shown), findsOneWidget, reason: sort.name);
+      expect(find.textContaining('–'), findsNothing);
+    }
+    SharedPreferences.setMockInitialValues({});
   });
 
   testWidgets('caption icons are sized from the caption text and grow with it (#180)',
@@ -268,6 +286,8 @@ void main() {
   testWidgets(
       'shows the em-dash placeholder for a group with no cached expenses',
       (tester) async {
+    SharedPreferences.setMockInitialValues({'group_list_sort': 'lastExpense'});
+    addTearDown(() => SharedPreferences.setMockInitialValues({}));
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     await db.cacheGroup(const Group(

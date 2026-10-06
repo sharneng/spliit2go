@@ -88,8 +88,8 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
   /// keyed by [GroupRow.id] -- loaded alongside [_groups] rather than
   /// lazily per row, so the list doesn't kick off a burst of individual
   /// queries as it scrolls. A group missing from this map (still
-  /// loading) or mapped to null (no cached expenses yet) both render
-  /// via [formatDateSpan]'s own null handling.
+  /// loading) or mapped to null (no cached expenses yet) both show '—'
+  /// under an expense-date sort.
   Map<String, DateSpan?> _dateSpans = {};
 
   /// Still a one-shot fetch, not a live subscription -- issue #57's
@@ -383,6 +383,19 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
     }
   }
 
+  /// [row]'s [groupSortDate], or '—' while it has none (#201). Expense
+  /// dates are date-only values shown as they are; creation and last
+  /// opened are real moments, shown on the local calendar.
+  String _sortDateText(GroupRow row) {
+    final date = groupSortDate(row, _sort, _dateSpans);
+    if (date == null) return '—';
+    final local = switch (_sort) {
+      GroupListSort.firstExpense || GroupListSort.lastExpense => date,
+      GroupListSort.created || GroupListSort.lastOpened => date.toLocal(),
+    };
+    return formatDate(local, locale: context.appLocale);
+  }
+
   Widget _groupTile(GroupRow row) {
     final count = (jsonDecode(row.participantsJson) as List).length;
     return GroupRowActions(
@@ -448,12 +461,12 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
                   const SizedBox(width: 4),
                   Text('$count'),
                 ])),
+            // The date the list is sorted by, not the first-to-last
+            // span, which didn't fit beside the count (#201).
             Row(mainAxisSize: MainAxisSize.min, children: [
               const _CaptionIcon(LucideIcons.calendar),
               const SizedBox(width: 4),
-              Flexible(
-                  child: Text(formatDateSpan(_dateSpans[row.id],
-                      locale: context.appLocale))),
+              Flexible(child: Text(_sortDateText(row))),
             ]),
           ]),
         ),
