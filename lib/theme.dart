@@ -53,6 +53,9 @@ ThemeData _appTheme(Brightness brightness) {
     ),
     navigationBarTheme: NavigationBarThemeData(backgroundColor: base),
     bottomSheetTheme: BottomSheetThemeData(backgroundColor: base),
+    // The add buttons are round, as spliit-ios's, not Material's rounded
+    // square (#199).
+    floatingActionButtonTheme: const FloatingActionButtonThemeData(shape: CircleBorder()),
     dividerTheme: DividerThemeData(
       color: theme.colorScheme.outlineVariant,
       thickness: 1,
