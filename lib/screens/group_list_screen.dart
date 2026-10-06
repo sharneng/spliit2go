@@ -88,8 +88,8 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
   /// keyed by [GroupRow.id] -- loaded alongside [_groups] rather than
   /// lazily per row, so the list doesn't kick off a burst of individual
   /// queries as it scrolls. A group missing from this map (still
-  /// loading) or mapped to null (no cached expenses yet) both render
-  /// via [formatDateSpan]'s own null handling.
+  /// loading) or mapped to null (no cached expenses yet) both show '—'
+  /// under an expense-date sort.
   Map<String, DateSpan?> _dateSpans = {};
 
   /// Still a one-shot fetch, not a live subscription -- issue #57's
@@ -383,6 +383,19 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
     }
   }
 
+  /// [row]'s [groupSortDate], or '—' while it has none (#201). Expense
+  /// dates are date-only values shown as they are; creation and last
+  /// opened are real moments, shown on the local calendar.
+  String _sortDateText(GroupRow row) {
+    final date = groupSortDate(row, _sort, _dateSpans);
+    if (date == null) return '—';
+    final local = switch (_sort) {
+      GroupListSort.firstExpense || GroupListSort.lastExpense => date,
+      GroupListSort.created || GroupListSort.lastOpened => date.toLocal(),
+    };
+    return formatDate(local, locale: context.appLocale);
+  }
+
   Widget _groupTile(GroupRow row) {
     final count = (jsonDecode(row.participantsJson) as List).length;
     return GroupRowActions(
@@ -412,7 +425,12 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
             onSelected: () => _performGroupAction(row, 'remove')),
       ],
       builder: (context, openMenu) => ListTile(
-        leading: Semantics(
+        // A tighter gap before the chevron (#201 review); the monogram's
+        // padding keeps the name at 80.
+        horizontalTitleGap: 8,
+        leading: Padding(
+          padding: const EdgeInsetsDirectional.only(end: 8),
+          child: Semantics(
             button: true,
             label: context.l10n.groupListActions(row.name),
             child: Tooltip(
@@ -425,9 +443,14 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
                         height: 48,
                         child: Center(
                             child:
-                                GroupMonogram(id: row.id, name: row.name)))))),
+                                GroupMonogram(id: row.id, name: row.name))))))),
+        // The clip and the date sit at the right edge, next to the
+        // chevron (#201 review).
         title: Row(children: [
-          Flexible(child: Text(row.name)),
+          // Bold, like a list title on iOS (#201 review).
+          Expanded(
+              child: Text(row.name,
+                  style: const TextStyle(fontWeight: FontWeight.w600))),
           // A favorite's receipts offline (#127).
           ReceiptDownloadIndicator(
             size: 18,
@@ -439,22 +462,22 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
         ]),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
-          child: Wrap(spacing: 12, runSpacing: 4, children: [
+          // The date the list is sorted by, not the first-to-last span,
+          // which didn't fit (#201); the count at the right edge, under
+          // the clip, number first (#201 review).
+          child: Row(children: [
+            const _CaptionIcon(LucideIcons.calendar),
+            const SizedBox(width: 4),
+            Expanded(child: Text(_sortDateText(row))),
+            const SizedBox(width: 12),
             Semantics(
                 label: context.l10n.groupListParticipantCount(count),
                 excludeSemantics: true,
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const _CaptionIcon(LucideIcons.users),
-                  const SizedBox(width: 4),
                   Text('$count'),
+                  const SizedBox(width: 4),
+                  const _CaptionIcon(LucideIcons.users),
                 ])),
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              const _CaptionIcon(LucideIcons.calendar),
-              const SizedBox(width: 4),
-              Flexible(
-                  child: Text(formatDateSpan(_dateSpans[row.id],
-                      locale: context.appLocale))),
-            ]),
           ]),
         ),
         // Opens the group's screen (#186 review).

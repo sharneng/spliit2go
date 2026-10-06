@@ -9,7 +9,7 @@ import 'package:spliit2go/services/settings_service.dart';
 import 'package:spliit2go/widgets/group_monogram.dart';
 
 void main() {
-  test('all four orders are descending, missing dates last, ties stable',
+  test('all four orders are descending, missing dates first, ties stable (#201)',
       () async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
@@ -30,9 +30,9 @@ void main() {
       'b': DateSpan(first: DateTime(2026, 2), last: DateTime(2026, 4)),
     };
     for (final entry in {
-      GroupListSort.firstExpense: ['b', 'a', 'c'],
-      GroupListSort.lastExpense: ['a', 'b', 'c'],
-      GroupListSort.created: ['b', 'a', 'c'],
+      GroupListSort.firstExpense: ['c', 'b', 'a'],
+      GroupListSort.lastExpense: ['c', 'a', 'b'],
+      GroupListSort.created: ['c', 'b', 'a'],
       GroupListSort.lastOpened: ['a', 'b', 'c'],
     }.entries) {
       final ordered = [...rows.reversed]

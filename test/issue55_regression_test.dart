@@ -64,6 +64,8 @@ void main() {
   });
   testWidgets('list updates after a route pushed by root returns',
       (tester) async {
+    // The list shows the sort's one date (#201): sort by last expense.
+    SharedPreferences.setMockInitialValues({'group_list_sort': 'lastExpense'});
     final nav = GlobalKey<NavigatorState>();
     await tester.pumpWidget(app(GroupListScreen(db: db), key: nav));
     await tester.pumpAndSettle();
@@ -76,7 +78,7 @@ void main() {
     await db.insertPending(expense('e2', DateTime(2026, 6, 15)));
     nav.currentState!.pop();
     await tester.pumpAndSettle();
-    expect(find.text('Jan 2, 2026 – Jun 15, 2026'), findsOneWidget);
+    expect(find.text('Jun 15, 2026'), findsOneWidget);
     // Same drift-stream-cancel/pending-Timer workaround GroupScreen's own
     // tests already use (group_screen_test.dart): cancelling a
     // watchExpensesForGroup subscription in dispose() schedules a
