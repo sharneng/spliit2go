@@ -447,7 +447,10 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
         // The clip and the date sit at the right edge, next to the
         // chevron (#201 review).
         title: Row(children: [
-          Expanded(child: Text(row.name)),
+          // Bold, like a list title on iOS (#201 review).
+          Expanded(
+              child: Text(row.name,
+                  style: const TextStyle(fontWeight: FontWeight.w600))),
           // A favorite's receipts offline (#127).
           ReceiptDownloadIndicator(
             size: 18,

@@ -259,6 +259,8 @@ void main() {
           tester.getTopRight(find.text('Banff Trip')).dx);
       expect(tester.getTopRight(find.text('0')).dx,
           lessThan(tester.getTopLeft(find.byIcon(LucideIcons.users)).dx));
+      expect(tester.widget<Text>(find.text('Banff Trip')).style?.fontWeight,
+          FontWeight.w600);
       // 8 to the chevron, not ListTile's 16; the name still starts at 80.
       expect(
           tester.getTopLeft(find.byIcon(Icons.chevron_right)).dx -
