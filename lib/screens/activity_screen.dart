@@ -295,7 +295,8 @@ class _ActivityScreenState extends State<ActivityScreen> {
       ],
     ];
 
-    return ListView.builder(
+    return GroupedScrollClip(
+        child: ListView.builder(
       controller: _scroll,
       padding: const EdgeInsets.only(top: 16),
       itemCount: rows.length + 1, // +1 for the footer (loading / error)
@@ -344,7 +345,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
           ),
         );
       },
-    );
+    ));
   }
 
   Widget _footer() {

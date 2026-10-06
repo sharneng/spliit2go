@@ -255,6 +255,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
       ),
     ];
     return SlidableAutoCloseBehavior(
+        child: GroupedScrollClip(
         child: ListView(
       padding: const EdgeInsets.only(top: 16, bottom: 88),
       children: [
@@ -273,7 +274,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
               ),
           ],
       ],
-    ));
+    )));
   }
 
   String _sortLabel(GroupListSort sort) => switch (sort) {

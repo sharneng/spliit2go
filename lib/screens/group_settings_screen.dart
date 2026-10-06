@@ -526,6 +526,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
             filled: false,
           ),
         ),
+        child: GroupedScrollClip(
         child: ListView(
           padding: const EdgeInsets.symmetric(vertical: 16),
           children: [
@@ -634,7 +635,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
               ],
             )),
           ],
-        ),
+        )),
       ),
     );
   }

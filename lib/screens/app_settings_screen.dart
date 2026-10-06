@@ -28,7 +28,8 @@ class AppSettingsScreen extends StatelessWidget {
     final l10n = context.l10n;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.appSettingsTitle)),
-      body: ListView(
+      body: GroupedScrollClip(
+        child: ListView(
         padding: const EdgeInsets.symmetric(vertical: 16),
         children: [
           GroupedSection(caption: l10n.appSettingsTheme, children: [
@@ -80,7 +81,7 @@ class AppSettingsScreen extends StatelessWidget {
             ),
           ]),
         ],
-      ),
+      )),
     );
   }
 

@@ -137,7 +137,8 @@ class _StatsScreenState extends State<StatsScreen> {
       return EmptyState(icon: LucideIcons.chartColumn, title: context.l10n.commonNoExpensesYet);
     }
     final theme = Theme.of(context);
-    return ListView(
+    return GroupedScrollClip(
+        child: ListView(
       padding: const EdgeInsets.only(top: 16),
       children: [
         // One figure, like spliit-ios's StatsView "The group" section
@@ -176,7 +177,7 @@ class _StatsScreenState extends State<StatsScreen> {
           children: [for (final c in categories) _categoryTile(context, c)],
         ),
       ],
-    );
+    ));
   }
 
   // Rows are a label and an amount that share a line when they fit and

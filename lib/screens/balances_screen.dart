@@ -249,7 +249,8 @@ class _BalancesScreenState extends State<BalancesScreen> {
             // rather than removing an affordance users expect on a
             // scrollable list (issue #47).
             onRefresh: () async {},
-            child: ListView(
+            child: GroupedScrollClip(
+        child: ListView(
               padding: const EdgeInsets.only(top: 16),
               children: [
                 _youSection(context, balances),
@@ -296,7 +297,7 @@ class _BalancesScreenState extends State<BalancesScreen> {
                 if (balances.isEmpty)
                   EmptyState(icon: LucideIcons.scale, title: context.l10n.commonNoExpensesYet),
               ],
-            ),
+            )),
           );
         }
         if (widget.embedded) return body;

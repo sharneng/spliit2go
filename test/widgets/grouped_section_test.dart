@@ -50,6 +50,21 @@ void main() {
     }
   });
 
+  testWidgets('the chevron is dim, near the card\'s edge (#195)', (tester) async {
+    await pump(
+      tester,
+      GroupedSection(children: [
+        GroupedRow(title: const Text('About'), navigates: true, onTap: () {}),
+      ]),
+    );
+    final icon = tester.widget<Icon>(find.byIcon(Icons.chevron_right));
+    expect(icon.color, spliit2goLightTheme.colorScheme.onSurface.withValues(alpha: 0.3));
+    final card = tester.getRect(find.byType(Material).last);
+    final chevron = tester.getRect(find.byIcon(Icons.chevron_right));
+    // The row's trailing end is the card's inset, as its leading end.
+    expect(card.right - chevron.right, GroupedSection.inset);
+  });
+
   testWidgets("a row's own trailing replaces the chevron", (tester) async {
     await pump(
       tester,
@@ -108,6 +123,30 @@ void main() {
     final context = tester.element(footer);
     expect(tester.widget<Text>(footer).style?.color,
         Theme.of(context).colorScheme.onSurfaceVariant);
+  });
+
+  testWidgets('a grouped list scrolls out through rounded edges at the cards\' inset (#193)',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: spliit2goLightTheme,
+      home: Scaffold(
+        body: GroupedScrollClip(
+          child: ListView(children: const [
+            GroupedSection(children: [GroupedRow(title: Text('Row'))]),
+          ]),
+        ),
+      ),
+    ));
+    final clip = tester.widget<ClipRRect>(
+        find.descendant(of: find.byType(GroupedScrollClip), matching: find.byType(ClipRRect)));
+    final size = tester.getSize(find.byType(GroupedScrollClip));
+    final rrect = clip.clipper!.getClip(size);
+    final card = tester.getRect(find.byType(Material).last);
+    expect(rrect.left, card.left);
+    expect(rrect.right, card.right);
+    expect(rrect.top, 0);
+    expect(rrect.bottom, size.height);
+    expect(rrect.tlRadius, const Radius.circular(GroupedSection.radius));
   });
 
   group('GroupedItem (#185)', () {
