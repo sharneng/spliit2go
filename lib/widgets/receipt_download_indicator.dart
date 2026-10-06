@@ -28,7 +28,7 @@ class ReceiptDownloadIndicator extends StatelessWidget {
 
   /// How far, per point of [size], a compact clip shifts toward its end.
   @visibleForTesting
-  static const compactInkNudge = 3.3 / 18;
+  static const compactInkNudge = 4.0 / 18;
 
   /// On the 📎 while it blinks.
   @visibleForTesting
@@ -65,7 +65,7 @@ class ReceiptDownloadIndicator extends StatelessWidget {
           );
           if (!compact) return button;
           // The clip's ink stops short of its box's end; nudged out so it
-          // ends where the date's digits below do (measured, #201 review).
+          // ends where the participants icon below does (measured, #201 review).
           final nudge = size * compactInkNudge;
           return Transform.translate(
               offset: Offset(

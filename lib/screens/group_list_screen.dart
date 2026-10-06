@@ -459,27 +459,21 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
         ]),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
+          // The date the list is sorted by, not the first-to-last span,
+          // which didn't fit (#201); the count at the right edge, under
+          // the clip, number first (#201 review).
           child: Row(children: [
+            const _CaptionIcon(LucideIcons.calendar),
+            const SizedBox(width: 4),
+            Expanded(child: Text(_sortDateText(row))),
+            const SizedBox(width: 12),
             Semantics(
                 label: context.l10n.groupListParticipantCount(count),
                 excludeSemantics: true,
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const _CaptionIcon(LucideIcons.users),
-                  const SizedBox(width: 4),
                   Text('$count'),
-                ])),
-            const SizedBox(width: 12),
-            // The date the list is sorted by, not the first-to-last
-            // span, which didn't fit beside the count (#201).
-            Expanded(
-                child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                  const _CaptionIcon(LucideIcons.calendar),
                   const SizedBox(width: 4),
-                  Flexible(
-                      child: Text(_sortDateText(row),
-                          textAlign: TextAlign.end)),
+                  const _CaptionIcon(LucideIcons.users),
                 ])),
           ]),
         ),

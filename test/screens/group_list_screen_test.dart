@@ -251,15 +251,18 @@ void main() {
 
       expect(find.text(shown), findsOneWidget, reason: sort.name);
       expect(find.textContaining('–'), findsNothing);
-      // Right-aligned with the end of the name's line (#201 review).
-      expect(tester.getTopRight(find.text(shown)).dx,
+      // The date at the start, under the name; the count at the end,
+      // number before icon (#201 review).
+      expect(tester.getTopLeft(find.byIcon(LucideIcons.calendar)).dx,
+          tester.getTopLeft(find.text('Banff Trip')).dx);
+      expect(tester.getTopRight(find.byIcon(LucideIcons.users)).dx,
           tester.getTopRight(find.text('Banff Trip')).dx);
-      expect(tester.getTopRight(find.text(shown)).dx,
-          greaterThan(tester.getTopRight(find.text('0')).dx + 100));
+      expect(tester.getTopRight(find.text('0')).dx,
+          lessThan(tester.getTopLeft(find.byIcon(LucideIcons.users)).dx));
       // 8 to the chevron, not ListTile's 16; the name still starts at 80.
       expect(
           tester.getTopLeft(find.byIcon(Icons.chevron_right)).dx -
-              tester.getTopRight(find.text(shown)).dx,
+              tester.getTopRight(find.byIcon(LucideIcons.users)).dx,
           8);
       expect(
           tester.getTopLeft(find.text('Banff Trip')).dx -
