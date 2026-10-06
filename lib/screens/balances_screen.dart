@@ -15,6 +15,7 @@ import 'expense_screen.dart';
 import '../services/error_reporting.dart';
 import '../widgets/empty_state.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../widgets/bottom_inset.dart';
 
 /// Who-owes-whom for the group, plus one-tap "mark as paid" for the
 /// suggested settlements -- mirrors the web app's Balances tab.
@@ -251,7 +252,7 @@ class _BalancesScreenState extends State<BalancesScreen> {
             onRefresh: () async {},
             child: GroupedScrollClip(
         child: ListView(
-              padding: const EdgeInsets.only(top: 16),
+              padding: withBottomInset(context, const EdgeInsets.only(top: 16)),
               children: [
                 _youSection(context, balances),
                 if (balances.isNotEmpty)

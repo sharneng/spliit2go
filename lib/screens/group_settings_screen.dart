@@ -18,6 +18,7 @@ import '../widgets/error_message.dart';
 import 'join_group_screen.dart' show cacheJoinedGroup;
 import '../services/error_reporting.dart';
 import '../widgets/grouped_section.dart';
+import '../widgets/bottom_inset.dart';
 
 /// Group settings: rename the group, add or change its notes, change its
 /// currency, and add, rename, or remove participants -- mirrors the web
@@ -528,7 +529,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
         ),
         child: GroupedScrollClip(
         child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          padding: withBottomInset(context, const EdgeInsets.symmetric(vertical: 16)),
           children: [
             if (_error != null)
               // After a create whose load failed it carries the new group's

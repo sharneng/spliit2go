@@ -48,7 +48,7 @@ void main() {
     expect(container.color, spliit2goDarkTheme.scaffoldBackgroundColor);
   });
 
-  testWidgets('the backdrop sits behind a SafeArea that insets the bottom only',
+  testWidgets('the backdrop sits behind a SafeArea that insets the sides only (#197)',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
       locale: const Locale('en'),
@@ -61,6 +61,35 @@ void main() {
 
     final safeArea = tester.widget<SafeArea>(find.byType(SafeArea).first);
     expect(safeArea.top, isFalse);
-    expect(safeArea.bottom, isTrue);
+    expect(safeArea.left, isTrue);
+    expect(safeArea.right, isTrue);
+    // Content runs to the bottom edge; each screen keeps its last row
+    // above the gesture bar itself.
+    expect(safeArea.bottom, isFalse);
+  });
+
+  testWidgets("a sheet's barrier dims the bottom strip too (#190)", (tester) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.view.padding = const FakeViewPadding(bottom: 34);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+      theme: spliit2goLightTheme,
+      builder: spliit2goAppBuilder,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () => showModalBottomSheet<void>(
+                context: context, builder: (_) => const SizedBox(height: 100)),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final barrier = tester.getRect(find.byType(ModalBarrier).last);
+    expect(barrier.bottom, 800);
   });
 }

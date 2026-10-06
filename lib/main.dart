@@ -93,51 +93,21 @@ class Spliit2GoApp extends StatelessWidget {
           themeMode: settings.themeMode,
           home: home ?? const AppRoot(),
           // Issue #24: modern Android (edge-to-edge is mandatory starting
-          // with API 35, and Flutter's default template doesn't opt out of
-          // it) draws the app behind the status bar *and* the bottom
-          // gesture/nav bar. Scaffold only insets its AppBar for the top
-          // status bar automatically (AppBar already extends its own color
-          // up behind the translucent status bar and lays its content below
-          // it) -- it does nothing for the bottom, so plain body content
-          // (a form's Save button at the bottom of a ListView, a bottom
-          // sheet's last row) was left sitting right behind the bottom
-          // gesture/nav bar, exactly the "save button under bottom nav bar"
-          // symptom reported.
+          // with API 35) draws the app behind the status bar *and* the
+          // bottom gesture/nav bar, and the system nav bar is always
+          // transparent (Window.setNavigationBarColor is a no-op there), so
+          // it's the app's job to paint behind it.
           //
-          // top: false here is deliberate, not an oversight: an *unscoped*
-          // SafeArea insets from the top too, which double-insets below
-          // AppBar's own handling and leaves a blank gap the app's
-          // background color, not the AppBar's, shows through -- confirmed
-          // on a real device after the first version of this fix (see the
-          // issue). Bottom-only avoids that while still fixing the actual
-          // complaint. Wrapping the whole app once here, rather than adding
-          // it to every individual screen, insets every route's bottom
-          // content uniformly, including screens added later. A descendant
-          // SafeArea (e.g. the currency/category picker bottom sheets)
-          // still works correctly nested inside this one: SafeArea consumes
-          // the padding it applies, so there's no double-inset there.
-          //
-          // The nav bar itself still showed up deep black regardless of
-          // theme even after setting systemNavigationBarColor via
-          // AnnotatedRegion<SystemUiOverlayStyle> -- confirmed on-device.
-          // The reason: starting with apps that target API 35,
-          // Window.setNavigationBarColor (what that overlay style call
-          // turns into) is a documented no-op -- edge-to-edge means the
-          // system nav bar is *always* transparent now, and it's the app's
-          // own job to paint content behind it, not ask the system to tint
-          // it. What was actually showing through as "deep black" was the
-          // plain Android window background (styles.xml's LaunchTheme),
-          // because SafeArea's Padding stops our Scaffold from painting
-          // into that strip at all -- there was nothing Flutter-side there
-          // to show through the now-transparent bar. The fix is this
-          // Container: a full-bleed backdrop in the *current* theme's own
-          // scaffoldBackgroundColor, painted underneath the SafeArea-inset
-          // content, so the strip behind the bar shows our theme's color
-          // instead of the native window background. This is the standard
-          // fix for this exact class of bug on API 35+; keeping
-          // spliit2goSystemUiOverlayStyle's color/contrast fields too is
-          // just belt-and-suspenders for whatever pre-35 devices are still
-          // out there, where Window.setNavigationBarColor still works.
+          // #24 first inset every route above that bar with an app-wide
+          // SafeArea(top: false), and painted the strip below it in the
+          // theme's background. #197 keeps it for the sides only (a
+          // landscape phone's cutout): content and sheets now run to the
+          // screen's bottom edge (the group screen's floating bar has lists
+          // scroll behind it), and a sheet's or dialog's barrier dims the
+          // whole screen (#190). Each screen and sheet keeps its own last
+          // row above the bar instead (withBottomInset, or a SafeArea of
+          // its own). The backdrop below is kept for any route that leaves
+          // the strip unpainted.
           //
           // Theme.of(context) here resolves to whichever of
           // theme/darkTheme MaterialApp picked for the current system
@@ -157,7 +127,7 @@ class Spliit2GoApp extends StatelessWidget {
 
 /// The `MaterialApp.builder` above, pulled out as a top-level function
 /// so its behavior (the Container backdrop + AnnotatedRegion, both
-/// explained in the doc comment above) is unit-testable directly with a
+/// explained in the comment above) is unit-testable directly with a
 /// throwaway `home`, without booting the real app's `_Root` and its
 /// live AppDatabase/sqlite connection.
 Widget spliit2goAppBuilder(BuildContext context, Widget? child) {
@@ -166,7 +136,7 @@ Widget spliit2goAppBuilder(BuildContext context, Widget? child) {
     value: spliit2goSystemUiOverlayStyle(theme),
     child: Container(
       color: theme.scaffoldBackgroundColor,
-      child: SafeArea(top: false, child: child!),
+      child: SafeArea(top: false, bottom: false, child: child!),
     ),
   );
 }

@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../l10n/context_l10n.dart';
 import '../services/build_info.dart';
 import '../theme.dart';
+import '../widgets/bottom_inset.dart';
 
 /// Where About's links go (#109).
 const spliitUrl = 'https://spliit.app';
@@ -111,7 +112,7 @@ class _AboutScreenState extends State<AboutScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(l10n.aboutTitle)),
       body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 24),
+        padding: withBottomInset(context, const EdgeInsets.symmetric(vertical: 24)),
         children: [
           Center(child: _logo(72)),
           const SizedBox(height: 12),

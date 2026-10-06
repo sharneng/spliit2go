@@ -13,6 +13,7 @@ import '../utils/byte_size.dart';
 import '../widgets/error_message.dart';
 import 'about_screen.dart';
 import '../widgets/grouped_section.dart';
+import '../widgets/bottom_inset.dart';
 
 /// App-wide preferences, separate from an individual group's settings.
 class AppSettingsScreen extends StatelessWidget {
@@ -30,7 +31,7 @@ class AppSettingsScreen extends StatelessWidget {
       appBar: AppBar(title: Text(l10n.appSettingsTitle)),
       body: GroupedScrollClip(
         child: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: withBottomInset(context, const EdgeInsets.symmetric(vertical: 16)),
         children: [
           GroupedSection(caption: l10n.appSettingsTheme, children: [
             for (final option in [

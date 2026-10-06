@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -29,6 +30,7 @@ import '../services/receipt_cache.dart';
 import '../services/receipt_downloader.dart';
 import '../widgets/receipt_download_indicator.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/grouped_section.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// A single group's expenses, offline-first -- reached by pushing on top
@@ -293,76 +295,101 @@ class _GroupScreenState extends State<GroupScreen> {
       // Expenses/Balances/Stats, plus a fourth tab -- Information there,
       // Activities here, per what was actually asked for in this issue).
       bottomNavigationBar: _bottomBar(context),
+      // The lists scroll behind the floating bar (#197); each pads its end
+      // by the bar's height, which Scaffold adds to its bottom inset.
+      extendBody: true,
     );
   }
 
-  static const _searchSlotWidth = 64.0;
+  /// The bar's distance from the screen's sides, as the cards' (#197).
+  static const _barInset = GroupedSection.inset;
 
-  /// The tabs plus a separate round search button at the right end, on
-  /// every tab, like spliit-ios (issue #84) -- search opens its own
-  /// screen rather than being a tab.
+  /// The tabs, and Search at the end, in a rounded bar floating over the
+  /// content, like spliit-ios's (#197): the list scrolls behind and around
+  /// it, down to the screen's edge. Search opens its own screen rather than
+  /// being a tab (#84), so it's never the selected one.
   Widget _bottomBar(BuildContext context) {
     final labels = [
       context.l10n.groupScreenTabExpenses,
       context.l10n.groupScreenTabBalance,
       context.l10n.groupScreenTabStats,
       context.l10n.groupScreenTabActivities,
+      context.l10n.groupScreenSearchTooltip,
     ];
-    return ColoredBox(
-      color: NavigationBarTheme.of(context).backgroundColor ??
-          Theme.of(context).colorScheme.surfaceContainer,
-      // spliit2goAppBuilder already removes these insets app-wide; this
-      // keeps the whole row (search included) inside them on its own too.
-      child: SafeArea(
-        top: false,
-        child: LayoutBuilder(builder: (context, constraints) {
-          final tabWidth =
-              (constraints.maxWidth - _searchSlotWidth) / labels.length;
-          return Row(
-            children: [
-              Expanded(
-                child: NavigationBar(
-                  selectedIndex: _tabIndex,
-                  onDestinationSelected: (i) => setState(() => _tabIndex = i),
-                  // Hidden labels stay available as each tab's tooltip.
-                  labelBehavior: _labelsFit(context, labels, tabWidth)
-                      ? NavigationDestinationLabelBehavior.alwaysShow
-                      : NavigationDestinationLabelBehavior.alwaysHide,
-                  destinations: [
-                    NavigationDestination(
-                      icon: const Icon(Icons.receipt_long_outlined),
-                      selectedIcon: const Icon(Icons.receipt_long),
-                      label: labels[0],
-                    ),
-                    NavigationDestination(
-                      icon: const Icon(Icons.account_balance_wallet_outlined),
-                      selectedIcon: const Icon(Icons.account_balance_wallet),
-                      label: labels[1],
-                    ),
-                    NavigationDestination(
-                      icon: const Icon(Icons.bar_chart_outlined),
-                      selectedIcon: const Icon(Icons.bar_chart),
-                      label: labels[2],
-                    ),
-                    NavigationDestination(
-                        icon: const Icon(Icons.history), label: labels[3]),
-                  ],
+    final scheme = Theme.of(context).colorScheme;
+    // Over the gesture bar's or home indicator's inset, or a little off
+    // the edge where there's none; inside a landscape cutout's.
+    final insets = MediaQuery.paddingOf(context);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(insets.left + _barInset, 0, insets.right + _barInset,
+          math.max(insets.bottom, 12)),
+      child: Material(
+        // A step above the cards, which scroll behind it, and lifted off
+        // them by a shadow.
+        color: scheme.brightness == Brightness.light
+            ? scheme.surfaceContainerLowest
+            : scheme.surfaceContainerHighest,
+        elevation: 3,
+        shadowColor: scheme.shadow,
+        surfaceTintColor: Colors.transparent,
+        shape: const StadiumBorder(),
+        clipBehavior: Clip.antiAlias,
+        // The bar is already placed clear of every inset, so NavigationBar
+        // mustn't pad itself again (it would add the status bar's).
+        child: MediaQuery.removePadding(
+          context: context,
+          removeTop: true,
+          removeBottom: true,
+          removeLeft: true,
+          removeRight: true,
+          // Off the rounded ends, so the end tabs' highlight isn't cut.
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: LayoutBuilder(builder: (context, constraints) {
+            final tabWidth = constraints.maxWidth / labels.length;
+            return NavigationBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              height: 68,
+              selectedIndex: _tabIndex,
+              onDestinationSelected: (i) {
+                if (i == labels.length - 1) {
+                  _openSearch();
+                } else {
+                  setState(() => _tabIndex = i);
+                }
+              },
+              // Hidden labels stay available as each tab's tooltip.
+              labelBehavior: _labelsFit(context, labels, tabWidth)
+                  ? NavigationDestinationLabelBehavior.alwaysShow
+                  : NavigationDestinationLabelBehavior.alwaysHide,
+              destinations: [
+                NavigationDestination(
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  selectedIcon: const Icon(Icons.receipt_long),
+                  label: labels[0],
                 ),
-              ),
-              SizedBox(
-                width: _searchSlotWidth,
-                child: Center(
-                  heightFactor: 1,
-                  child: IconButton.filledTonal(
-                    icon: const Icon(Icons.search),
-                    tooltip: context.l10n.groupScreenSearchTooltip,
-                    onPressed: _group == null ? null : _openSearch,
-                  ),
+                NavigationDestination(
+                  icon: const Icon(Icons.account_balance_wallet_outlined),
+                  selectedIcon: const Icon(Icons.account_balance_wallet),
+                  label: labels[1],
                 ),
-              ),
-            ],
-          );
-        }),
+                NavigationDestination(
+                  icon: const Icon(Icons.bar_chart_outlined),
+                  selectedIcon: const Icon(Icons.bar_chart),
+                  label: labels[2],
+                ),
+                NavigationDestination(icon: const Icon(Icons.history), label: labels[3]),
+                NavigationDestination(
+                  icon: const Icon(Icons.search),
+                  label: labels[4],
+                  enabled: _group != null,
+                ),
+              ],
+            );
+          }),
+          ),
+        ),
       ),
     );
   }

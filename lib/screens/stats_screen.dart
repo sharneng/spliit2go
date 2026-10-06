@@ -16,6 +16,7 @@ import '../widgets/grouped_section.dart';
 import '../widgets/money.dart';
 import '../widgets/empty_state.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../widgets/bottom_inset.dart';
 
 /// A first pass at the web app's Stats tab (issue #27, split from #6
 /// alongside Activity -- see issue #26): the group's total spending
@@ -139,7 +140,7 @@ class _StatsScreenState extends State<StatsScreen> {
     final theme = Theme.of(context);
     return GroupedScrollClip(
         child: ListView(
-      padding: const EdgeInsets.only(top: 16),
+      padding: withBottomInset(context, const EdgeInsets.only(top: 16)),
       children: [
         // One figure, like spliit-ios's StatsView "The group" section
         // (issue #103): the group's total, unsigned, under a label that
