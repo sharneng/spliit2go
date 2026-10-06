@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:spliit2go/api/spliit_client.dart';
@@ -225,16 +226,82 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Expense "Groceries" created by Alex.'), findsOneWidget);
+    expect(find.text('Alex added “Groceries”.'), findsOneWidget);
     // No participantId on the group-settings activity -- falls back to
     // "Someone" rather than a blank or an id.
-    expect(find.text('Group settings were modified by Someone.'), findsOneWidget);
+    expect(find.text('Someone changed the group settings.'), findsOneWidget);
+    // Active voice, as spliit-ios (#189), each with its kind's icon.
+    Icon iconOf(String sentence) => tester.widget<Icon>(find.descendant(
+        of: find.ancestor(of: find.text(sentence), matching: find.byType(ListTile)),
+        matching: find.byType(Icon)));
+    expect(iconOf('Alex added “Groceries”.').icon, LucideIcons.plus);
+    expect(iconOf('Someone changed the group settings.').icon, LucideIcons.settings);
     // Both activities happened today, so they share a single "Today"
     // header rather than one each.
     expect(find.text('Today'), findsOneWidget);
     // An expense opens in a sheet, not a screen, so no row promises one
     // with a chevron (#186 review).
     expect(find.byIcon(Icons.chevron_right), findsNothing);
+  });
+
+  testWidgets('who did what, in the active voice, with an icon per kind, in en/fr/zh (#189)',
+      (tester) async {
+    final db = await newDb();
+    addTearDown(db.close);
+    Map<String, Object?> entry(String id, int hour, String type, String? data) => {
+          'id': id,
+          'time': isoToday(hour),
+          'activityType': type,
+          'participantId': 'alex',
+          'expenseId': data == null ? null : 'e$id',
+          'data': data,
+        };
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async => http.Response(
+            pageBody(activities: [
+              entry('1', 12, 'CREATE_EXPENSE', 'Taxi'),
+              entry('2', 11, 'UPDATE_EXPENSE', 'Taxi'),
+              entry('3', 10, 'DELETE_EXPENSE', 'Taxi'),
+              entry('4', 9, 'UPDATE_GROUP', null),
+            ], hasMore: false, nextCursor: 4),
+            200,
+          )),
+    );
+    final outbox = Outbox(db, client, groupId: 'g1');
+    const expected = {
+      'en': ['Alex added “Taxi”.', 'Alex updated “Taxi”.', 'Alex deleted “Taxi”.',
+          'Alex changed the group settings.'],
+      'fr': ['Alex a ajouté «\u00a0Taxi\u00a0».', 'Alex a mis à jour «\u00a0Taxi\u00a0».',
+          'Alex a supprimé «\u00a0Taxi\u00a0».', 'Alex a modifié les paramètres du groupe.'],
+      'zh': ['Alex 添加了“Taxi”。', 'Alex 更新了“Taxi”。', 'Alex 删除了“Taxi”。', 'Alex 更改了群组设置。'],
+    };
+    const icons = [LucideIcons.plus, LucideIcons.pencil, LucideIcons.trash2, LucideIcons.settings];
+    for (final MapEntry(key: lang, value: sentences) in expected.entries) {
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(MaterialApp(
+        locale: Locale(lang),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ActivityScreen(client: client, db: db, outbox: outbox, group: group),
+      ));
+      await tester.pumpAndSettle();
+      for (var i = 0; i < sentences.length; i++) {
+        final row = find.ancestor(of: find.text(sentences[i]), matching: find.byType(ListTile));
+        expect(row, findsOneWidget, reason: '$lang: ${sentences[i]}');
+        expect(
+            tester.widget<Icon>(find.descendant(of: row, matching: find.byType(Icon)).first).icon,
+            icons[i],
+            reason: '$lang: ${sentences[i]}');
+        // Centered on the sentence's first line, not on the whole row.
+        final icon = find.descendant(of: row, matching: find.byType(Icon)).first;
+        final sentence = tester.getRect(find.text(sentences[i]));
+        final style = Theme.of(tester.element(icon)).textTheme.bodyLarge!;
+        expect(tester.getCenter(icon).dy,
+            closeTo(sentence.top + style.fontSize! * style.height! / 2, 1),
+            reason: '$lang: ${sentences[i]}');
+      }
+    }
   });
 
   testWidgets('an activity for a since-deleted expense is not tappable', (tester) async {
@@ -563,7 +630,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Expense "Groceries" created by Alex.'));
+    await tester.tap(find.text('Alex added “Groceries”.'));
     await tester.pumpAndSettle();
 
     expect(find.byType(BottomSheet), findsOneWidget);

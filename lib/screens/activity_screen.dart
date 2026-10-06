@@ -169,9 +169,10 @@ class _ActivityScreenState extends State<ActivityScreen> {
     return context.l10n.activitySomeone;
   }
 
-  /// Plain-text equivalents of messages/en-US.json's Activity section
-  /// (settingsModified/expenseCreated/expenseUpdated/expenseDeleted) --
-  /// same wording, minus the rich bold/italic markup the web app adds.
+  /// Who did what, in the active voice, as spliit-ios's ActivityLogView
+  /// says it (#189): "Ken added "Dinner"." rather than the web app's
+  /// passive "Expense "Dinner" created by Ken.", which reads unnaturally
+  /// in many languages.
   String _summary(Activity a) {
     final name = _participantName(a.participantId);
     switch (a.activityType) {
@@ -185,6 +186,15 @@ class _ActivityScreenState extends State<ActivityScreen> {
         return context.l10n.activityExpenseDeleted(a.data ?? '', name);
     }
   }
+
+  /// What kind of change, beside its sentence (#189): spliit-ios's
+  /// plus, pencil, trash and gear, in Lucide's drawing of each.
+  IconData _icon(Activity a) => switch (a.activityType) {
+        ActivityType.createExpense => LucideIcons.plus,
+        ActivityType.updateExpense => LucideIcons.pencil,
+        ActivityType.deleteExpense => LucideIcons.trash2,
+        ActivityType.updateGroup => LucideIcons.settings,
+      };
 
   String _sectionTitle(ActivityDateGroup group) {
     final l10n = context.l10n;
@@ -301,11 +311,34 @@ class _ActivityScreenState extends State<ActivityScreen> {
         return GroupedItem(
           first: first,
           last: last,
+          // Past the icon, under the sentence.
+          dividerIndent: 56,
           child: GroupedRow(
-            title: Text(_summary(a)),
-            subtitle: Text(needsDate
-                ? formatDateTime(local, locale: locale)
-                : formatTimeOfDay(local, locale: locale)),
+            // The icon in the title's own row, not ListTile.leading: there
+            // it's aligned to the tile, not to the sentence, and sat high
+            // beside rows with a time under them.
+            title: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ActivityIcon(_icon(a)),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_summary(a)),
+                      Text(
+                        needsDate
+                            ? formatDateTime(local, locale: locale)
+                            : formatTimeOfDay(local, locale: locale),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
             // No chevron: the expense opens in a sheet, not a screen.
             onTap: a.expenseExists ? () => _openExpense(a) : null,
           ),
@@ -334,5 +367,28 @@ class _ActivityScreenState extends State<ActivityScreen> {
       );
     }
     return const SizedBox(height: 16);
+  }
+}
+
+/// An activity's kind, muted and small: a marker beside the sentence
+/// rather than a picture of it (#189), in a fixed column so the sentences
+/// line up. In a box one line of the sentence tall, so it centers on the
+/// first line however the sentence wraps, at any text size.
+class _ActivityIcon extends StatelessWidget {
+  const _ActivityIcon(this.icon);
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // The sentence's style: a ListTile title, bodyLarge in Material 3.
+    final style = theme.textTheme.bodyLarge;
+    final line = MediaQuery.textScalerOf(context).scale(style?.fontSize ?? 16) * (style?.height ?? 1.5);
+    return SizedBox(
+      width: 24,
+      height: line,
+      child: Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+    );
   }
 }

@@ -274,7 +274,7 @@
   "activityOpenNeedsConnection": "Opening this expense needs a connection.",
   "activityLoadFailed": "Couldn't load activity.",
   "activitySomeone": "Someone",
-  "activityGroupSettingsModified": "Group settings were modified by {name}.",
+  "activityGroupSettingsModified": "{name} changed the group settings.",
   "@activityGroupSettingsModified": {
     "placeholders": {
       "name": {
@@ -282,7 +282,7 @@
       }
     }
   },
-  "activityExpenseCreated": "Expense \"{title}\" created by {name}.",
+  "activityExpenseCreated": "{name} added “{title}”.",
   "@activityExpenseCreated": {
     "placeholders": {
       "title": {
@@ -293,7 +293,7 @@
       }
     }
   },
-  "activityExpenseUpdated": "Expense \"{title}\" updated by {name}.",
+  "activityExpenseUpdated": "{name} updated “{title}”.",
   "@activityExpenseUpdated": {
     "placeholders": {
       "title": {
@@ -304,7 +304,7 @@
       }
     }
   },
-  "activityExpenseDeleted": "Expense \"{title}\" deleted by {name}.",
+  "activityExpenseDeleted": "{name} deleted “{title}”.",
   "@activityExpenseDeleted": {
     "placeholders": {
       "title": {
