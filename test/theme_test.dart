@@ -78,6 +78,12 @@ void main() {
     }
   });
 
+  test('add buttons are circles, in both modes (#199)', () {
+    for (final theme in [spliit2goLightTheme, spliit2goDarkTheme]) {
+      expect(theme.floatingActionButtonTheme.shape, const CircleBorder());
+    }
+  });
+
   test('each theme carries its own spliit-ios colors (#178)', () {
     expect(spliit2goLightTheme.extension<SpliitColors>(), SpliitColors.light);
     expect(spliit2goDarkTheme.extension<SpliitColors>(), SpliitColors.dark);
