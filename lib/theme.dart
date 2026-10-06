@@ -44,7 +44,13 @@ ThemeData _appTheme(Brightness brightness) {
   final base = dark ? colorScheme.surface : colorScheme.surfaceContainer;
   return theme.copyWith(
     scaffoldBackgroundColor: base,
-    appBarTheme: AppBarTheme(backgroundColor: base),
+    // The bar keeps the page's color when content scrolls under it,
+    // flat, instead of Material's darker tint and shadow (#188).
+    appBarTheme: AppBarTheme(
+      backgroundColor: base,
+      surfaceTintColor: Colors.transparent,
+      scrolledUnderElevation: 0,
+    ),
     navigationBarTheme: NavigationBarThemeData(backgroundColor: base),
     bottomSheetTheme: BottomSheetThemeData(backgroundColor: base),
     dividerTheme: DividerThemeData(
