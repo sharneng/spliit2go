@@ -295,19 +295,17 @@ class _GroupScreenState extends State<GroupScreen> {
       // Expenses/Balances/Stats, plus a fourth tab -- Information there,
       // Activities here, per what was actually asked for in this issue).
       bottomNavigationBar: _bottomBar(context),
-      // The lists scroll behind the floating bar (#197); each pads its end
-      // by the bar's height, which Scaffold adds to its bottom inset.
-      extendBody: true,
     );
   }
 
   /// The bar's distance from the screen's sides, as the cards' (#197).
   static const _barInset = GroupedSection.inset;
 
-  /// The tabs, and Search at the end, in a rounded bar floating over the
-  /// content, like spliit-ios's (#197): the list scrolls behind and around
-  /// it, down to the screen's edge. Search opens its own screen rather than
-  /// being a tab (#84), so it's never the selected one.
+  /// The tabs, and Search at the end, in a rounded bar floating off the
+  /// screen's edges, like spliit-ios's (#197). The list stops above it,
+  /// through the rounded clip's curve (#193), rather than scrolling behind
+  /// it (#198 review). Search opens its own screen rather than being a tab
+  /// (#84), so it's never the selected one.
   Widget _bottomBar(BuildContext context) {
     final labels = [
       context.l10n.groupScreenTabExpenses,
@@ -317,15 +315,13 @@ class _GroupScreenState extends State<GroupScreen> {
       context.l10n.groupScreenSearchTooltip,
     ];
     final scheme = Theme.of(context).colorScheme;
-    // Over the gesture bar's or home indicator's inset, or a little off
-    // the edge where there's none; inside a landscape cutout's.
     final insets = MediaQuery.paddingOf(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(insets.left + _barInset, 0, insets.right + _barInset,
-          math.max(insets.bottom, 12)),
+      // 12 above it: the list's rounded end stands off the bar.
+      padding: EdgeInsets.fromLTRB(insets.left + _barInset, 12, insets.right + _barInset,
+          _barBottom(context, insets.bottom)),
       child: Material(
-        // A step above the cards, which scroll behind it, and lifted off
-        // them by a shadow.
+        // A step above the cards, and lifted off the page by a shadow.
         color: scheme.brightness == Brightness.light
             ? scheme.surfaceContainerLowest
             : scheme.surfaceContainerHighest,
@@ -345,12 +341,10 @@ class _GroupScreenState extends State<GroupScreen> {
           // Off the rounded ends, so the end tabs' highlight isn't cut.
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: LayoutBuilder(builder: (context, constraints) {
-            final tabWidth = constraints.maxWidth / labels.length;
-            return NavigationBar(
+            child: NavigationBar(
               backgroundColor: Colors.transparent,
               elevation: 0,
-              height: 68,
+              height: 60,
               selectedIndex: _tabIndex,
               onDestinationSelected: (i) {
                 if (i == labels.length - 1) {
@@ -359,10 +353,9 @@ class _GroupScreenState extends State<GroupScreen> {
                   setState(() => _tabIndex = i);
                 }
               },
-              // Hidden labels stay available as each tab's tooltip.
-              labelBehavior: _labelsFit(context, labels, tabWidth)
-                  ? NavigationDestinationLabelBehavior.alwaysShow
-                  : NavigationDestinationLabelBehavior.alwaysHide,
+              // Icons only (#198 review); each label stays as the tab's
+              // tooltip, which screen readers announce.
+              labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
               destinations: [
                 NavigationDestination(
                   icon: const Icon(Icons.receipt_long_outlined),
@@ -386,37 +379,24 @@ class _GroupScreenState extends State<GroupScreen> {
                   enabled: _group != null,
                 ),
               ],
-            );
-          }),
+            ),
           ),
         ),
       ),
     );
   }
 
-  /// NavigationBar never ellipsizes a label: one too wide for its tab
-  /// wraps mid-word ("Statistiq/ues" in French on a narrow phone), so
-  /// labels are measured up front and hidden if any doesn't fit.
-  bool _labelsFit(BuildContext context, List<String> labels, double tabWidth) {
-    final style = NavigationBarTheme.of(context)
-            .labelTextStyle
-            ?.resolve({WidgetState.selected}) ??
-        Theme.of(context).textTheme.labelMedium;
-    // NavigationBar caps label text scaling at 1.3 (its private
-    // _kMaxLabelTextScaleFactor); measure the same way.
-    final scaler = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3);
-    for (final label in labels) {
-      final painter = TextPainter(
-        text: TextSpan(text: label, style: style),
-        textDirection: Directionality.of(context),
-        textScaler: scaler,
-        maxLines: 1,
-      )..layout();
-      final width = painter.width;
-      painter.dispose();
-      if (width > tabWidth - 8) return false;
-    }
-    return true;
+  /// The bar's distance from the screen's bottom. On Android, the gesture
+  /// bar's or the buttons' inset, which looks right with either (#198
+  /// review). On iOS that would leave it high: it sits over the lower part
+  /// of the home indicator's inset, as iOS's own tab bar does, clear of the
+  /// indicator itself. 12 where there's no inset.
+  static double _barBottom(BuildContext context, double inset) {
+    if (inset == 0) return 12;
+    return switch (Theme.of(context).platform) {
+      TargetPlatform.iOS => math.max(inset - 14, 12),
+      _ => inset,
+    };
   }
 
   /// This tab's content, resolved fresh on every switch rather than kept
