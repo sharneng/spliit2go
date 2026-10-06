@@ -439,8 +439,10 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
                         child: Center(
                             child:
                                 GroupMonogram(id: row.id, name: row.name)))))),
+        // The clip and the date sit at the right edge, next to the
+        // chevron (#201 review).
         title: Row(children: [
-          Flexible(child: Text(row.name)),
+          Expanded(child: Text(row.name)),
           // A favorite's receipts offline (#127).
           ReceiptDownloadIndicator(
             size: 18,
@@ -452,7 +454,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
         ]),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
-          child: Wrap(spacing: 12, runSpacing: 4, children: [
+          child: Row(children: [
             Semantics(
                 label: context.l10n.groupListParticipantCount(count),
                 excludeSemantics: true,
@@ -461,13 +463,19 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
                   const SizedBox(width: 4),
                   Text('$count'),
                 ])),
+            const SizedBox(width: 12),
             // The date the list is sorted by, not the first-to-last
             // span, which didn't fit beside the count (#201).
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              const _CaptionIcon(LucideIcons.calendar),
-              const SizedBox(width: 4),
-              Flexible(child: Text(_sortDateText(row))),
-            ]),
+            Expanded(
+                child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                  const _CaptionIcon(LucideIcons.calendar),
+                  const SizedBox(width: 4),
+                  Flexible(
+                      child: Text(_sortDateText(row),
+                          textAlign: TextAlign.end)),
+                ])),
           ]),
         ),
         // Opens the group's screen (#186 review).

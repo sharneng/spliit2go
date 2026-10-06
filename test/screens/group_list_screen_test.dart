@@ -251,6 +251,11 @@ void main() {
 
       expect(find.text(shown), findsOneWidget, reason: sort.name);
       expect(find.textContaining('–'), findsNothing);
+      // Right-aligned with the end of the name's line (#201 review).
+      expect(tester.getTopRight(find.text(shown)).dx,
+          tester.getTopRight(find.text('Banff Trip')).dx);
+      expect(tester.getTopRight(find.text(shown)).dx,
+          greaterThan(tester.getTopRight(find.text('0')).dx + 100));
     }
     SharedPreferences.setMockInitialValues({});
   });

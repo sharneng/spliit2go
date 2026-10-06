@@ -47,9 +47,11 @@ class ReceiptDownloadIndicator extends StatelessWidget {
           final icon = Icon(Icons.attach_file, size: size, color: color);
           return IconButton(
             tooltip: l10n.receiptDownloadsTooltip,
-            // Small in the group list, so the row keeps its height.
+            // Small in the group list, so the row keeps its height, and
+            // flush with the row's right-aligned date (#201 review).
             constraints: compact ? const BoxConstraints() : null,
-            padding: compact ? const EdgeInsets.symmetric(horizontal: 6) : null,
+            padding:
+                compact ? const EdgeInsetsDirectional.only(start: 6) : null,
             style: compact
                 ? const ButtonStyle(tapTargetSize: MaterialTapTargetSize.shrinkWrap)
                 : null,
