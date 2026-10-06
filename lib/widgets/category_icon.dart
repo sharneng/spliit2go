@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../models/category.dart';
+import '../theme.dart';
+import 'group_monogram.dart';
 
 /// The glyph that stands for an expense category (issue #28), grounded
 /// in spliit-web's own map rather than guessed: `category-icon.tsx`
@@ -76,14 +78,30 @@ const Map<String, IconData> _icons = {
   'Utilities/Water': LucideIcons.cupSoda,
 };
 
-/// A category's glyph in a rounded "slot" -- the treatment spliit-ios's
-/// own `CategoryIcon` view uses to lead an expense row
-/// (`Spliit/Views/DesignSystem/CategoryIcon.swift`): a neutral (not
-/// tinted) fill, so the icon doesn't compete with the amount for
-/// attention, and a glyph sized to about half the slot. Ported to this
-/// app's Material theming rather than iOS's `tertiarySystemFill` --
-/// [ColorScheme.surfaceContainerHighest]/[ColorScheme.onSurfaceVariant]
-/// is Material's own equivalent "quiet, neutral chip" pairing.
+/// [grouping]'s place in [monogramPalette] (#205). Hashing the names
+/// would put the seven groupings on only four colors, so each has its
+/// own; one a server adds later is hashed like a group id.
+int groupingColorIndex(String grouping) =>
+    _groupingColors[grouping] ?? groupColorIndex(grouping);
+
+const Map<String, int> _groupingColors = {
+  'Uncategorized': 2, // indigo
+  'Entertainment': 7, // violet
+  'Food and Drink': 4, // orange
+  'Home': 6, // olive
+  'Life': 3, // pink
+  'Transportation': 1, // cyan
+  'Utilities': 5, // amber
+};
+
+/// A category's glyph in a circle, like the group list's monograms
+/// (spliit-ios's own `CategoryIcon` uses a rounded square), with a glyph
+/// sized to about half the circle.
+///
+/// The slot is tinted by the category's grouping (#205), from the group
+/// list's monogram colors: each of the server's seven groupings has its
+/// own (see [_groupingColors]), so every category of a grouping shares
+/// one color. With no category known it stays neutral.
 ///
 /// Used both as the expense list's leading icon (issue #28's "group
 /// screen" ask, `size` defaulting to spliit-ios's own 34) and, at a
@@ -98,15 +116,19 @@ class CategoryIconGlyph extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final grouping = category?.grouping;
     return Container(
       width: size,
       height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(size * 0.24),
+        color: grouping == null
+            ? colors.surfaceContainerHighest
+            : monogramPalette[groupingColorIndex(grouping)],
+        shape: BoxShape.circle,
       ),
-      child: Icon(categoryIconData(category), size: size * 0.55, color: colors.onSurfaceVariant),
+      child: Icon(categoryIconData(category),
+          size: size * 0.55, color: grouping == null ? colors.onSurfaceVariant : Colors.white),
     );
   }
 }
