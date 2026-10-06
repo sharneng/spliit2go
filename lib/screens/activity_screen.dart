@@ -16,6 +16,7 @@ import '../widgets/error_message.dart';
 import '../services/error_reporting.dart';
 import '../widgets/empty_state.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../widgets/bottom_inset.dart';
 
 /// The group's server-side activity log (issue #26) -- who changed what
 /// and when. Read-only and **online-only**: unlike expenses, activity
@@ -298,7 +299,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
     return GroupedScrollClip(
         child: ListView.builder(
       controller: _scroll,
-      padding: const EdgeInsets.only(top: 16),
+      padding: withBottomInset(context, const EdgeInsets.only(top: 16)),
       itemCount: rows.length + 1, // +1 for the footer (loading / error)
       itemBuilder: (context, i) {
         if (i == rows.length) return _footer();

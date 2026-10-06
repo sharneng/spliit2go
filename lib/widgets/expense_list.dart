@@ -9,6 +9,7 @@ import '../utils/money.dart';
 import 'money.dart';
 import 'category_icon.dart';
 import 'grouped_section.dart';
+import 'bottom_inset.dart';
 
 /// Expenses in date sections (issue #88), each a grouped card under its
 /// caption (#185), built lazily. Shared by the Expenses tab and search
@@ -54,7 +55,7 @@ class ExpenseDateList extends StatelessWidget {
     return GroupedScrollClip(
         child: ListView.builder(
       keyboardDismissBehavior: keyboardDismissBehavior,
-      padding: EdgeInsets.only(top: 16, bottom: bottomPadding),
+      padding: withBottomInset(context, EdgeInsets.only(top: 16, bottom: bottomPadding)),
       itemCount: rows.length,
       itemBuilder: (context, i) {
         final row = rows[i];

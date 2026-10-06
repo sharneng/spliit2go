@@ -34,6 +34,7 @@ import '../services/settings_service.dart';
 import '../widgets/receipt_attachments.dart';
 import '../widgets/receipt_language.dart';
 import '../utils/haptics.dart';
+import '../widgets/bottom_inset.dart';
 
 /// Adds -- or, given [existingExpense], edits -- an expense. An expense
 /// with [Expense.isReimbursement] set is a settlement/"paid back"
@@ -913,7 +914,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           title:
               Text(widget.isEditing ? context.l10n.expenseEditTitle : context.l10n.expenseAddTitle)),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: withBottomInset(context, const EdgeInsets.all(16)),
         child: Form(
           key: _formKey,
           child: Column(

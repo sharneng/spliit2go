@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -16,6 +17,7 @@ import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/activity_screen.dart';
 import 'package:spliit2go/screens/balances_screen.dart';
 import 'package:spliit2go/screens/expense_search_screen.dart';
+import 'package:spliit2go/widgets/expense_list.dart';
 import 'package:spliit2go/screens/group_screen.dart';
 import 'package:spliit2go/screens/group_settings_screen.dart';
 import 'package:spliit2go/screens/stats_screen.dart';
@@ -644,16 +646,39 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('shows all four destinations in the bottom nav bar', (tester) async {
+    testWidgets('shows the four tabs and Search in the bottom nav bar (#197)', (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       await pumpGroupScreen(tester, db);
 
-      expect(find.byType(NavigationDestination), findsNWidgets(4));
-      expect(find.text('Expenses'), findsOneWidget);
-      expect(find.text('Balance'), findsOneWidget);
-      expect(find.text('Stats'), findsOneWidget);
-      expect(find.text('Activities'), findsOneWidget);
+      expect(find.byType(NavigationDestination), findsNWidgets(5));
+      for (final label in ['Expenses', 'Balance', 'Stats', 'Activities', 'Search']) {
+        expect(find.text(label), findsOneWidget, reason: label);
+      }
+      // See the first test above for why. (issue #47)
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('the list stops above the floating bar (#197, #198 review)', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.replaceServerExpenses('g1', [
+        Expense(
+          id: 'e1',
+          groupId: 'g1',
+          title: 'Dinner',
+          amountCents: 500,
+          paidBy: 'p1',
+          paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+          date: DateTime(2026, 9, 16),
+        ),
+      ]);
+      await pumpGroupScreen(tester, db);
+
+      final barTop = tester.getTopLeft(find.byType(NavigationBar)).dy;
+      final list = find.descendant(of: find.byType(ExpenseDateList), matching: find.byType(ListView));
+      expect(tester.getRect(list).bottom, barTop - 12);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
@@ -861,15 +886,13 @@ void main() {
     NavigationDestinationLabelBehavior labelBehavior(WidgetTester tester) =>
         tester.widget<NavigationBar>(find.byType(NavigationBar)).labelBehavior!;
 
-    testWidgets('tab labels show when they fit beside the search button (#84)', (tester) async {
+    testWidgets('tab labels show when they fit (#84)', (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       await pumpGroupScreen(tester, db);
 
       expect(labelBehavior(tester), NavigationDestinationLabelBehavior.alwaysShow);
-      final screenHeight = tester.getSize(find.byType(GroupScreen)).height;
-      expect(tester.getTopLeft(find.byType(NavigationBar)).dy,
-          screenHeight - tester.getSize(find.byType(NavigationBar)).height,
+      expect(tester.getSize(find.byType(NavigationBar)).height, 68,
           reason: 'the bottom bar must stay at its own height, not take over the screen');
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
@@ -894,6 +917,27 @@ void main() {
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('on iPhone the bar sits lower in the home indicator inset; on Android, on it (#198 review)',
+        (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1;
+      tester.view.padding = const FakeViewPadding(bottom: 34);
+      addTearDown(tester.view.reset);
+      for (final (platform, gap) in [(TargetPlatform.iOS, 20.0), (TargetPlatform.android, 34.0)]) {
+        debugDefaultTargetPlatformOverride = platform;
+        final db = AppDatabase(NativeDatabase.memory());
+        await pumpGroupScreen(tester, db);
+        final bar = tester.getRect(find.ancestor(
+            of: find.byType(NavigationBar),
+            matching: find.byWidgetPredicate((w) => w is Material && w.shape is StadiumBorder)));
+        expect(800 - bar.bottom, gap, reason: '$platform');
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await db.close();
+      }
+      debugDefaultTargetPlatformOverride = null;
     });
 
     // Landscape on a phone with a side cutout and a home indicator.
@@ -924,9 +968,12 @@ void main() {
 
     void expectBottomBarInsideSafeArea(WidgetTester tester) {
       final search = tester.getRect(find.byIcon(Icons.search));
-      final bar = tester.getRect(find.byType(NavigationBar));
-      expect(bar.left, 47, reason: 'tabs start at the safe edge, not doubly inset');
-      expect(search.right, lessThanOrEqualTo(844 - 47));
+      final bar = tester.getRect(find.ancestor(
+          of: find.byType(NavigationBar),
+          matching: find.byWidgetPredicate((w) => w is Material && w.shape is StadiumBorder)));
+      expect(bar.left, 47 + 16, reason: 'the bar floats 16 off the safe edge, not doubly inset');
+      expect(bar.right, 844 - 47 - 16);
+      expect(search.right, lessThanOrEqualTo(bar.right));
       expect(bar.bottom, 390 - 21);
       expect(search.top, greaterThanOrEqualTo(bar.top));
       expect(search.bottom, lessThanOrEqualTo(bar.bottom));

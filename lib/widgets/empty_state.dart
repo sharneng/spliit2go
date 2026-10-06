@@ -43,12 +43,17 @@ class EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, constraints) {
       if (!constraints.hasBoundedHeight) return _content(context);
+      // Centered in the space above the gesture bar, or the group
+      // screen's floating bar, not behind it (#197).
+      final inset = MediaQuery.paddingOf(context).bottom;
       return SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         keyboardDismissBehavior: keyboardDismissBehavior,
+        padding: EdgeInsets.only(bottom: inset),
         child: ConstrainedBox(
           constraints: BoxConstraints(
-              minWidth: constraints.maxWidth, minHeight: constraints.maxHeight),
+              minWidth: constraints.maxWidth,
+              minHeight: (constraints.maxHeight - inset).clamp(0, double.infinity)),
           child: Center(child: _content(context)),
         ),
       );

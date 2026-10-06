@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -29,6 +30,7 @@ import '../services/receipt_cache.dart';
 import '../services/receipt_downloader.dart';
 import '../widgets/receipt_download_indicator.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/grouped_section.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// A single group's expenses, offline-first -- reached by pushing on top
@@ -296,75 +298,109 @@ class _GroupScreenState extends State<GroupScreen> {
     );
   }
 
-  static const _searchSlotWidth = 64.0;
+  /// The bar's distance from the screen's sides, as the cards' (#197).
+  static const _barInset = GroupedSection.inset;
 
-  /// The tabs plus a separate round search button at the right end, on
-  /// every tab, like spliit-ios (issue #84) -- search opens its own
-  /// screen rather than being a tab.
+  /// The tabs, and Search at the end, in a rounded bar floating off the
+  /// screen's edges, like spliit-ios's (#197). The list stops above it,
+  /// through the rounded clip's curve (#193), rather than scrolling behind
+  /// it (#198 review). Search opens its own screen rather than being a tab
+  /// (#84), so it's never the selected one.
   Widget _bottomBar(BuildContext context) {
     final labels = [
       context.l10n.groupScreenTabExpenses,
       context.l10n.groupScreenTabBalance,
       context.l10n.groupScreenTabStats,
       context.l10n.groupScreenTabActivities,
+      context.l10n.groupScreenSearchTooltip,
     ];
-    return ColoredBox(
-      color: NavigationBarTheme.of(context).backgroundColor ??
-          Theme.of(context).colorScheme.surfaceContainer,
-      // spliit2goAppBuilder already removes these insets app-wide; this
-      // keeps the whole row (search included) inside them on its own too.
-      child: SafeArea(
-        top: false,
-        child: LayoutBuilder(builder: (context, constraints) {
-          final tabWidth =
-              (constraints.maxWidth - _searchSlotWidth) / labels.length;
-          return Row(
-            children: [
-              Expanded(
-                child: NavigationBar(
-                  selectedIndex: _tabIndex,
-                  onDestinationSelected: (i) => setState(() => _tabIndex = i),
-                  // Hidden labels stay available as each tab's tooltip.
-                  labelBehavior: _labelsFit(context, labels, tabWidth)
-                      ? NavigationDestinationLabelBehavior.alwaysShow
-                      : NavigationDestinationLabelBehavior.alwaysHide,
-                  destinations: [
-                    NavigationDestination(
-                      icon: const Icon(Icons.receipt_long_outlined),
-                      selectedIcon: const Icon(Icons.receipt_long),
-                      label: labels[0],
-                    ),
-                    NavigationDestination(
-                      icon: const Icon(Icons.account_balance_wallet_outlined),
-                      selectedIcon: const Icon(Icons.account_balance_wallet),
-                      label: labels[1],
-                    ),
-                    NavigationDestination(
-                      icon: const Icon(Icons.bar_chart_outlined),
-                      selectedIcon: const Icon(Icons.bar_chart),
-                      label: labels[2],
-                    ),
-                    NavigationDestination(
-                        icon: const Icon(Icons.history), label: labels[3]),
-                  ],
+    final scheme = Theme.of(context).colorScheme;
+    final insets = MediaQuery.paddingOf(context);
+    return Padding(
+      // 12 above it: the list's rounded end stands off the bar.
+      padding: EdgeInsets.fromLTRB(insets.left + _barInset, 12, insets.right + _barInset,
+          _barBottom(context, insets.bottom)),
+      child: Material(
+        // A step above the cards, and lifted off the page by a shadow.
+        color: scheme.brightness == Brightness.light
+            ? scheme.surfaceContainerLowest
+            : scheme.surfaceContainerHighest,
+        elevation: 3,
+        shadowColor: scheme.shadow,
+        surfaceTintColor: Colors.transparent,
+        shape: const StadiumBorder(),
+        clipBehavior: Clip.antiAlias,
+        // The bar is already placed clear of every inset, so NavigationBar
+        // mustn't pad itself again (it would add the status bar's).
+        child: MediaQuery.removePadding(
+          context: context,
+          removeTop: true,
+          removeBottom: true,
+          removeLeft: true,
+          removeRight: true,
+          // Off the rounded ends, so the end tabs sit well inside the curve.
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: LayoutBuilder(builder: (context, constraints) {
+            final tabWidth = constraints.maxWidth / labels.length;
+            return NavigationBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              height: 68,
+              selectedIndex: _tabIndex,
+              onDestinationSelected: (i) {
+                if (i == labels.length - 1) {
+                  _openSearch();
+                } else {
+                  setState(() => _tabIndex = i);
+                }
+              },
+              // Hidden labels stay available as each tab's tooltip.
+              labelBehavior: _labelsFit(context, labels, tabWidth)
+                  ? NavigationDestinationLabelBehavior.alwaysShow
+                  : NavigationDestinationLabelBehavior.alwaysHide,
+              destinations: [
+                NavigationDestination(
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  selectedIcon: const Icon(Icons.receipt_long),
+                  label: labels[0],
                 ),
-              ),
-              SizedBox(
-                width: _searchSlotWidth,
-                child: Center(
-                  heightFactor: 1,
-                  child: IconButton.filledTonal(
-                    icon: const Icon(Icons.search),
-                    tooltip: context.l10n.groupScreenSearchTooltip,
-                    onPressed: _group == null ? null : _openSearch,
-                  ),
+                NavigationDestination(
+                  icon: const Icon(Icons.account_balance_wallet_outlined),
+                  selectedIcon: const Icon(Icons.account_balance_wallet),
+                  label: labels[1],
                 ),
-              ),
-            ],
-          );
-        }),
+                NavigationDestination(
+                  icon: const Icon(Icons.bar_chart_outlined),
+                  selectedIcon: const Icon(Icons.bar_chart),
+                  label: labels[2],
+                ),
+                NavigationDestination(icon: const Icon(Icons.history), label: labels[3]),
+                NavigationDestination(
+                  icon: const Icon(Icons.search),
+                  label: labels[4],
+                  enabled: _group != null,
+                ),
+              ],
+            );
+          }),
+          ),
+        ),
       ),
     );
+  }
+
+  /// The bar's distance from the screen's bottom. On Android, the gesture
+  /// bar's or the buttons' inset, which looks right with either (#198
+  /// review). On iOS that would leave it high: it sits over the lower part
+  /// of the home indicator's inset, as iOS's own tab bar does, clear of the
+  /// indicator itself. 12 where there's no inset.
+  static double _barBottom(BuildContext context, double inset) {
+    if (inset == 0) return 12;
+    return switch (Theme.of(context).platform) {
+      TargetPlatform.iOS => math.max(inset - 14, 12),
+      _ => inset,
+    };
   }
 
   /// NavigationBar never ellipsizes a label: one too wide for its tab

@@ -11,6 +11,7 @@ import '../services/settings_service.dart';
 import 'group_settings_screen.dart';
 import '../widgets/error_message.dart';
 import '../services/error_reporting.dart';
+import '../widgets/bottom_inset.dart';
 
 /// Joins a group: paste the group's full URL (the same one you'd get
 /// from the webapp's address bar or a share sheet, e.g.
@@ -142,7 +143,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(context.l10n.joinGroupScreenTitle)),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: withBottomInset(context, const EdgeInsets.all(16)),
         child: Form(
           key: _formKey,
           child: Column(

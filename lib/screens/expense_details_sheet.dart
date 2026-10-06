@@ -26,6 +26,7 @@ import '../widgets/error_message.dart';
 import '../widgets/receipts.dart';
 import '../utils/haptics.dart';
 import '../widgets/grouped_section.dart';
+import '../widgets/bottom_inset.dart';
 
 /// What tapping an expense does, from both the expense list and the
 /// Activity tab (issue #90): a bottom sheet showing the expense's details,
@@ -614,7 +615,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       maxChildSize: 0.95,
       builder: (context, scrollController) => ListView(
         controller: scrollController,
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        padding: withBottomInset(context, const EdgeInsets.fromLTRB(20, 0, 20, 24)),
         children: _content(context),
       ),
     );

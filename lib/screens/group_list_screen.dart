@@ -29,6 +29,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/grouped_section.dart';
 import '../utils/haptics.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../widgets/bottom_inset.dart';
 
 /// Registered as a `MaterialApp.navigatorObservers` entry (main.dart) so
 /// [_GroupListScreenState] can hear about routes pushed *on top of* it by
@@ -257,7 +258,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
     return SlidableAutoCloseBehavior(
         child: GroupedScrollClip(
         child: ListView(
-      padding: const EdgeInsets.only(top: 16, bottom: 88),
+      padding: withBottomInset(context, const EdgeInsets.only(top: 16, bottom: 88)),
       children: [
         for (final (caption, groups) in sections)
           if (groups.isNotEmpty) ...[

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../l10n/context_l10n.dart';
 import '../services/error_reporting.dart';
+import 'bottom_inset.dart';
 
 /// The message a screen shows for [error] (issue #118, #119 review): a
 /// connection failure always reads the same ("check your connection");
@@ -114,7 +115,7 @@ Future<void> showErrorDetails(BuildContext context, String diagnostics, {String?
         initialChildSize: 0.6,
         maxChildSize: 0.95,
         builder: (context, controller) => Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          padding: withBottomInset(context, const EdgeInsets.fromLTRB(16, 0, 16, 16)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
