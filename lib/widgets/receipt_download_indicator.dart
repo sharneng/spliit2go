@@ -66,8 +66,9 @@ class ReceiptDownloadIndicator extends StatelessWidget {
               ),
             );
           }
-          // Sized like a caption icon, from the title's text (#209).
-          final rowSize = rowClipSize(context).clamp(0.0, maxRowSize.clamp(_baseRowSize(context), double.infinity));
+          // The expense rows' marks' size, growing with the text (#209).
+          final rowSize =
+              titleMarkSize(context).clamp(0.0, maxRowSize.clamp(titleMarkBaseSize, double.infinity));
           // The clip's ink stops short of its box's end; nudged out so it
           // ends where the participants icon below does (#201 review).
           final nudge = rowSize * _clipInkGap -
@@ -83,13 +84,6 @@ class ReceiptDownloadIndicator extends StatelessWidget {
           );
         },
       );
-
-  /// A row's clip: a caption icon's size for the row's title text.
-  static double rowClipSize(BuildContext context) => captionIconSize(context);
-
-  /// A row's clip at the usual text size.
-  static double _baseRowSize(BuildContext context) =>
-      (DefaultTextStyle.of(context).style.fontSize ?? 14) * 1.15;
 
   // The caption (the row's subtitle) is bodyMedium, as ListTile draws it.
   static double? _captionFontSize(BuildContext context) =>

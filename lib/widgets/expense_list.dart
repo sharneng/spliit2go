@@ -222,7 +222,7 @@ class ExpenseTile extends StatelessWidget {
           // that, the amount shrinks rather than overflow.
           final titleStyle = DefaultTextStyle.of(context).style.merge(_titleStyle);
           final fits = _textWidth(context, 'Mmm…', titleStyle) +
-                  marks.length * (4 + _Mark.sizeOf(context)) +
+                  marks.length * (4 + titleMarkSize(context)) +
                   8 +
                   _textWidth(context, amount,
                       Money.styleOf(context, isReimbursement: e.isReimbursement)) <=
@@ -415,11 +415,9 @@ class _Mark extends StatelessWidget {
   final IconData icon;
   final Color color;
 
-  static double sizeOf(BuildContext context) => MediaQuery.textScalerOf(context).scale(14);
-
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsetsDirectional.only(start: 4),
-        child: Icon(icon, size: sizeOf(context), color: color),
+        child: Icon(icon, size: titleMarkSize(context), color: color),
       );
 }

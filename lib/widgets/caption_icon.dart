@@ -23,3 +23,11 @@ double captionIconSize(BuildContext context, {double? captionFontSize}) =>
     MediaQuery.textScalerOf(context)
         .scale(captionFontSize ?? DefaultTextStyle.of(context).style.fontSize ?? 14) *
     1.15;
+
+/// A mark beside a row's title (an expense's repeats, receipts and notes,
+/// a group's 📎), at the usual text size: one size for every row (#209).
+const titleMarkBaseSize = 14.0;
+
+/// A title mark's size at the current text size.
+double titleMarkSize(BuildContext context) =>
+    MediaQuery.textScalerOf(context).scale(titleMarkBaseSize);

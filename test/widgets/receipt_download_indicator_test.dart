@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/services/receipt_downloader.dart';
+import 'package:spliit2go/widgets/caption_icon.dart';
 import 'package:spliit2go/widgets/receipt_download_indicator.dart';
 
 // Issue #127: a favorite group's 📎 (Kenneth): blinking while downloading,
@@ -203,9 +204,13 @@ void main() {
       expect(data.flagsCollection.isButton, isTrue);
     });
 
-    testWidgets('grows with the text size', (tester) async {
+    testWidgets('the expense rows\' marks\' size, growing and shrinking with the text',
+        (tester) async {
       await pumpRow(tester, done);
       final normal = tester.getSize(find.byIcon(LucideIcons.paperclip)).width;
+      expect(normal, titleMarkBaseSize);
+      await pumpRow(tester, done, scale: 0.8);
+      expect(tester.getSize(find.byIcon(LucideIcons.paperclip)).width, closeTo(normal * 0.8, 0.01));
       await pumpRow(tester, done, scale: 2);
       expect(tester.getSize(find.byIcon(LucideIcons.paperclip)).width, closeTo(normal * 2, 0.01));
     });
