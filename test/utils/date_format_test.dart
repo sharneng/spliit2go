@@ -14,6 +14,8 @@ void main() {
   setUpAll(() async {
     await initializeDateFormatting('fr');
     await initializeDateFormatting('zh');
+    await initializeDateFormatting('en_GB');
+    await initializeDateFormatting('de');
   });
 
   group('formatDate', () {
@@ -58,6 +60,30 @@ void main() {
       final t = DateTime(2026, 3, 5, 9, 7);
       expect(formatTimeOfDay(t, locale: en), '09:07');
       expect(formatTimeOfDay(t, locale: fr), '09:07');
+    });
+  });
+
+  // #207: the expense list's dates, one width each.
+  group('formatShortDate', () {
+    test('each locale\'s own numeric order and separators, zero-padded', () {
+      final d = DateTime(2026, 9, 9);
+      expect(formatShortDate(d, locale: en), '09/09/2026');
+      expect(formatShortDate(DateTime(2026, 9, 10), locale: en), '09/10/2026');
+      expect(formatShortDate(DateTime(2026, 9, 10), locale: const Locale('en', 'GB')),
+          '10/09/2026');
+      expect(formatShortDate(DateTime(2026, 9, 10), locale: fr), '10/09/2026');
+      expect(formatShortDate(d, locale: zh), '2026/09/09');
+      expect(formatShortDate(d, locale: const Locale('de')), '09.09.2026');
+    });
+
+    test('every date of a locale is the same length', () {
+      for (final locale in [en, fr, zh]) {
+        final lengths = {
+          for (final d in [DateTime(2026, 1, 1), DateTime(2026, 9, 9), DateTime(2026, 12, 31)])
+            formatShortDate(d, locale: locale).length,
+        };
+        expect(lengths, hasLength(1), reason: '$locale');
+      }
     });
   });
 }

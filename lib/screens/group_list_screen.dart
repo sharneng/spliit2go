@@ -30,6 +30,7 @@ import '../widgets/grouped_section.dart';
 import '../utils/haptics.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../widgets/bottom_inset.dart';
+import '../widgets/caption_icon.dart';
 
 /// Registered as a `MaterialApp.navigatorObservers` entry (main.dart) so
 /// [_GroupListScreenState] can hear about routes pushed *on top of* it by
@@ -466,7 +467,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
           // which didn't fit (#201); the count at the right edge, under
           // the clip, number first (#201 review).
           child: Row(children: [
-            const _CaptionIcon(LucideIcons.calendar),
+            const CaptionIcon(LucideIcons.calendar),
             const SizedBox(width: 4),
             Expanded(child: Text(_sortDateText(row))),
             const SizedBox(width: 12),
@@ -476,7 +477,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Text('$count'),
                   const SizedBox(width: 4),
-                  const _CaptionIcon(LucideIcons.users),
+                  const CaptionIcon(LucideIcons.users),
                 ])),
           ]),
         ),
@@ -486,22 +487,5 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
         onLongPress: openMenu,
       ),
     );
-  }
-}
-
-/// An icon in a row's caption, sized from the caption's own text so it
-/// grows with the system text size, in the caption's color (#180). Lucide,
-/// whose line drawings sit next to text the way spliit-ios's SF Symbols
-/// do; Material's, drawn for 24 px, thinned to faint lines at 14.
-class _CaptionIcon extends StatelessWidget {
-  const _CaptionIcon(this.icon);
-
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final style = DefaultTextStyle.of(context).style;
-    final fontSize = MediaQuery.textScalerOf(context).scale(style.fontSize ?? 14);
-    return Icon(icon, size: fontSize * 1.15, color: style.color);
   }
 }

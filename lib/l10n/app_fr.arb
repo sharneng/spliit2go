@@ -318,5 +318,17 @@
   "aboutLinkFailed": "Impossible d'ouvrir {url}.",
   "aboutCommitUnknown": "inconnu",
   "aboutCopyVersion": "Copier la version et le commit",
-  "aboutVersionCopied": "Version et commit copiés"
+  "aboutVersionCopied": "Version et commit copiés",
+  "expenseRowYouLent": "Vous avez prêté {amount}",
+  "expenseRowYouOwe": "Vous devez {amount}",
+  "expenseRowPaidByYou": "Vous",
+  "expenseRowRecurring": "Récurrente",
+  "expenseRowHasReceipts": "Avec reçus",
+  "expenseRowHasNotes": "Avec notes",
+  "expenseRowSpokenPaid": "{payer} a payé {amount} le {date}, {category}",
+  "expenseRowSpokenYouPaid": "Vous avez payé {amount} le {date}, {category}",
+  "expenseRowSpokenPaidBack": "{payer} a remboursé {amount} le {date}, {category}",
+  "expenseRowSpokenYouPaidBack": "Vous avez remboursé {amount} le {date}, {category}",
+  "expenseRowSpokenNoPayer": "{amount} le {date}, {category}",
+  "expenseRowSpokenSentenceEnd": "."
 }
