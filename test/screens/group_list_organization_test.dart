@@ -6,6 +6,7 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/models/group_organization.dart';
@@ -114,6 +115,21 @@ void main() {
     await tester.tap(find.widgetWithText(PopupMenuItem<int>, label));
     await tester.pumpAndSettle();
   }
+
+  testWidgets('the list stops above the gesture bar, its end rounded (#222)', (tester) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.view.padding = const FakeViewPadding(bottom: 34);
+    addTearDown(tester.view.reset);
+    final db = await seed();
+    await pump(tester, db);
+
+    final clip = find.byType(GroupedScrollClip);
+    expect(tester.getRect(clip).bottom, 800 - 34);
+    // The list itself ends there too: nothing scrolls under the bar.
+    expect(tester.getRect(find.descendant(of: clip, matching: find.byType(ListView))).bottom,
+        800 - 34);
+  });
 
   testWidgets(
       'long press switches exclusive states; unarchive returns to Active',
