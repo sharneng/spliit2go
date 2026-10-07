@@ -321,10 +321,9 @@ class _GroupScreenState extends State<GroupScreen> {
       padding: EdgeInsets.fromLTRB(insets.left + _barInset, 12, insets.right + _barInset,
           _barBottom(context, insets.bottom)),
       child: Material(
-        // A step above the cards, and lifted off the page by a shadow.
-        color: scheme.brightness == Brightness.light
-            ? scheme.surfaceContainerLowest
-            : scheme.surfaceContainerHighest,
+        // The cards' color, so it reads as one of them (#215), lifted
+        // off the page by a shadow.
+        color: GroupedSection.cardColor(context),
         elevation: 3,
         shadowColor: scheme.shadow,
         surfaceTintColor: Colors.transparent,
