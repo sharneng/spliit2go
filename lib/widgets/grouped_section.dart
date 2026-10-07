@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 
 /// A settings-style section (#180): one rounded card, inset from the
-/// screen's edges, its rows divided by hairlines, with an optional
+/// screen's edges, its rows divided by lines, with an optional
 /// caption above. iOS's Settings and Samsung's One UI both draw sections
 /// this way, and Pixel's rounded sections are close, so it's one design
 /// for both platforms rather than a platform branch.
@@ -31,10 +31,10 @@ class GroupedSection extends StatelessWidget {
   /// what to do in it (#187), as iOS's section footers.
   final String? footer;
 
-  /// The rows; a hairline goes between each two.
+  /// The rows; a line goes between each two.
   final List<Widget> children;
 
-  /// Where the hairlines start: past a row's leading icon, as on iOS and
+  /// Where the lines start: past a row's leading icon, as on iOS and
   /// One UI, so the icons read as a column. 16 for rows with no icon.
   final double dividerIndent;
 
@@ -154,7 +154,7 @@ class GroupedCaption extends StatelessWidget {
 /// One row of a section in a long, lazily built list (#185), drawn as its
 /// piece of the section's card: the [first] row has the card's top
 /// corners, the [last] its bottom ones and the space after it, and every
-/// other row starts with a hairline. A [GroupedSection] builds all its rows
+/// other row starts with a line. A [GroupedSection] builds all its rows
 /// at once; this lets a [ListView.builder] build only the visible ones and
 /// still look the same.
 class GroupedItem extends StatelessWidget {
@@ -202,19 +202,31 @@ class GroupedItem extends StatelessWidget {
   }
 }
 
-/// The hairline between two rows of a [GroupedSection]. A row widget that
+/// The line between two rows of a [GroupedSection]. A row widget that
 /// builds several rows itself puts these between them.
+///
+/// As iOS's and One UI's (#213, Kenneth): in the page's own color, as if
+/// the card were cut through to the page behind it; a point thick, since
+/// in that color a single device pixel all but disappears; and stopping
+/// where the rows' content does rather than running to the card's edge.
 class GroupedDivider extends StatelessWidget {
   const GroupedDivider({super.key, this.indent = 16});
 
   final double indent;
 
+  /// Where it stops, from the card's end edge: where a card's rows end
+  /// their content (see [_CardRows]).
+  static const double endIndent = GroupedSection.inset;
+
+  static const double thickness = 1;
+
   @override
   Widget build(BuildContext context) => Divider(
-        height: 1,
-        thickness: 1 / MediaQuery.devicePixelRatioOf(context),
+        height: thickness,
+        thickness: thickness,
         indent: indent,
-        color: Theme.of(context).colorScheme.outlineVariant,
+        endIndent: endIndent,
+        color: GroupedSection.backgroundColor(context),
       );
 }
 

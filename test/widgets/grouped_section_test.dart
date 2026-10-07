@@ -36,6 +36,40 @@ void main() {
     expect(tester.widget<Divider>(find.byType(Divider)).indent, 56);
   });
 
+  // #213: as iOS's and One UI's.
+  testWidgets('the lines are the page\'s color, a point thick, in light and dark', (tester) async {
+    for (final theme in [spliit2goLightTheme, spliit2goDarkTheme]) {
+      await pump(
+        tester,
+        const GroupedSection(children: [
+          GroupedRow(title: Text('Light')),
+          GroupedRow(title: Text('Dark')),
+        ]),
+        theme: theme,
+      );
+      await tester.pumpAndSettle();
+      final line = tester.widget<Divider>(find.byType(Divider));
+      expect(line.color, theme.scaffoldBackgroundColor, reason: '${theme.brightness}');
+      expect(tester.getSize(find.byType(Divider)).height, 1);
+      expect(line.thickness, 1);
+    }
+  });
+
+  testWidgets('the lines stop where the rows\' content does, not at the card\'s edge',
+      (tester) async {
+    await pump(
+      tester,
+      const GroupedSection(children: [
+        GroupedRow(title: Text('Light'), navigates: true),
+        GroupedRow(title: Text('Dark'), navigates: true),
+      ]),
+    );
+    final chevron = find.byIcon(Icons.chevron_right).first;
+    final card = tester.getRect(find.ancestor(of: chevron, matching: find.byType(Material)).first);
+    final line = tester.widget<Divider>(find.byType(Divider));
+    expect(card.right - line.endIndent!, tester.getRect(chevron).right);
+  });
+
   testWidgets('a row that opens a screen has a chevron, on Android and iOS', (tester) async {
     for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
       await pump(
