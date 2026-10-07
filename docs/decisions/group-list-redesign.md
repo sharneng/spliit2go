@@ -36,7 +36,16 @@ Schema is now v9 (`lib/db/app_database.dart`): `Groups.createdAt` (nullable, pop
 - **#74:** the header read "SPLIIT2GO" (all caps) instead of "Spliit2Go", inconsistent with the project's own name and spliit-ios's casing. One-line fix.
 - **#75/#76:** the first full-swipe implementation didn't really dismiss the row -- it vetoed `flutter_slidable`'s own dismissal (`confirmDismiss` returning `false`) specifically to avoid a `flutter_slidable` runtime assertion ("A dismissed Slidable widget is still part of the tree"), which produced a visible bounce-back instead of a real slide-out. The fix let the dismissal actually complete and re-keys the row unconditionally afterward, via a local per-row "dismiss generation" counter that bumps regardless of whether the underlying favorite/archive write succeeds -- rather than a key derived from `organization`, which only changes on a successful write. That closed both the visual bug and a follow-on crash risk: a failed write previously could leave an already-dismissed `Slidable` element in the tree with an unchanged key, which then threw the exact same assertion on the next unrelated list rebuild. See the review thread on #76 for the full trace through `flutter_slidable`'s source and the regression test that reproduces it.
 
+## Large text sizes and screen readers (#209)
+
+Checked on the iOS simulator at the largest accessibility text size, and from the row's semantics in tests, 2026-10-07:
+
+- **The second line reflows rather than breaks.** The date and the count are measured first. When they don't fit one line, the date gets a line of its own, never wrapped (shrunk if even that line is too narrow), and the count goes under it at the edge, still under the 📎. Before, the count squeezed the date into "Aug / 28, / 202 / 6".
+- **A screen reader names the date.** The row reads "Banff Trip. Last opened Sep 3, 2026. 3 participants." The date is the one the list is sorted by, which sighted users see in the sort menu and a listener can't; "No expenses yet" when an expense sort has no date to show. Spoken only (Kenneth): on screen a label would crowd the row.
+- **Favorite, Archive and Remove are the row's screen-reader actions** (VoiceOver's actions rotor, TalkBack's actions menu), not only behind the monogram's "Actions for …" menu. Remove still asks first.
+- The 📎's changes (diagonal, its state said, growing with the text size, a 44-point target) are in [receipts.md](receipts.md).
+
 ## Not done / open
 
-- VoiceOver/TalkBack walkthroughs of the swipe and menu interactions were called out in PR #72 as a manual follow-up check, not confirmed done as of this writing.
+- VoiceOver/TalkBack walkthroughs of the swipe and menu interactions were called out in PR #72 as a manual follow-up check, not confirmed done as of this writing. #209 checked the row's semantics in tests and its layout on the simulator, not with VoiceOver itself.
 - PR #69's initial layout merged without physical-device verification; Kenneth's subsequent real-device pass is what drove #71/#72/#73 in the first place.

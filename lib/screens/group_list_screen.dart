@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 
 import '../api/spliit_client.dart';
@@ -17,6 +18,7 @@ import '../widgets/group_row_actions.dart';
 import '../sync/outbox.dart';
 import '../theme.dart';
 import '../utils/date_format.dart';
+import '../utils/spoken.dart';
 import 'group_screen.dart';
 import 'app_settings_screen.dart';
 import 'join_group_screen.dart';
@@ -397,95 +399,190 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
     return formatDate(local, locale: context.appLocale);
   }
 
+  static const _nameStyle = TextStyle(fontWeight: FontWeight.w600);
+
+  /// [row]'s date as a screen reader says it: what the date is, since a
+  /// listener can't glance at the sort menu (#209). Nothing for a moment
+  /// the group doesn't have.
+  String? _spokenSortDate(GroupRow row) {
+    final l10n = context.l10n;
+    final date = groupSortDate(row, _sort, _dateSpans);
+    if (date == null) {
+      return switch (_sort) {
+        GroupListSort.firstExpense || GroupListSort.lastExpense => l10n.groupListSpokenNoExpenses,
+        GroupListSort.created || GroupListSort.lastOpened => null,
+      };
+    }
+    final text = _sortDateText(row);
+    return switch (_sort) {
+      GroupListSort.firstExpense => l10n.groupListSpokenFirstExpense(text),
+      GroupListSort.lastExpense => l10n.groupListSpokenLastExpense(text),
+      GroupListSort.created => l10n.groupListSpokenCreated(text),
+      GroupListSort.lastOpened => l10n.groupListSpokenOpened(text),
+    };
+  }
+
   Widget _groupTile(GroupRow row) {
     final count = (jsonDecode(row.participantsJson) as List).length;
+    final downloads = ReceiptDownloader.of(widget.db);
+    void retryDownloads() =>
+        unawaited(downloads.run(row.id, widget.clientFactory(row.serverUrl)));
+    final actions = [
+      GroupRowAction(
+          label: row.organization == GroupOrganization.favorite
+              ? context.l10n.groupListUnfavorite
+              : context.l10n.groupListFavorite,
+          icon: row.organization == GroupOrganization.favorite
+              ? Icons.star_border
+              : Icons.star,
+          onSelected: () => _performGroupAction(row, 'favorite')),
+      GroupRowAction(
+          label: row.organization == GroupOrganization.archived
+              ? context.l10n.groupListUnarchive
+              : context.l10n.groupListArchive,
+          icon: row.organization == GroupOrganization.archived
+              ? Icons.unarchive_outlined
+              : Icons.archive_outlined,
+          onSelected: () => _performGroupAction(row, 'archive')),
+      GroupRowAction(
+          label: context.l10n.groupListRemove,
+          icon: Icons.delete_outline,
+          destructive: true,
+          onSelected: () => _performGroupAction(row, 'remove')),
+    ];
+    final spokenDate = _spokenSortDate(row);
+    final spoken = spokenSentences([
+      row.name,
+      if (spokenDate != null) spokenDate,
+      context.l10n.groupListParticipantCount(count),
+    ], context.l10n.spokenSentenceEnd);
+    // The clip and its full-size tap area, laid over the row (#209).
+    final clip = LayerLink();
     return GroupRowActions(
       // Guarantees a fresh widget identity whenever onDismissed runs:
       key: ValueKey('${row.id}_${_dismissVersions[row.id] ?? 0}'),
-      actions: [
-        GroupRowAction(
-            label: row.organization == GroupOrganization.favorite
-                ? context.l10n.groupListUnfavorite
-                : context.l10n.groupListFavorite,
-            icon: row.organization == GroupOrganization.favorite
-                ? Icons.star_border
-                : Icons.star,
-            onSelected: () => _performGroupAction(row, 'favorite')),
-        GroupRowAction(
-            label: row.organization == GroupOrganization.archived
-                ? context.l10n.groupListUnarchive
-                : context.l10n.groupListArchive,
-            icon: row.organization == GroupOrganization.archived
-                ? Icons.unarchive_outlined
-                : Icons.archive_outlined,
-            onSelected: () => _performGroupAction(row, 'archive')),
-        GroupRowAction(
-            label: context.l10n.groupListRemove,
-            icon: Icons.delete_outline,
-            destructive: true,
-            onSelected: () => _performGroupAction(row, 'remove')),
-      ],
-      builder: (context, openMenu) => ListTile(
-        // A tighter gap before the chevron (#201 review); the monogram's
-        // padding keeps the name at 80.
-        horizontalTitleGap: 8,
-        leading: Padding(
-          padding: const EdgeInsetsDirectional.only(end: 8),
-          child: Semantics(
-            button: true,
-            label: context.l10n.groupListActions(row.name),
-            child: Tooltip(
-                message: context.l10n.groupListActions(row.name),
-                child: InkResponse(
-                    onTap: openMenu,
-                    radius: 24,
-                    child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Center(
-                            child:
-                                GroupMonogram(id: row.id, name: row.name))))))),
-        // The clip and the date sit at the right edge, next to the
-        // chevron (#201 review).
-        title: Row(children: [
-          // Bold, like a list title on iOS (#201 review).
-          Expanded(
-              child: Text(row.name,
-                  style: const TextStyle(fontWeight: FontWeight.w600))),
-          // A favorite's receipts offline (#127).
-          ReceiptDownloadIndicator(
-            size: 18,
-            compact: true,
-            status: ReceiptDownloader.of(widget.db).status(row.id),
-            onRetry: () => unawaited(ReceiptDownloader.of(widget.db)
-                .run(row.id, widget.clientFactory(row.serverUrl))),
+      actions: actions,
+      builder: (context, openMenu) => Stack(children: [
+        ListTile(
+          // A tighter gap before the chevron (#201 review); the monogram's
+          // padding keeps the name at 80.
+          horizontalTitleGap: 8,
+          leading: Padding(
+            padding: const EdgeInsetsDirectional.only(end: 8),
+            child: Semantics(
+              button: true,
+              label: context.l10n.groupListActions(row.name),
+              child: Tooltip(
+                  message: context.l10n.groupListActions(row.name),
+                  child: InkResponse(
+                      onTap: openMenu,
+                      radius: 24,
+                      child: SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: Center(
+                              child:
+                                  GroupMonogram(id: row.id, name: row.name))))))),
+          // The clip and the date sit at the right edge, next to the
+          // chevron (#201 review).
+          title: Semantics(
+            // Read as sentences, the date named (#209). The swipe actions
+            // are the screen reader's actions too, rather than only behind
+            // the monogram's menu.
+            label: spoken,
+            customSemanticsActions: {
+              for (final action in actions)
+                CustomSemanticsAction(label: action.label): action.onSelected,
+            },
+            excludeSemantics: true,
+            child: LayoutBuilder(builder: (context, constraints) {
+              // The clip grows with the text size only as far as leaves the
+              // name's longest word a line of its own (#209).
+              final style = DefaultTextStyle.of(context).style.merge(_nameStyle);
+              final longestWord = row.name
+                  .split(' ')
+                  .map((word) => (TextPainter(
+                          text: TextSpan(text: word, style: style),
+                          textDirection: Directionality.of(context),
+                          textScaler: MediaQuery.textScalerOf(context),
+                          maxLines: 1)
+                        ..layout())
+                      .width)
+                  .fold(0.0, (a, b) => a > b ? a : b);
+              return Row(children: [
+                // Bold, like a list title on iOS (#201 review).
+                Expanded(child: Text(row.name, style: _nameStyle)),
+                // A favorite's receipts offline (#127).
+                ReceiptDownloadIndicator(
+                  link: clip,
+                  status: downloads.status(row.id),
+                  onRetry: retryDownloads,
+                  maxRowSize: constraints.maxWidth - longestWord - 1,
+                ),
+              ]);
+            }),
           ),
-        ]),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          // The date the list is sorted by, not the first-to-last span,
-          // which didn't fit (#201); the count at the right edge, under
-          // the clip, number first (#201 review).
-          child: Row(children: [
-            const CaptionIcon(LucideIcons.calendar),
-            const SizedBox(width: 4),
-            Expanded(child: Text(_sortDateText(row))),
-            const SizedBox(width: 12),
-            Semantics(
-                label: context.l10n.groupListParticipantCount(count),
-                excludeSemantics: true,
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text('$count'),
-                  const SizedBox(width: 4),
-                  const CaptionIcon(LucideIcons.users),
-                ])),
-          ]),
+          subtitle: ExcludeSemantics(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: LayoutBuilder(
+                  builder: (context, constraints) =>
+                      _caption(context, constraints.maxWidth, _sortDateText(row), count)),
+            ),
+          ),
+          // Opens the group's screen (#186 review).
+          trailing: GroupedRow.chevron(context),
+          onTap: () => _openGroup(row),
+          onLongPress: openMenu,
         ),
-        // Opens the group's screen (#186 review).
-        trailing: GroupedRow.chevron(context),
-        onTap: () => _openGroup(row),
-        onLongPress: openMenu,
-      ),
+        Positioned(
+          top: 0,
+          left: 0,
+          child: ReceiptDownloadTapArea(
+              link: clip, status: downloads.status(row.id), onRetry: retryDownloads),
+        ),
+      ]),
     );
+  }
+
+  /// The date the list is sorted by, not the first-to-last span, which
+  /// didn't fit (#201); the count at the right edge, under the clip,
+  /// number first (#201 review). When both don't fit one line (a large
+  /// text size), the date gets its own and the count goes under it,
+  /// still at the edge; the date is never broken, only shrunk (#209).
+  Widget _caption(BuildContext context, double maxWidth, String dateText, int count) {
+    final style = DefaultTextStyle.of(context).style;
+    final scaler = MediaQuery.textScalerOf(context);
+    double widthOf(String text) => (TextPainter(
+            text: TextSpan(text: text, style: style),
+            textDirection: Directionality.of(context),
+            textScaler: scaler,
+            maxLines: 1)
+          ..layout())
+        .width;
+    final icon = captionIconSize(context);
+    final fits = icon + 4 + widthOf(dateText) + 12 + widthOf('$count') + 4 + icon <= maxWidth;
+    final date = Row(mainAxisSize: MainAxisSize.min, children: [
+      const CaptionIcon(LucideIcons.calendar),
+      const SizedBox(width: 4),
+      Flexible(
+          child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(dateText, maxLines: 1, softWrap: false))),
+    ]);
+    final people = Row(mainAxisSize: MainAxisSize.min, children: [
+      Text('$count'),
+      const SizedBox(width: 4),
+      const CaptionIcon(LucideIcons.users),
+    ]);
+    if (fits) {
+      return Row(children: [Expanded(child: date), const SizedBox(width: 12), people]);
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Align(alignment: AlignmentDirectional.centerStart, child: date),
+      const SizedBox(height: 2),
+      Align(alignment: AlignmentDirectional.centerEnd, child: people),
+    ]);
   }
 }

@@ -198,6 +198,11 @@
   "groupListSortCreated": "创建日期",
   "groupListSortOpened": "最近打开",
   "groupListParticipantCount": "{count} 位成员",
+  "groupListSpokenFirstExpense": "首笔花费：{date}",
+  "groupListSpokenLastExpense": "末笔花费：{date}",
+  "groupListSpokenCreated": "创建于 {date}",
+  "groupListSpokenOpened": "最近打开：{date}",
+  "groupListSpokenNoExpenses": "还没有花费",
   "groupListActions": "{name}的操作",
   "expenseDetailsEdit": "编辑",
   "expenseDetailsDiscard": "舍弃",
@@ -330,5 +335,5 @@
   "expenseRowSpokenPaidBack": "{payer} 于 {date} 还款 {amount}，{category}",
   "expenseRowSpokenYouPaidBack": "你于 {date} 还款 {amount}，{category}",
   "expenseRowSpokenNoPayer": "{date} {amount}，{category}",
-  "expenseRowSpokenSentenceEnd": "。"
+  "spokenSentenceEnd": "。"
 }

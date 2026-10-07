@@ -11,6 +11,7 @@ import '../services/expense_date_group.dart';
 import '../utils/date_format.dart';
 import '../theme.dart';
 import '../utils/money.dart';
+import '../utils/spoken.dart';
 import 'caption_icon.dart';
 import 'money.dart';
 import 'category_icon.dart';
@@ -194,8 +195,7 @@ class ExpenseTile extends StatelessWidget {
         l10n.expenseRowSpokenPaidBack(name, amount, date, categoryName),
       (false, null, _) => l10n.expenseRowSpokenNoPayer(amount, date, categoryName),
     };
-    final end = l10n.expenseRowSpokenSentenceEnd;
-    final label = [
+    final label = spokenSentences([
       e.title,
       paid,
       if (yours != null)
@@ -204,10 +204,7 @@ class ExpenseTile extends StatelessWidget {
       if (recurring) l10n.expenseRowRecurring,
       if (receipts) l10n.expenseRowHasReceipts,
       if (notes) l10n.expenseRowHasNotes,
-    ]
-        // Not after a title or state that already ends one ("syncing…").
-        .map((sentence) => RegExp(r'[.。…!?！？]$').hasMatch(sentence) ? sentence : '$sentence$end')
-        .join(end == '.' ? ' ' : '');
+    ], l10n.spokenSentenceEnd);
     return ListTile(
       leading: CategoryIconGlyph(category: category),
       title: Semantics(
