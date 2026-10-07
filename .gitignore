@@ -42,7 +42,7 @@ coverage/
 .secrets/
 
 # AI Config
-AGENTS.md
+AGENTS.override.md
 CLAUDE.local.md
 
 # OS files
