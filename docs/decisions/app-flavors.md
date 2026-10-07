@@ -25,12 +25,17 @@ Once the store version was installed on the team's phones, every development bui
    - The old `Runner` scheme is gone, since Flutter builds a flavor's scheme.
    - Swift Package Manager integration and the Flutter prepare step carry over in both schemes.
    - Automatic signing registers the dev id under the existing team.
-4. **Guard rails, so a dev build can't be mistaken for the real app:**
+4. **Signing by flavor, not build mode** ([#220](https://github.com/sharneng/spliit2go/pull/220) review):
+   - Dev is always signed with the debug key, in debug, profile and release, whether or not the upload key is there.
+   - If dev releases took the upload key, switching between `flutter run` and `flutter run --release` would change the signer. Android can't update an app to a different signer, so Flutter would uninstall the dev app with its data.
+   - Only prod releases take the upload key.
+5. **Guard rails, so a dev build can't be mistaken for the real app:**
    - A prod release build fails without the upload key (`android/key.properties`); before, it fell back to the debug key without a word.
-   - Gradle refuses a dev Play bundle before building anything.
+   - Gradle refuses a dev Play bundle. Asked for by name (`flutter build appbundle`), it fails before anything builds. Reached through an aggregate task such as `bundleDebug`, the tasks that make a dev bundle stop before they run, so no `.aab` is written.
+   - `scripts/check_android_flavors`, run in CI, checks the signing and the bundle guard, using a throwaway upload key.
    - If a dev build reaches a store anyway, the store rejects it, because no app is registered under the dev id.
-5. **Group links stay in both apps.** On Android 12 and later, unverified links (#110) open in an app only once "Open by default" is turned on for it. So everyday use turns it on for the prod app only, and dev links are tested with a package-targeted `adb` command, or by pasting the link into the dev app. Taking the handler out of dev would have left no way to test a tapped link there.
-6. **Separate local data, shared server data.**
+6. **Group links stay in both apps.** On Android 12 and later, unverified links (#110) open in an app only once "Open by default" is turned on for it. So everyday use turns it on for the prod app only, and dev links are tested with a package-targeted `adb` command, or by pasting the link into the dev app. Taking the handler out of dev would have left no way to test a tapped link there.
+7. **Separate local data, shared server data.**
    - Each app keeps its own database, receipt cache and settings, and the dev app starts empty.
    - Both apps edit the same groups on the server, so testing in the dev app uses the demo group or test groups (SETUP.md, "Run").
 
@@ -42,7 +47,8 @@ Once the store version was installed on the team's phones, every development bui
 ## Where
 
 - `pubspec.yaml`: the `default-flavor` setting.
-- `android/app/build.gradle.kts`: the flavors and both guards.
+- `android/app/build.gradle.kts`: the flavors, signing by flavor, and both guards.
+- `scripts/check_android_flavors`, run by `.github/workflows/ci.yml`: the Android checks.
 - `ios/Runner.xcodeproj`: the configurations and the `dev`/`prod` schemes.
 - `ios/Runner/Info.plist`: the app names.
 - `.github/workflows/windows-android.yml`: now checks `app-dev-debug.apk`.
