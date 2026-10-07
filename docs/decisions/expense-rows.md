@@ -27,9 +27,9 @@ Two lines, like a group's in the group list (`lib/widgets/expense_list.dart`):
 
 Kenneth asked for the lists to read more quietly, on the group list and the expense list first.
 
-1. **One dimmed color for what supports a row's title:** section headers, row captions (dates, participant counts, who paid) and their icons, and the expense rows' repeat, receipts and notes marks. It's `ColorScheme.secondaryContent`, `onSurfaceVariant` at 75%. At 75% small text stays above WCAG's 4.5:1 on the light cards; about 70% falls below.
+1. **One dimmed color for what supports a row's title:** section headers, row captions (dates, participant counts, who paid) and their icons, and the expense rows' repeat, receipts and notes marks. It's `ColorScheme.secondaryContent`, `onSurfaceVariant` at 80%, so small text keeps WCAG's 4.5:1 on the cards and on the page around them, where the section headers sit. It was first 75%, which Ezra's review of #212 measured at 4.2:1 for the headers on the light page.
 2. **Through the theme**, the list tiles' subtitle style, so captions under row titles on other screens dim too. Kenneth expected that and wanted it.
-3. **What you lent or owe keeps its green or red, at 80% opacity**, so it steps back with the caption without losing its color.
+3. **What you lent or owe keeps its green or red, at 90% opacity**, so it steps back with the caption without losing its color. 80% put its 12-point text at 3.7–3.9:1 on the light cards (#212 review).
 4. The group row's 📎 dims with the row; its waiting state became a strike-through, since a lighter grey was too close to it (see [receipts.md](receipts.md)).
 
 Checked by Kenneth on the iOS simulator and on a Galaxy S25.

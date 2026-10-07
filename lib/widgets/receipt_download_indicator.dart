@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -18,7 +19,7 @@ import 'error_message.dart';
 /// Tapping it shows the progress, with Retry. The diagonal clip of the
 /// expense rows' receipts mark, so the app has one clip (#209).
 ///
-/// In an app bar it's an icon button. In a group row ([link] given) it's
+/// In an app bar it's an icon button. In a group row ([row] given) it's
 /// only the drawing, sized from the row's text so it grows with the text
 /// size, and the row lays a [ReceiptDownloadTapArea] over it: a target
 /// larger than the clip's box that doesn't make the row any taller (#209).
@@ -28,7 +29,7 @@ class ReceiptDownloadIndicator extends StatelessWidget {
     required this.status,
     required this.onRetry,
     this.size = 24,
-    this.link,
+    this.row,
     this.maxRowSize = double.infinity,
   });
 
@@ -39,7 +40,7 @@ class ReceiptDownloadIndicator extends StatelessWidget {
   final double size;
 
   /// Ties a row's clip to its [ReceiptDownloadTapArea].
-  final LayerLink? link;
+  final ReceiptRowClip? row;
 
   /// How large a row's clip may grow, so the title beside it isn't broken
   /// mid-word; never below its size at the usual text size.
@@ -58,8 +59,8 @@ class ReceiptDownloadIndicator extends StatelessWidget {
         valueListenable: status,
         builder: (context, s, _) {
           if (!s.shown) return const SizedBox.shrink();
-          final link = this.link;
-          if (link == null) {
+          final row = this.row;
+          if (row == null) {
             return MergeSemantics(
               child: Semantics(
                 value: _spokenState(context, s),
@@ -74,6 +75,11 @@ class ReceiptDownloadIndicator extends StatelessWidget {
           // The expense rows' marks' size, growing with the text (#209).
           final rowSize =
               titleMarkSize(context).clamp(0.0, maxRowSize.clamp(titleMarkBaseSize, double.infinity));
+          // Told to the tap area after this frame, so its target follows
+          // the clip as drawn, capped or not (#212 review).
+          if (row.size.value != rowSize) {
+            SchedulerBinding.instance.addPostFrameCallback((_) => row.size.value = rowSize);
+          }
           // Centered over the participants icon below rather than ending
           // where it does: the diagonal clip ending flush looked off to the
           // right (Kenneth on a device, #211). Both Lucide drawings sit centered
@@ -84,7 +90,7 @@ class ReceiptDownloadIndicator extends StatelessWidget {
           return Transform.translate(
             offset: Offset(Directionality.of(context) == TextDirection.rtl ? -nudge : nudge, 0),
             child: CompositedTransformTarget(
-              link: link,
+              link: row.link,
               // Read out by the tap area laid over it.
               child: ExcludeSemantics(child: _clip(context, s, rowSize)),
             ),
@@ -103,7 +109,7 @@ class ReceiptDownloadIndicator extends StatelessWidget {
     // is wrong: waiting for Wi-Fi, or for the next refresh (#211).
     final color = s.isError
         ? theme.colorScheme.error
-        : link == null
+        : row == null
             ? null
             : theme.colorScheme.secondaryContent;
     final waiting = !s.isError && !s.complete && !s.running;
@@ -129,16 +135,25 @@ class ReceiptDownloadIndicator extends StatelessWidget {
   }
 }
 
+/// What ties a group row's clip to its tap area: where the clip is drawn
+/// and how large.
+class ReceiptRowClip {
+  final link = LayerLink();
+
+  /// The clip's size as drawn; null until it has been.
+  final size = ValueNotifier<double?>(null);
+}
+
 /// A row's 📎 as a button: a target a [margin] larger than the clip all
-/// round, centered on the [ReceiptDownloadIndicator] it's [link]ed to,
+/// round, centered on the [ReceiptDownloadIndicator] of the same [row],
 /// which reaches past the clip's own box, so the row keeps its height
 /// (#209, #211). Goes in a [Stack] over the whole row; nothing while the
 /// clip isn't shown.
 class ReceiptDownloadTapArea extends StatelessWidget {
   const ReceiptDownloadTapArea(
-      {super.key, required this.link, required this.status, required this.onRetry});
+      {super.key, required this.row, required this.status, required this.onRetry});
 
-  final LayerLink link;
+  final ReceiptRowClip row;
   final ValueListenable<ReceiptDownloadStatus> status;
   final VoidCallback onRetry;
 
@@ -149,18 +164,17 @@ class ReceiptDownloadTapArea extends StatelessWidget {
   /// full-size button.
   static const margin = 7.0;
 
-  /// The target's side at the current text size.
-  static double extentOf(BuildContext context) => titleMarkSize(context) + 2 * margin;
-
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder(
-        valueListenable: status,
-        builder: (context, s, _) {
-          if (!s.shown) return const SizedBox.shrink();
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Listenable.merge([status, row.size]),
+        builder: (context, _) {
+          final s = status.value;
+          final clipSize = row.size.value;
+          if (!s.shown || clipSize == null) return const SizedBox.shrink();
           final label = context.l10n.receiptDownloadsTooltip;
-          final extent = extentOf(context);
+          final extent = clipSize + 2 * margin;
           return CompositedTransformFollower(
-            link: link,
+            link: row.link,
             showWhenUnlinked: false,
             targetAnchor: Alignment.center,
             followerAnchor: Alignment.center,

@@ -144,12 +144,13 @@ void main() {
   });
 
   group('in a group row (#209)', () {
-    final link = LayerLink();
+    late ReceiptRowClip clip;
 
     Future<void> pumpRow(WidgetTester tester, ReceiptDownloadStatus s,
         {double scale = 1, double maxRowSize = double.infinity}) async {
       status = ValueNotifier(s);
       retries = 0;
+      clip = ReceiptRowClip();
       await tester.pumpWidget(MaterialApp(
         locale: const Locale('en'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -163,7 +164,7 @@ void main() {
                 title: Row(children: [
                   const Expanded(child: Text('Banff Trip')),
                   ReceiptDownloadIndicator(
-                      link: link,
+                      row: clip,
                       status: status,
                       onRetry: () => retries++,
                       maxRowSize: maxRowSize),
@@ -174,7 +175,7 @@ void main() {
                   top: 0,
                   left: 0,
                   child: ReceiptDownloadTapArea(
-                      link: link, status: status, onRetry: () => retries++)),
+                      row: clip, status: status, onRetry: () => retries++)),
             ]),
           ),
         ),
@@ -212,6 +213,21 @@ void main() {
       await pumpRow(tester, done, scale: 2);
       expect(tester.getSize(find.byType(InkResponse)),
           const Size.square(titleMarkBaseSize * 2 + 2 * ReceiptDownloadTapArea.margin));
+    });
+
+    // #212 review (Ezra): a clip capped to leave the name room keeps a
+    // target its own size, not the text size's.
+    testWidgets('a capped clip\'s target is the capped clip plus the margin', (tester) async {
+      await pumpRow(tester, done, scale: 3, maxRowSize: 5);
+      final clipBox = tester.getRect(find.byIcon(LucideIcons.paperclip));
+      expect(clipBox.width, titleMarkBaseSize);
+      final target = tester.getRect(find.byType(InkResponse));
+      expect(target.size, const Size.square(titleMarkBaseSize + 2 * ReceiptDownloadTapArea.margin));
+      expect((target.center - clipBox.center).distance, lessThan(0.01));
+
+      await tester.tapAt(clipBox.centerLeft - const Offset(ReceiptDownloadTapArea.margin + 4, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('All receipts available offline'), findsNothing);
     });
 
     testWidgets('one button for a screen reader, with the state', (tester) async {

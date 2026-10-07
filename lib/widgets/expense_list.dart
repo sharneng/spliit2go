@@ -355,7 +355,7 @@ class ExpenseTile extends StatelessWidget {
   Widget _yourAmount(BuildContext context, bool lent, String amount) {
     final colors = SpliitColors.of(context);
     // Dimmed like the rest of the caption (#211).
-    return Opacity(opacity: 0.8, child: Row(mainAxisSize: MainAxisSize.min, children: [
+    return Opacity(opacity: secondaryMoneyOpacity, child: Row(mainAxisSize: MainAxisSize.min, children: [
       CaptionIcon(lent ? LucideIcons.arrowUpRight : LucideIcons.arrowDownLeft,
           color: lent ? colors.moneyPositive : colors.moneyNegative),
       const SizedBox(width: 2),

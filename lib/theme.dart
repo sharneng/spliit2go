@@ -70,9 +70,15 @@ ThemeData _appTheme(Brightness brightness) {
 }
 
 /// How much of [ColorScheme.onSurfaceVariant] less important content
-/// keeps: section headers, row captions, marks (#211). 0.75 keeps small
-/// text above WCAG's 4.5:1 on the light cards; about 0.7 falls below.
-const secondaryContentAlpha = 0.75;
+/// keeps: section headers, row captions, marks (#211). Small text must
+/// stay at WCAG's 4.5:1 on the cards and on the page around them, where
+/// the section headers sit; in light mode the page is the tighter one,
+/// passing from about 0.78 (#212 review).
+const secondaryContentAlpha = 0.8;
+
+/// How much of their color what you lent or owe keeps (#211): their 12pt
+/// text passes 4.5:1 on the light cards from about 0.9 (#212 review).
+const secondaryMoneyOpacity = 0.9;
 
 extension SecondaryContent on ColorScheme {
   /// Less important text and icons, a step back from the content.

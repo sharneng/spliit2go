@@ -84,19 +84,38 @@ void main() {
     }
   });
 
-  // #211: less important content steps back, but stays readable.
-  test('row captions are the dimmed secondary color, still 4.5:1 on the cards', () {
+  // #211: less important content steps back, but stays readable at
+  // WCAG's 4.5:1 wherever it's drawn (#212 review).
+  group('dimmed secondary content keeps 4.5:1', () {
+    double contrast(Color text, Color background) {
+      final a = Color.alphaBlend(text, background).computeLuminance();
+      final b = background.computeLuminance();
+      return ((a > b ? a : b) + 0.05) / ((a > b ? b : a) + 0.05);
+    }
+
     for (final theme in [spliit2goLightTheme, spliit2goDarkTheme]) {
       final scheme = theme.colorScheme;
-      expect(theme.listTileTheme.subtitleTextStyle?.color, scheme.secondaryContent);
       final card = theme.brightness == Brightness.light
           ? scheme.surfaceContainerLowest
           : scheme.surfaceContainerHigh;
-      final text = Color.alphaBlend(scheme.secondaryContent, card);
-      final lighter = [text, card].map((c) => c.computeLuminance()).reduce((a, b) => a > b ? a : b);
-      final darker = [text, card].map((c) => c.computeLuminance()).reduce((a, b) => a < b ? a : b);
-      expect((lighter + 0.05) / (darker + 0.05), greaterThanOrEqualTo(4.5),
-          reason: '${theme.brightness}');
+      final page = theme.scaffoldBackgroundColor;
+      final money = theme.brightness == Brightness.light ? SpliitColors.light : SpliitColors.dark;
+
+      test('${theme.brightness.name}: row captions, on the cards', () {
+        expect(theme.listTileTheme.subtitleTextStyle?.color, scheme.secondaryContent);
+        expect(contrast(scheme.secondaryContent, card), greaterThanOrEqualTo(4.5));
+      });
+
+      test('${theme.brightness.name}: section headers, on the page', () {
+        expect(contrast(scheme.secondaryContent, page), greaterThanOrEqualTo(4.5));
+      });
+
+      test('${theme.brightness.name}: what you lent or owe, on the cards', () {
+        for (final color in [money.moneyPositive, money.moneyNegative]) {
+          final dimmed = color.withValues(alpha: color.a * secondaryMoneyOpacity);
+          expect(contrast(dimmed, card), greaterThanOrEqualTo(4.5), reason: '$color');
+        }
+      });
     }
   });
 
