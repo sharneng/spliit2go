@@ -22,6 +22,8 @@ import 'package:spliit2go/screens/group_screen.dart';
 import 'package:spliit2go/screens/group_settings_screen.dart';
 import 'package:spliit2go/screens/stats_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
+import 'package:spliit2go/theme.dart';
+import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/widgets/category_icon.dart';
 
 void main() {
@@ -630,7 +632,7 @@ void main() {
       participants: [Participant(id: 'p1', name: 'Ken')],
     );
 
-    Future<void> pumpGroupScreen(WidgetTester tester, AppDatabase db) async {
+    Future<void> pumpGroupScreen(WidgetTester tester, AppDatabase db, {ThemeData? theme}) async {
       await db.cacheGroup(cachedGroup);
       final client = SpliitClient(
         baseUrl: 'https://example.test',
@@ -638,6 +640,7 @@ void main() {
       );
       final outbox = Outbox(db, client, groupId: 'g1');
       await tester.pumpWidget(MaterialApp(
+      theme: theme,
       locale: const Locale('en'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -658,6 +661,32 @@ void main() {
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('the bar is a card, its selected tab highlighted as the add button (#215)',
+        (tester) async {
+      for (final theme in [spliit2goLightTheme, spliit2goDarkTheme]) {
+        final db = AppDatabase(NativeDatabase.memory());
+        await pumpGroupScreen(tester, db, theme: theme);
+        final reason = '${theme.brightness}';
+        final bar = tester.widget<Material>(find.ancestor(
+            of: find.byType(NavigationBar),
+            matching: find.byWidgetPredicate((w) => w is Material && w.shape is StadiumBorder)));
+        final card = GroupedSection.cardColor(tester.element(find.byType(NavigationBar)));
+        expect(bar.color, card, reason: reason);
+
+        final add = tester.widget<Material>(find.descendant(
+            of: find.byType(FloatingActionButton), matching: find.byType(Material)));
+        final indicator = tester.widget<NavigationIndicator>(find.byType(NavigationIndicator).first);
+        expect(indicator.color, add.color, reason: reason);
+        final selected = IconTheme.of(tester.element(find.byIcon(Icons.receipt_long)));
+        expect(selected.color, IconTheme.of(tester.element(find.byIcon(Icons.add))).color,
+            reason: reason);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await db.close();
+      }
     });
 
     testWidgets('the list stops above the floating bar (#197, #198 review)', (tester) async {

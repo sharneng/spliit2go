@@ -53,6 +53,11 @@ ThemeData _appTheme(Brightness brightness, {bool highContrast = false}) {
   // lighter than Material's surfaceContainer, so the dimmed section
   // headers on it read as well as the captions on the cards (#211).
   final base = dark ? Colors.black : colorScheme.surfaceContainerLow;
+  // The add buttons' color, which the group screen's selected tab is
+  // highlighted in too, so the bar and the button read as one set
+  // (#215).
+  final addColor = colorScheme.primaryContainer;
+  final onAddColor = colorScheme.onPrimaryContainer;
   return theme.copyWith(
     scaffoldBackgroundColor: base,
     // The bar keeps the page's color when content scrolls under it,
@@ -62,11 +67,22 @@ ThemeData _appTheme(Brightness brightness, {bool highContrast = false}) {
       surfaceTintColor: Colors.transparent,
       scrolledUnderElevation: 0,
     ),
-    navigationBarTheme: NavigationBarThemeData(backgroundColor: base),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: base,
+      indicatorColor: addColor,
+      iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
+          color: states.contains(WidgetState.selected)
+              ? onAddColor
+              : colorScheme.onSurfaceVariant)),
+    ),
     bottomSheetTheme: BottomSheetThemeData(backgroundColor: base),
     // The add buttons are round, as spliit-ios's, not Material's rounded
     // square (#199).
-    floatingActionButtonTheme: const FloatingActionButtonThemeData(shape: CircleBorder()),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      shape: const CircleBorder(),
+      backgroundColor: addColor,
+      foregroundColor: onAddColor,
+    ),
     // Captions under a row's title (dates, counts, who paid) in the
     // dimmed secondary color, a step back from the titles (#211).
     listTileTheme: ListTileThemeData(
