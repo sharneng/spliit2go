@@ -42,3 +42,12 @@ Kenneth asked for the lists to read more quietly, on the group list and the expe
 8. The group row's 📎 dims with the row. Its waiting state became a strike-through, since a lighter grey was too close to the normal clip (see [receipts.md](receipts.md)).
 
 Checked by Kenneth on the iOS simulator, his iPhone and a Galaxy S25.
+
+## Lines between rows (#213)
+
+The lines between a card's rows, everywhere in the app (`GroupedDivider`), follow iOS's Settings and One UI, which Kenneth compared side by side:
+
+- **In light mode, the page's own color**, as if the card were cut through to the page behind it, rather than Material's `outlineVariant` grey.
+- **In dark mode, the card's own color made lighter**, same hue and saturation, until it stands off the card as much as iOS's dark `separator` stands off iOS's card: 1.60:1, `#37443B` on our `#1B211D`. iOS draws its dark lines a little brighter than the card (Kenneth's screenshot); using iOS's grey itself would have broken the scheme's green tint. Kenneth compared it with dimmer versions (1.26:1 and 1.35:1) on the simulator against iOS's Settings and chose this one: in full screenshots its contrast looks the same as iOS's.
+- **One point thick.** In the page's color a single device pixel all but disappears.
+- **Stopping where the rows' content does**, 16 points from the card's end edge, rather than running to the edge. They still start past a row's leading icon, as before.
