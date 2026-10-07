@@ -57,8 +57,12 @@ class Money extends StatelessWidget {
   final MoneySign sign;
   final bool isReimbursement;
 
-  @override
-  Widget build(BuildContext context) {
+  /// The style an amount of [size] is drawn in, for measuring one before
+  /// it's laid out.
+  static TextStyle? styleOf(BuildContext context,
+      {MoneySize size = MoneySize.row,
+      MoneySign sign = MoneySign.none,
+      bool isReimbursement = false}) {
     final theme = Theme.of(context);
     final text = theme.textTheme;
     final base = switch (size) {
@@ -74,16 +78,21 @@ class Money extends StatelessWidget {
       MoneySign.negative => colors.moneyNegative,
       MoneySign.settled => theme.colorScheme.onSurfaceVariant,
     };
+    return base?.copyWith(
+      fontWeight: isReimbursement ? FontWeight.w400 : FontWeight.w600,
+      fontStyle: isReimbursement ? FontStyle.italic : null,
+      fontFeatures: const [FontFeature.tabularFigures()],
+      letterSpacing: -0.2,
+      color: color,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final amount = Text(
       value,
       key: ValueKey(value),
-      style: base?.copyWith(
-        fontWeight: isReimbursement ? FontWeight.w400 : FontWeight.w600,
-        fontStyle: isReimbursement ? FontStyle.italic : null,
-        fontFeatures: const [FontFeature.tabularFigures()],
-        letterSpacing: -0.2,
-        color: color,
-      ),
+      style: styleOf(context, size: size, sign: sign, isReimbursement: isReimbursement),
     );
     // Its own width, where a plain Text would be: at the start of a
     // stretched column, not across it.

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/category.dart';
 import 'package:spliit2go/models/expense.dart';
@@ -198,5 +199,60 @@ void main() {
     await tester.pumpAndSettle();
     expect(spoken(tester), startsWith('Dinner。Jo 于 2026年10月6日 支付 \$30.00，'));
     expect(spoken(tester), endsWith('。你应付 \$10.00。'));
+  });
+
+  // #208 review: at phone widths and large text sizes the second line
+  // must neither overflow nor let what you owe run into the payer. The
+  // test font's glyphs are a full em wide, wider than the phones' fonts,
+  // so this errs on the strict side.
+  group('fits a phone', () {
+    for (final width in [320.0, 360.0, 390.0]) {
+      for (final scale in [1.0, 1.5, 2.0]) {
+        testWidgets('${width.toInt()} wide, text at ${scale}x', (tester) async {
+          tester.view.physicalSize = Size(width * 3, 1600 * 3);
+          tester.view.devicePixelRatio = 3;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(MaterialApp(
+            theme: spliit2goLightTheme,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: MediaQuery.withClampedTextScaling(
+              minScaleFactor: scale,
+              maxScaleFactor: scale,
+              child: Scaffold(
+                body: ExpenseDateList(
+                  expenses: [
+                    expense(paidBy: 'jo', recurrence: RecurrenceRule.monthly, documents: 1),
+                  ],
+                  currency: r'$',
+                  categoryFor: (_) => general,
+                  participants: const [
+                    Participant(id: 'me', name: 'Me'),
+                    Participant(id: 'jo', name: 'Bartholomew Montgomery'),
+                    Participant(id: 'al', name: 'Al'),
+                  ],
+                  activeUserId: 'me',
+                  onTap: (_) {},
+                ),
+              ),
+            ),
+          ));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+
+          final owe = tester.getRect(find.text('\$10.00'));
+          final payer = tester.getRect(find.text('Bartholomew Montgomery'));
+          final row = tester.getRect(find.byType(ExpenseTile));
+          expect(owe.overlaps(payer), isFalse, reason: '$owe overlaps $payer');
+          // At the usual text size there's room for the marks.
+          if (scale == 1.0) expect(find.byIcon(LucideIcons.repeat), findsOneWidget);
+          for (final part in [owe, payer]) {
+            expect(row.contains(part.topLeft) && row.contains(part.bottomRight - const Offset(1, 1)),
+                isTrue,
+                reason: '$part outside $row');
+          }
+        });
+      }
+    }
   });
 }

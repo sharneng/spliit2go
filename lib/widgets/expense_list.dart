@@ -213,45 +213,133 @@ class ExpenseTile extends StatelessWidget {
       title: Semantics(
         label: label,
         excludeSemantics: true,
-        child: Row(children: [
-          Expanded(
-              child: Text(e.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w600))),
-          if (recurring) _Mark(LucideIcons.repeat, mark),
-          if (receipts) _Mark(LucideIcons.paperclip, mark),
-          if (notes) _Mark(LucideIcons.notebookPen, mark),
-          const SizedBox(width: 8),
-          Money(amount, isReimbursement: e.isReimbursement),
-        ]),
+        child: LayoutBuilder(builder: (context, constraints) {
+          final marks = [
+            if (recurring) LucideIcons.repeat,
+            if (receipts) LucideIcons.paperclip,
+            if (notes) LucideIcons.notebookPen,
+          ];
+          // The marks go when they and the amount leave no room for a few
+          // letters of the title (a narrow phone, a large text size, #208);
+          // they're read out and shown in the details all the same. Past
+          // that, the amount shrinks rather than overflow.
+          final titleStyle = DefaultTextStyle.of(context).style.merge(_titleStyle);
+          final fits = _textWidth(context, 'Mmm…', titleStyle) +
+                  marks.length * (4 + _Mark.sizeOf(context)) +
+                  8 +
+                  _textWidth(context, amount,
+                      Money.styleOf(context, isReimbursement: e.isReimbursement)) <=
+              constraints.maxWidth;
+          return Row(children: [
+            // A large text size leaves room for only a few letters a line,
+            // so the title gets two, unless a word of it wouldn't fit a
+            // line and would be broken in the middle.
+            Expanded(
+                child: LayoutBuilder(
+                    builder: (context, title) => Text(e.title,
+                    maxLines: MediaQuery.textScalerOf(context).scale(10) > 13 &&
+                            e.title.split(' ').every((word) =>
+                                _textWidth(context, word, titleStyle) <= title.maxWidth)
+                        ? 2
+                        : 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _titleStyle))),
+            if (fits)
+              for (final icon in marks) _Mark(icon, mark),
+            const SizedBox(width: 8),
+            Flexible(
+                flex: 0,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: constraints.maxWidth - 8),
+                  child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: Money(amount, isReimbursement: e.isReimbursement)),
+                )),
+          ]);
+        }),
       ),
       subtitle: ExcludeSemantics(
         child: Padding(
           padding: const EdgeInsets.only(top: 4),
-          // The payer at most a third of the row, so the rest keeps room.
           child: LayoutBuilder(
-            builder: (context, constraints) => Row(children: [
-              const CaptionIcon(LucideIcons.calendar),
-              const SizedBox(width: 4),
-              // One width for every date, so what follows lines up.
-              Text(shortDate, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
-              const SizedBox(width: 12),
-              Expanded(
-                  child: Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: yours == null ? null : _yourAmount(context, yours.lent, yoursText!))),
-              ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: constraints.maxWidth / 3),
-                  child: _status(context, paidByYou)),
-            ]),
-          ),
+              builder: (context, constraints) =>
+                  _subtitle(context, constraints.maxWidth, shortDate, yours, yoursText, paidByYou)),
         ),
       ),
       // Every row opens its details (issue #90), pending and failed
       // ones included; the sheet decides what each state can do.
       onTap: onTap,
     );
+  }
+
+  static const _titleStyle = TextStyle(fontWeight: FontWeight.w600);
+
+  /// How wide [text] lays out in [style] at the current text size.
+  static double _textWidth(BuildContext context, String text, TextStyle? style) =>
+      (TextPainter(
+              text: TextSpan(text: text, style: style),
+              textDirection: Directionality.of(context),
+              textScaler: MediaQuery.textScalerOf(context),
+              maxLines: 1)
+            ..layout())
+          .width;
+
+  /// The date, what you lent or owe, and who paid (#207). The date and
+  /// your part are measured first and the payer gets what's left, cut
+  /// short; when that leaves no room for even a few letters of the payer
+  /// (a narrow phone, a large text size), the date gets a line of its own
+  /// and your part and the payer share the next (Ezra, #208).
+  Widget _subtitle(BuildContext context, double maxWidth, String shortDate,
+      ({int cents, bool lent})? yours, String? yoursText, bool paidByYou) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final textStyle = DefaultTextStyle.of(context).style;
+    final iconWidth = scaler.scale(textStyle.fontSize ?? 14) * 1.15;
+    double widthOf(String text, TextStyle? style) =>
+        _textWidth(context, text, textStyle.merge(style));
+
+    // Tabular figures, so every date of a locale has one width and what
+    // follows lines up.
+    const dateStyle = TextStyle(fontFeatures: [FontFeature.tabularFigures()]);
+    final dateWidth = iconWidth + 4 + widthOf(shortDate, dateStyle);
+    final yoursWidth = yours == null
+        ? 0.0
+        : 12 +
+            iconWidth +
+            2 +
+            widthOf(yoursText!,
+                Money.styleOf(context, size: MoneySize.support, sign: MoneySign.positive));
+    // A few letters of a name and its dot.
+    final payerMinWidth = 8 + widthOf('Mmm…', null) + 12;
+    final oneLine = dateWidth + yoursWidth + payerMinWidth <= maxWidth;
+
+    final date = Row(mainAxisSize: MainAxisSize.min, children: [
+      const CaptionIcon(LucideIcons.calendar),
+      const SizedBox(width: 4),
+      Flexible(
+          child: Text(shortDate, maxLines: 1, overflow: TextOverflow.ellipsis, style: dateStyle)),
+    ]);
+    final payer = Align(
+        alignment: AlignmentDirectional.centerEnd, child: _status(context, paidByYou));
+    final yoursAmount = yours == null ? null : _yourAmount(context, yours.lent, yoursText!);
+    if (oneLine) {
+      return Row(children: [
+        date,
+        if (yoursAmount != null) ...[const SizedBox(width: 12), yoursAmount],
+        const SizedBox(width: 8),
+        Expanded(child: payer),
+      ]);
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      date,
+      Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Row(children: [
+          if (yoursAmount != null) ...[Flexible(child: yoursAmount), const SizedBox(width: 8)],
+          Expanded(child: payer),
+        ]),
+      ),
+    ]);
   }
 
   /// What you lent (paid, less your share) or owe (your share of what
@@ -273,7 +361,14 @@ class ExpenseTile extends StatelessWidget {
       CaptionIcon(lent ? LucideIcons.arrowUpRight : LucideIcons.arrowDownLeft,
           color: lent ? colors.moneyPositive : colors.moneyNegative),
       const SizedBox(width: 2),
-      Money(amount, size: MoneySize.support, sign: lent ? MoneySign.positive : MoneySign.negative),
+      // Shrunk rather than wrapped when there's no room (#208).
+      Flexible(
+          child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Money(amount,
+                  size: MoneySize.support,
+                  sign: lent ? MoneySign.positive : MoneySign.negative))),
     ]);
   }
 
@@ -323,9 +418,11 @@ class _Mark extends StatelessWidget {
   final IconData icon;
   final Color color;
 
+  static double sizeOf(BuildContext context) => MediaQuery.textScalerOf(context).scale(14);
+
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsetsDirectional.only(start: 4),
-        child: Icon(icon, size: MediaQuery.textScalerOf(context).scale(14), color: color),
+        child: Icon(icon, size: sizeOf(context), color: color),
       );
 }
