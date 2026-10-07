@@ -47,6 +47,9 @@ dev_dependencies:
   build_runner: ^2.4.9
 
 flutter:
+  # The app plain `flutter run`/`flutter build` make: dev, which installs
+  # beside the real app; `--flavor prod` for that one (#219).
+  default-flavor: dev
   assets:
     - assets/spliit2go-logo.png
   uses-material-design: true

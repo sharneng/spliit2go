@@ -10,12 +10,14 @@ plugins {
 
 // The Play upload key (#107), from android/key.properties, which is
 // gitignored with the keystore itself; see SETUP.md, "Release build
-// (Android)". Without the file, release builds are signed with the debug
-// key, so anyone can still build and run one locally.
+// (Android)". Without the file, dev release builds are signed with the
+// debug key, so anyone can still build and run one locally; prod release
+// builds refuse to build (#219).
 val keyProperties = Properties().apply {
     val file = rootProject.file("key.properties")
     if (file.exists()) file.inputStream().use { load(it) }
 }
+val hasUploadKey = !keyProperties.isEmpty
 
 // The commit this build is from, for About (#176): the full hash, with
 // "-dirty" when tracked files have uncommitted changes, or "?" when git
@@ -92,6 +94,23 @@ android {
 
     buildFeatures {
         buildConfig = true
+        resValues = true
+    }
+
+    // Two apps from one codebase (#219): dev, the default (pubspec.yaml's
+    // default-flavor), installs beside prod, the real app for the stores
+    // and for APKs given out. See docs/decisions/app-flavors.md.
+    flavorDimensions += "app"
+    productFlavors {
+        create("dev") {
+            dimension = "app"
+            applicationIdSuffix = ".dev"
+            resValue("string", "app_name", "Spliit2Go Dev")
+        }
+        create("prod") {
+            dimension = "app"
+            resValue("string", "app_name", "Spliit2Go")
+        }
     }
 
     signingConfigs {
@@ -112,6 +131,25 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
+}
+
+// A prod release goes to people: signed with the upload key, never the
+// debug key (#219).
+tasks.matching { it.name == "preProdReleaseBuild" }.configureEach {
+    doFirst {
+        if (!hasUploadKey) {
+            throw GradleException(
+                "A prod release build needs the upload key in android/key.properties; " +
+                    "see SETUP.md, \"Release build (Android)\".")
+        }
+    }
+}
+
+// Only prod goes to Play: a dev bundle could only be uploaded by mistake.
+// Checked against the tasks asked for, before anything is built: the
+// bundle task itself only runs once the bundle is already written.
+if (gradle.startParameter.taskNames.any { it.substringAfterLast(':').startsWith("bundleDev") }) {
+    throw GradleException("Play bundles are prod only: add --flavor prod.")
 }
 
 kotlin {

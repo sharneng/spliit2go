@@ -47,13 +47,24 @@ flutter run
 
 There's no server to configure in code. In the app, tap **+** and paste a group's link from Spliit, e.g. `https://spliit.app/groups/<groupId>` or the same link on your own instance; each group remembers its own server.
 
+This runs the **dev** app, Spliit2Go Dev (see App identity below). It installs beside the real app instead of replacing it, but it edits the same groups on the server, so test with the [demo group](https://spliit.app/groups/Lh7eRlfTFBoa_DVEL7mxO) or a test group of your own, not a real one.
+
 ## App identity
 
-Both platforms use the app id `com.sharneng.spliit2go` and the display name **Spliit2Go**; the version comes from `pubspec.yaml` (`1.0.0+300` is version 1.0.0, build 300; it starts at 300 to stay above #174's builds, which were numbered by commit count). Every store upload needs a higher build number.
+There are two apps, as build flavors (#219, [docs/decisions/app-flavors.md](docs/decisions/app-flavors.md)):
+
+| Flavor | App id, Android and iOS | Name |
+|---|---|---|
+| `dev`, the default | `com.sharneng.spliit2go.dev` | **Spliit2Go Dev** |
+| `prod` | `com.sharneng.spliit2go` | **Spliit2Go** |
+
+Plain `flutter run` and `flutter build`, in any build mode, make the dev app (`default-flavor` in `pubspec.yaml`), so it installs beside the store version on the same phone, with its own data. `prod` is the real app: the store uploads and any APK given to people. Build it by adding `--flavor prod`, or in Xcode with the `prod` scheme. Each app keeps its own local data (groups joined, cached expenses and receipts, settings), so the dev app starts empty.
+
+The version comes from `pubspec.yaml` (`1.0.0+300` is version 1.0.0, build 300; it starts at 300 to stay above #174's builds, which were numbered by commit count). Every store upload needs a higher build number.
 
 Every Android and iOS build also records the commit it was built from, and About shows it after the build number: `Version 1.0.0 (300 · a1b2c3d)`, with `-dirty` when tracked files had uncommitted changes (#176). The copy button next to it copies the version with the full hash, for bug reports. Gradle (`android/app/build.gradle.kts`) and an Xcode build phase (`ios/scripts/write_build_info.sh`) run `git` themselves, so plain `flutter run` and `flutter build`, an IDE, or an archive from Xcode all include it. Without git (a source download, or no `git` on PATH), the build warns and About shows `unknown`. The commit comes from the last Android or iOS build, so a hot reload or hot restart keeps the old one. The stores don't see it: they get `1.0.0 (300)`. Details are in [docs/decisions/build-info.md](docs/decisions/build-info.md).
 
-The id is permanent once the app is published. Before #105 the id was `com.sharneng.spliit2go.spliit2go`: a build from before then is a different app to the phone, so it installs alongside the new one with its own data. Uninstall it, or re-join your groups in the new one.
+The prod id is permanent once the app is published. Before #105 the id was `com.sharneng.spliit2go.spliit2go`: a build from before then is a different app to the phone, so it installs alongside the new one with its own data. Uninstall it, or re-join your groups in the new one.
 
 ### App icon
 
@@ -86,25 +97,27 @@ keyAlias=upload
 keyPassword=<the key password; the same one unless you set another>
 ```
 
-`storeFile` is an absolute path, or relative to `android/`. `key.properties`, `*.jks` and `*.keystore` are gitignored; never commit them. Then build:
+`storeFile` is an absolute path, or relative to `android/`. `key.properties`, `*.jks` and `*.keystore` are gitignored; never commit them. Then build the prod app:
 
 ```
-flutter build appbundle --release
+flutter build appbundle --release --flavor prod
 ```
 
-The bundle is `build/app/outputs/bundle/release/app-release.aab`. Raise the build number in `pubspec.yaml` before each upload (see App identity above). To check which key signed it:
+The bundle is `build/app/outputs/bundle/prodRelease/app-prod-release.aab`. Flutter's own "Built" line can name an older bundle still in `build/` from before #219 (`bundle/release/app-release.aab`); upload the one at this path. Raise the build number in `pubspec.yaml` before each upload (see App identity above). To check which key signed it:
 
 ```
-keytool -printcert -jarfile build/app/outputs/bundle/release/app-release.aab
+keytool -printcert -jarfile build/app/outputs/bundle/prodRelease/app-prod-release.aab
 ```
 
-Without `key.properties`, release builds are signed with the debug key, so anyone can still build and run one (`flutter run --release`); Play rejects those. Release builds shrink the code with R8, which debug builds don't, so try a release build on a phone before uploading: #125's ML Kit crash only happened in release (`android/app/proguard-rules.pro`).
+An APK to give out directly is built the same way, `flutter build apk --release --flavor prod`, at `build/app/outputs/flutter-apk/app-prod-release.apk`.
+
+A prod release build needs `key.properties` and fails without it, so what people install is never signed with the debug key. Dev release builds use the upload key when it's there and the debug key otherwise, so anyone can still build and run one (`flutter run --release`). Bundles are prod only: `flutter build appbundle` without `--flavor prod` fails rather than make a dev bundle that could be uploaded by mistake. Release builds shrink the code with R8, which debug builds don't, so try a release build on a phone before uploading: #125's ML Kit crash only happened in release (`android/app/proguard-rules.pro`).
 
 The target API level comes from Flutter (`flutter.targetSdkVersion`, 36 with Flutter 3.47), which meets Play's rule for new apps and updates from 31 August 2026 (API 36). A newer rule would need it pinned in `android/app/build.gradle.kts`.
 
 ## iOS
 
-The iOS project (`ios/`, added in #79) needs Xcode. It uses the same bundle id as Android, `com.sharneng.spliit2go`, targets iOS 16 or later, and is iPhone only (#105). Plugins are integrated with Swift Package Manager, so there's no `Podfile` and no `pod install` step. Receipt scanning uses Apple's VisionKit and Vision on the iPhone (#155, `ios/Runner/ReceiptScanChannel.swift`) and ML Kit on Android (#125, `ReceiptScanChannel.kt`), each called from the app rather than through pub.dev plugins, which would bring CocoaPods back. To run it on a simulator:
+The iOS project (`ios/`, added in #79) needs Xcode. It uses the same bundle ids as Android, `com.sharneng.spliit2go.dev` for dev and `com.sharneng.spliit2go` for prod (see App identity above), with a `dev` and a `prod` scheme and Debug, Release and Profile configurations for each (`Debug-dev`, `Release-prod`, and so on). It targets iOS 16 or later, and is iPhone only (#105). Plugins are integrated with Swift Package Manager, so there's no `Podfile` and no `pod install` step. Receipt scanning uses Apple's VisionKit and Vision on the iPhone (#155, `ios/Runner/ReceiptScanChannel.swift`) and ML Kit on Android (#125, `ReceiptScanChannel.kt`), each called from the app rather than through pub.dev plugins, which would bring CocoaPods back. To run it on a simulator:
 
 ```
 open -a Simulator
@@ -122,12 +135,13 @@ App Store Connect takes an archive signed by the Apple Developer team (#108). Si
 3. Raise the build number in `pubspec.yaml` (see App identity above), then build:
 
 ```
-flutter build ipa --release
+flutter build ipa --release --flavor prod
 ```
 
+   To archive from Xcode instead, choose the **prod** scheme, then Product → Archive.
 4. Upload `build/ios/ipa/*.ipa` with Apple's Transporter app, or open `build/ios/archive/Runner.xcarchive` in Xcode's Organizer and choose Distribute App. It shows in TestFlight after Apple processes it.
 
-Without a team, `flutter build ipa --no-codesign` still checks that the release archive builds (no `.ipa`).
+Without a team, `flutter build ipa --release --flavor prod --no-codesign` still checks that the release archive builds (no `.ipa`). A dev upload would be refused, since App Store Connect has no app with the dev id.
 
 Already set for upload:
 - **Export compliance:** `ITSAppUsesNonExemptEncryption` is false in `ios/Runner/Info.plist`, since the app only uses the system's HTTPS. App Store Connect doesn't ask about encryption on each upload.
@@ -179,7 +193,13 @@ to use instead. If spliit.app ever publishes the file (it
 could come up in spliit-app/spliit#658), add `android:autoVerify="true"` back to the intent
 filter. Store listings shouldn't promise that links open the app.
 
-To turn the link on or off from the command line, e.g. on an emulator:
+Both the dev and the prod app handle the links (#219). For everyday use turn
+Open by default on for **Spliit2Go** only, so a tapped link goes to the real
+app; test links in the dev app with the package-targeted command below and
+`com.sharneng.spliit2go.dev`, or by pasting the link into it.
+
+To turn the link on or off from the command line, e.g. on an emulator (the prod
+app; add `.dev` to both package names for the dev one):
 
 ```sh
 adb shell pm set-app-links-user-selection --user 0 --package com.sharneng.spliit2go true spliit.app
@@ -187,7 +207,7 @@ adb shell pm get-app-links --user 0 com.sharneng.spliit2go
 ```
 
 For device testing, substitute a real group ID and exercise both a stopped and
-already-running app:
+already-running app (`com.sharneng.spliit2go.dev` for the dev app):
 
 ```sh
 adb shell am start -W -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d 'https://spliit.app/groups/GROUP_ID' com.sharneng.spliit2go
