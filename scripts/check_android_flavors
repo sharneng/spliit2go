@@ -35,10 +35,15 @@ trap 'rm -rf "$TMP"' EXIT
 
 gradle() { (cd android && ./gradlew -q "$@"); }
 
+# The debug keystore is made by the first build that signs with it, and
+# signingReport doesn't make it: on a fresh machine (CI) it would report
+# no fingerprints at all.
+gradle :app:validateSigningDevDebug
+
 # "<variant> <SHA-256>" for each app variant.
 signatures() {
-  gradle :app:signingReport "-Pspliit2go.keyProperties=$1" |
-    awk '/^Variant:/ { v = $2 } /^SHA-256:/ { print v, $2 }' |
+  gradle :app:signingReport "-Pspliit2go.keyProperties=$1" > "$TMP/report.txt"
+  awk '/^Variant:/ { v = $2 } /^SHA-256:/ { print v, $2 }' "$TMP/report.txt" |
     grep -E '^(dev|prod)(Debug|Profile|Release) ' | sort
 }
 
@@ -51,7 +56,8 @@ printf 'storeFile=%s\nstorePassword=checkpass\nkeyAlias=upload\nkeyPassword=chec
 
 signatures "$TMP/none.properties" > "$TMP/without.txt"
 signatures "$TMP/key.properties" > "$TMP/with.txt"
-[ "$(wc -l < "$TMP/without.txt")" -eq 6 ] || fail "expected six variants, got: $(cat "$TMP/without.txt")"
+[ "$(wc -l < "$TMP/without.txt")" -eq 6 ] ||
+  fail "expected six variants, got: $(cat "$TMP/without.txt"); signingReport said: $(cat "$TMP/report.txt")"
 
 dev_keys() { grep '^dev' "$1" | awk '{ print $2 }' | sort -u; }
 [ "$(dev_keys "$TMP/without.txt" | wc -l)" -eq 1 ] || fail "dev variants differ without an upload key"
