@@ -56,11 +56,27 @@ ThemeData _appTheme(Brightness brightness) {
     // The add buttons are round, as spliit-ios's, not Material's rounded
     // square (#199).
     floatingActionButtonTheme: const FloatingActionButtonThemeData(shape: CircleBorder()),
+    // Captions under a row's title (dates, counts, who paid) in the
+    // dimmed secondary color, a step back from the titles (#211).
+    listTileTheme: ListTileThemeData(
+      subtitleTextStyle:
+          theme.textTheme.bodyMedium?.copyWith(color: colorScheme.secondaryContent),
+    ),
     dividerTheme: DividerThemeData(
       color: theme.colorScheme.outlineVariant,
       thickness: 1,
     ),
   );
+}
+
+/// How much of [ColorScheme.onSurfaceVariant] less important content
+/// keeps: section headers, row captions, marks (#211). 0.75 keeps small
+/// text above WCAG's 4.5:1 on the light cards; about 0.7 falls below.
+const secondaryContentAlpha = 0.75;
+
+extension SecondaryContent on ColorScheme {
+  /// Less important text and icons, a step back from the content.
+  Color get secondaryContent => onSurfaceVariant.withValues(alpha: secondaryContentAlpha);
 }
 
 /// The colors spliit-ios adds on top of the system palette (its

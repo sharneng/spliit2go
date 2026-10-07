@@ -43,7 +43,8 @@ Checked on the iOS simulator at the largest accessibility text size, and from th
 - **The second line reflows rather than breaks.** The date and the count are measured first. When they don't fit one line, the date gets a line of its own, never wrapped (shrunk if even that line is too narrow), and the count goes under it at the edge, still under the 📎. Before, the count squeezed the date into "Aug / 28, / 202 / 6".
 - **A screen reader names the date.** The row reads "Banff Trip. Last opened Sep 3, 2026. 3 participants." The date is the one the list is sorted by, which sighted users see in the sort menu and a listener can't; "No expenses yet" when an expense sort has no date to show. Spoken only (Kenneth): on screen a label would crowd the row.
 - **Favorite, Archive and Remove are the row's screen-reader actions** (VoiceOver's actions rotor, TalkBack's actions menu), not only behind the monogram's "Actions for …" menu. Remove still asks first.
-- The 📎's changes (diagonal, its state said, growing with the text size, a 44-point target) are in [receipts.md](receipts.md).
+- The 📎's changes (diagonal, its state said, growing with the text size, a larger target) are in [receipts.md](receipts.md).
+- **Section headers and the rows' second line are dimmed** (#211), with the expense list; see [expense-rows.md](expense-rows.md).
 
 ## Not done / open
 

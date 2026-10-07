@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme.dart';
+
 /// A settings-style section (#180): one rounded card, inset from the
 /// screen's edges, its rows divided by hairlines, with an optional
 /// caption above. iOS's Settings and Samsung's One UI both draw sections
@@ -135,7 +137,7 @@ class GroupedCaption extends StatelessWidget {
               header: true,
               child: Text(caption,
                   style: theme.textTheme.labelLarge
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                      ?.copyWith(color: theme.colorScheme.secondaryContent)),
             )
           else
             const SizedBox.shrink(),

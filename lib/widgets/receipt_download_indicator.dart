@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../l10n/app_localizations.dart';
 import '../l10n/context_l10n.dart';
+import '../theme.dart';
 import '../utils/spoken.dart';
 import '../services/receipt_downloader.dart';
 import 'caption_icon.dart';
@@ -12,15 +13,15 @@ import 'error_message.dart';
 
 /// A favorite group's 📎 (#127, Kenneth): blinking while its receipts
 /// download, red after an error, solid once they're all on this device,
-/// and dimmed while some aren't and nothing is wrong (waiting for Wi-Fi,
-/// or for the next refresh after Clear). Nothing for other groups.
+/// and struck through while some aren't and nothing is wrong (waiting for
+/// Wi-Fi, or for the next refresh after Clear). Nothing for other groups.
 /// Tapping it shows the progress, with Retry. The diagonal clip of the
 /// expense rows' receipts mark, so the app has one clip (#209).
 ///
 /// In an app bar it's an icon button. In a group row ([link] given) it's
 /// only the drawing, sized from the row's text so it grows with the text
-/// size, and the row lays a [ReceiptDownloadTapArea] over it: a full-size
-/// target that doesn't make the row any taller (#209).
+/// size, and the row lays a [ReceiptDownloadTapArea] over it: a target
+/// larger than the clip's box that doesn't make the row any taller (#209).
 class ReceiptDownloadIndicator extends StatelessWidget {
   const ReceiptDownloadIndicator({
     super.key,
@@ -48,6 +49,10 @@ class ReceiptDownloadIndicator extends StatelessWidget {
   @visibleForTesting
   static const blinking = ValueKey('receipt-downloads-blinking');
 
+  /// On the 📎 while it's struck through, waiting.
+  @visibleForTesting
+  static const struckThrough = ValueKey('receipt-downloads-struck-through');
+
   @override
   Widget build(BuildContext context) => ValueListenableBuilder(
         valueListenable: status,
@@ -69,11 +74,13 @@ class ReceiptDownloadIndicator extends StatelessWidget {
           // The expense rows' marks' size, growing with the text (#209).
           final rowSize =
               titleMarkSize(context).clamp(0.0, maxRowSize.clamp(titleMarkBaseSize, double.infinity));
-          // The clip's ink stops short of its box's end; nudged out so it
-          // ends where the participants icon below does (#201 review).
-          final nudge = rowSize * _clipInkGap -
-              captionIconSize(context, captionFontSize: _captionFontSize(context)) *
-                  _participantsInkGap;
+          // Centered over the participants icon below rather than ending
+          // where it does: the diagonal clip ending flush looked off to the
+          // right (Kenneth on a device, #211). Both Lucide drawings sit centered
+          // in their boxes, so the boxes' centers are lined up.
+          final nudge = -(captionIconSize(context, captionFontSize: _captionFontSize(context)) -
+                  rowSize) /
+              2;
           return Transform.translate(
             offset: Offset(Directionality.of(context) == TextDirection.rtl ? -nudge : nudge, 0),
             child: CompositedTransformTarget(
@@ -89,30 +96,44 @@ class ReceiptDownloadIndicator extends StatelessWidget {
   static double? _captionFontSize(BuildContext context) =>
       Theme.of(context).textTheme.bodyMedium?.fontSize;
 
-  // How far the ink stops short of the box's end, per point of size, from
-  // the Lucide drawings: the paperclip ends at 21.2 of 24, the users icon
-  // at 23.
-  static const _clipInkGap = 2.8 / 24;
-  static const _participantsInkGap = 1 / 24;
-
   Widget _clip(BuildContext context, ReceiptDownloadStatus s, double size) {
     final theme = Theme.of(context);
-    // Red: an error. Solid: all here. Dimmed: not all here, and nothing
-    // wrong (waiting for Wi-Fi, or for the next refresh).
+    // Red: an error. Otherwise the clip's own color (dimmed in a row, like
+    // its other marks), struck through while some aren't here and nothing
+    // is wrong: waiting for Wi-Fi, or for the next refresh (#211).
     final color = s.isError
         ? theme.colorScheme.error
-        : s.complete || s.running
+        : link == null
             ? null
-            : theme.disabledColor;
-    final icon = Icon(LucideIcons.paperclip, size: size, color: color);
+            : theme.colorScheme.secondaryContent;
+    final waiting = !s.isError && !s.complete && !s.running;
+    final clip = Icon(LucideIcons.paperclip, size: size, color: color);
+    final icon = waiting
+        // Built where the clip is, so the strike takes the icon color the
+        // app bar's button gives it.
+        ? Builder(key: struckThrough, builder: (context) {
+            final resolved =
+                color ?? IconTheme.of(context).color ?? theme.colorScheme.onSurfaceVariant;
+            // Drawn opaque and dimmed together, so the crossings aren't
+            // darker than the rest.
+            return Opacity(
+              opacity: resolved.a,
+              child: CustomPaint(
+                  foregroundPainter: _StrikeThrough(resolved.withValues(alpha: 1)),
+                  child: Icon(LucideIcons.paperclip,
+                      size: size, color: resolved.withValues(alpha: 1))),
+            );
+          })
+        : clip;
     return s.running ? _Blinking(key: blinking, child: icon) : icon;
   }
 }
 
-/// A row's 📎 as a button: a full-size target centered on the
-/// [ReceiptDownloadIndicator] it's [link]ed to, which reaches past the
-/// clip's own small box, so the row keeps its height (#209). Goes in a
-/// [Stack] over the whole row; nothing while the clip isn't shown.
+/// A row's 📎 as a button: a target a [margin] larger than the clip all
+/// round, centered on the [ReceiptDownloadIndicator] it's [link]ed to,
+/// which reaches past the clip's own box, so the row keeps its height
+/// (#209, #211). Goes in a [Stack] over the whole row; nothing while the
+/// clip isn't shown.
 class ReceiptDownloadTapArea extends StatelessWidget {
   const ReceiptDownloadTapArea(
       {super.key, required this.link, required this.status, required this.onRetry});
@@ -121,8 +142,15 @@ class ReceiptDownloadTapArea extends StatelessWidget {
   final ValueListenable<ReceiptDownloadStatus> status;
   final VoidCallback onRetry;
 
-  /// The smallest target Apple's guidelines allow.
-  static const extent = 44.0;
+  /// How far the target reaches past the clip on each side. Apple's 44
+  /// points reached into the name and the count and caught taps meant to
+  /// open the group (Kenneth on a device, #211), so it's a margin around the
+  /// clip instead, growing with it. The group screen's app bar has the
+  /// full-size button.
+  static const margin = 7.0;
+
+  /// The target's side at the current text size.
+  static double extentOf(BuildContext context) => titleMarkSize(context) + 2 * margin;
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder(
@@ -130,6 +158,7 @@ class ReceiptDownloadTapArea extends StatelessWidget {
         builder: (context, s, _) {
           if (!s.shown) return const SizedBox.shrink();
           final label = context.l10n.receiptDownloadsTooltip;
+          final extent = extentOf(context);
           return CompositedTransformFollower(
             link: link,
             showWhenUnlinked: false,
@@ -145,7 +174,7 @@ class ReceiptDownloadTapArea extends StatelessWidget {
                 child: InkResponse(
                   radius: extent / 2,
                   onTap: () => _showDetails(context, status, onRetry),
-                  child: const SizedBox.square(dimension: extent),
+                  child: SizedBox.square(dimension: extent),
                 ),
               ),
             ),
@@ -247,6 +276,28 @@ class _Details extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The waiting 📎's strike: the opposite diagonal to the clip's, top-left
+/// to bottom-right, in the clip's own color and Lucide's stroke width.
+class _StrikeThrough extends CustomPainter {
+  const _StrikeThrough(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final unit = size.shortestSide / 24;
+    canvas.drawLine(
+        Offset(4 * unit, 4 * unit),
+        Offset(20 * unit, 20 * unit),
+        Paint()
+          ..color = color
+          ..strokeWidth = 2 * unit
+          ..strokeCap = StrokeCap.round);
+  }
+
+  @override
+  bool shouldRepaint(_StrikeThrough old) => old.color != color;
 }
 
 /// Fades its child in and out while mounted.

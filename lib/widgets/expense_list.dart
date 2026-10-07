@@ -164,7 +164,7 @@ class ExpenseTile extends StatelessWidget {
     final e = expense;
     final l10n = context.l10n;
     final locale = context.appLocale;
-    final mark = Theme.of(context).colorScheme.onSurfaceVariant;
+    final mark = Theme.of(context).colorScheme.secondaryContent;
     final amount = formatMoney(e.amountCents, currency, locale: locale);
     // e.date is already a date-only value (year/month/day of the
     // calendar day the expense happened on, not a real instant -- see
@@ -354,7 +354,8 @@ class ExpenseTile extends StatelessWidget {
   /// [_yourPart] as Balances colors it, with an arrow out or in.
   Widget _yourAmount(BuildContext context, bool lent, String amount) {
     final colors = SpliitColors.of(context);
-    return Row(mainAxisSize: MainAxisSize.min, children: [
+    // Dimmed like the rest of the caption (#211).
+    return Opacity(opacity: 0.8, child: Row(mainAxisSize: MainAxisSize.min, children: [
       CaptionIcon(lent ? LucideIcons.arrowUpRight : LucideIcons.arrowDownLeft,
           color: lent ? colors.moneyPositive : colors.moneyNegative),
       const SizedBox(width: 2),
@@ -366,7 +367,7 @@ class ExpenseTile extends StatelessWidget {
               child: Money(amount,
                   size: MoneySize.support,
                   sign: lent ? MoneySign.positive : MoneySign.negative))),
-    ]);
+    ]));
   }
 
   /// Who paid, under the amount; the sync state instead while the

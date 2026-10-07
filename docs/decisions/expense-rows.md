@@ -22,3 +22,14 @@ Two lines, like a group's in the group list (`lib/widgets/expense_list.dart`):
 8. **Each person has a fixed color**, a dot at the row's edge so the dots line up. You are always emerald; the others take the remaining seven colors in alphabetical order by name, starting over after seven. Not the group's order: the server returns participants in no fixed order, which recolored people between refreshes. Adding someone can still move the people after them in the alphabet to the next color.
 9. **A screen reader hears the row as a few short sentences, the title first** (Kenneth's suggestion, reordered). The title comes first because someone moving down the list tells rows apart by it, and most move on after the first few words. Then comes one sentence of who paid what, when, and the category's name (the icon's meaning), then what you lent or owe, the sync state, and the marks: "Dinner. Jo paid $30.00 on Oct 6, 2026, General. You owe $10.00. Repeats. Has receipts. Has notes." A reimbursement reads "paid back", which says what its italic amount shows. Each language has its own sentence templates, since French and Chinese order the words differently, and Chinese ends its sentences with 。. Each sentence ending makes the reader pause. The row stays one button that opens the details.
 10. **On a narrow phone or at a large text size the row reflows rather than overflows** (Ezra's review of #208). The date and what you lent or owe are measured first and the payer gets what's left. When that leaves no room for a few letters of the payer, the date takes a line of its own, with your part and the payer on the next. On the first line the marks drop out before the title shrinks to nothing (they're still read out), and at large text sizes the title gets two lines unless a word of it wouldn't fit one. Amounts shrink rather than wrap.
+
+## Less important content dimmed (#211)
+
+Kenneth asked for the lists to read more quietly, on the group list and the expense list first.
+
+1. **One dimmed color for what supports a row's title:** section headers, row captions (dates, participant counts, who paid) and their icons, and the expense rows' repeat, receipts and notes marks. It's `ColorScheme.secondaryContent`, `onSurfaceVariant` at 75%. At 75% small text stays above WCAG's 4.5:1 on the light cards; about 70% falls below.
+2. **Through the theme**, the list tiles' subtitle style, so captions under row titles on other screens dim too. Kenneth expected that and wanted it.
+3. **What you lent or owe keeps its green or red, at 80% opacity**, so it steps back with the caption without losing its color.
+4. The group row's 📎 dims with the row; its waiting state became a strike-through, since a lighter grey was too close to it (see [receipts.md](receipts.md)).
+
+Checked by Kenneth on the iOS simulator and on a Galaxy S25.

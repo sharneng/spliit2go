@@ -84,6 +84,22 @@ void main() {
     }
   });
 
+  // #211: less important content steps back, but stays readable.
+  test('row captions are the dimmed secondary color, still 4.5:1 on the cards', () {
+    for (final theme in [spliit2goLightTheme, spliit2goDarkTheme]) {
+      final scheme = theme.colorScheme;
+      expect(theme.listTileTheme.subtitleTextStyle?.color, scheme.secondaryContent);
+      final card = theme.brightness == Brightness.light
+          ? scheme.surfaceContainerLowest
+          : scheme.surfaceContainerHigh;
+      final text = Color.alphaBlend(scheme.secondaryContent, card);
+      final lighter = [text, card].map((c) => c.computeLuminance()).reduce((a, b) => a > b ? a : b);
+      final darker = [text, card].map((c) => c.computeLuminance()).reduce((a, b) => a < b ? a : b);
+      expect((lighter + 0.05) / (darker + 0.05), greaterThanOrEqualTo(4.5),
+          reason: '${theme.brightness}');
+    }
+  });
+
   test('each theme carries its own spliit-ios colors (#178)', () {
     expect(spliit2goLightTheme.extension<SpliitColors>(), SpliitColors.light);
     expect(spliit2goDarkTheme.extension<SpliitColors>(), SpliitColors.dark);
