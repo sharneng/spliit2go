@@ -37,7 +37,8 @@ void main() {
   });
 
   // #213: as iOS's and One UI's.
-  testWidgets('the lines are the page\'s color, a point thick, in light and dark', (tester) async {
+  testWidgets('the lines: the page\'s color in light, the card\'s lighter in dark, a point thick',
+      (tester) async {
     for (final theme in [spliit2goLightTheme, spliit2goDarkTheme]) {
       await pump(
         tester,
@@ -49,7 +50,12 @@ void main() {
       );
       await tester.pumpAndSettle();
       final line = tester.widget<Divider>(find.byType(Divider));
-      expect(line.color, theme.scaffoldBackgroundColor, reason: '${theme.brightness}');
+      expect(
+          line.color,
+          theme.brightness == Brightness.light
+              ? theme.scaffoldBackgroundColor
+              : GroupedDivider.darkColor,
+          reason: '${theme.brightness}');
       expect(tester.getSize(find.byType(Divider)).height, 1);
       expect(line.thickness, 1);
     }

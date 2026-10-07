@@ -205,10 +205,12 @@ class GroupedItem extends StatelessWidget {
 /// The line between two rows of a [GroupedSection]. A row widget that
 /// builds several rows itself puts these between them.
 ///
-/// As iOS's and One UI's (#213, Kenneth): in the page's own color, as if
-/// the card were cut through to the page behind it; a point thick, since
-/// in that color a single device pixel all but disappears; and stopping
-/// where the rows' content does rather than running to the card's edge.
+/// As iOS's and One UI's (#213, Kenneth): in light mode the page's own
+/// color, as if the card were cut through to the page behind it; in dark
+/// mode, where the page is black, a line a little brighter than the card,
+/// as iOS draws them ([darkColor]). A point thick, since in those
+/// colors a single device pixel all but disappears; and stopping where
+/// the rows' content does rather than running to the card's edge.
 class GroupedDivider extends StatelessWidget {
   const GroupedDivider({super.key, this.indent = 16, this.endIndent = GroupedSection.inset});
 
@@ -221,13 +223,23 @@ class GroupedDivider extends StatelessWidget {
 
   static const double thickness = 1;
 
+  /// The dark card's own color made lighter, same hue and saturation,
+  /// until it stands off the card as much as iOS's dark `separator`
+  /// stands off iOS's card: #3E3E41 on #1C1C1E, 1.60:1 (#213, Kenneth).
+  static const darkColor = Color(0xff37443B);
+
+  static Color colorOf(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+          ? darkColor
+          : GroupedSection.backgroundColor(context);
+
   @override
   Widget build(BuildContext context) => Divider(
         height: thickness,
         thickness: thickness,
         indent: indent,
         endIndent: endIndent,
-        color: GroupedSection.backgroundColor(context),
+        color: colorOf(context),
       );
 }
 
