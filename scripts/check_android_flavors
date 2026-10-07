@@ -24,9 +24,11 @@ if [ -z "${JAVA_HOME:-}" ] && [ -d "/Applications/Android Studio.app/Contents/jb
 fi
 KEYTOOL="${JAVA_HOME:+$JAVA_HOME/bin/}keytool"
 
-# Gradle reads the Flutter SDK's location from android/local.properties,
-# which only a Flutter build writes.
-[ -f android/local.properties ] || flutter build apk --config-only >/dev/null
+# The Gradle wrapper and android/local.properties (the Flutter SDK's
+# location) aren't in git; a Flutter build writes them.
+if [ ! -x android/gradlew ] || [ ! -f android/local.properties ]; then
+  flutter build apk --config-only >/dev/null
+fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
