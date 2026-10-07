@@ -474,7 +474,8 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
           onChanged: (value) => setState(() => _server = value),
         ),
         if (_server == null) ...[
-          const GroupedDivider(indent: 0),
+          // In the padded cell: its own padding is the inset, both ends.
+          const GroupedDivider(indent: 0, endIndent: 0),
           TextField(
             controller: _otherServerController,
             decoration: InputDecoration(

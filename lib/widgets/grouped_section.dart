@@ -210,13 +210,14 @@ class GroupedItem extends StatelessWidget {
 /// in that color a single device pixel all but disappears; and stopping
 /// where the rows' content does rather than running to the card's edge.
 class GroupedDivider extends StatelessWidget {
-  const GroupedDivider({super.key, this.indent = 16});
+  const GroupedDivider({super.key, this.indent = 16, this.endIndent = GroupedSection.inset});
 
   final double indent;
 
-  /// Where it stops, from the card's end edge: where a card's rows end
-  /// their content (see [_CardRows]).
-  static const double endIndent = GroupedSection.inset;
+  /// Where it stops, from the card's end edge: by default where a card's
+  /// rows end their content (see [_CardRows]); 0 in a cell that pads its
+  /// content itself (#214 review).
+  final double endIndent;
 
   static const double thickness = 1;
 

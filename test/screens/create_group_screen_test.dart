@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -204,6 +205,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Other server').last);
     await tester.pumpAndSettle();
+
+    // Its line ends where the fields do, not a second inset short (#214
+    // review).
+    final address = find.widgetWithText(TextField, 'Server address');
+    final line = find.descendant(
+        of: find.ancestor(of: address, matching: find.byType(Column)).first,
+        matching: find.byType(GroupedDivider));
+    final lineEnd = tester.getRect(line).right - tester.widget<Divider>(
+        find.descendant(of: line, matching: find.byType(Divider))).endIndent!;
+    expect(lineEnd, tester.getRect(address).right);
 
     await tester.enterText(find.widgetWithText(TextField, 'Server address'), 'not a server');
     await tapCreate(tester);
