@@ -90,6 +90,8 @@ class Spliit2GoApp extends StatelessWidget {
           locale: settings.locale,
           theme: spliit2goLightTheme,
           darkTheme: spliit2goDarkTheme,
+          highContrastTheme: spliit2goLightHighContrastTheme,
+          highContrastDarkTheme: spliit2goDarkHighContrastTheme,
           themeMode: settings.themeMode,
           home: home ?? const AppRoot(),
           // Issue #24: modern Android (edge-to-edge is mandatory starting

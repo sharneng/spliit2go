@@ -47,10 +47,11 @@ void main() {
       expect(theme.navigationBarTheme.backgroundColor, base, reason: reason);
       expect(theme.bottomSheetTheme.backgroundColor, base, reason: reason);
     }
-    // Grouped cards stand off it: lighter in light mode, a step up in dark.
+    // Grouped cards stand off it: lighter in light mode, a step up from
+    // black in dark (#211).
     expect(spliit2goLightTheme.scaffoldBackgroundColor,
-        spliit2goLightTheme.colorScheme.surfaceContainer);
-    expect(spliit2goDarkTheme.scaffoldBackgroundColor, spliit2goDarkTheme.colorScheme.surface);
+        spliit2goLightTheme.colorScheme.surfaceContainerLow);
+    expect(spliit2goDarkTheme.scaffoldBackgroundColor, Colors.black);
   });
 
   testWidgets("the app bar keeps the page's color when content scrolls under it (#188)",
@@ -82,6 +83,41 @@ void main() {
     for (final theme in [spliit2goLightTheme, spliit2goDarkTheme]) {
       expect(theme.floatingActionButtonTheme.shape, const CircleBorder());
     }
+  });
+
+  // #211: less important content steps back as far as Apple's
+  // secondaryLabel, and comes forward with Increase Contrast.
+  group('secondary content', () {
+    test("Apple's secondaryLabel dimming: 60% of the light scheme's grey, #EBEBF5 in dark", () {
+      final light = SpliitColors.light.secondaryContent;
+      expect(light.withValues(alpha: 1), spliit2goLightTheme.colorScheme.onSurfaceVariant);
+      expect(light.a, closeTo(0.6, 0.01));
+      expect(SpliitColors.dark.secondaryContent, const Color(0x99EBEBF5));
+    });
+
+    test('row captions take it from the theme', () {
+      for (final theme in [
+        spliit2goLightTheme,
+        spliit2goDarkTheme,
+        spliit2goLightHighContrastTheme,
+        spliit2goDarkHighContrastTheme,
+      ]) {
+        expect(theme.listTileTheme.subtitleTextStyle?.color,
+            theme.extension<SpliitColors>()!.secondaryContent);
+      }
+    });
+
+    test('with Increase Contrast: undimmed, the schemes\' own grey, and lent/owe solid', () {
+      for (final (theme, normal) in [
+        (spliit2goLightHighContrastTheme, spliit2goLightTheme),
+        (spliit2goDarkHighContrastTheme, spliit2goDarkTheme),
+      ]) {
+        final colors = theme.extension<SpliitColors>()!;
+        expect(colors.secondaryContent, normal.colorScheme.onSurfaceVariant);
+        expect(colors.secondaryMoneyOpacity, 1);
+        expect(theme.scaffoldBackgroundColor, normal.scaffoldBackgroundColor);
+      }
+    });
   });
 
   test('each theme carries its own spliit-ios colors (#178)', () {

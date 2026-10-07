@@ -456,8 +456,8 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
       if (spokenDate != null) spokenDate,
       context.l10n.groupListParticipantCount(count),
     ], context.l10n.spokenSentenceEnd);
-    // The clip and its full-size tap area, laid over the row (#209).
-    final clip = LayerLink();
+    // The clip and its tap area, laid over the row (#209).
+    final clip = ReceiptRowClip();
     return GroupRowActions(
       // Guarantees a fresh widget identity whenever onDismissed runs:
       key: ValueKey('${row.id}_${_dismissVersions[row.id] ?? 0}'),
@@ -514,7 +514,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
                 Expanded(child: Text(row.name, style: _nameStyle)),
                 // A favorite's receipts offline (#127).
                 ReceiptDownloadIndicator(
-                  link: clip,
+                  row: clip,
                   status: downloads.status(row.id),
                   onRetry: retryDownloads,
                   maxRowSize: constraints.maxWidth - longestWord - 1,
@@ -539,7 +539,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
           top: 0,
           left: 0,
           child: ReceiptDownloadTapArea(
-              link: clip, status: downloads.status(row.id), onRetry: retryDownloads),
+              row: clip, status: downloads.status(row.id), onRetry: retryDownloads),
         ),
       ]),
     );

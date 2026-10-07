@@ -83,14 +83,17 @@ void main() {
     expect(retries, 1);
   });
 
-  testWidgets('waiting for Wi-Fi isn\'t an error: dimmed, not red, and it says why', (tester) async {
+  testWidgets('waiting for Wi-Fi isn\'t an error: struck through, not red, and it says why',
+      (tester) async {
     await pump(
         tester,
         const ReceiptDownloadStatus(
             shown: true, total: 5, available: 0, problem: ReceiptDownloadProblem.waitingForWifi));
 
-    // Dimmed: not red, and not solid either, since they aren't all here.
-    expect(clip(tester).color, Theme.of(tester.element(find.byType(Scaffold))).disabledColor);
+    // Struck through: not red, and not plain either, since they aren't all here.
+    expect(clip(tester).color,
+        isNot(Theme.of(tester.element(find.byType(Scaffold))).colorScheme.error));
+    expect(find.byKey(ReceiptDownloadIndicator.struckThrough), findsOneWidget);
     await tester.tap(find.byIcon(LucideIcons.paperclip));
     await tester.pumpAndSettle();
     expect(find.text('Waiting for Wi-Fi: nothing downloads over mobile data.'), findsOneWidget);
@@ -141,12 +144,13 @@ void main() {
   });
 
   group('in a group row (#209)', () {
-    final link = LayerLink();
+    late ReceiptRowClip clip;
 
     Future<void> pumpRow(WidgetTester tester, ReceiptDownloadStatus s,
         {double scale = 1, double maxRowSize = double.infinity}) async {
       status = ValueNotifier(s);
       retries = 0;
+      clip = ReceiptRowClip();
       await tester.pumpWidget(MaterialApp(
         locale: const Locale('en'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -160,7 +164,7 @@ void main() {
                 title: Row(children: [
                   const Expanded(child: Text('Banff Trip')),
                   ReceiptDownloadIndicator(
-                      link: link,
+                      row: clip,
                       status: status,
                       onRetry: () => retries++,
                       maxRowSize: maxRowSize),
@@ -171,7 +175,7 @@ void main() {
                   top: 0,
                   left: 0,
                   child: ReceiptDownloadTapArea(
-                      link: link, status: status, onRetry: () => retries++)),
+                      row: clip, status: status, onRetry: () => retries++)),
             ]),
           ),
         ),
@@ -181,19 +185,49 @@ void main() {
 
     const done = ReceiptDownloadStatus(shown: true, total: 3, available: 3);
 
-    testWidgets('a full-size target centered on the clip, the row no taller', (tester) async {
+    testWidgets('a target a margin past the clip, centered on it, the row no taller',
+        (tester) async {
       await pumpRow(tester, done);
       final clipBox = tester.getRect(find.byIcon(LucideIcons.paperclip));
       final target = tester.getRect(find.byType(InkResponse));
-      expect(target.size, const Size.square(ReceiptDownloadTapArea.extent));
+      expect(target.size,
+          const Size.square(titleMarkBaseSize + 2 * ReceiptDownloadTapArea.margin));
       expect((target.center - clipBox.center).distance, lessThan(0.01));
-      expect(clipBox.height, lessThan(ReceiptDownloadTapArea.extent / 2));
       expect(tester.getSize(find.byType(ListTile)).height, 72);
 
-      // A tap well outside the clip's own box, inside the target.
-      await tester.tapAt(clipBox.center + const Offset(0, ReceiptDownloadTapArea.extent / 2 - 2));
+      // A tap past the clip's own box, inside the margin.
+      await tester.tapAt(clipBox.bottomCenter + const Offset(0, ReceiptDownloadTapArea.margin - 2));
       await tester.pumpAndSettle();
       expect(find.text('All receipts available offline'), findsOneWidget);
+    });
+
+    testWidgets('a tap past the margin isn\'t the clip\'s', (tester) async {
+      await pumpRow(tester, done);
+      final clipBox = tester.getRect(find.byIcon(LucideIcons.paperclip));
+      await tester.tapAt(clipBox.bottomCenter + const Offset(0, ReceiptDownloadTapArea.margin + 4));
+      await tester.pumpAndSettle();
+      expect(find.text('All receipts available offline'), findsNothing);
+    });
+
+    testWidgets('the target grows with the text size', (tester) async {
+      await pumpRow(tester, done, scale: 2);
+      expect(tester.getSize(find.byType(InkResponse)),
+          const Size.square(titleMarkBaseSize * 2 + 2 * ReceiptDownloadTapArea.margin));
+    });
+
+    // #212 review (Ezra): a clip capped to leave the name room keeps a
+    // target its own size, not the text size's.
+    testWidgets('a capped clip\'s target is the capped clip plus the margin', (tester) async {
+      await pumpRow(tester, done, scale: 3, maxRowSize: 5);
+      final clipBox = tester.getRect(find.byIcon(LucideIcons.paperclip));
+      expect(clipBox.width, titleMarkBaseSize);
+      final target = tester.getRect(find.byType(InkResponse));
+      expect(target.size, const Size.square(titleMarkBaseSize + 2 * ReceiptDownloadTapArea.margin));
+      expect((target.center - clipBox.center).distance, lessThan(0.01));
+
+      await tester.tapAt(clipBox.centerLeft - const Offset(ReceiptDownloadTapArea.margin + 4, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('All receipts available offline'), findsNothing);
     });
 
     testWidgets('one button for a screen reader, with the state', (tester) async {

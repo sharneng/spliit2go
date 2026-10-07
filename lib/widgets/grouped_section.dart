@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme.dart';
+
 /// A settings-style section (#180): one rounded card, inset from the
 /// screen's edges, its rows divided by hairlines, with an optional
 /// caption above. iOS's Settings and Samsung's One UI both draw sections
@@ -52,7 +54,8 @@ class GroupedSection extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return scheme.brightness == Brightness.light
         ? scheme.surfaceContainerLowest
-        : scheme.surfaceContainerHigh;
+        // A step off the black page, like iOS's #1C1C1E (#211).
+        : scheme.surfaceContainer;
   }
 
   /// The page behind the cards: every screen's, from the theme.
@@ -133,9 +136,11 @@ class GroupedCaption extends StatelessWidget {
           if (caption != null)
             Semantics(
               header: true,
+              // The rows' title size, bold, so a header still reads as
+              // one in the dimmed color (#211, Kenneth).
               child: Text(caption,
-                  style: theme.textTheme.labelLarge
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w700, color: SpliitColors.of(context).secondaryContent)),
             )
           else
             const SizedBox.shrink(),
