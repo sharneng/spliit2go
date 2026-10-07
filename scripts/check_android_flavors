@@ -1,0 +1,81 @@
+#!/bin/sh
+# Checks the Android side of the dev and prod apps (#219, #220 review),
+# which `flutter test` can't see:
+#
+# 1. Every dev variant (debug, profile, release) is signed with the same
+#    key, with or without an upload key, so switching build modes updates
+#    the installed dev app instead of replacing it and its data. Only a
+#    prod release takes the upload key.
+# 2. No dev Play bundle is written, even through an aggregate task
+#    (`bundleDebug`).
+#
+# Uses a throwaway upload key in a temporary directory, never
+# android/key.properties. Needs Java 17 (JAVA_HOME, or Android Studio's on
+# a Mac) and the generated Dart code (SETUP.md, step 4). Run in CI by
+# .github/workflows/ci.yml.
+set -eu
+
+REPO_ROOT="$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+if [ -z "${JAVA_HOME:-}" ] && [ -d "/Applications/Android Studio.app/Contents/jbr/Contents/Home" ]; then
+  JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+  export JAVA_HOME
+fi
+KEYTOOL="${JAVA_HOME:+$JAVA_HOME/bin/}keytool"
+
+# The Gradle wrapper and android/local.properties (the Flutter SDK's
+# location) aren't in git; a Flutter build writes them.
+if [ ! -x android/gradlew ] || [ ! -f android/local.properties ]; then
+  flutter build apk --config-only >/dev/null
+fi
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+gradle() { (cd android && ./gradlew -q "$@"); }
+
+# The debug keystore is made by the first build that signs with it, and
+# signingReport doesn't make it: on a fresh machine (CI) it would report
+# no fingerprints at all.
+gradle :app:validateSigningDevDebug
+
+# "<variant> <SHA-256>" for each app variant.
+signatures() {
+  gradle :app:signingReport "-Pspliit2go.keyProperties=$1" > "$TMP/report.txt"
+  awk '/^Variant:/ { v = $2 } /^SHA-256:/ { print v, $2 }' "$TMP/report.txt" |
+    grep -E '^(dev|prod)(Debug|Profile|Release) ' | sort
+}
+
+fail() { echo "FAIL: $*" >&2; exit 1; }
+
+"$KEYTOOL" -genkeypair -keystore "$TMP/upload.jks" -storepass checkpass -keypass checkpass \
+  -alias upload -keyalg RSA -keysize 2048 -validity 1 -dname CN=check >/dev/null 2>&1
+printf 'storeFile=%s\nstorePassword=checkpass\nkeyAlias=upload\nkeyPassword=checkpass\n' \
+  "$TMP/upload.jks" > "$TMP/key.properties"
+
+signatures "$TMP/none.properties" > "$TMP/without.txt"
+signatures "$TMP/key.properties" > "$TMP/with.txt"
+[ "$(wc -l < "$TMP/without.txt")" -eq 6 ] ||
+  fail "expected six variants, got: $(cat "$TMP/without.txt"); signingReport said: $(cat "$TMP/report.txt")"
+
+dev_keys() { grep '^dev' "$1" | awk '{ print $2 }' | sort -u; }
+[ "$(dev_keys "$TMP/without.txt" | wc -l)" -eq 1 ] || fail "dev variants differ without an upload key"
+[ "$(dev_keys "$TMP/with.txt" | wc -l)" -eq 1 ] || fail "dev variants differ with an upload key"
+[ "$(dev_keys "$TMP/without.txt")" = "$(dev_keys "$TMP/with.txt")" ] ||
+  fail "the upload key changed the dev apps' signer"
+debug_key="$(dev_keys "$TMP/without.txt")"
+prod_release="$(awk '$1 == "prodRelease" { print $2 }' "$TMP/with.txt")"
+[ "$prod_release" != "$debug_key" ] || fail "prod release isn't signed with the upload key"
+echo "ok: dev is signed with one key in every mode, with or without an upload key; prod release takes the upload key"
+
+rm -rf build/app/outputs/bundle
+if gradle :app:bundleDebug "-Pspliit2go.keyProperties=$TMP/none.properties" > "$TMP/bundle.log" 2>&1; then
+  fail "bundleDebug succeeded, though it includes a dev bundle"
+fi
+grep -q "Play bundles are prod only" "$TMP/bundle.log" ||
+  fail "bundleDebug failed for another reason: $(tail -20 "$TMP/bundle.log")"
+if [ -n "$(find build/app/outputs -name 'app-dev-*.aab' 2>/dev/null)" ]; then
+  fail "a dev bundle was written: $(find build/app/outputs -name 'app-dev-*.aab')"
+fi
+echo "ok: bundleDebug is refused before any dev bundle is written"

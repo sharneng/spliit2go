@@ -39,7 +39,7 @@ jobs:
         run: |
           sha="$(git rev-parse HEAD)"
           echo "HEAD is $sha"
-          unzip -p build/app/outputs/flutter-apk/app-debug.apk 'classes*.dex' > dex.bin
+          unzip -p build/app/outputs/flutter-apk/app-dev-debug.apk 'classes*.dex' > dex.bin
           if grep -a -q "$sha" dex.bin; then
             echo "Found $sha in the APK."
           else
