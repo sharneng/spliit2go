@@ -47,10 +47,11 @@ void main() {
       expect(theme.navigationBarTheme.backgroundColor, base, reason: reason);
       expect(theme.bottomSheetTheme.backgroundColor, base, reason: reason);
     }
-    // Grouped cards stand off it: lighter in light mode, a step up in dark.
+    // Grouped cards stand off it: lighter in light mode, a step up from
+    // black in dark (#211).
     expect(spliit2goLightTheme.scaffoldBackgroundColor,
-        spliit2goLightTheme.colorScheme.surfaceContainer);
-    expect(spliit2goDarkTheme.scaffoldBackgroundColor, spliit2goDarkTheme.colorScheme.surface);
+        spliit2goLightTheme.colorScheme.surfaceContainerLow);
+    expect(spliit2goDarkTheme.scaffoldBackgroundColor, Colors.black);
   });
 
   testWidgets("the app bar keeps the page's color when content scrolls under it (#188)",
@@ -84,39 +85,39 @@ void main() {
     }
   });
 
-  // #211: less important content steps back, but stays readable at
-  // WCAG's 4.5:1 wherever it's drawn (#212 review).
-  group('dimmed secondary content keeps 4.5:1', () {
-    double contrast(Color text, Color background) {
-      final a = Color.alphaBlend(text, background).computeLuminance();
-      final b = background.computeLuminance();
-      return ((a > b ? a : b) + 0.05) / ((a > b ? b : a) + 0.05);
-    }
+  // #211: less important content steps back as far as Apple's
+  // secondaryLabel, and comes forward with Increase Contrast.
+  group('secondary content', () {
+    test("Apple's secondaryLabel dimming: 60% of the light scheme's grey, #EBEBF5 in dark", () {
+      final light = SpliitColors.light.secondaryContent;
+      expect(light.withValues(alpha: 1), spliit2goLightTheme.colorScheme.onSurfaceVariant);
+      expect(light.a, closeTo(0.6, 0.01));
+      expect(SpliitColors.dark.secondaryContent, const Color(0x99EBEBF5));
+    });
 
-    for (final theme in [spliit2goLightTheme, spliit2goDarkTheme]) {
-      final scheme = theme.colorScheme;
-      final card = theme.brightness == Brightness.light
-          ? scheme.surfaceContainerLowest
-          : scheme.surfaceContainerHigh;
-      final page = theme.scaffoldBackgroundColor;
-      final money = theme.brightness == Brightness.light ? SpliitColors.light : SpliitColors.dark;
+    test('row captions take it from the theme', () {
+      for (final theme in [
+        spliit2goLightTheme,
+        spliit2goDarkTheme,
+        spliit2goLightHighContrastTheme,
+        spliit2goDarkHighContrastTheme,
+      ]) {
+        expect(theme.listTileTheme.subtitleTextStyle?.color,
+            theme.extension<SpliitColors>()!.secondaryContent);
+      }
+    });
 
-      test('${theme.brightness.name}: row captions, on the cards', () {
-        expect(theme.listTileTheme.subtitleTextStyle?.color, scheme.secondaryContent);
-        expect(contrast(scheme.secondaryContent, card), greaterThanOrEqualTo(4.5));
-      });
-
-      test('${theme.brightness.name}: section headers, on the page', () {
-        expect(contrast(scheme.secondaryContent, page), greaterThanOrEqualTo(4.5));
-      });
-
-      test('${theme.brightness.name}: what you lent or owe, on the cards', () {
-        for (final color in [money.moneyPositive, money.moneyNegative]) {
-          final dimmed = color.withValues(alpha: color.a * secondaryMoneyOpacity);
-          expect(contrast(dimmed, card), greaterThanOrEqualTo(4.5), reason: '$color');
-        }
-      });
-    }
+    test('with Increase Contrast: undimmed, the schemes\' own grey, and lent/owe solid', () {
+      for (final (theme, normal) in [
+        (spliit2goLightHighContrastTheme, spliit2goLightTheme),
+        (spliit2goDarkHighContrastTheme, spliit2goDarkTheme),
+      ]) {
+        final colors = theme.extension<SpliitColors>()!;
+        expect(colors.secondaryContent, normal.colorScheme.onSurfaceVariant);
+        expect(colors.secondaryMoneyOpacity, 1);
+        expect(theme.scaffoldBackgroundColor, normal.scaffoldBackgroundColor);
+      }
+    });
   });
 
   test('each theme carries its own spliit-ios colors (#178)', () {

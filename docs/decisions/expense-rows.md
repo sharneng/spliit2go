@@ -27,9 +27,18 @@ Two lines, like a group's in the group list (`lib/widgets/expense_list.dart`):
 
 Kenneth asked for the lists to read more quietly, on the group list and the expense list first.
 
-1. **One dimmed color for what supports a row's title:** section headers, row captions (dates, participant counts, who paid) and their icons, and the expense rows' repeat, receipts and notes marks. It's `ColorScheme.secondaryContent`, `onSurfaceVariant` at 80%, so small text keeps WCAG's 4.5:1 on the cards and on the page around them, where the section headers sit. It was first 75%, which Ezra's review of #212 measured at 4.2:1 for the headers on the light page.
-2. **Through the theme**, the list tiles' subtitle style, so captions under row titles on other screens dim too. Kenneth expected that and wanted it.
-3. **What you lent or owe keeps its green or red, at 90% opacity**, so it steps back with the caption without losing its color. 80% put its 12-point text at 3.7–3.9:1 on the light cards (#212 review).
-4. The group row's 📎 dims with the row; its waiting state became a strike-through, since a lighter grey was too close to it (see [receipts.md](receipts.md)).
+1. **One dimmed color for what supports a row's title:** section headers, row captions (dates, participant counts, who paid) and their icons, the expense rows' repeat, receipts and notes marks, and the group row's 📎. It's `SpliitColors.secondaryContent`.
+2. **As dim as Apple's `secondaryLabel`, not WCAG AA's 4.5:1.** Light mode is the scheme's `onSurfaceVariant` at 60%; dark mode is Apple's dark `secondaryLabel` exactly, `#EBEBF5` at 60%. How we got there:
+   - We first held it to 4.5:1. Ezra's review of #212 measured section headers at 4.2:1 on the light page and lent/owe at 3.7–3.9:1, so we went to 80% and 90%.
+   - Kenneth found that louder than iOS's own Settings next to it. Apple's secondary text measures 3.3–3.4:1 in light mode, so it doesn't meet 4.5:1 either.
+   - WCAG 2's ratio also misjudges dark mode. APCA, the perceptual model proposed for WCAG 3, scores the dimmed dark text far lower than WCAG 2 does. Even so, Apple's dark secondary text reads well on a phone at night at about Lc 41–45. Kenneth's eye agreed with Apple rather than with either formula.
+3. **With the system's Increase Contrast it's undimmed** (iOS's accessibility setting, via `MaterialApp.highContrastTheme`/`highContrastDarkTheme`): the schemes' own `onSurfaceVariant`, and lent/owe solid. That's how Apple serves people who need more contrast, rather than making everyone's default louder.
+4. **Through the theme**, the list tiles' subtitle style, so captions under row titles on other screens dim too. Kenneth expected that and wanted it.
+5. **Section headers are the rows' title size, bold** (16 points, weight 700), so a header still reads as one in the dimmed color.
+6. **What you lent or owe keeps its green or red, at 90% opacity**, so it steps back with the caption without losing its color. Colored text reads more easily than grey at the same contrast (Kenneth: traffic-light colors).
+7. **Backgrounds:**
+   - Light mode's page is `surfaceContainerLow`, a step lighter than before, so the dimmed headers on it read about as well as the captions on the white cards.
+   - Dark mode's page is black, like iOS's grouped screens, with cards at `surfaceContainer` (`#1B211D`, close to iOS's `#1C1C1E`).
+8. The group row's 📎 dims with the row. Its waiting state became a strike-through, since a lighter grey was too close to the normal clip (see [receipts.md](receipts.md)).
 
-Checked by Kenneth on the iOS simulator and on a Galaxy S25.
+Checked by Kenneth on the iOS simulator, his iPhone and a Galaxy S25.

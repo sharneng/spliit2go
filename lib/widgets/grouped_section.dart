@@ -54,7 +54,8 @@ class GroupedSection extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return scheme.brightness == Brightness.light
         ? scheme.surfaceContainerLowest
-        : scheme.surfaceContainerHigh;
+        // A step off the black page, like iOS's #1C1C1E (#211).
+        : scheme.surfaceContainer;
   }
 
   /// The page behind the cards: every screen's, from the theme.
@@ -135,9 +136,11 @@ class GroupedCaption extends StatelessWidget {
           if (caption != null)
             Semantics(
               header: true,
+              // The rows' title size, bold, so a header still reads as
+              // one in the dimmed color (#211, Kenneth).
               child: Text(caption,
-                  style: theme.textTheme.labelLarge
-                      ?.copyWith(color: theme.colorScheme.secondaryContent)),
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w700, color: SpliitColors.of(context).secondaryContent)),
             )
           else
             const SizedBox.shrink(),

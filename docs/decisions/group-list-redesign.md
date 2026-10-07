@@ -44,7 +44,7 @@ Checked on the iOS simulator at the largest accessibility text size, and from th
 - **A screen reader names the date.** The row reads "Banff Trip. Last opened Sep 3, 2026. 3 participants." The date is the one the list is sorted by, which sighted users see in the sort menu and a listener can't; "No expenses yet" when an expense sort has no date to show. Spoken only (Kenneth): on screen a label would crowd the row.
 - **Favorite, Archive and Remove are the row's screen-reader actions** (VoiceOver's actions rotor, TalkBack's actions menu), not only behind the monogram's "Actions for …" menu. Remove still asks first.
 - The 📎's changes (diagonal, its state said, growing with the text size, a larger target) are in [receipts.md](receipts.md).
-- **Section headers and the rows' second line are dimmed** (#211), with the expense list; see [expense-rows.md](expense-rows.md).
+- **Section headers and the rows' second line are dimmed** (#211), with the expense list, and the headers are the rows' title size, bold; the page is black in dark mode. See [expense-rows.md](expense-rows.md).
 
 ## Not done / open
 

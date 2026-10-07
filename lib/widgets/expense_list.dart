@@ -164,7 +164,7 @@ class ExpenseTile extends StatelessWidget {
     final e = expense;
     final l10n = context.l10n;
     final locale = context.appLocale;
-    final mark = Theme.of(context).colorScheme.secondaryContent;
+    final mark = SpliitColors.of(context).secondaryContent;
     final amount = formatMoney(e.amountCents, currency, locale: locale);
     // e.date is already a date-only value (year/month/day of the
     // calendar day the expense happened on, not a real instant -- see
@@ -355,7 +355,7 @@ class ExpenseTile extends StatelessWidget {
   Widget _yourAmount(BuildContext context, bool lent, String amount) {
     final colors = SpliitColors.of(context);
     // Dimmed like the rest of the caption (#211).
-    return Opacity(opacity: secondaryMoneyOpacity, child: Row(mainAxisSize: MainAxisSize.min, children: [
+    return Opacity(opacity: colors.secondaryMoneyOpacity, child: Row(mainAxisSize: MainAxisSize.min, children: [
       CaptionIcon(lent ? LucideIcons.arrowUpRight : LucideIcons.arrowDownLeft,
           color: lent ? colors.moneyPositive : colors.moneyNegative),
       const SizedBox(width: 2),

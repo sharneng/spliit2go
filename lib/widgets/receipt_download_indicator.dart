@@ -111,7 +111,7 @@ class ReceiptDownloadIndicator extends StatelessWidget {
         ? theme.colorScheme.error
         : row == null
             ? null
-            : theme.colorScheme.secondaryContent;
+            : SpliitColors.of(context).secondaryContent;
     final waiting = !s.isError && !s.complete && !s.running;
     final clip = Icon(LucideIcons.paperclip, size: size, color: color);
     final icon = waiting

@@ -1,3 +1,5 @@
+import 'dart:ui' show lerpDouble;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -21,8 +23,14 @@ const spliitWordmarkGreen = Color(0xff56BC9C);
 const _accentLight = Color(0xff059669);
 const _accentDark = Color(0xff10B981);
 
-ThemeData _appTheme(Brightness brightness) {
+ThemeData _appTheme(Brightness brightness, {bool highContrast = false}) {
   final dark = brightness == Brightness.dark;
+  final spliitColors = switch ((dark, highContrast)) {
+    (false, false) => SpliitColors.light,
+    (true, false) => SpliitColors.dark,
+    (false, true) => SpliitColors.lightHighContrast,
+    (true, true) => SpliitColors.darkHighContrast,
+  };
   final accent = dark ? _accentDark : _accentLight;
   // Seeded from the accent, with the accent itself as primary: a seeded
   // scheme alone would shift it to Material's own tone of that hue.
@@ -34,14 +42,17 @@ ThemeData _appTheme(Brightness brightness) {
   final theme = ThemeData(
     useMaterial3: true,
     colorScheme: colorScheme,
-    extensions: [dark ? SpliitColors.dark : SpliitColors.light],
+    extensions: [spliitColors],
   );
   // One base background for every screen, its app bar, the group
   // screen's tab bar and sheets (#186 review), so nothing changes color
   // from screen to screen, nor in the strip under them that the app
   // paints in this color (main.dart). Grouped cards (GroupedSection)
   // stand a step lighter off it.
-  final base = dark ? colorScheme.surface : colorScheme.surfaceContainer;
+  // Black in dark mode, as iOS's grouped screens; in light mode a step
+  // lighter than Material's surfaceContainer, so the dimmed section
+  // headers on it read as well as the captions on the cards (#211).
+  final base = dark ? Colors.black : colorScheme.surfaceContainerLow;
   return theme.copyWith(
     scaffoldBackgroundColor: base,
     // The bar keeps the page's color when content scrolls under it,
@@ -60,29 +71,13 @@ ThemeData _appTheme(Brightness brightness) {
     // dimmed secondary color, a step back from the titles (#211).
     listTileTheme: ListTileThemeData(
       subtitleTextStyle:
-          theme.textTheme.bodyMedium?.copyWith(color: colorScheme.secondaryContent),
+          theme.textTheme.bodyMedium?.copyWith(color: spliitColors.secondaryContent),
     ),
     dividerTheme: DividerThemeData(
       color: theme.colorScheme.outlineVariant,
       thickness: 1,
     ),
   );
-}
-
-/// How much of [ColorScheme.onSurfaceVariant] less important content
-/// keeps: section headers, row captions, marks (#211). Small text must
-/// stay at WCAG's 4.5:1 on the cards and on the page around them, where
-/// the section headers sit; in light mode the page is the tighter one,
-/// passing from about 0.78 (#212 review).
-const secondaryContentAlpha = 0.8;
-
-/// How much of their color what you lent or owe keeps (#211): their 12pt
-/// text passes 4.5:1 on the light cards from about 0.9 (#212 review).
-const secondaryMoneyOpacity = 0.9;
-
-extension SecondaryContent on ColorScheme {
-  /// Less important text and icons, a step back from the content.
-  Color get secondaryContent => onSurfaceVariant.withValues(alpha: secondaryContentAlpha);
 }
 
 /// The colors spliit-ios adds on top of the system palette (its
@@ -95,6 +90,8 @@ class SpliitColors extends ThemeExtension<SpliitColors> {
     required this.moneyNegative,
     required this.brandSecondary,
     required this.brandAccentSoft,
+    required this.secondaryContent,
+    required this.secondaryMoneyOpacity,
   });
 
   /// Owed to you.
@@ -109,11 +106,24 @@ class SpliitColors extends ThemeExtension<SpliitColors> {
   /// The accent at a whisper, behind an empty state's icon.
   final Color brandAccentSoft;
 
+  /// Less important text and icons, a step back from the content:
+  /// section headers, row captions, marks (#211). Apple's
+  /// `secondaryLabel` at its 60%, rather than WCAG AA's 4.5:1, which
+  /// Apple's own secondary text doesn't meet and which read as too loud
+  /// next to it (Kenneth). Undimmed with the system's Increase Contrast.
+  final Color secondaryContent;
+
+  /// How much of their color what you lent or owe keeps (#211).
+  final double secondaryMoneyOpacity;
+
   static const light = SpliitColors(
     moneyPositive: Color(0xff047857),
     moneyNegative: Color(0xffC2334A),
     brandSecondary: Color(0xffBE185D),
     brandAccentSoft: Color(0xffECFDF5),
+    // The light scheme's onSurfaceVariant at 60%.
+    secondaryContent: Color(0x99404943),
+    secondaryMoneyOpacity: 0.9,
   );
 
   static const dark = SpliitColors(
@@ -121,7 +131,19 @@ class SpliitColors extends ThemeExtension<SpliitColors> {
     moneyNegative: Color(0xffFF8A9B),
     brandSecondary: Color(0xffEC4899),
     brandAccentSoft: Color(0x2910B981),
+    // Apple's dark secondaryLabel exactly: the dark scheme's
+    // onSurfaceVariant is a mid grey already, which dimmed would sit
+    // well below it.
+    secondaryContent: Color(0x99EBEBF5),
+    secondaryMoneyOpacity: 0.9,
   );
+
+  /// With the system's Increase Contrast: secondary content undimmed,
+  /// the light and dark schemes' onSurfaceVariant.
+  static final lightHighContrast = light.copyWith(
+      secondaryContent: const Color(0xff404943), secondaryMoneyOpacity: 1);
+  static final darkHighContrast = dark.copyWith(
+      secondaryContent: const Color(0xffC0C9C1), secondaryMoneyOpacity: 1);
 
   /// The app theme's colors, or the defaults for the ambient brightness
   /// where the theme has none (a test's bare MaterialApp).
@@ -137,12 +159,16 @@ class SpliitColors extends ThemeExtension<SpliitColors> {
     Color? moneyNegative,
     Color? brandSecondary,
     Color? brandAccentSoft,
+    Color? secondaryContent,
+    double? secondaryMoneyOpacity,
   }) =>
       SpliitColors(
         moneyPositive: moneyPositive ?? this.moneyPositive,
         moneyNegative: moneyNegative ?? this.moneyNegative,
         brandSecondary: brandSecondary ?? this.brandSecondary,
         brandAccentSoft: brandAccentSoft ?? this.brandAccentSoft,
+        secondaryContent: secondaryContent ?? this.secondaryContent,
+        secondaryMoneyOpacity: secondaryMoneyOpacity ?? this.secondaryMoneyOpacity,
       );
 
   @override
@@ -153,6 +179,9 @@ class SpliitColors extends ThemeExtension<SpliitColors> {
       moneyNegative: Color.lerp(moneyNegative, other.moneyNegative, t)!,
       brandSecondary: Color.lerp(brandSecondary, other.brandSecondary, t)!,
       brandAccentSoft: Color.lerp(brandAccentSoft, other.brandAccentSoft, t)!,
+      secondaryContent: Color.lerp(secondaryContent, other.secondaryContent, t)!,
+      secondaryMoneyOpacity:
+          lerpDouble(secondaryMoneyOpacity, other.secondaryMoneyOpacity, t)!,
     );
   }
 }
@@ -170,6 +199,13 @@ ThemeData get spliit2goLightTheme => _appTheme(Brightness.light);
 /// mode gets a genuinely dark version of this app's own look rather
 /// than a generic Material dark theme.
 ThemeData get spliit2goDarkTheme => _appTheme(Brightness.dark);
+
+/// The themes with the system's Increase Contrast on (iOS's
+/// accessibility setting; MaterialApp picks them by itself): secondary
+/// content undimmed (#211).
+ThemeData get spliit2goLightHighContrastTheme =>
+    _appTheme(Brightness.light, highContrast: true);
+ThemeData get spliit2goDarkHighContrastTheme => _appTheme(Brightness.dark, highContrast: true);
 
 /// The system status/navigation bar styling for the given [theme]'s
 /// current brightness -- issue #24 follow-up: without this, Android
