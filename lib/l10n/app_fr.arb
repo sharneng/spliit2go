@@ -198,6 +198,11 @@
   "groupListSortCreated": "Date de création",
   "groupListSortOpened": "Dernière ouverture",
   "groupListParticipantCount": "{count, plural, =1{1 participant} other{{count} participants}}",
+  "groupListSpokenFirstExpense": "Première dépense le {date}",
+  "groupListSpokenLastExpense": "Dernière dépense le {date}",
+  "groupListSpokenCreated": "Créé le {date}",
+  "groupListSpokenOpened": "Dernière ouverture le {date}",
+  "groupListSpokenNoExpenses": "Aucune dépense pour l'instant",
   "groupListActions": "Actions pour {name}",
   "expenseDetailsEdit": "Modifier",
   "expenseDetailsDiscard": "Abandonner",
@@ -330,5 +335,5 @@
   "expenseRowSpokenPaidBack": "{payer} a remboursé {amount} le {date}, {category}",
   "expenseRowSpokenYouPaidBack": "Vous avez remboursé {amount} le {date}, {category}",
   "expenseRowSpokenNoPayer": "{amount} le {date}, {category}",
-  "expenseRowSpokenSentenceEnd": "."
+  "spokenSentenceEnd": "."
 }

@@ -13,9 +13,21 @@ class CaptionIcon extends StatelessWidget {
   final Color? color;
 
   @override
-  Widget build(BuildContext context) {
-    final style = DefaultTextStyle.of(context).style;
-    final fontSize = MediaQuery.textScalerOf(context).scale(style.fontSize ?? 14);
-    return Icon(icon, size: fontSize * 1.15, color: color ?? style.color);
-  }
+  Widget build(BuildContext context) => Icon(icon,
+      size: captionIconSize(context), color: color ?? DefaultTextStyle.of(context).style.color);
 }
+
+/// A [CaptionIcon]'s size beside text of [captionFontSize], or of the
+/// surrounding text's size, at the current text size.
+double captionIconSize(BuildContext context, {double? captionFontSize}) =>
+    MediaQuery.textScalerOf(context)
+        .scale(captionFontSize ?? DefaultTextStyle.of(context).style.fontSize ?? 14) *
+    1.15;
+
+/// A mark beside a row's title (an expense's repeats, receipts and notes,
+/// a group's 📎), at the usual text size: one size for every row (#209).
+const titleMarkBaseSize = 14.0;
+
+/// A title mark's size at the current text size.
+double titleMarkSize(BuildContext context) =>
+    MediaQuery.textScalerOf(context).scale(titleMarkBaseSize);

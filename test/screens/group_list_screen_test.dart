@@ -1,5 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:spliit2go/models/group_organization.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -349,5 +351,91 @@ void main() {
 
     expect(find.text('Banff Trip'), findsOneWidget);
     expect(await db.groupRow('gA'), isNotNull);
+  });
+
+  // #209: a screen reader hears what the date is, and gets the swipe
+  // actions as its own; at large text sizes the date isn't broken.
+  group('accessibility (#209)', () {
+    Future<AppDatabase> oneGroup(WidgetTester tester,
+        {GroupListSort sort = GroupListSort.lastOpened, double scale = 1}) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.cacheGroup(const Group(id: 'gA', name: 'Banff Trip', currency: '\$', participants: [
+        Participant(id: 'a', name: 'A'),
+        Participant(id: 'b', name: 'B'),
+        Participant(id: 'c', name: 'C'),
+      ]));
+      await db.recordGroupOpened('gA',
+          serverUrl: 'https://example.test', at: DateTime(2026, 9, 3, 12));
+      SharedPreferences.setMockInitialValues({'group_list_sort': sort.name});
+      await tester.pumpWidget(MaterialApp(
+        key: ValueKey((sort, scale)),
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        navigatorObservers: [groupListRouteObserver],
+        home: MediaQuery.withClampedTextScaling(
+            minScaleFactor: scale,
+            maxScaleFactor: scale,
+            child: GroupListScreen(db: db, clientFactory: (_) => offlineClient())),
+      ));
+      await tester.pumpAndSettle();
+      return db;
+    }
+
+    Future<void> dispose(WidgetTester tester) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+
+    SemanticsData row(WidgetTester tester) =>
+        tester.getSemantics(find.byType(ListTile)).getSemanticsData();
+
+    testWidgets('the row is read as sentences, the date named', (tester) async {
+      await oneGroup(tester);
+      expect(row(tester).label, 'Banff Trip. Last opened Sep 3, 2026. 3 participants.');
+      await dispose(tester);
+
+      await oneGroup(tester, sort: GroupListSort.lastExpense);
+      expect(row(tester).label, 'Banff Trip. No expenses yet. 3 participants.');
+      await dispose(tester);
+    });
+
+    testWidgets('favorite, archive and remove are screen-reader actions', (tester) async {
+      final db = await oneGroup(tester);
+      final data = row(tester);
+      final labels = [
+        for (final id in data.customSemanticsActionIds!)
+          CustomSemanticsAction.getAction(id)!.label,
+      ];
+      expect(labels, ['Favorite', 'Archive', 'Remove']);
+
+      final favorite = data.customSemanticsActionIds!.first;
+      tester.renderObject(find.byType(ListTile)).owner!.semanticsOwner!.performAction(
+          tester.getSemantics(find.byType(ListTile)).id, SemanticsAction.customAction, favorite);
+      await tester.pumpAndSettle();
+      expect((await db.groupRow('gA'))!.organization, GroupOrganization.favorite);
+      await dispose(tester);
+    });
+
+    for (final width in [320.0, 390.0]) {
+      for (final scale in [1.0, 2.0, 3.0]) {
+        testWidgets('fits ${width.toInt()} wide, text at ${scale}x', (tester) async {
+          tester.view.physicalSize = Size(width * 3, 2400 * 3);
+          tester.view.devicePixelRatio = 3;
+          addTearDown(tester.view.reset);
+          await oneGroup(tester, scale: scale);
+          expect(tester.takeException(), isNull);
+
+          // The date on one line, the count inside the row.
+          final date = tester.renderObject<RenderParagraph>(find.text('Sep 3, 2026'));
+          expect(date.size.height, lessThan(scale * 14 * 1.6), reason: 'the date wrapped');
+          final tile = tester.getRect(find.byType(ListTile));
+          final people = tester.getRect(find.byIcon(LucideIcons.users));
+          expect(tile.contains(people.bottomRight - const Offset(1, 1)), isTrue);
+          await dispose(tester);
+        });
+      }
+    }
   });
 }

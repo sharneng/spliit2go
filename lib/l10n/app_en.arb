@@ -387,6 +387,30 @@
       }
     }
   },
+  "groupListSpokenFirstExpense": "First expense {date}",
+  "@groupListSpokenFirstExpense": {
+    "description": "A group row's date, as a screen reader says it after the group's name; the list is sorted by this date.",
+    "placeholders": {"date": {"type": "String"}}
+  },
+  "groupListSpokenLastExpense": "Last expense {date}",
+  "@groupListSpokenLastExpense": {
+    "description": "A group row's date, as a screen reader says it after the group's name; the list is sorted by this date.",
+    "placeholders": {"date": {"type": "String"}}
+  },
+  "groupListSpokenCreated": "Created {date}",
+  "@groupListSpokenCreated": {
+    "description": "A group row's date, as a screen reader says it after the group's name; the list is sorted by this date.",
+    "placeholders": {"date": {"type": "String"}}
+  },
+  "groupListSpokenOpened": "Last opened {date}",
+  "@groupListSpokenOpened": {
+    "description": "A group row's date, as a screen reader says it after the group's name; the list is sorted by this date.",
+    "placeholders": {"date": {"type": "String"}}
+  },
+  "groupListSpokenNoExpenses": "No expenses yet",
+  "@groupListSpokenNoExpenses": {
+    "description": "Said for a group row, sorted by an expense date, whose group has no expenses (shown as —)."
+  },
   "groupListActions": "Actions for {name}",
   "@groupListActions": {
     "placeholders": {
@@ -732,8 +756,8 @@
       }
     }
   },
-  "expenseRowSpokenSentenceEnd": ".",
-  "@expenseRowSpokenSentenceEnd": {
-    "description": "Ends each sentence of an expense row's spoken label, so a screen reader pauses between them."
+  "spokenSentenceEnd": ".",
+  "@spokenSentenceEnd": {
+    "description": "Ends each sentence of a spoken label (an expense or group row, the receipts clip), so a screen reader pauses between them."
   }
 }
