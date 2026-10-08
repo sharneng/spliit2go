@@ -4,6 +4,28 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:spliit2go/theme.dart';
 
 void main() {
+  // The typography that sets the letter spacing must keep Material's text
+  // colors from the scheme (onSurface), not pure black or white (#232 review).
+  for (final (name, theme) in [
+    ('light', spliit2goLightTheme),
+    ('dark', spliit2goDarkTheme),
+    ('light high contrast', spliit2goLightHighContrastTheme),
+    ('dark high contrast', spliit2goDarkHighContrastTheme),
+  ]) {
+    test('text takes its colors from the scheme ($name)', () {
+      final material = ThemeData(useMaterial3: true, colorScheme: theme.colorScheme).textTheme;
+      TextStyle? style(TextTheme t, int i) => [
+            t.displayLarge, t.displayMedium, t.displaySmall, t.headlineLarge, t.headlineMedium,
+            t.headlineSmall, t.titleLarge, t.titleMedium, t.titleSmall, t.bodyLarge, t.bodyMedium,
+            t.bodySmall, t.labelLarge, t.labelMedium, t.labelSmall,
+          ][i];
+      for (var i = 0; i < 15; i++) {
+        expect(style(theme.textTheme, i)!.color, style(material, i)!.color, reason: style(material, i)!.debugLabel);
+      }
+      expect(theme.textTheme.bodyLarge!.color, theme.colorScheme.onSurface);
+    });
+  }
+
   for (final locale in const [Locale('en'), Locale('zh')]) {
     testWidgets('the font\'s own letter spacing, as native apps; row titles a little tighter ($locale)',
         (tester) async {

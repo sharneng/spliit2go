@@ -53,8 +53,11 @@ ThemeData _appTheme(Brightness brightness, {bool highContrast = false}) {
     // Android and One UI have it: Material 3's type scale adds up to half
     // a point between letters (0.5 on body text), which spread ours wider
     // than any of them (#231, Kenneth).
+    // With the scheme, as ThemeData's own default, so text keeps its
+    // onSurface color rather than pure black or white (#232 review).
     typography: Typography.material2021(
       platform: defaultTargetPlatform,
+      colorScheme: colorScheme,
       englishLike: _systemLetterSpacing(Typography.englishLike2021),
       dense: _systemLetterSpacing(Typography.dense2021),
       tall: _systemLetterSpacing(Typography.tall2021),
