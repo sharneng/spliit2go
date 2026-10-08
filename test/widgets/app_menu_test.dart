@@ -42,10 +42,10 @@ void main() {
       // A screen reader hears which order is current (#227 review).
       final handle = tester.ensureSemantics();
       expect(tester.getSemantics(find.text('Second')),
-          containsSemantics(hasCheckedState: true, isChecked: true, isInMutuallyExclusiveGroup: true));
+          isSemantics(hasCheckedState: true, isChecked: true, isInMutuallyExclusiveGroup: true));
       for (final other in ['First', 'Third']) {
         expect(tester.getSemantics(find.text(other)),
-            containsSemantics(hasCheckedState: true, isChecked: false, isInMutuallyExclusiveGroup: true));
+            isSemantics(hasCheckedState: true, isChecked: false, isInMutuallyExclusiveGroup: true));
       }
       handle.dispose();
 
@@ -55,7 +55,7 @@ void main() {
     });
   }
 
-  testWidgets('a disabled row'\''s label is dimmed (#227 review)', (tester) async {
+  testWidgets("a disabled row's label is dimmed (#227 review)", (tester) async {
     await open(tester, [
       AppMenuItem(label: 'Settings', icon: Icons.settings, enabled: false, onSelected: () {}),
       AppMenuItem(label: 'Share', icon: Icons.share, onSelected: () {}),
@@ -66,7 +66,7 @@ void main() {
     expect(label('Settings'), onSurface.withValues(alpha: 0.38));
     // Not a check: a row that isn't a choice says nothing about one.
     final handle = tester.ensureSemantics();
-    expect(tester.getSemantics(find.text('Share')), isNot(containsSemantics(hasCheckedState: true)));
+    expect(tester.getSemantics(find.text('Share')), isNot(isSemantics(hasCheckedState: true)));
     handle.dispose();
   });
 
