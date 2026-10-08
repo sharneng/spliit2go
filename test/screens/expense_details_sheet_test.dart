@@ -271,15 +271,40 @@ void main() {
     await closeTree(tester);
   });
 
-  testWidgets('a split by percentages shows each share as a percent (#226)', (tester) async {
+  testWidgets('a split by percentages shows each share as a percent, decimals kept (#226)',
+      (tester) async {
     tallView(tester);
     final db = await cachedDb(dinner(splitMode: SplitMode.byPercentage));
     addTearDown(db.close);
     await openSheet(tester, db);
 
-    expect(inSheet(find.text('67%')), findsOneWidget);
-    expect(inSheet(find.text('33%')), findsOneWidget);
+    expect(inSheet(find.text('66.67%')), findsOneWidget);
+    expect(inSheet(find.text('33.33%')), findsOneWidget);
     await closeTree(tester);
+
+    // The smallest share isn't rounded to nothing; a whole one has no
+    // decimals (#236 review).
+    for (final (shares, expected) in [((1, 9999), ('0.01%', '99.99%')), ((5000, 5000), ('50%', '50%'))]) {
+      final split = Expense(
+        id: 'e1',
+        groupId: 'g1',
+        title: 'Split',
+        amountCents: 1000000,
+        paidBy: 'alex',
+        paidFor: [
+          ExpenseShare(participantId: 'alex', shares: shares.$1),
+          ExpenseShare(participantId: 'bea', shares: shares.$2),
+        ],
+        splitMode: SplitMode.byPercentage,
+        date: DateTime(2026, 9, 16),
+      );
+      final db = await cachedDb(split);
+      await openSheet(tester, db);
+      expect(inSheet(find.text(expected.$1)), findsWidgets, reason: expected.$1);
+      expect(inSheet(find.text(expected.$2)), findsWidgets, reason: expected.$2);
+      await closeTree(tester);
+      await db.close();
+    }
   });
 
   testWidgets('a date over ten months old keeps its year (#226)', (tester) async {

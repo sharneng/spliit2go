@@ -909,12 +909,14 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
 
   /// A person's part of a split by shares or percentages, beside their
   /// amount (#226); none for an even split or exact amounts, whose amount
-  /// says it all. Both are stored times 100.
+  /// says it all. Both are stored times 100, so a percentage keeps its two
+  /// decimals (66.67%, 0.01%), as the form takes them (#236 review).
   String? _shareLabel(BuildContext context, SplitMode mode, ExpenseShare share) =>
       switch (mode) {
         SplitMode.byShares => context.l10n.expenseDetailsShareCount(share.shares / 100),
-        SplitMode.byPercentage =>
-          NumberFormat.percentPattern(context.appLocale.toString()).format(share.shares / 10000),
+        SplitMode.byPercentage => (NumberFormat.percentPattern(context.appLocale.toString())
+              ..maximumFractionDigits = 2)
+            .format(share.shares / 10000),
         _ => null,
       };
 
