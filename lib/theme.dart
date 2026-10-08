@@ -1,5 +1,6 @@
 import 'dart:ui' show lerpDouble;
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -48,6 +49,19 @@ ThemeData _appTheme(Brightness brightness, {bool highContrast = false}) {
   final theme = ThemeData(
     useMaterial3: true,
     colorScheme: colorScheme,
+    // The system font's own letter spacing, as native apps on iOS, stock
+    // Android and One UI have it: Material 3's type scale adds up to half
+    // a point between letters (0.5 on body text), which spread ours wider
+    // than any of them (#231, Kenneth).
+    // With the scheme, as ThemeData's own default, so text keeps its
+    // onSurface color rather than pure black or white (#232 review).
+    typography: Typography.material2021(
+      platform: defaultTargetPlatform,
+      colorScheme: colorScheme,
+      englishLike: _systemLetterSpacing(Typography.englishLike2021),
+      dense: _systemLetterSpacing(Typography.dense2021),
+      tall: _systemLetterSpacing(Typography.tall2021),
+    ),
     extensions: [spliitColors],
   );
   // One base background for every screen, its app bar, the group
@@ -105,6 +119,7 @@ ThemeData _appTheme(Brightness brightness, {bool highContrast = false}) {
       labelTextStyle: WidgetStateProperty.resolveWith((states) =>
           theme.textTheme.bodyLarge?.copyWith(
               fontSize: 17,
+              letterSpacing: bodyLargeLetterSpacing,
               color: states.contains(WidgetState.disabled)
                   ? colorScheme.onSurface.withValues(alpha: 0.38)
                   : colorScheme.onSurface)),
@@ -130,7 +145,8 @@ ThemeData _appTheme(Brightness brightness, {bool highContrast = false}) {
     // dimmed secondary color, a step back from the titles (#211).
     listTileTheme: ListTileThemeData(
       subtitleTextStyle:
-          theme.textTheme.bodyMedium?.copyWith(color: spliitColors.secondaryContent),
+          theme.textTheme.bodyMedium?.copyWith(
+              color: spliitColors.secondaryContent, letterSpacing: captionLetterSpacing),
     ),
     dividerTheme: DividerThemeData(
       color: theme.colorScheme.outlineVariant,
@@ -314,5 +330,34 @@ SystemUiOverlayStyle spliit2goSystemUiOverlayStyle(ThemeData theme) {
     // the deep-black look reported, since our chosen color gets
     // darkened underneath it.
     systemNavigationBarContrastEnforced: false,
+  );
+}
+
+/// Row titles' and menu labels' letter spacing, a little tighter than the
+/// font's own, so long titles fit.
+const bodyLargeLetterSpacing = -0.4;
+
+/// Row captions' (dates, who paid, counts).
+const captionLetterSpacing = -0.2;
+
+/// [theme] with no letter spacing added to the font's own.
+TextTheme _systemLetterSpacing(TextTheme theme) {
+  TextStyle? none(TextStyle? style, [double spacing = 0]) => style?.copyWith(letterSpacing: spacing);
+  return TextTheme(
+    displayLarge: none(theme.displayLarge),
+    displayMedium: none(theme.displayMedium),
+    displaySmall: none(theme.displaySmall),
+    headlineLarge: none(theme.headlineLarge),
+    headlineMedium: none(theme.headlineMedium),
+    headlineSmall: none(theme.headlineSmall),
+    titleLarge: none(theme.titleLarge),
+    titleMedium: none(theme.titleMedium),
+    titleSmall: none(theme.titleSmall),
+    bodyLarge: none(theme.bodyLarge, bodyLargeLetterSpacing),
+    bodyMedium: none(theme.bodyMedium),
+    bodySmall: none(theme.bodySmall),
+    labelLarge: none(theme.labelLarge),
+    labelMedium: none(theme.labelMedium),
+    labelSmall: none(theme.labelSmall),
   );
 }

@@ -1,8 +1,59 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spliit2go/theme.dart';
 
 void main() {
+  // The typography that sets the letter spacing must keep Material's text
+  // colors from the scheme (onSurface), not pure black or white (#232 review).
+  for (final (name, theme) in [
+    ('light', spliit2goLightTheme),
+    ('dark', spliit2goDarkTheme),
+    ('light high contrast', spliit2goLightHighContrastTheme),
+    ('dark high contrast', spliit2goDarkHighContrastTheme),
+  ]) {
+    test('text takes its colors from the scheme ($name)', () {
+      final material = ThemeData(useMaterial3: true, colorScheme: theme.colorScheme).textTheme;
+      TextStyle? style(TextTheme t, int i) => [
+            t.displayLarge, t.displayMedium, t.displaySmall, t.headlineLarge, t.headlineMedium,
+            t.headlineSmall, t.titleLarge, t.titleMedium, t.titleSmall, t.bodyLarge, t.bodyMedium,
+            t.bodySmall, t.labelLarge, t.labelMedium, t.labelSmall,
+          ][i];
+      for (var i = 0; i < 15; i++) {
+        expect(style(theme.textTheme, i)!.color, style(material, i)!.color, reason: style(material, i)!.debugLabel);
+      }
+      expect(theme.textTheme.bodyLarge!.color, theme.colorScheme.onSurface);
+    });
+  }
+
+  for (final locale in const [Locale('en'), Locale('zh')]) {
+    testWidgets('the font\'s own letter spacing, as native apps; row titles a little tighter ($locale)',
+        (tester) async {
+      late TextTheme text;
+      await tester.pumpWidget(MaterialApp(
+        theme: spliit2goLightTheme,
+        locale: locale,
+        supportedLocales: const [Locale('en'), Locale('zh')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        home: Builder(builder: (context) {
+          text = Theme.of(context).textTheme;
+          return const SizedBox();
+        }),
+      ));
+      for (final style in [
+        text.displayLarge, text.headlineSmall, text.titleLarge, text.titleMedium, text.titleSmall,
+        text.bodyMedium, text.bodySmall, text.labelLarge, text.labelMedium, text.labelSmall,
+      ]) {
+        expect(style!.letterSpacing, 0, reason: style.debugLabel);
+      }
+      expect(text.bodyLarge!.letterSpacing, bodyLargeLetterSpacing);
+      expect(bodyLargeLetterSpacing, -0.4);
+      expect(spliit2goLightTheme.listTileTheme.subtitleTextStyle!.letterSpacing, -0.2);
+      expect(spliit2goLightTheme.popupMenuTheme.labelTextStyle!.resolve({})!.letterSpacing, -0.4);
+      expect(text.bodyLarge!.fontSize, 16, reason: 'only the spacing changes');
+    });
+  }
+
   test('light and dark themes have matching brightness fields (issue #25)', () {
     expect(spliit2goLightTheme.brightness, Brightness.light);
     expect(spliit2goDarkTheme.brightness, Brightness.dark);

@@ -40,6 +40,12 @@ The theme wasn't decided all at once. It was settled piece by piece, in focused 
    - **Shape and placement:** 24pt corners, a soft shadow, no tint, dropping below its button.
    - **Rows:** 40pt tall, labels at 17pt beside 24pt icons. Icons lead; in a menu that picks one, the emerald check leads instead, and the other rows keep that room so the labels line up.
 10. **Dark mode's red is the amount red, #FF8A9B** ([#217](https://github.com/sharneng/spliit2go/issues/217)). It's used for delete buttons, destructive menu rows and errors. Material's #FFB4AB is a pale pink that read faint.
+11. **Letter spacing: the system font's own, a little tighter where text runs long.** ([#231](https://github.com/sharneng/spliit2go/issues/231)) Material 3's type scale adds up to half a point between letters: +0.5 on body text, +0.25 on 14pt text. That spread our text wider than native iOS, stock Android and One UI, whose own font is the widest of the three. So `theme.dart` sets every text style to the font's own spacing. Three are tighter, so long titles and names fit:
+    - Row titles and menu labels (`bodyLarge`): −0.4.
+    - Row captions (dates, who paid, counts): −0.2.
+    - Amounts: −0.4.
+
+    Kenneth tuned these on the simulator against spliit-ios and on the emulator (2026-10-08). The reimbursement title's italic stays the font's own; Flutter can't change its angle except by slanting the drawn text, which Kenneth decided against.
 
 The layout of particular screens is in their own records: [group-list-redesign.md](group-list-redesign.md), [expense-rows.md](expense-rows.md), [stats-screen.md](stats-screen.md) and [receipts.md](receipts.md).
 
