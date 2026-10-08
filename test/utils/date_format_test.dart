@@ -55,11 +55,43 @@ void main() {
     });
   });
 
+  // #233: read by people, so the device's 24-hour setting, else the
+  // locale's own clock.
   group('formatTimeOfDay', () {
-    test('is 24-hour HH:mm', () {
-      final t = DateTime(2026, 3, 5, 9, 7);
-      expect(formatTimeOfDay(t, locale: en), '09:07');
-      expect(formatTimeOfDay(t, locale: fr), '09:07');
+    final t = DateTime(2026, 3, 5, 21, 7);
+    test('24-hour HH:mm when the device says so', () {
+      expect(formatTimeOfDay(t, locale: en, use24HourFormat: true), '21:07');
+      expect(formatTimeOfDay(t, locale: zh, use24HourFormat: true), '21:07');
+    });
+    test('otherwise the locale\'s own clock', () {
+      expect(formatTimeOfDay(t, locale: en, use24HourFormat: false), '9:07\u202fPM');
+      expect(formatTimeOfDay(t, locale: const Locale('en', 'GB'), use24HourFormat: false), '21:07');
+      expect(formatTimeOfDay(t, locale: fr, use24HourFormat: false), '21:07');
+    });
+  });
+
+  group('formatDateTime', () {
+    final t = DateTime(2026, 9, 12, 9, 3);
+    test('with the year', () {
+      expect(formatDateTime(t, locale: en, use24HourFormat: false), 'Sep 12, 2026 9:03\u202fAM');
+      expect(formatDateTime(t, locale: fr, use24HourFormat: true), '12 sept. 2026 09:03');
+    });
+    test('without it: CLDR\'s month and day', () {
+      expect(formatDateTime(t, locale: en, use24HourFormat: false, withYear: false), 'Sep 12 9:03\u202fAM');
+      expect(formatDateTime(t, locale: const Locale('en', 'GB'), use24HourFormat: true, withYear: false),
+          '12 Sept 09:03');
+      expect(formatDateTime(t, locale: fr, use24HourFormat: true, withYear: false), '12 sept. 09:03');
+      expect(formatDateTime(t, locale: zh, use24HourFormat: true, withYear: false), '9月12日 09:03');
+    });
+  });
+
+  group('isWithinTenMonths', () {
+    final now = DateTime(2026, 10, 8, 12);
+    test('ten months back to the day', () {
+      expect(isWithinTenMonths(DateTime(2025, 12, 8), now: now), isTrue);
+      expect(isWithinTenMonths(DateTime(2025, 12, 7, 23, 59), now: now), isFalse);
+      expect(isWithinTenMonths(DateTime(2025, 10, 8), now: now), isFalse);
+      expect(isWithinTenMonths(DateTime(2026, 10, 9), now: now), isTrue, reason: 'a clock behind the server');
     });
   });
 

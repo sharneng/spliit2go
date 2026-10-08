@@ -50,15 +50,32 @@ String formatShortDate(DateTime d, {required Locale locale}) {
   return DateFormat(padded, locale.toString()).format(d);
 }
 
-/// Formats [t]'s time of day as 24-hour `HH:mm` in [locale]'s digits.
-String formatTimeOfDay(DateTime t, {required Locale locale}) =>
-    DateFormat.Hm(locale.toString()).format(t);
+/// Formats [t]'s time of day for people to read (#233): 24-hour `HH:mm`
+/// when [use24HourFormat] (the device's own setting,
+/// `MediaQuery.alwaysUse24HourFormatOf`), otherwise [locale]'s own clock,
+/// `9:07 AM` in en, `09:07` in fr.
+String formatTimeOfDay(DateTime t, {required Locale locale, required bool use24HourFormat}) =>
+    _time(DateFormat(null, locale.toString()), use24HourFormat).format(t);
 
-/// [formatDate] and [formatTimeOfDay] together ("Sep 12, 2026 14:03"),
-/// joined the way [locale] joins them. Like both, formats [t]'s own
-/// fields: convert a real moment with `toLocal()` first.
-String formatDateTime(DateTime t, {required Locale locale}) =>
-    DateFormat.yMMMd(locale.toString()).add_Hm().format(t);
+/// [t]'s date and time together, joined the way [locale] joins them:
+/// "Sep 12, 2026 9:03 AM". Without the year when [withYear] is false
+/// (#233), CLDR's month-and-day form for [locale]: "Sep 12", "12 sept.",
+/// "9月12日". Like [formatTimeOfDay], formats [t]'s own fields: convert a
+/// real moment with `toLocal()` first.
+String formatDateTime(DateTime t,
+    {required Locale locale, required bool use24HourFormat, bool withYear = true}) {
+  final date = withYear ? DateFormat.yMMMd(locale.toString()) : DateFormat.MMMd(locale.toString());
+  return _time(date, use24HourFormat).format(t);
+}
+
+DateFormat _time(DateFormat format, bool use24HourFormat) =>
+    use24HourFormat ? format.add_Hm() : format.add_jm();
+
+/// Whether [t] is recent enough to show without its year (#233): within
+/// ten months before [now], so it can't be read as the same month a year
+/// on. Anything later than [now] counts as recent too.
+bool isWithinTenMonths(DateTime t, {required DateTime now}) =>
+    !t.isBefore(DateTime(now.year, now.month - 10, now.day));
 
 /// Formats a [DateSpan] for display: '—' when null (no cached expenses
 /// to span yet), a single date when the span is exactly one day, or

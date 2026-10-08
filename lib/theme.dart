@@ -158,6 +158,9 @@ ThemeData _appTheme(Brightness brightness, {bool highContrast = false}) {
     // Captions under a row's title (dates, counts, who paid) in the
     // dimmed secondary color, a step back from the titles (#211).
     listTileTheme: ListTileThemeData(
+      // Rows a step more compact than Material's (#233), nearer iOS's:
+      // 4 off each default height, 52 for one line, 68 for two.
+      visualDensity: const VisualDensity(vertical: -1),
       subtitleTextStyle:
           theme.textTheme.bodyMedium?.copyWith(
               color: spliitColors.secondaryContent, letterSpacing: captionLetterSpacing),

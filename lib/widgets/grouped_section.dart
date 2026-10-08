@@ -281,11 +281,17 @@ class GroupedRow extends StatelessWidget {
   static Color chevronColor(BuildContext context) =>
       Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3);
 
+  /// A single-line row's least height (#233), under the theme's density's
+  /// 52. For one line only: [ListTile]'s minimum height replaces its
+  /// default for every line count, and isn't adjusted by the density.
+  static const double oneLineMinHeight = 48;
+
   @override
   Widget build(BuildContext context) => ListTile(
         leading: leading,
         title: title,
         subtitle: subtitle,
+        minTileHeight: subtitle == null ? oneLineMinHeight : null,
         trailing: trailing ?? (navigates ? chevron(context) : null),
         onTap: onTap,
         selected: selected,
