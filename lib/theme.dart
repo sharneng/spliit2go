@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'widgets/grouped_section.dart';
+import 'widgets/top_bar_buttons.dart';
 
 /// Shared iOS-compatible identity colors; see THIRD_PARTY_NOTICES.md.
 const monogramPalette = <Color>[
@@ -86,7 +87,20 @@ ThemeData _appTheme(Brightness brightness, {bool highContrast = false}) {
     scaffoldBackgroundColor: base,
     // The bar keeps the page's color when content scrolls under it,
     // flat, instead of Material's darker tint and shadow (#188).
+    // Back and close in a circle, as the top bar's other buttons (#228).
+    actionIconTheme: ActionIconThemeData(
+      // Flutter's own back icons (BackButtonIcon): on iOS the centered
+      // rounded chevron, not Icons.adaptive's, which sits left in its box.
+      backButtonIconBuilder: (context) => topBarCircleIcon(
+          context,
+          switch (Theme.of(context).platform) {
+            TargetPlatform.iOS || TargetPlatform.macOS => Icons.arrow_back_ios_new_rounded,
+            _ => Icons.arrow_back,
+          }),
+      closeButtonIconBuilder: (context) => topBarCircleIcon(context, Icons.close),
+    ),
     appBarTheme: AppBarTheme(
+      leadingWidth: TopBarButtons.leadingWidth,
       backgroundColor: base,
       surfaceTintColor: Colors.transparent,
       scrolledUnderElevation: 0,
