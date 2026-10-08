@@ -116,20 +116,28 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('the list stops above the gesture bar, its end rounded (#222)', (tester) async {
-    tester.view.physicalSize = const Size(400, 800);
-    tester.view.devicePixelRatio = 1;
-    tester.view.padding = const FakeViewPadding(bottom: 34);
-    addTearDown(tester.view.reset);
-    final db = await seed();
-    await pump(tester, db);
+  // Where the group screen's tab bar ends: above the whole inset on
+  // Android, over its lower part on iPhone, clear of the home indicator.
+  for (final (platform, gap) in [
+    (TargetPlatform.android, 34.0),
+    (TargetPlatform.iOS, 20.0),
+  ]) {
+    testWidgets('the list stops above the gesture bar, its end rounded, on ${platform.name} (#222)',
+        (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1;
+      tester.view.padding = const FakeViewPadding(bottom: 34);
+      addTearDown(tester.view.reset);
+      final db = await seed();
+      await pump(tester, db, platform: platform);
 
-    final clip = find.byType(GroupedScrollClip);
-    expect(tester.getRect(clip).bottom, 800 - 34);
-    // The list itself ends there too: nothing scrolls under the bar.
-    expect(tester.getRect(find.descendant(of: clip, matching: find.byType(ListView))).bottom,
-        800 - 34);
-  });
+      final clip = find.byType(GroupedScrollClip);
+      expect(tester.getRect(clip).bottom, 800 - gap);
+      // The list itself ends there too: nothing scrolls under the bar.
+      expect(tester.getRect(find.descendant(of: clip, matching: find.byType(ListView))).bottom,
+          800 - gap);
+    });
+  }
 
   testWidgets(
       'long press switches exclusive states; unarchive returns to Active',

@@ -31,6 +31,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/grouped_section.dart';
 import '../utils/haptics.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../widgets/bottom_inset.dart';
 import '../widgets/caption_icon.dart';
 
 /// Registered as a `MaterialApp.navigatorObservers` entry (main.dart) so
@@ -258,12 +259,12 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
       ),
     ];
     // The list stops above the gesture bar or navigation buttons (the home
-    // indicator on iPhone), through the rounded clip's curve, as the group
-    // screen's list stops above its tab bar, rather than scrolling under
-    // them to the screen's edge (#222).
+    // indicator on iPhone), through the rounded clip's curve, rather than
+    // scrolling under them to the screen's edge: where the group screen's
+    // tab bar ends (#222).
     return SlidableAutoCloseBehavior(
         child: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
+        padding: EdgeInsets.only(bottom: bottomBarGap(context)),
         child: GroupedScrollClip(
         child: ListView(
       // Room at the end for the last row to scroll clear of the add button.
