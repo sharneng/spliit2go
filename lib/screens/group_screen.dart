@@ -33,6 +33,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/grouped_section.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../app_name.dart';
+import '../widgets/app_menu.dart';
 
 /// A single group's expenses, offline-first -- reached by pushing on top
 /// of GroupListScreen (the app's actual root; see main.dart and
@@ -249,30 +250,20 @@ class _GroupScreenState extends State<GroupScreen> {
             onRetry: () =>
                 unawaited(ReceiptDownloader.of(widget.db).run(widget.groupId, widget.client)),
           ),
-          PopupMenuButton<_GroupAction>(
+          AppMenuButton(
             icon: const Icon(Icons.more_horiz),
             tooltip: context.l10n.groupScreenMenuTooltip,
-            onSelected: (action) => switch (action) {
-              _GroupAction.settings => _openGroupSettings(),
-              _GroupAction.share => _shareGroup(),
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: _GroupAction.settings,
+            items: [
+              AppMenuItem(
+                label: context.l10n.groupScreenMenuSettings,
+                icon: Icons.settings_outlined,
                 enabled: _group != null,
-                child: ListTile(
-                  leading: const Icon(Icons.settings_outlined),
-                  title: Text(context.l10n.groupScreenMenuSettings),
-                  contentPadding: EdgeInsets.zero,
-                ),
+                onSelected: _openGroupSettings,
               ),
-              PopupMenuItem(
-                value: _GroupAction.share,
-                child: ListTile(
-                  leading: Icon(Icons.adaptive.share),
-                  title: Text(context.l10n.groupScreenMenuShare),
-                  contentPadding: EdgeInsets.zero,
-                ),
+              AppMenuItem(
+                label: context.l10n.groupScreenMenuShare,
+                icon: Icons.adaptive.share,
+                onSelected: _shareGroup,
               ),
             ],
           ),
@@ -696,8 +687,6 @@ class ActiveUserPicker extends StatelessWidget {
     );
   }
 }
-
-enum _GroupAction { settings, share }
 
 /// The platform share sheet, via share_plus: the link as a URL, so iOS
 /// shows the page's preview; Android shares it as text. The group's name

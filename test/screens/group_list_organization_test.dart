@@ -204,10 +204,7 @@ void main() {
     // sorting, navigating, or refreshing after a failed dismissal).
     await tester.tap(find.byTooltip('Sort groups'));
     await tester.pumpAndSettle();
-    await tester.tap(find.ancestor(
-        of: find.text('Creation date'),
-        matching: find
-            .byWidgetPredicate((widget) => widget is CheckedPopupMenuItem)));
+    await tester.tap(find.widgetWithText(PopupMenuItem<int>, 'Creation date'));
     await tester.pumpAndSettle();
 
     // 5. Critical assertion: verify no "A dismissed Slidable widget is still part of the tree" exception was thrown.
@@ -227,20 +224,20 @@ void main() {
       await pump(tester, db);
       await tester.tap(find.byTooltip('Sort groups'));
       await tester.pumpAndSettle();
-      await tester.tap(find.ancestor(
-          of: find.text('Creation date'),
-          matching: find
-              .byWidgetPredicate((widget) => widget is CheckedPopupMenuItem)));
+      await tester.tap(find.widgetWithText(PopupMenuItem<int>, 'Creation date'));
       await tester.pumpAndSettle();
       expect(find.byType(SnackBar), findsOneWidget);
       expect(tester.getTopLeft(find.text('Beta')).dy,
           lessThan(tester.getTopLeft(find.text('Alpha')).dy));
       await tester.tap(find.byTooltip('Sort groups'));
       await tester.pumpAndSettle();
-      final checked = tester.widgetList<CheckedPopupMenuItem>(
-          find.byWidgetPredicate((widget) => widget is CheckedPopupMenuItem));
-      expect(checked.where((item) => item.checked).single.child,
-          isA<Text>().having((text) => text.data, 'selection', 'Last opened'));
+      // The one check mark is on the saved choice.
+      expect(find.byIcon(Icons.check), findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.widgetWithText(PopupMenuItem<int>, 'Last opened'),
+              matching: find.byIcon(Icons.check)),
+          findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
       // Reopening must not pick up a failed write from the plugin's cache.
@@ -258,10 +255,7 @@ void main() {
     await pump(tester, db, settings: settings);
     await tester.tap(find.byTooltip('Sort groups'));
     await tester.pumpAndSettle();
-    await tester.tap(find.ancestor(
-        of: find.text('Creation date'),
-        matching: find
-            .byWidgetPredicate((widget) => widget is CheckedPopupMenuItem)));
+    await tester.tap(find.widgetWithText(PopupMenuItem<int>, 'Creation date'));
     await tester.pumpAndSettle();
     final reads = settings.reads;
     await tester.pumpWidget(const SizedBox());
@@ -461,10 +455,7 @@ void main() {
         lessThan(tester.getTopLeft(find.text('Alpha')).dy));
     await tester.tap(find.byTooltip('Sort groups'));
     await tester.pumpAndSettle();
-    await tester.tap(find.ancestor(
-        of: find.text('Creation date'),
-        matching: find
-            .byWidgetPredicate((widget) => widget is CheckedPopupMenuItem)));
+    await tester.tap(find.widgetWithText(PopupMenuItem<int>, 'Creation date'));
     await tester.pumpAndSettle();
     expect(await SettingsService().groupListSort(), 'created');
     expect(tester.getTopLeft(find.text('Alpha')).dy,

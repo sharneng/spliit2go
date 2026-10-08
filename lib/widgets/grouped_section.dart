@@ -50,13 +50,13 @@ class GroupedSection extends StatelessWidget {
   static const double spacing = 24;
 
   /// The card's color, a step lighter than [backgroundColor].
-  static Color cardColor(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return scheme.brightness == Brightness.light
-        ? scheme.surfaceContainerLowest
-        // A step off the black page, like iOS's #1C1C1E (#211).
-        : scheme.surfaceContainer;
-  }
+  static Color cardColor(BuildContext context) => cardColorOf(Theme.of(context).colorScheme);
+
+  /// [cardColor] from the [scheme] itself, for the theme to use.
+  static Color cardColorOf(ColorScheme scheme) => scheme.brightness == Brightness.light
+      ? scheme.surfaceContainerLowest
+      // A step off the black page, like iOS's #1C1C1E (#211).
+      : scheme.surfaceContainer;
 
   /// The page behind the cards: every screen's, from the theme.
   static Color backgroundColor(BuildContext context) =>
