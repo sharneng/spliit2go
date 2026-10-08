@@ -35,6 +35,7 @@ import '../widgets/bottom_inset.dart';
 import '../widgets/caption_icon.dart';
 import '../app_name.dart';
 import '../widgets/app_menu.dart';
+import '../widgets/top_bar_buttons.dart';
 
 /// Registered as a `MaterialApp.navigatorObservers` entry (main.dart) so
 /// [_GroupListScreenState] can hear about routes pushed *on top of* it by
@@ -194,6 +195,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
                           color: spliitWordmarkGreen)))),
         ]),
         actions: [
+          TopBarButtons(children: [
           AppMenuButton(
             tooltip: context.l10n.groupListSort,
             icon: const Icon(Icons.sort),
@@ -213,6 +215,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
                   builder: (_) => AppSettingsScreen(receipts: ReceiptCache.of(widget.db))),
             ),
           ),
+          ]),
         ],
       ),
       body: _body(context),

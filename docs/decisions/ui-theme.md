@@ -46,6 +46,9 @@ The theme wasn't decided all at once. It was settled piece by piece, in focused 
     - Amounts: −0.4.
 
     Kenneth tuned these on the simulator against spliit-ios and on the emulator (2026-10-08). The reimbursement title's italic stays the font's own; Flutter can't change its angle except by slanting the drawn text, which Kenneth decided against.
+12. **Top bar buttons on a card, as iOS 26's toolbars, on both platforms** ([#228](https://github.com/sharneng/spliit2go/issues/228)). A single button gets a 44pt circle; several share one capsule, as the group list's sort and app settings do. They're in the cards' color with a light shadow (elevation 1, lighter than the tab bar's 3), 16pt from the screen's edges like the cards (`lib/widgets/top_bar_buttons.dart`). The back and close buttons get the same circle from the theme (`actionIconTheme`), with Flutter's own back icons. On iOS that's the centered rounded chevron, not `Icons.adaptive`'s, which sits left of center. Kenneth compared it with spliit-ios 2.6.1 on the simulator and checked it on the emulator (2026-10-08).
+   - Expense search's clear button stays bare: it belongs to the search field, as on iOS.
+   - The receipt-download indicator sits beside the group screen's ••• circle. It only shows while receipts download.
 
 The layout of particular screens is in their own records: [group-list-redesign.md](group-list-redesign.md), [expense-rows.md](expense-rows.md), [stats-screen.md](stats-screen.md) and [receipts.md](receipts.md).
 

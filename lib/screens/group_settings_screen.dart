@@ -13,6 +13,7 @@ import '../services/date_span_calculator.dart';
 import '../services/group_url.dart';
 import '../services/settings_service.dart';
 import '../utils/date_format.dart';
+import '../widgets/top_bar_buttons.dart';
 import '../widgets/currency_picker.dart';
 import '../widgets/error_message.dart';
 import 'join_group_screen.dart' show cacheJoinedGroup;
@@ -497,13 +498,16 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
       appBar: AppBar(
         title: Text(_creating ? context.l10n.createGroupTitle : context.l10n.groupSettingsTitle),
         actions: [
+          TopBarButtons(children: [
           _saving
-              ? const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+              ? const SizedBox.square(
+                  dimension: TopBarButtons.size,
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                   ),
                 )
               : IconButton(
@@ -513,6 +517,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                       : context.l10n.groupSettingsSaveTooltip,
                   onPressed: _save,
                 ),
+          ]),
         ],
       ),
       body: Theme(

@@ -34,6 +34,7 @@ import '../widgets/grouped_section.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../app_name.dart';
 import '../widgets/app_menu.dart';
+import '../widgets/top_bar_buttons.dart';
 import '../widgets/active_user_sheet.dart';
 
 /// A single group's expenses, offline-first -- reached by pushing on top
@@ -251,6 +252,7 @@ class _GroupScreenState extends State<GroupScreen> {
             onRetry: () =>
                 unawaited(ReceiptDownloader.of(widget.db).run(widget.groupId, widget.client)),
           ),
+          TopBarButtons(children: [
           AppMenuButton(
             icon: const Icon(Icons.more_horiz),
             tooltip: context.l10n.groupScreenMenuTooltip,
@@ -268,6 +270,7 @@ class _GroupScreenState extends State<GroupScreen> {
               ),
             ],
           ),
+          ]),
         ],
       ),
       body: _tabBody(),
