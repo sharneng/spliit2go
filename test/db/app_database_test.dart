@@ -34,7 +34,8 @@ void main() {
       expect(cached, isNotNull);
       expect(cached!.name, 'Banff Trip');
       expect(cached.currency, '\$');
-      expect(cached.participants.map((p) => p.name), containsAll(['Ken', 'Jenny']));
+      // By name, also for a group cached in the server's order before #218.
+      expect(cached.participants.map((p) => p.name), ['Jenny', 'Ken']);
     });
 
     test('cacheGroup then cachedGroup round-trips information and currencyCode (issue #23)',

@@ -27,15 +27,26 @@ class GroupMonogram extends StatelessWidget {
   final String id;
   final String name;
   @override
+  Widget build(BuildContext context) =>
+      Monogram(name: name, color: monogramPalette[groupColorIndex(id)]);
+}
+
+/// [name]'s initials in white on a [color] circle: a group's in the group
+/// list, a participant's in "Who are you?" (#218).
+class Monogram extends StatelessWidget {
+  const Monogram({super.key, required this.name, required this.color, this.radius = 20});
+  final String name;
+  final Color color;
+  final double radius;
+  @override
   Widget build(BuildContext context) => ExcludeSemantics(
         child: CircleAvatar(
-          radius: 20,
-          backgroundColor: monogramPalette[groupColorIndex(id)],
+          radius: radius,
+          backgroundColor: color,
           foregroundColor: Colors.white,
           child: Text(groupInitials(name),
               textScaler: TextScaler.noScaling,
-              style:
-                  const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+              style: TextStyle(fontSize: radius * 0.85, fontWeight: FontWeight.w600)),
         ),
       );
 }

@@ -36,6 +36,16 @@ class Group {
   });
 }
 
+/// [participants] by name, then id (#218): the order every screen lists
+/// them in, set as a group is fetched and as it's read from the cache.
+/// The server returns them in no fixed order, which moved people around
+/// between refreshes.
+List<Participant> participantsByName(Iterable<Participant> participants) => [...participants]
+  ..sort((a, b) {
+    final name = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    return name != 0 ? name : a.id.compareTo(b.id);
+  });
+
 class Participant {
   final String id;
   final String name;

@@ -12,8 +12,13 @@ import 'package:spliit2go/screens/group_screen.dart';
 import 'package:spliit2go/services/active_user.dart';
 import 'package:spliit2go/services/settings_service.dart';
 import 'package:spliit2go/sync/outbox.dart';
+import 'package:spliit2go/theme.dart';
+import 'package:spliit2go/widgets/active_user_sheet.dart';
+import 'package:spliit2go/widgets/expense_list.dart';
+import 'package:spliit2go/widgets/group_monogram.dart';
+import 'package:spliit2go/widgets/grouped_section.dart';
 
-// The one-time "Who are you?" prompt (issue #85).
+// The one-time "Who are you?" prompt (issue #85), a sheet since #218.
 void main() {
   const group = Group(
     id: 'g1',
@@ -206,13 +211,132 @@ void main() {
 
     await tester.tap(find.widgetWithText(ListTile, 'You'));
     await tester.pumpAndSettle();
-    await tester.tap(find.descendant(of: find.byType(SimpleDialog), matching: find.text('Alex')));
+    await tester.tap(find.descendant(of: find.byType(ActiveUserPicker), matching: find.text('Alex')));
     await tester.pumpAndSettle();
 
     expect(await stored(db), 'alex');
     expect(find.widgetWithText(ListTile, 'Nobody'), findsNothing);
     expect(find.text('You’re settled up'), findsOneWidget);
     await closeGroup(tester);
+  });
+
+  testWidgets('slides up as a sheet with no Cancel button; a drag down dismisses it (#218)',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.cacheGroup(group);
+
+    await openGroup(tester, db);
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.text('Cancel'), findsNothing);
+    await tester.fling(prompt, const Offset(0, 600), 2000);
+    await tester.pumpAndSettle();
+    expect(prompt, findsNothing);
+    expect(await stored(db), nobodyParticipantId);
+    await closeGroup(tester);
+  });
+
+  testWidgets('use-this-name starts on while no name is set; turned off, the pick sets none (#218)',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.cacheGroup(group);
+
+    await openGroup(tester, db);
+    final remember = find.byType(Switch);
+    expect(tester.widget<Switch>(remember).value, isTrue);
+    expect(find.text('Groups you open or join later pick you by this name, without asking.'),
+        findsOneWidget);
+    await tester.tap(find.text('Use this name in new groups'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Switch>(remember).value, isFalse);
+
+    await tester.tap(find.text('Bea'));
+    await tester.pumpAndSettle();
+    expect(await stored(db), 'bea');
+    expect(await SettingsService().defaultActiveUserName(), isNull);
+    await closeGroup(tester);
+  });
+
+  testWidgets('use-this-name starts off once a name is set; a pick keeps it, unless turned on (#218)',
+      (tester) async {
+    // "Kenneth" matches nobody here, so the group asks.
+    SharedPreferences.setMockInitialValues({'default_active_user_name': 'Kenneth'});
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.cacheGroup(group);
+
+    await openGroup(tester, db);
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    expect(find.textContaining('Now “Kenneth”'), findsOneWidget);
+    await tester.tap(find.text('Alex'));
+    await tester.pumpAndSettle();
+    expect(await stored(db), 'alex');
+    expect(await SettingsService().defaultActiveUserName(), 'Kenneth');
+
+    // From the You row on Balances, turned on: the name becomes Bea's.
+    await tester.tap(find.text('Balance'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'You'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(ActiveUserPicker), matching: find.text('Bea')));
+    await tester.pumpAndSettle();
+    expect(await stored(db), 'bea');
+    expect(await SettingsService().defaultActiveUserName(), 'Bea');
+    await closeGroup(tester);
+  });
+
+  testWidgets('Nobody never sets the name, even with use-this-name on (#218)', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.cacheGroup(group);
+
+    await openGroup(tester, db);
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+    await tester.tap(find.text('Nobody'));
+    await tester.pumpAndSettle();
+    expect(await SettingsService().defaultActiveUserName(), isNull);
+    await closeGroup(tester);
+  });
+
+  testWidgets('monograms in the expense rows\' colors, you in emerald; the choice checked, also for screen readers (#218)',
+      (tester) async {
+    const participants = [
+      Participant(id: 'alex', name: 'Alex'),
+      Participant(id: 'bea', name: 'Bea Chan'),
+    ];
+    await tester.pumpWidget(MaterialApp(
+      theme: spliit2goLightTheme,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const Scaffold(
+          body: ActiveUserPicker(participants: participants, checkedId: 'bea', defaultName: 'Bea Chan')),
+    ));
+    await tester.pumpAndSettle();
+    final colors = participantColors(participants, 'bea');
+    expect(colors['bea'], monogramPalette[0]);
+    final monograms = tester.widgetList<Monogram>(find.byType(Monogram)).toList();
+    expect({for (final m in monograms) m.name: m.color}, {'Alex': colors['alex'], 'Bea Chan': colors['bea']});
+    expect(find.text('BC'), findsOneWidget);
+    // The line between the rows starts where the names do.
+    final line = find.descendant(of: find.byType(GroupedSection).first, matching: find.byType(GroupedDivider));
+    expect(tester.getTopLeft(line).dx + tester.widget<GroupedDivider>(line).indent,
+        tester.getTopLeft(find.text('Alex')).dx);
+
+    final check = tester.getRect(find.byIcon(Icons.check));
+    expect(check.center.dy, closeTo(tester.getCenter(find.text('Bea Chan')).dy, 1));
+    expect(tester.widget<Icon>(find.byIcon(Icons.check)).color, spliit2goLightTheme.colorScheme.primary);
+
+    final handle = tester.ensureSemantics();
+    expect(tester.getSemantics(find.text('Bea Chan')),
+        isSemantics(hasCheckedState: true, isChecked: true, isInMutuallyExclusiveGroup: true));
+    for (final other in ['Alex', 'Nobody']) {
+      expect(tester.getSemantics(find.text(other)),
+          isSemantics(hasCheckedState: true, isChecked: false, isInMutuallyExclusiveGroup: true));
+    }
+    handle.dispose();
   });
 
   testWidgets('French at double text size on a narrow phone: the prompt wraps long labels (#87 review)',
@@ -244,12 +368,15 @@ void main() {
         locale: const Locale('fr'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: ActiveUserPicker(
-          participants: const [
-            Participant(id: 'alex', name: 'Alex'),
-            Participant(id: 'bart', name: 'Bartholomew Montgomery-Fitzgerald'),
-          ],
-          checkedId: checkedId,
+        home: Scaffold(
+          body: ActiveUserPicker(
+            participants: const [
+              Participant(id: 'alex', name: 'Alex'),
+              Participant(id: 'bart', name: 'Bartholomew Montgomery-Fitzgerald'),
+            ],
+            checkedId: checkedId == 'bart' ? 'bart' : nobodyParticipantId,
+            defaultName: 'Alex',
+          ),
         ),
       ));
       await tester.pumpAndSettle();

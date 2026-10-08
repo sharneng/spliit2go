@@ -34,6 +34,7 @@ import '../widgets/grouped_section.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../app_name.dart';
 import '../widgets/app_menu.dart';
+import '../widgets/active_user_sheet.dart';
 
 /// A single group's expenses, offline-first -- reached by pushing on top
 /// of GroupListScreen (the app's actual root; see main.dart and
@@ -626,65 +627,28 @@ class _GroupScreenState extends State<GroupScreen> {
   /// group, on this phone". On the first ask, dismissing counts as
   /// "Nobody" so it's never asked again; from Stats it changes nothing.
   Future<void> _pickActiveUser({required bool firstAsk}) async {
-    final selected = await showDialog<String>(
-      context: context,
-      builder: (context) => ActiveUserPicker(
-        participants: _group!.participants,
-        checkedId: firstAsk ? null : _activeUserId ?? nobodyParticipantId,
-      ),
+    final defaultName = await _settings.defaultActiveUserName();
+    if (!mounted) return;
+    final choice = await showActiveUserSheet(
+      context,
+      participants: _group!.participants,
+      checkedId: firstAsk ? null : _activeUserId ?? nobodyParticipantId,
+      defaultName: defaultName,
     );
-    if (selected == null && !firstAsk) return;
-    final stored = selected ?? nobodyParticipantId;
+    if (choice == null && !firstAsk) return;
+    final stored = choice?.participantId ?? nobodyParticipantId;
     await widget.db.setActiveParticipant(widget.groupId, stored);
     final newId = stored == nobodyParticipantId ? null : stored;
-    // A new device never has a default name, so seed it from the first
-    // pick: later groups with that name then match without asking.
-    if (newId != null && await _settings.defaultActiveUserName() == null) {
+    // The device's default name picks you in groups opened later; the
+    // sheet asks whether this pick sets it, on by default only while it's
+    // unset (#218).
+    if (newId != null && choice!.rememberName) {
       final picked = _group!.participants.where((p) => p.id == newId);
       if (picked.isNotEmpty) {
         await _settings.setDefaultActiveUserName(picked.first.name);
       }
     }
     if (mounted) setState(() => _activeUserId = newId);
-  }
-}
-
-/// The "Who are you?" dialog: pops a participant's id, or
-/// [nobodyParticipantId] for "Nobody" (listed last).
-class ActiveUserPicker extends StatelessWidget {
-  const ActiveUserPicker({super.key, required this.participants, this.checkedId});
-
-  final List<Participant> participants;
-
-  /// The option to show checked: a participant's id, [nobodyParticipantId],
-  /// or null for none.
-  final String? checkedId;
-
-  @override
-  Widget build(BuildContext context) {
-    return SimpleDialog(
-      title: Text(context.l10n.groupScreenActiveUserDialogTitle),
-      children: [
-        for (final p in participants) _option(context, p.id, p.name),
-        _option(context, nobodyParticipantId, context.l10n.groupScreenActiveUserNone),
-      ],
-    );
-  }
-
-  Widget _option(BuildContext context, String id, String label) {
-    return SimpleDialogOption(
-      onPressed: () => Navigator.of(context).pop(id),
-      child: Row(
-        children: [
-          if (checkedId == id) ...[
-            const Icon(Icons.check, size: 18),
-            const SizedBox(width: 8),
-          ],
-          // Flexible so a long label wraps at large text sizes.
-          Flexible(child: Text(label)),
-        ],
-      ),
-    );
   }
 }
 

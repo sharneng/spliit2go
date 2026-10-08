@@ -1070,9 +1070,9 @@ class AppDatabase extends _$AppDatabase {
       information: row.information,
       currency: row.currency,
       currencyCode: row.currencyCode,
-      participants: (jsonDecode(row.participantsJson) as List)
-          .map((p) => Participant.fromJson(p as Map<String, dynamic>))
-          .toList(),
+      // Sorted again: a group cached before #218 kept the server's order.
+      participants: participantsByName((jsonDecode(row.participantsJson) as List)
+          .map((p) => Participant.fromJson(p as Map<String, dynamic>))),
     );
   }
 
@@ -1095,9 +1095,8 @@ class AppDatabase extends _$AppDatabase {
         information: row.information,
         currency: row.currency,
         currencyCode: row.currencyCode,
-        participants: (jsonDecode(row.participantsJson) as List)
-            .map((p) => Participant.fromJson(p as Map<String, dynamic>))
-            .toList(),
+        participants: participantsByName((jsonDecode(row.participantsJson) as List)
+            .map((p) => Participant.fromJson(p as Map<String, dynamic>))),
       );
     });
   }

@@ -112,22 +112,17 @@ class ExpenseDateList extends StatelessWidget {
 }
 
 /// Each participant's color in a group (#207), fixed rather than hashed
-/// so no two share one while there are colors left: you are always
-/// emerald, the app's own accent, and the others take the rest of
-/// [monogramPalette] by name, starting over past seven. By name, not
-/// the group's order: the server returns participants in no fixed
-/// order, which would recolor people between refreshes.
+/// so no two share one while there are colors left: the seven colors of
+/// [monogramPalette] after emerald, by name, starting over past seven.
+/// You are emerald, the app's own accent, in place of yours; the others
+/// keep theirs whoever you are, so picking someone else in "Who are
+/// you?" recolors only the two of you (#218, Kenneth).
 Map<String, Color> participantColors(List<Participant> participants, String? activeUserId) {
   final others = monogramPalette.sublist(1);
-  final byName = [...participants]
-    ..sort((a, b) {
-      final name = a.name.toLowerCase().compareTo(b.name.toLowerCase());
-      return name != 0 ? name : a.id.compareTo(b.id);
-    });
-  var next = 0;
+  final byName = participantsByName(participants);
   return {
-    for (final p in byName)
-      p.id: p.id == activeUserId ? monogramPalette[0] : others[next++ % others.length],
+    for (final (i, p) in byName.indexed)
+      p.id: p.id == activeUserId ? monogramPalette[0] : others[i % others.length],
   };
 }
 
