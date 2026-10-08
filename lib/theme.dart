@@ -3,6 +3,8 @@ import 'dart:ui' show lerpDouble;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'widgets/grouped_section.dart';
+
 /// Shared iOS-compatible identity colors; see THIRD_PARTY_NOTICES.md.
 const monogramPalette = <Color>[
   Color(0xff059669),
@@ -33,11 +35,15 @@ ThemeData _appTheme(Brightness brightness, {bool highContrast = false}) {
   };
   final accent = dark ? _accentDark : _accentLight;
   // Seeded from the accent, with the accent itself as primary: a seeded
-  // scheme alone would shift it to Material's own tone of that hue.
+  // scheme alone would shift it to Material's own tone of that hue. In
+  // dark mode the red of delete buttons, destructive menu rows and errors
+  // is the amount red: Material's own (#FFB4AB) is a pale pink that reads
+  // faint (#217, Kenneth).
   final colorScheme = ColorScheme.fromSeed(
     seedColor: accent,
     brightness: brightness,
     primary: accent,
+    error: dark ? SpliitColors.dark.moneyNegative : null,
   );
   final theme = ThemeData(
     useMaterial3: true,
@@ -58,6 +64,10 @@ ThemeData _appTheme(Brightness brightness, {bool highContrast = false}) {
   // (#215).
   final addColor = colorScheme.primaryContainer;
   final onAddColor = colorScheme.onPrimaryContainer;
+  // Menus in the page's color in light mode, the lines' between card rows
+  // too; in dark the cards', since the lines' lighter tone over a whole
+  // menu left the emerald check and the red under 4.5:1 (#217, Kenneth).
+  final menuColor = dark ? GroupedSection.cardColorOf(colorScheme) : base;
   return theme.copyWith(
     scaffoldBackgroundColor: base,
     // The bar keeps the page's color when content scrolls under it,
@@ -66,6 +76,39 @@ ThemeData _appTheme(Brightness brightness, {bool highContrast = false}) {
       backgroundColor: base,
       surfaceTintColor: Colors.transparent,
       scrolledUnderElevation: 0,
+    ),
+    // Menus as One UI's pop-up menus (#217), on every platform: in
+    // [menuColor], well rounded, with a soft shadow and no tint, dropping
+    // below their button rather than covering it.
+    popupMenuTheme: PopupMenuThemeData(
+      color: menuColor,
+      surfaceTintColor: Colors.transparent,
+      elevation: 6,
+      shadowColor: Colors.black.withValues(alpha: dark ? 0.6 : 0.25),
+      // A hairline edge, so the menu reads on a page or card of nearly its
+      // own color: a shade darker in light mode, and in dark a shade
+      // lighter, halfway to the lines' tone between card rows, since a
+      // darker edge vanishes on the black page (#217, Kenneth).
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(
+              width: 0.5,
+              color: dark
+                  ? Color.lerp(menuColor, GroupedDivider.darkColor, 0.5)!
+                  : Color.alphaBlend(Colors.black.withValues(alpha: 0.08), menuColor))),
+      menuPadding: const EdgeInsets.symmetric(vertical: 8),
+      position: PopupMenuPosition.under,
+      // 17, as iOS's body text, a step over bodyLarge's 16, so the
+      // labels hold their own beside the 24pt icons.
+      // Dimmed when disabled, as Material's own menu style does: the menu
+      // relies on this style to dim a disabled row's label (#227 review).
+      labelTextStyle: WidgetStateProperty.resolveWith((states) =>
+          theme.textTheme.bodyLarge?.copyWith(
+              fontSize: 17,
+              color: states.contains(WidgetState.disabled)
+                  ? colorScheme.onSurface.withValues(alpha: 0.38)
+                  : colorScheme.onSurface)),
+      iconColor: colorScheme.onSurfaceVariant,
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: base,

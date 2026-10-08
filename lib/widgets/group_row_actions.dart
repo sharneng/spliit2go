@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 
+import 'app_menu.dart';
+
 /// One action shared by the anchored menu and swipe panes.
 class GroupRowAction {
   const GroupRowAction(
@@ -65,6 +67,15 @@ class _GroupRowActionsState extends State<GroupRowActions>
   Offset? _pressPosition;
   bool _menuOpen = false;
 
+  List<AppMenuItem> get _menuItems => [
+        for (final action in widget.actions)
+          AppMenuItem(
+              label: action.label,
+              icon: action.icon,
+              destructive: action.destructive,
+              onSelected: action.onSelected),
+      ];
+
   Future<void> _openMenu() async {
     if (_menuOpen) return;
     _menuOpen = true;
@@ -87,26 +98,7 @@ class _GroupRowActionsState extends State<GroupRowActions>
         constraints:
             BoxConstraints(maxWidth: (overlay.size.width - 32).clamp(0, 320)),
         items: [
-          for (var i = 0; i < actions.length; i++)
-            PopupMenuItem<int>(
-                value: i,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(actions[i].icon,
-                          color: actions[i].destructive
-                              ? Theme.of(context).colorScheme.error
-                              : null),
-                      const SizedBox(width: 12),
-                      Flexible(
-                          child: Text(actions[i].label,
-                              style: actions[i].destructive
-                                  ? TextStyle(
-                                      color:
-                                          Theme.of(context).colorScheme.error)
-                                  : null)),
-                    ]))),
+          for (final (i, item) in _menuItems.indexed) appPopupMenuItem(context, i, item),
         ],
       );
       if (mounted && selected != null) actions[selected].onSelected();

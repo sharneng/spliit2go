@@ -34,6 +34,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../widgets/bottom_inset.dart';
 import '../widgets/caption_icon.dart';
 import '../app_name.dart';
+import '../widgets/app_menu.dart';
 
 /// Registered as a `MaterialApp.navigatorObservers` entry (main.dart) so
 /// [_GroupListScreenState] can hear about routes pushed *on top of* it by
@@ -193,17 +194,15 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
                           color: spliitWordmarkGreen)))),
         ]),
         actions: [
-          PopupMenuButton<GroupListSort>(
+          AppMenuButton(
             tooltip: context.l10n.groupListSort,
             icon: const Icon(Icons.sort),
-            initialValue: _sort,
-            onSelected: _setSort,
-            itemBuilder: (context) => [
+            items: [
               for (final sort in GroupListSort.values)
-                CheckedPopupMenuItem(
-                    value: sort,
+                AppMenuItem(
+                    label: _sortLabel(sort),
                     checked: sort == _sort,
-                    child: Text(_sortLabel(sort))),
+                    onSelected: () => _setSort(sort)),
             ],
           ),
           IconButton(

@@ -33,6 +33,13 @@ The theme wasn't decided all at once. It was settled piece by piece, in focused 
    - Lucide icons for categories, marks and captions, as on spliit.app; categories are colored by their grouping.
    - The web app's terms: Paid by, Paid for, the split modes, Reimbursement.
 8. **How colors are matched to iOS.** When we follow an iOS color on our green-tinted palette, we don't copy Apple's value. We measure its contrast against its own background, then lighten or darken our color, keeping its hue, until it reaches the same contrast. The dark row line ([#213](https://github.com/sharneng/spliit2go/issues/213)) was set this way. Kenneth judges the result on a phone, next to iOS's own screens.
+9. **One popup menu on both platforms, styled after One UI's** ([#217](https://github.com/sharneng/spliit2go/issues/217)). Kenneth tried two iPhone-only menus and turned both down. Flutter's iOS pull-down menu (`CupertinoMenuAnchor`) is far from iOS 26's glass menus. Material's `MenuAnchor` made translucent showed the content behind it without iOS's blur, and imitating the blur would look clumsy. `MenuAnchor` adds nothing these short menus need.
+   - The menu is a themed `PopupMenuButton` or `showMenu` (`popupMenuTheme`). Its rows come from `lib/widgets/app_menu.dart`.
+   - **Color:** the page's color in light mode, the card's in dark. The dark row lines' tone (#37443B) over a whole menu left the emerald check and the red under 4.5:1.
+   - **Edge:** a 0.5pt hairline. In light mode it's a shade darker than the menu. In dark mode it's a shade lighter (#29322C), halfway to the row lines' tone, because a darker edge vanished on the black page.
+   - **Shape and placement:** 24pt corners, a soft shadow, no tint, dropping below its button.
+   - **Rows:** 40pt tall, labels at 17pt beside 24pt icons. Icons lead; in a menu that picks one, the emerald check leads instead, and the other rows keep that room so the labels line up.
+10. **Dark mode's red is the amount red, #FF8A9B** ([#217](https://github.com/sharneng/spliit2go/issues/217)). It's used for delete buttons, destructive menu rows and errors. Material's #FFB4AB is a pale pink that read faint.
 
 The layout of particular screens is in their own records: [group-list-redesign.md](group-list-redesign.md), [expense-rows.md](expense-rows.md), [stats-screen.md](stats-screen.md) and [receipts.md](receipts.md).
 
