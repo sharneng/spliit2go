@@ -27,6 +27,11 @@ import '../widgets/receipts.dart';
 import '../utils/haptics.dart';
 import '../widgets/grouped_section.dart';
 import '../widgets/bottom_inset.dart';
+import '../widgets/expense_list.dart' show participantColors;
+import '../widgets/group_monogram.dart';
+import '../widgets/top_bar_buttons.dart';
+import '../theme.dart';
+import 'package:intl/intl.dart' show NumberFormat;
 
 /// What tapping an expense does, from both the expense list and the
 /// Activity tab (issue #90): a bottom sheet showing the expense's details,
@@ -68,6 +73,7 @@ Future<bool> showExpenseDetails(
   String? activeUserId,
   bool fetchIfMissing = false,
   @visibleForTesting Stream<bool>? connectivity,
+  @visibleForTesting DateTime Function() now = DateTime.now,
 }) async {
   final action = await showModalBottomSheet<_SheetAction>(
     context: context,
@@ -83,6 +89,7 @@ Future<bool> showExpenseDetails(
       activeUserId: activeUserId,
       fetchIfMissing: fetchIfMissing,
       connectivity: connectivity ?? _deviceOnline(),
+      now: now,
     ),
   );
   if (!context.mounted) return false;
@@ -158,6 +165,9 @@ class _ExpenseDetailsSheet extends StatefulWidget {
   final bool fetchIfMissing;
   final Stream<bool> connectivity;
 
+  /// Today, for whether the summary's date needs its year.
+  final DateTime Function() now;
+
   const _ExpenseDetailsSheet({
     required this.expenseId,
     required this.group,
@@ -167,6 +177,7 @@ class _ExpenseDetailsSheet extends StatefulWidget {
     required this.activeUserId,
     required this.fetchIfMissing,
     required this.connectivity,
+    required this.now,
   });
 
   @override
@@ -662,49 +673,89 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     final originalAmount = e.originalAmountCents;
     final originalCurrency = e.originalCurrency;
 
+    final secondary = SpliitColors.of(context).secondaryContent;
+    final amount = formatMoney(e.amountCents, currency, locale: locale);
+    final original = originalAmount != null && originalCurrency != null
+        ? l10n.expenseDetailsOriginalAmount(
+            formatMoney(originalAmount, _symbolFor(originalCurrency), locale: locale))
+        : null;
+    final colors = participantColors(widget.group.participants, widget.activeUserId);
+    final canAct = !e.syncFailed && !e.pending;
+
     return [
+      // Edit and delete on a row of their own at the top, as a top bar's
+      // buttons (#226): beside the title, they squeezed a long one.
+      if (canAct) ...[
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: TopBarButtons(padding: EdgeInsets.zero, children: _actionButtons(context, e)),
+        ),
+        const SizedBox(height: 8),
+      ],
       Row(
         children: [
-          CategoryIconGlyph(category: known, size: 40),
+          CategoryIconGlyph(category: known, size: 40, isReimbursement: e.isReimbursement),
           const SizedBox(width: 12),
-          Expanded(child: Text(e.title, style: theme.textTheme.titleLarge)),
+          // The title, the amount and what it was originally are read as
+          // one: "Dinner, $90.00" (#226).
+          Expanded(
+              child: Semantics(
+                  label: [e.title, amount, if (original != null) original].join(', '),
+                  excludeSemantics: true,
+                  child: Text(e.title,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                          // A reimbursement's title italic, as in its row (#224).
+                          fontStyle: e.isReimbursement ? FontStyle.italic : null)))),
         ],
       ),
       const SizedBox(height: 12),
-      Money(formatMoney(e.amountCents, currency, locale: locale),
-          size: MoneySize.hero, isReimbursement: e.isReimbursement),
-      if (originalAmount != null && originalCurrency != null)
-        Text(
-          l10n.expenseDetailsOriginalAmount(
-              formatMoney(originalAmount, _symbolFor(originalCurrency), locale: locale)),
-          style: theme.textTheme.bodyMedium
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-        ),
-      ..._badges(context, e),
-      const SizedBox(height: 12),
-      ..._actions(context, e),
+      ExcludeSemantics(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Money(amount, size: MoneySize.hero, isReimbursement: e.isReimbursement),
+          if (original != null)
+            Text(original, style: theme.textTheme.bodyMedium?.copyWith(color: secondary)),
+        ]),
+      ),
+      ..._status(context, e),
       const SizedBox(height: 20),
       GroupedSection(
         margin: _sectionMargin,
-        dividerIndent: 56,
         children: [
-          _info(context, Icons.calendar_today_outlined, l10n.expenseDateLabel,
-              formatDate(e.date, locale: locale)),
-          _info(context, Icons.category_outlined, l10n.expenseCategoryLabel,
-              localizedCategoryLabel(context, e.category, known)),
-          _info(context, Icons.person_outline, l10n.expensePaidByLabel, _name(e.paidBy)),
+          Padding(padding: const EdgeInsets.all(16), child: _summary(context, e, known)),
         ],
       ),
       GroupedSection(
         margin: _sectionMargin,
         caption: l10n.expensePaidForHeading,
-        captionTrailing: Text(_splitLabel(context, e.splitMode),
-            style: theme.textTheme.bodyMedium
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        // In line with the amounts in the card, as the caption is with the
+        // names (#226): the caption's own end padding is 8, the card's 16.
+        captionTrailing: Padding(
+          padding: const EdgeInsetsDirectional.only(end: 8),
+          child: Text(_splitLabel(context, e.splitMode),
+              style: theme.textTheme.bodyMedium?.copyWith(color: secondary)),
+        ),
+        // Past the monogram, under the name.
+        dividerIndent: 64,
         children: [
           for (final share in e.paidFor)
             GroupedRow(
-              title: Text(_name(share.participantId)),
+              leading: Monogram(
+                  name: _participantName(share.participantId),
+                  color: colors[share.participantId] ?? monogramPalette.first,
+                  radius: 16),
+              // The share at the end of the name's line, beside the amount;
+              // under the name when both don't fit (a large text size).
+              // In the title, which gives way: the trailing slot doesn't.
+              title: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                children: [
+                  Text(_name(share.participantId)),
+                  if (_shareLabel(context, e.splitMode, share) case final label?)
+                    Text(label, style: theme.textTheme.bodyMedium?.copyWith(color: secondary)),
+                ],
+              ),
               trailing:
                   Money(formatMoney(shares[share.participantId] ?? 0, currency, locale: locale)),
             ),
@@ -735,32 +786,10 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     ];
   }
 
-  List<Widget> _badges(BuildContext context, Expense e) {
-    final l10n = context.l10n;
-    final labels = [
-      if (e.isReimbursement) l10n.expenseDetailsReimbursement,
-      switch (e.recurrenceRule) {
-        RecurrenceRule.daily => l10n.expenseDetailsRepeatsDaily,
-        RecurrenceRule.weekly => l10n.expenseDetailsRepeatsWeekly,
-        RecurrenceRule.monthly => l10n.expenseDetailsRepeatsMonthly,
-        RecurrenceRule.none => null,
-      },
-    ].whereType<String>();
-    if (labels.isEmpty) return const [];
-    return [
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 4,
-        children: [
-          for (final label in labels)
-            Chip(label: Text(label), visualDensity: VisualDensity.compact),
-        ],
-      ),
-    ];
-  }
-
-  List<Widget> _actions(BuildContext context, Expense e) {
+  /// What's in the way of acting on the expense, under the amount: a
+  /// failed sync with its choices, a pending one, or why the buttons are
+  /// off. Nothing when they work.
+  List<Widget> _status(BuildContext context, Expense e) {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final muted = theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant);
@@ -802,54 +831,95 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
         ),
       ];
     }
-    if (e.pending) return [Text(l10n.expenseDetailsPending, style: muted)];
+    if (e.pending) return [const SizedBox(height: 8), Text(l10n.expenseDetailsPending, style: muted)];
     final offline = _online == false;
     final message = _actionError ?? (offline ? l10n.expenseDetailsNeedsConnection : null);
+    if (message == null) return const [];
+    return [
+      const SizedBox(height: 8),
+      if (_actionDiagnostics != null)
+        ErrorMessage(message, diagnostics: _actionDiagnostics)
+      else
+        Text(message, style: muted),
+    ];
+  }
+
+  /// Edit and delete, as icons on a capsule (#226); off while offline or
+  /// busy, a spinner in place of the one running.
+  List<Widget> _actionButtons(BuildContext context, Expense e) {
+    final l10n = context.l10n;
+    final off = _busy || _online == false;
     Widget icon(_ServerAction action, IconData data) => _running == action
         ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
         : Icon(data);
     return [
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          FilledButton.tonalIcon(
-            onPressed: _busy || offline ? null : _edit,
-            icon: icon(_ServerAction.edit, Icons.edit_outlined),
-            label: Text(l10n.expenseDetailsEdit),
-          ),
-          OutlinedButton.icon(
-            onPressed: _busy || offline ? null : () => _delete(e),
-            style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error),
-            icon: icon(_ServerAction.delete, Icons.delete_outline),
-            label: Text(l10n.commonDelete),
-          ),
-        ],
+      IconButton(
+        tooltip: l10n.expenseDetailsEdit,
+        onPressed: off ? null : _edit,
+        icon: icon(_ServerAction.edit, Icons.edit_outlined),
       ),
-      if (message != null) ...[
-        const SizedBox(height: 4),
-        if (_actionDiagnostics != null)
-          ErrorMessage(message, diagnostics: _actionDiagnostics)
-        else
-          Text(message, style: muted),
-      ],
+      IconButton(
+        tooltip: l10n.commonDelete,
+        onPressed: off ? null : () => _delete(e),
+        color: Theme.of(context).colorScheme.error,
+        icon: icon(_ServerAction.delete, Icons.delete_outline),
+      ),
     ];
   }
 
+  /// "Paid by Ken on Sep 12 for Groceries" (#226): the first card's three
+  /// rows as one sentence, its fixed words in the secondary color so the
+  /// names, date and category stand out. The language's own template, its
+  /// placeholders found by filling them with markers.
+  Widget _summary(BuildContext context, Expense e, Category? known) {
+    final l10n = context.l10n;
+    final locale = context.regionalDateLocale;
+    final theme = Theme.of(context);
+    final payer = e.paidBy == widget.activeUserId
+        ? l10n.expenseDetailsPayerYou
+        : _participantName(e.paidBy);
+    final date = formatDate(e.date,
+        locale: locale, withYear: !isWithinTenMonths(e.date, now: widget.now()));
+    final category = e.isReimbursement
+        ? l10n.expenseDetailsSettlement
+        : localizedCategoryLabel(context, e.category, known);
+    final frequency = switch (e.recurrenceRule) {
+      RecurrenceRule.daily => l10n.expenseDetailsFrequencyDaily,
+      RecurrenceRule.weekly => l10n.expenseDetailsFrequencyWeekly,
+      RecurrenceRule.monthly => l10n.expenseDetailsFrequencyMonthly,
+      RecurrenceRule.none => null,
+    };
+    // Private-use characters no translation contains.
+    const marks = ['\u{F0000}', '\u{F0001}', '\u{F0002}', '\u{F0003}'];
+    final values = [payer, date, category, if (frequency != null) frequency];
+    final template = frequency == null
+        ? l10n.expenseDetailsSummary(marks[0], marks[1], marks[2])
+        : l10n.expenseDetailsSummaryRepeating(marks[0], marks[1], marks[2], marks[3]);
+    final fixed = TextStyle(color: SpliitColors.of(context).secondaryContent);
+    final spans = <TextSpan>[];
+    template.splitMapJoin(RegExp(marks.join('|')), onMatch: (m) {
+      spans.add(TextSpan(text: values[marks.indexOf(m[0]!)]));
+      return '';
+    }, onNonMatch: (text) {
+      if (text.isNotEmpty) spans.add(TextSpan(text: text, style: fixed));
+      return '';
+    });
+    return Text.rich(TextSpan(children: spans), style: theme.textTheme.bodyLarge);
+  }
+
+  /// A person's part of a split by shares or percentages, beside their
+  /// amount (#226); none for an even split or exact amounts, whose amount
+  /// says it all. Both are stored times 100.
+  String? _shareLabel(BuildContext context, SplitMode mode, ExpenseShare share) =>
+      switch (mode) {
+        SplitMode.byShares => context.l10n.expenseDetailsShareCount(share.shares / 100),
+        SplitMode.byPercentage =>
+          NumberFormat.percentPattern(context.appLocale.toString()).format(share.shares / 10000),
+        _ => null,
+      };
+
   /// The sheet already has its own side padding.
   static const _sectionMargin = EdgeInsets.only(bottom: 20);
-
-  /// A labeled value: the label small above it, the icon leading.
-  Widget _info(BuildContext context, IconData icon, String label, String value) {
-    final theme = Theme.of(context);
-    return GroupedRow(
-      leading: Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
-      title: Text(label,
-          style: theme.textTheme.labelMedium
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-      subtitle: Text(value, style: theme.textTheme.bodyLarge),
-    );
-  }
 
   /// A participant's name, marked when it's this device's active user. A
   /// participant no longer in the group reads "Someone", as in Activity.
@@ -859,6 +929,11 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     if (participant == null) return l10n.activitySomeone;
     return id == widget.activeUserId ? l10n.expenseDetailsYou(participant.name) : participant.name;
   }
+
+  /// A participant's name alone, or "Someone".
+  String _participantName(String id) =>
+      widget.group.participants.where((p) => p.id == id).firstOrNull?.name ??
+      context.l10n.activitySomeone;
 
   /// The "paid in" currency's symbol (€ for EUR), or its code when this
   /// app doesn't know it.

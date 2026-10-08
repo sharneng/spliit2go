@@ -441,10 +441,6 @@
       }
     }
   },
-  "expenseDetailsReimbursement": "Reimbursement",
-  "expenseDetailsRepeatsDaily": "Repeats daily",
-  "expenseDetailsRepeatsWeekly": "Repeats weekly",
-  "expenseDetailsRepeatsMonthly": "Repeats monthly",
   "expenseDetailsOriginalAmount": "Originally {amount}",
   "@expenseDetailsOriginalAmount": {
     "placeholders": {
@@ -771,5 +767,59 @@
   "spokenSentenceEnd": ".",
   "@spokenSentenceEnd": {
     "description": "Ends each sentence of a spoken label (an expense or group row, the receipts clip), so a screen reader pauses between them."
+  },
+  "expenseDetailsSummary": "Paid by {payer} on {date} for {category}",
+  "@expenseDetailsSummary": {
+    "placeholders": {
+      "payer": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "category": {
+        "type": "String"
+      }
+    },
+    "description": "The expense details' one-sentence summary (#226). The fixed words are drawn in a secondary color, the placeholders in the text color."
+  },
+  "expenseDetailsSummaryRepeating": "Paid by {payer} on {date} for {category}, repeats {frequency}",
+  "@expenseDetailsSummaryRepeating": {
+    "placeholders": {
+      "payer": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "category": {
+        "type": "String"
+      },
+      "frequency": {
+        "type": "String"
+      }
+    },
+    "description": "expenseDetailsSummary for a recurring expense; frequency is expenseDetailsFrequencyDaily/Weekly/Monthly."
+  },
+  "expenseDetailsFrequencyDaily": "daily",
+  "expenseDetailsFrequencyWeekly": "weekly",
+  "expenseDetailsFrequencyMonthly": "monthly",
+  "expenseDetailsPayerYou": "you",
+  "@expenseDetailsPayerYou": {
+    "description": "The payer in expenseDetailsSummary when it is the active user."
+  },
+  "expenseDetailsSettlement": "settlement",
+  "@expenseDetailsSettlement": {
+    "description": "A reimbursement's category in expenseDetailsSummary: what it was paid for."
+  },
+  "expenseDetailsShareCount": "{count, plural, =1{1 share} other{{count} shares}}",
+  "@expenseDetailsShareCount": {
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "decimalPattern"
+      }
+    },
+    "description": "A person's shares, beside their amount, for an expense split by shares."
   }
 }

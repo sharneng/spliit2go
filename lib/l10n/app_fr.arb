@@ -212,10 +212,6 @@
   "expenseDetailsEdit": "Modifier",
   "expenseDetailsDiscard": "Abandonner",
   "expenseDetailsYou": "{name} (vous)",
-  "expenseDetailsReimbursement": "Remboursement",
-  "expenseDetailsRepeatsDaily": "Se répète chaque jour",
-  "expenseDetailsRepeatsWeekly": "Se répète chaque semaine",
-  "expenseDetailsRepeatsMonthly": "Se répète chaque mois",
   "expenseDetailsOriginalAmount": "Montant d'origine : {amount}",
   "expenseDetailsPending": "En attente de synchronisation. Vous pourrez la modifier une fois qu'elle aura atteint le serveur.",
   "expenseDetailsFailedHint": "Réessayez pour l'envoyer à nouveau, ou abandonnez-la sur cet appareil. Cette action est irréversible.",
@@ -340,5 +336,13 @@
   "expenseRowSpokenPaidBack": "{payer} a remboursé {amount} le {date}, {category}",
   "expenseRowSpokenYouPaidBack": "Vous avez remboursé {amount} le {date}, {category}",
   "expenseRowSpokenNoPayer": "{amount} le {date}, {category}",
-  "spokenSentenceEnd": "."
+  "spokenSentenceEnd": ".",
+  "expenseDetailsSummary": "Payé par {payer} le {date} pour {category}",
+  "expenseDetailsSummaryRepeating": "Payé par {payer} le {date} pour {category}, se répète {frequency}",
+  "expenseDetailsFrequencyDaily": "chaque jour",
+  "expenseDetailsFrequencyWeekly": "chaque semaine",
+  "expenseDetailsFrequencyMonthly": "chaque mois",
+  "expenseDetailsPayerYou": "vous",
+  "expenseDetailsSettlement": "remboursement",
+  "expenseDetailsShareCount": "{count, plural, =1{1 part} other{{count} parts}}"
 }

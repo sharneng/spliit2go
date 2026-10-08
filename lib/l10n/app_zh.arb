@@ -212,10 +212,6 @@
   "expenseDetailsEdit": "编辑",
   "expenseDetailsDiscard": "舍弃",
   "expenseDetailsYou": "{name}（你）",
-  "expenseDetailsReimbursement": "还款",
-  "expenseDetailsRepeatsDaily": "每日付",
-  "expenseDetailsRepeatsWeekly": "每周付",
-  "expenseDetailsRepeatsMonthly": "每月付",
   "expenseDetailsOriginalAmount": "原付金额：{amount}",
   "expenseDetailsPending": "等待上传。上传到服务器后即可编辑。",
   "expenseDetailsFailedHint": "重试发送，或从此设备上舍弃。舍弃后无法恢复。",
@@ -340,5 +336,13 @@
   "expenseRowSpokenPaidBack": "{payer} 于 {date} 还款 {amount}，{category}",
   "expenseRowSpokenYouPaidBack": "你于 {date} 还款 {amount}，{category}",
   "expenseRowSpokenNoPayer": "{date} {amount}，{category}",
-  "spokenSentenceEnd": "。"
+  "spokenSentenceEnd": "。",
+  "expenseDetailsSummary": "由{payer}于{date}支付，用于{category}",
+  "expenseDetailsSummaryRepeating": "由{payer}于{date}支付，用于{category}，{frequency}重复",
+  "expenseDetailsFrequencyDaily": "每天",
+  "expenseDetailsFrequencyWeekly": "每周",
+  "expenseDetailsFrequencyMonthly": "每月",
+  "expenseDetailsPayerYou": "你",
+  "expenseDetailsSettlement": "还款",
+  "expenseDetailsShareCount": "{count} 份"
 }

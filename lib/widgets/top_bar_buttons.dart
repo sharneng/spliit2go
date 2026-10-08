@@ -6,10 +6,17 @@ import 'grouped_section.dart';
 /// cards' color, lifted by the group screen's tab bar's shadow, so the two
 /// bars read as one set.
 class TopBarButtons extends StatelessWidget {
-  const TopBarButtons({super.key, required this.children});
+  const TopBarButtons({super.key, required this.children, this.padding = barPadding});
 
   /// [IconButton]s, or widgets built on one such as an AppMenuButton.
   final List<Widget> children;
+
+  /// Around the card. In a top bar, [barPadding]: as far from the
+  /// screen's edge as the cards and the back button.
+  final EdgeInsetsGeometry padding;
+
+  static const EdgeInsetsGeometry barPadding =
+      EdgeInsetsDirectional.only(start: 8, end: GroupedSection.inset);
 
   /// The card's height, and a single button's circle: iOS's 44.
   static const double size = 44;
@@ -20,8 +27,7 @@ class TopBarButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        // As far from the screen's edge as the cards and the back button.
-        padding: const EdgeInsetsDirectional.only(start: 8, end: GroupedSection.inset),
+        padding: padding,
         child: topBarCard(
           context,
           IconButtonTheme(

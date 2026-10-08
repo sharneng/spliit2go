@@ -27,6 +27,12 @@ import 'package:spliit2go/theme.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/widgets/category_icon.dart';
 
+
+/// The expense details' edit or delete button, an icon on a capsule
+/// (#226), by its tooltip: still there while it shows a spinner.
+Finder actionButton(String tooltip) =>
+    find.ancestor(of: find.byTooltip(tooltip), matching: find.byType(IconButton));
+
 void main() {
   // GroupScreen's _resolveActiveUser awaits
   // SettingsService.defaultActiveUserName() -> SharedPreferences.
@@ -177,7 +183,7 @@ void main() {
       expect(fetches, 0);
       expect(find.text('Edit expense'), findsNothing);
 
-      await tester.tap(find.widgetWithText(FilledButton, 'Edit'));
+      await tester.tap(actionButton('Edit'));
       await tester.pumpAndSettle();
 
       expect(fetches, 1);
@@ -215,7 +221,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(FilledButton, 'Edit'));
+      await tester.tap(actionButton('Edit'));
       await tester.pumpAndSettle();
 
       expect(find.text('Edit expense'), findsNothing);
@@ -265,7 +271,7 @@ void main() {
 
       expect(find.byType(BottomSheet), findsOneWidget);
       expect(find.textContaining('Waiting to sync'), findsOneWidget);
-      expect(find.widgetWithText(FilledButton, 'Edit'), findsNothing);
+      expect(actionButton('Edit'), findsNothing);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
@@ -294,7 +300,7 @@ void main() {
       await tester.tap(find.text(title));
       await tester.pumpAndSettle();
       await tester.tap(find.descendant(
-          of: find.byType(BottomSheet), matching: find.widgetWithText(OutlinedButton, 'Delete')));
+          of: find.byType(BottomSheet), matching: actionButton('Delete')));
       await tester.pumpAndSettle();
       await tester.tap(find.descendant(
           of: find.byWidgetPredicate((w) => w is AlertDialog), matching: find.text('Delete')));
