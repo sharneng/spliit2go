@@ -7,6 +7,7 @@ import '../l10n/context_l10n.dart';
 import '../services/build_info.dart';
 import '../theme.dart';
 import '../widgets/bottom_inset.dart';
+import '../app_name.dart';
 
 /// Where About's links go (#109).
 const spliitUrl = 'https://spliit.app';
@@ -80,7 +81,7 @@ class _AboutScreenState extends State<AboutScreen> {
   /// Copies the version with the full commit, for bug reports (#176).
   Future<void> _copyVersion(PackageInfo info, BuildCommit commit) async {
     await Clipboard.setData(
-        ClipboardData(text: 'Spliit2Go ${info.version} (${info.buildNumber} · ${commit.full})'));
+        ClipboardData(text: '$appName ${info.version} (${info.buildNumber} · ${commit.full})'));
     if (!mounted) return;
     ScaffoldMessenger.maybeOf(context)
         ?.showSnackBar(SnackBar(content: Text(context.l10n.aboutVersionCopied)));
@@ -116,7 +117,7 @@ class _AboutScreenState extends State<AboutScreen> {
         children: [
           Center(child: _logo(72)),
           const SizedBox(height: 12),
-          Text('Spliit2Go',
+          Text(appName,
               textAlign: TextAlign.center,
               style: theme.textTheme.headlineSmall
                   ?.copyWith(fontWeight: FontWeight.w700, color: spliitWordmarkGreen)),
@@ -158,7 +159,7 @@ class _AboutScreenState extends State<AboutScreen> {
             subtitle: Text(l10n.aboutLicensesSubtitle),
             onTap: () => showLicensePage(
               context: context,
-              applicationName: 'Spliit2Go',
+              applicationName: appName,
               applicationVersion: version,
               applicationIcon: Padding(padding: const EdgeInsets.all(8), child: _logo(48)),
             ),

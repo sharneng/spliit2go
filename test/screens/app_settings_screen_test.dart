@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:spliit2go/app_name.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/main.dart';
 import 'package:spliit2go/screens/app_settings_screen.dart';
@@ -68,7 +69,7 @@ void main() {
 
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('Spliit2Go'), findsOneWidget);
+    expect(find.text(appName), findsOneWidget);
     await tester.tap(find.byType(FloatingActionButton));
     await tester.pumpAndSettle();
     expect(find.byType(JoinGroupScreen), findsOneWidget);

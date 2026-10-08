@@ -6,6 +6,7 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:spliit2go/app_name.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/models/group.dart';
@@ -502,7 +503,7 @@ void main() {
               date: DateTime(year, 12, 31)),
       ]);
       await pump(tester, db, locale: locale, scale: 1.5);
-      expect(find.text('Spliit2Go'), findsOneWidget);
+      expect(find.text(appName), findsOneWidget);
       expect(find.text(r'$'), findsNothing);
       expect(tester.takeException(), isNull);
     });

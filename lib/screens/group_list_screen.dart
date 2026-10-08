@@ -33,6 +33,7 @@ import '../utils/haptics.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../widgets/bottom_inset.dart';
 import '../widgets/caption_icon.dart';
+import '../app_name.dart';
 
 /// Registered as a `MaterialApp.navigatorObservers` entry (main.dart) so
 /// [_GroupListScreenState] can hear about routes pushed *on top of* it by
@@ -186,7 +187,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
           const Flexible(
               child: FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: Text('Spliit2Go',
+                  child: Text(appName,
                       style: TextStyle(
                           fontWeight: FontWeight.w700,
                           color: spliitWordmarkGreen)))),

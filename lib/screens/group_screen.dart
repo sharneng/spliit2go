@@ -32,6 +32,7 @@ import '../widgets/receipt_download_indicator.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/grouped_section.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../app_name.dart';
 
 /// A single group's expenses, offline-first -- reached by pushing on top
 /// of GroupListScreen (the app's actual root; see main.dart and
@@ -238,7 +239,7 @@ class _GroupScreenState extends State<GroupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_group?.name ?? 'Spliit2Go'),
+        title: Text(_group?.name ?? appName),
         // A meatballs menu, like spliit-ios's group toolbar (issue #3):
         // group settings, and sharing the group's link. Room for more
         // later (a QR code).
