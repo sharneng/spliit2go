@@ -32,7 +32,7 @@ Once the store version was installed on the team's phones, every development bui
 5. **Guard rails, so a dev build can't be mistaken for the real app:**
    - A prod release build fails without the upload key (`android/key.properties`); before, it fell back to the debug key without a word.
    - Gradle refuses a dev Play bundle. Asked for by name (`flutter build appbundle`), it fails before anything builds. Reached through an aggregate task such as `bundleDebug`, the tasks that make a dev bundle stop before they run, so no `.aab` is written.
-   - `scripts/check_android_flavors`, run in CI, checks the signing and the bundle guard, using a throwaway upload key.
+   - `scripts/check_android_flavors`, run in CI, checks the signing and the bundle guard, using a throwaway upload key. CI runs it on every push to main, but on a pull request only when it changes `android/`, `pubspec.yaml`, `pubspec.lock`, the script or the CI workflow. Run on every PR it finished about two minutes after the other checks (PRs #220 to #229), and Dart-only changes can't break it.
    - If a dev build reaches a store anyway, the store rejects it, because no app is registered under the dev id.
 6. **Group links stay in both apps.** On Android 12 and later, unverified links (#110) open in an app only once "Open by default" is turned on for it. So everyday use turns it on for the prod app only, and dev links are tested with a package-targeted `adb` command, or by pasting the link into the dev app. Taking the handler out of dev would have left no way to test a tapped link there.
 7. **Separate local data, shared server data.**
