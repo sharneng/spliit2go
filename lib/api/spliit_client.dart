@@ -123,12 +123,10 @@ class SpliitClient {
       information: g['information'] as String?,
       currency: g['currency'] as String,
       currencyCode: g['currencyCode'] as String?,
-      participants: (g['participants'] as List)
-          .map((p) => Participant(
-                id: _asId((p as Map<String, dynamic>)['id']),
-                name: p['name'] as String,
-              ))
-          .toList(),
+      participants: participantsByName((g['participants'] as List).map((p) => Participant(
+            id: _asId((p as Map<String, dynamic>)['id']),
+            name: p['name'] as String,
+          ))),
     );
   }
 

@@ -111,7 +111,8 @@ void main() {
 
       expect(group.name, 'Banff Trip');
       expect(group.participants, hasLength(2));
-      expect(group.participants.map((p) => p.name), containsAll(['Ken', 'Jenny']));
+      // By name, whatever the server's order (#218).
+      expect(group.participants.map((p) => p.name), ['Jenny', 'Ken']);
     });
 
     // Regression test for github.com/sharneng/spliit2go/issues/14: a
@@ -147,7 +148,7 @@ void main() {
       final group = await client.fetchGroup('42');
 
       expect(group.id, '42');
-      expect(group.participants.map((p) => p.id), ['1', '2']);
+      expect(group.participants.map((p) => p.id), unorderedEquals(['1', '2']));
     });
 
     test('parses information and currencyCode when present (issue #23)', () async {

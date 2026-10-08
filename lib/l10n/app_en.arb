@@ -105,6 +105,18 @@
   "groupScreenEditNeedsConnection": "Editing an expense needs a connection.",
   "groupScreenActiveUserDialogTitle": "Who are you?",
   "groupScreenActiveUserNone": "Nobody",
+  "activeUserPrivacyNote": "This stays on this phone. Spliit has no accounts, so nobody else in the group can see who you picked.",
+  "activeUserRememberName": "Use this name in new groups",
+  "activeUserRememberNameNote": "Groups you open or join later pick you by this name, without asking.",
+  "activeUserRememberNameNoteSet": "Now “{name}”: groups you open or join later pick you by it, without asking. Turn on to use the name you pick here.",
+  "@activeUserRememberNameNoteSet": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "activeUserNobodyNote": "Pick this on a phone the whole group shares.",
   "groupSettingsTitle": "Group settings",
   "groupSettingsSaveTooltip": "Save",
   "groupSettingsNameRequired": "Group name is required.",

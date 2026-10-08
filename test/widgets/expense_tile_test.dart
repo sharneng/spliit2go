@@ -167,14 +167,25 @@ void main() {
       for (final id in ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']) Participant(id: id, name: id),
     ];
 
-    test('you are emerald; the others take the rest in order, then start over', () {
+    test('each takes the next of the seven by name, starting over; you are emerald in place of yours',
+        () {
       final colors = participantColors(people, 'c');
       expect(colors['c'], monogramPalette[0]);
-      expect([for (final id in ['a', 'b', 'd', 'e', 'f', 'g', 'h', 'i', 'j']) colors[id]], [
-        ...monogramPalette.sublist(1),
-        monogramPalette[1],
-        null,
-      ]);
+      final others = monogramPalette.sublist(1);
+      expect([for (final id in ['a', 'b', 'd', 'e', 'f', 'g', 'h', 'i', 'j']) colors[id]],
+          [others[0], others[1], others[3], others[4], others[5], others[6], others[0], others[1], null]);
+    });
+
+    test('picking someone else as you recolors only the two of you (#218)', () {
+      final asC = participantColors(people, 'c');
+      final asE = participantColors(people, 'e');
+      final none = participantColors(people, null);
+      for (final id in ['a', 'b', 'd', 'f', 'g', 'h', 'i']) {
+        expect(asE[id], asC[id], reason: id);
+        expect(asE[id], none[id], reason: id);
+      }
+      expect(asE['c'], none['c']);
+      expect(asE['e'], monogramPalette[0]);
     });
 
     test('with nobody as you, nobody is emerald', () {
