@@ -25,6 +25,26 @@ void main() {
     expect(find.bySemanticsLabel('Theme'), findsOneWidget);
   });
 
+  // #233: a step more compact than Material, and one-line rows nearer
+  // iOS's 44, without squeezing rows of two lines.
+  testWidgets('rows: one line 48 tall, two lines Material\'s 72 less the density\'s 4',
+      (tester) async {
+    await pump(
+      tester,
+      const GroupedSection(children: [
+        GroupedRow(title: Text('One')),
+        GroupedRow(title: Text('Two'), subtitle: Text('lines')),
+        ListTile(title: Text('A plain row')),
+      ]),
+    );
+    double height(String title) =>
+        tester.getSize(find.ancestor(of: find.text(title), matching: find.byType(ListTile))).height;
+    expect(height('One'), GroupedRow.oneLineMinHeight);
+    expect(GroupedRow.oneLineMinHeight, 48);
+    expect(height('Two'), 68);
+    expect(height('A plain row'), 52, reason: 'the theme\'s density alone');
+  });
+
   testWidgets('the hairlines start where the section says', (tester) async {
     await pump(
       tester,

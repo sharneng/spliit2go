@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:spliit2go/theme.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
@@ -102,12 +103,18 @@ void main() {
     DateTime Function()? now,
     DateTime Function(DateTime)? toLocal,
     TransitionBuilder? builder,
+    bool use24HourFormat = true,
   }) async {
     await tester.pumpWidget(MaterialApp(
       locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      builder: builder,
+      // The device's own 12/24-hour setting (#233): 24-hour unless a test
+      // says otherwise, so times read the same in every language.
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: use24HourFormat),
+        child: builder?.call(context, child) ?? child!,
+      ),
       home: ActivityScreen(
         client: client,
         db: db,
@@ -226,13 +233,13 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Alex added “Groceries”.'), findsOneWidget);
+    expect(find.textContaining('Alex added “Groceries”.'), findsOneWidget);
     // No participantId on the group-settings activity -- falls back to
     // "Someone" rather than a blank or an id.
-    expect(find.text('Someone changed the group settings.'), findsOneWidget);
+    expect(find.textContaining('Someone changed the group settings.'), findsOneWidget);
     // Active voice, as spliit-ios (#189), each with its kind's icon.
     Icon iconOf(String sentence) => tester.widget<Icon>(find.descendant(
-        of: find.ancestor(of: find.text(sentence), matching: find.byType(ListTile)),
+        of: find.ancestor(of: find.textContaining(sentence), matching: find.byType(ListTile)),
         matching: find.byType(Icon)));
     expect(iconOf('Alex added “Groceries”.').icon, LucideIcons.plus);
     expect(iconOf('Someone changed the group settings.').icon, LucideIcons.settings);
@@ -287,7 +294,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
       for (var i = 0; i < sentences.length; i++) {
-        final row = find.ancestor(of: find.text(sentences[i]), matching: find.byType(ListTile));
+        final row =
+            find.ancestor(of: find.textContaining(sentences[i]), matching: find.byType(ListTile));
         expect(row, findsOneWidget, reason: '$lang: ${sentences[i]}');
         expect(
             tester.widget<Icon>(find.descendant(of: row, matching: find.byType(Icon)).first).icon,
@@ -295,7 +303,7 @@ void main() {
             reason: '$lang: ${sentences[i]}');
         // Centered on the sentence's first line, not on the whole row.
         final icon = find.descendant(of: row, matching: find.byType(Icon)).first;
-        final sentence = tester.getRect(find.text(sentences[i]));
+        final sentence = tester.getRect(find.textContaining(sentences[i]));
         final style = Theme.of(tester.element(icon)).textTheme.bodyLarge!;
         expect(tester.getCenter(icon).dy,
             closeTo(sentence.top + style.fontSize! * style.height! / 2, 1),
@@ -529,7 +537,95 @@ void main() {
 
     expect(find.text('09:05'), findsOneWidget);
     expect(find.text('Earlier this month'), findsOneWidget);
-    expect(find.text('Sep 10, 2026 09:05'), findsOneWidget);
+    // Within ten months: no year (#233).
+    expect(find.text('Sep 10 09:05'), findsOneWidget);
+  });
+
+  // #233: the time is read by people, so their clock, their region's date
+  // order, and no year unless it's needed.
+  testWidgets('the device\'s clock, the region\'s date order, a year only past ten months',
+      (tester) async {
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    final db = await newDb();
+    addTearDown(db.close);
+    final server = pagedServer({
+      0: ([
+        activityJson('today', '2026-09-24T21:05:00.000Z'),
+        activityJson('month', '2026-09-10T21:05:00.000Z'),
+        activityJson('old', '2025-11-10T21:05:00.000Z'),
+      ], false, 3),
+    });
+    // A device not set to 24-hour: its region's own clock, as Flutter's
+    // own formatTimeOfDay does. The app's English with the device's
+    // region: the US's month first and 12-hour, the UK's day first and
+    // 24-hour.
+    for (final (region, expected) in [
+      ('US', ['9:05\u202fPM', 'Sep 10 9:05\u202fPM', 'Nov 10, 2025 9:05\u202fPM']),
+      ('GB', ['21:05', '10 Sept 21:05', '10 Nov 2025 21:05']),
+    ]) {
+      tester.platformDispatcher.localeTestValue = Locale('en', region);
+      await tester.pumpWidget(const SizedBox());
+      await pumpActivity(tester, server.client, db,
+          now: () => DateTime(2026, 9, 24, 23), toLocal: wallClock, use24HourFormat: false);
+      for (final text in expected) {
+        expect(find.text(text), findsOneWidget, reason: region);
+      }
+    }
+  });
+
+  // #233: the time ends the sentence's last line, right-aligned, where it
+  // fits, and is read once, after the sentence.
+  testWidgets('the time trails the sentence, right-aligned, on its own line only when it must',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    // The test font draws each character a square of its size: 16 wide in
+    // the sentence. At 800 the sentence has 708, 44 characters.
+    tester.view.physicalSize = const Size(800, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final db = await newDb();
+    addTearDown(db.close);
+    // "Alex added “…”." with this is exactly the 44: no room for the time.
+    final full = 'X' * 30;
+    Map<String, dynamic> added(String id, String time, String title) => activityJson(id, time)
+      ..['activityType'] = 'CREATE_EXPENSE'
+      ..['participantId'] = 'alex'
+      ..['data'] = title;
+    final server = pagedServer({
+      0: ([
+        added('short', '2026-09-24T10:05:00.000Z', 'Groceries'),
+        added('long', '2026-09-24T09:05:00.000Z', full),
+      ], false, 2),
+    });
+
+    await pumpActivity(tester, server.client, db,
+        now: () => DateTime(2026, 9, 24, 12), toLocal: wallClock, builder: (context, child) =>
+            Theme(data: spliit2goLightTheme, child: child!));
+
+    for (final (time, sentence, ownLine) in [
+      ('10:05', 'Alex added “Groceries”.', false),
+      ('09:05', 'Alex added “$full”.', true),
+    ]) {
+      final sentenceBox = tester.getRect(find.textContaining(sentence));
+      final timeBox = tester.getRect(find.text(time));
+      // At the row's right edge: the card's 16 and the row's 16 in.
+      expect(timeBox.right, 800 - 32, reason: time);
+      final lines = (sentenceBox.height / 24).round();
+      expect(lines, ownLine ? 2 : 1, reason: '$time: the sentence\'s lines, with its time');
+      expect(timeBox.bottom, closeTo(sentenceBox.bottom, 3), reason: time);
+
+      // In the captions' size and secondary color, as the icon is.
+      final style = tester.widget<Text>(find.text(time)).style!;
+      final secondary = SpliitColors.of(tester.element(find.text(time))).secondaryContent;
+      expect(style.fontSize, 14);
+      expect(style.color, secondary);
+      final row = find.ancestor(of: find.text(time), matching: find.byType(ListTile));
+      expect(tester.widget<Icon>(find.descendant(of: row, matching: find.byType(Icon))).color,
+          secondary);
+    }
+    expect(find.bySemanticsLabel(RegExp('^Alex added “Groceries”.\u2003 ?10:05\$')), findsOneWidget);
+    expect(find.bySemanticsLabel('10:05'), findsNothing);
+    semantics.dispose();
   });
 
   testWidgets('French at double text size on a narrow phone, in the real app wrapper (#91)',
@@ -630,7 +726,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Alex added “Groceries”.'));
+    await tester.tap(find.textContaining('Alex added “Groceries”.'));
     await tester.pumpAndSettle();
 
     expect(find.byType(BottomSheet), findsOneWidget);

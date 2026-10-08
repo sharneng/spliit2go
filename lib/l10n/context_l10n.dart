@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart' show DateFormat;
 
 import 'app_localizations.dart';
 
@@ -19,4 +20,16 @@ extension AppLocalizationsX on BuildContext {
   /// locale, and never a separately-tracked global like
   /// `Intl.defaultLocale`), so a live language switch reaches all of them.
   Locale get appLocale => Localizations.localeOf(this);
+
+  /// [appLocale] with the device's region, where the date formats know
+  /// that pairing (#233): en with the device's GB is en_GB, so a date
+  /// reads "12 Sep" there rather than en's "Sep 12". The app's own
+  /// locales are languages only, so [appLocale] alone drops the region.
+  Locale get regionalDateLocale {
+    final app = appLocale;
+    final region = View.of(this).platformDispatcher.locale.countryCode;
+    if (app.countryCode != null || region == null || region.isEmpty) return app;
+    final regional = Locale(app.languageCode, region);
+    return DateFormat.localeExists(regional.toString()) ? regional : app;
+  }
 }

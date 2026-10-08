@@ -10,6 +10,7 @@ import '../services/activity_date_group.dart';
 import '../services/expense_date_group.dart' show firstWeekdayFor;
 import '../sync/outbox.dart';
 import '../utils/date_format.dart';
+import '../theme.dart';
 import '../widgets/grouped_section.dart';
 import 'expense_details_sheet.dart';
 import '../widgets/error_message.dart';
@@ -309,12 +310,21 @@ class _ActivityScreenState extends State<ActivityScreen> {
         }
         final (a, needsDate, first, last) = row as (Activity, bool, bool, bool);
         final local = widget.toLocal(a.time);
-        final locale = context.appLocale;
+        final locale = context.regionalDateLocale;
+        final use24 = MediaQuery.alwaysUse24HourFormatOf(context);
+        // Today and Yesterday name the day; within ten months the date
+        // needs no year (#233).
+        final when = needsDate
+            ? formatDateTime(local,
+                locale: locale,
+                use24HourFormat: use24,
+                withYear: !isWithinTenMonths(local, now: widget.now()))
+            : formatTimeOfDay(local, locale: locale, use24HourFormat: use24);
         return GroupedItem(
           first: first,
           last: last,
           // Past the icon, under the sentence.
-          dividerIndent: 56,
+          dividerIndent: GroupedSection.inset + _ActivityIcon.width + _ActivityIcon.gap,
           child: GroupedRow(
             // The icon in the title's own row, not ListTile.leading: there
             // it's aligned to the tile, not to the sentence, and sat high
@@ -323,22 +333,8 @@ class _ActivityScreenState extends State<ActivityScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _ActivityIcon(_icon(a)),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(_summary(a)),
-                      Text(
-                        needsDate
-                            ? formatDateTime(local, locale: locale)
-                            : formatTimeOfDay(local, locale: locale),
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                ),
+                const SizedBox(width: _ActivityIcon.gap),
+                Expanded(child: _SentenceWithTime(sentence: _summary(a), time: when)),
               ],
             ),
             // No chevron: the expense opens in a sheet, not a screen.
@@ -381,6 +377,11 @@ class _ActivityIcon extends StatelessWidget {
 
   final IconData icon;
 
+  /// Just the icon's own width, and a small gap: it's a marker, so the
+  /// sentence starts close by.
+  static const double width = 18;
+  static const double gap = 10;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -388,9 +389,66 @@ class _ActivityIcon extends StatelessWidget {
     final style = theme.textTheme.bodyLarge;
     final line = MediaQuery.textScalerOf(context).scale(style?.fontSize ?? 16) * (style?.height ?? 1.5);
     return SizedBox(
-      width: 24,
+      width: width,
       height: line,
-      child: Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+      // The captions' secondary color, as the time beside it (#233).
+      child: Icon(icon, size: 18, color: SpliitColors.of(context).secondaryContent),
     );
+  }
+}
+
+/// An activity's sentence with its time at the end of its last line,
+/// right-aligned (#233), as a chat bubble's: on that line when it fits,
+/// else on a line of its own. Saves the line the time used to take under
+/// every sentence. In the captions' style (the list tile subtitle's), on
+/// the sentence's baseline.
+class _SentenceWithTime extends StatelessWidget {
+  const _SentenceWithTime({required this.sentence, required this.time});
+
+  final String sentence;
+  final String time;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // The theme's caption style is only color and spacing: ListTile adds
+    // bodyMedium's size itself, so this has to too.
+    final timeStyle = theme.textTheme.bodyMedium!.merge(theme.listTileTheme.subtitleTextStyle);
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    // The sentence keeps room for the time at its end: an invisible copy,
+    // unbreakable, so its last line wraps exactly where the time won't fit.
+    final span = TextSpan(children: [
+      TextSpan(text: sentence),
+      TextSpan(
+          text: '\u2003${time.replaceAll(' ', '\u00a0')}',
+          style: timeStyle.copyWith(color: Colors.transparent)),
+    ]);
+    return LayoutBuilder(builder: (context, constraints) {
+      final style = DefaultTextStyle.of(context).style;
+      final paragraph = TextPainter(
+          text: TextSpan(style: style, children: [span]),
+          textDirection: direction,
+          textScaler: scaler)
+        ..layout(maxWidth: constraints.maxWidth);
+      final lastBaseline = paragraph.computeLineMetrics().last.baseline;
+      final caption = TextPainter(
+          text: TextSpan(text: time, style: style.merge(timeStyle)),
+          textDirection: direction,
+          textScaler: scaler)
+        ..layout();
+      final top = lastBaseline - caption.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+      paragraph.dispose();
+      caption.dispose();
+      return Stack(children: [
+        Text.rich(span),
+        PositionedDirectional(
+          end: 0,
+          top: top,
+          // Read once, from the sentence's copy.
+          child: ExcludeSemantics(child: Text(time, style: timeStyle)),
+        ),
+      ]);
+    });
   }
 }
