@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/category.dart';
 import '../theme.dart';
 import 'group_monogram.dart';
+import 'grouped_section.dart';
 
 /// The glyph that stands for an expense category (issue #28), grounded
 /// in spliit-web's own map rather than guessed: `category-icon.tsx`
@@ -109,8 +110,10 @@ const Map<String, int> _groupingColors = {
 /// rows (this app's "expense screen" ask).
 ///
 /// A reimbursement isn't an expense, so its icon is its own (#224): the
-/// Uncategorized banknote whatever its category, in the app's green on
-/// the page's color.
+/// Uncategorized banknote whatever its category, in the app's emerald on
+/// the color of the lines between rows: the page's color in light mode,
+/// and in dark the lighter tone that stands off the card (the page's
+/// near-black would sink into it).
 class CategoryIconGlyph extends StatelessWidget {
   final Category? category;
   final double size;
@@ -128,7 +131,7 @@ class CategoryIconGlyph extends StatelessWidget {
         width: size,
         height: size,
         alignment: Alignment.center,
-        decoration: BoxDecoration(color: theme.scaffoldBackgroundColor, shape: BoxShape.circle),
+        decoration: BoxDecoration(color: GroupedDivider.colorOf(context), shape: BoxShape.circle),
         child: Icon(LucideIcons.banknote, size: size * 0.55, color: colors.primary),
       );
     }

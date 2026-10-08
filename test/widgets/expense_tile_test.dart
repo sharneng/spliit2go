@@ -7,6 +7,7 @@ import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/theme.dart';
 import 'package:spliit2go/widgets/expense_list.dart';
+import 'package:spliit2go/widgets/grouped_section.dart';
 
 // #207: an expense row in two lines -- what you lent or owe, who paid,
 // and marks for repeats, receipts and notes.
@@ -44,9 +45,12 @@ void main() {
   String spoken(WidgetTester tester) => tester.getSemantics(find.byType(ListTile)).label;
 
   Future<void> pump(WidgetTester tester, Expense e,
-      {String? activeUserId = 'me', String? payer = 'Jo', Category category = general}) async {
+      {String? activeUserId = 'me',
+      String? payer = 'Jo',
+      Category category = general,
+      ThemeData? theme}) async {
     await tester.pumpWidget(MaterialApp(
-      theme: spliit2goLightTheme,
+      theme: theme ?? spliit2goLightTheme,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
@@ -64,7 +68,7 @@ void main() {
   }
 
   // #224: a reimbursement isn't an expense, and looks it.
-  testWidgets('a reimbursement: a fixed banknote in green on the page color, an italic title',
+  testWidgets('a reimbursement: a fixed emerald banknote on the lines\' color, an italic title',
       (tester) async {
     const groceries = Category(id: 9, name: 'Groceries', grouping: 'Food and Drink');
     await pump(tester, expense(reimbursement: true), category: groceries);
@@ -78,6 +82,14 @@ void main() {
     final title = tester.widget<Text>(find.text('Dinner')).style!;
     expect(title.fontStyle, FontStyle.italic);
     expect(title.fontWeight, FontWeight.w400);
+
+    // In dark mode, on the lines' lighter tone, which stands off the card.
+    await pump(tester, expense(reimbursement: true), category: groceries, theme: spliit2goDarkTheme);
+    final darkCircle = tester.widget<Container>(
+        find.ancestor(of: find.byIcon(LucideIcons.banknote), matching: find.byType(Container)).first);
+    expect((darkCircle.decoration! as BoxDecoration).color, GroupedDivider.darkColor);
+    expect(tester.widget<Icon>(find.byIcon(LucideIcons.banknote)).color,
+        spliit2goDarkTheme.colorScheme.primary);
 
     // An expense keeps its category's icon and a bold title.
     await pump(tester, expense(), category: groceries);
