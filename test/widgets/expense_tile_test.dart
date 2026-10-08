@@ -44,7 +44,7 @@ void main() {
   String spoken(WidgetTester tester) => tester.getSemantics(find.byType(ListTile)).label;
 
   Future<void> pump(WidgetTester tester, Expense e,
-      {String? activeUserId = 'me', String? payer = 'Jo'}) async {
+      {String? activeUserId = 'me', String? payer = 'Jo', Category category = general}) async {
     await tester.pumpWidget(MaterialApp(
       theme: spliit2goLightTheme,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -52,7 +52,7 @@ void main() {
       home: Scaffold(
         body: ExpenseTile(
           expense: e,
-          category: general,
+          category: category,
           currency: r'$',
           payer: payer,
           activeUserId: activeUserId,
@@ -62,6 +62,29 @@ void main() {
     ));
     await tester.pumpAndSettle();
   }
+
+  // #224: a reimbursement isn't an expense, and looks it.
+  testWidgets('a reimbursement: a fixed banknote in green on the page color, an italic title',
+      (tester) async {
+    const groceries = Category(id: 9, name: 'Groceries', grouping: 'Food and Drink');
+    await pump(tester, expense(reimbursement: true), category: groceries);
+    final icon = tester.widget<Icon>(find.byIcon(LucideIcons.banknote));
+    expect(icon.color, spliit2goLightTheme.colorScheme.primary);
+    expect(find.byIcon(LucideIcons.shoppingCart), findsNothing);
+    final circle = tester.widget<Container>(
+        find.ancestor(of: find.byIcon(LucideIcons.banknote), matching: find.byType(Container)).first);
+    expect((circle.decoration! as BoxDecoration).color,
+        spliit2goLightTheme.scaffoldBackgroundColor);
+    final title = tester.widget<Text>(find.text('Dinner')).style!;
+    expect(title.fontStyle, FontStyle.italic);
+    expect(title.fontWeight, FontWeight.w400);
+
+    // An expense keeps its category's icon and a bold title.
+    await pump(tester, expense(), category: groceries);
+    expect(find.byIcon(LucideIcons.shoppingCart), findsOneWidget);
+    expect(tester.widget<Text>(find.text('Dinner')).style!.fontStyle, isNull);
+    expect(tester.widget<Text>(find.text('Dinner')).style!.fontWeight, FontWeight.w600);
+  });
 
   testWidgets('you paid: "You", and what the others owe you, in green', (tester) async {
     await pump(tester, expense());

@@ -206,7 +206,7 @@ class ExpenseTile extends StatelessWidget {
       if (notes) l10n.expenseRowHasNotes,
     ], l10n.spokenSentenceEnd);
     return ListTile(
-      leading: CategoryIconGlyph(category: category),
+      leading: CategoryIconGlyph(category: category, isReimbursement: e.isReimbursement),
       title: Semantics(
         label: label,
         excludeSemantics: true,
@@ -220,7 +220,10 @@ class ExpenseTile extends StatelessWidget {
           // letters of the title (a narrow phone, a large text size, #208);
           // they're read out and shown in the details all the same. Past
           // that, the amount shrinks rather than overflow.
-          final titleStyle = DefaultTextStyle.of(context).style.merge(_titleStyle);
+          // A reimbursement's title is italic, not bold, as its amount is:
+          // a payment between people, not an expense (#224).
+          final rowTitleStyle = e.isReimbursement ? _reimbursementTitleStyle : _titleStyle;
+          final titleStyle = DefaultTextStyle.of(context).style.merge(rowTitleStyle);
           final fits = _textWidth(context, 'Mmm…', titleStyle) +
                   marks.length * (4 + titleMarkSize(context)) +
                   8 +
@@ -240,7 +243,7 @@ class ExpenseTile extends StatelessWidget {
                         ? 2
                         : 1,
                     overflow: TextOverflow.ellipsis,
-                    style: _titleStyle))),
+                    style: rowTitleStyle))),
             if (fits)
               for (final icon in marks) _Mark(icon, mark),
             const SizedBox(width: 8),
@@ -271,6 +274,8 @@ class ExpenseTile extends StatelessWidget {
   }
 
   static const _titleStyle = TextStyle(fontWeight: FontWeight.w600);
+  static const _reimbursementTitleStyle =
+      TextStyle(fontWeight: FontWeight.w400, fontStyle: FontStyle.italic);
 
   /// How wide [text] lays out in [style] at the current text size.
   static double _textWidth(BuildContext context, String text, TextStyle? style) =>

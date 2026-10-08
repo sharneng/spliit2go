@@ -107,15 +107,31 @@ const Map<String, int> _groupingColors = {
 /// screen" ask, `size` defaulting to spliit-ios's own 34) and, at a
 /// smaller size, inline in the expense form's category field and picker
 /// rows (this app's "expense screen" ask).
+///
+/// A reimbursement isn't an expense, so its icon is its own (#224): the
+/// Uncategorized banknote whatever its category, in the app's green on
+/// the page's color.
 class CategoryIconGlyph extends StatelessWidget {
   final Category? category;
   final double size;
+  final bool isReimbursement;
 
-  const CategoryIconGlyph({super.key, required this.category, this.size = 34});
+  const CategoryIconGlyph(
+      {super.key, required this.category, this.size = 34, this.isReimbursement = false});
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    if (isReimbursement) {
+      return Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: theme.scaffoldBackgroundColor, shape: BoxShape.circle),
+        child: Icon(LucideIcons.banknote, size: size * 0.55, color: colors.primary),
+      );
+    }
     final grouping = category?.grouping;
     return Container(
       width: size,
