@@ -56,7 +56,12 @@ PopupMenuItem<int> appPopupMenuItem(BuildContext context, int index, AppMenuItem
     // Rows closer than Material's 48, as One UI's menus.
     height: 40,
     padding: const EdgeInsets.symmetric(horizontal: 20),
-    child: Row(children: [
+    // A pick-one row says whether it's the current choice, as a radio
+    // button would: the check mark itself is only drawn (#227 review).
+    child: Semantics(
+      checked: choice ? item.checked : null,
+      inMutuallyExclusiveGroup: choice ? true : null,
+      child: Row(children: [
       if (item.checked)
         Icon(Icons.check, color: colors.primary)
       else if (item.icon != null)
@@ -66,6 +71,7 @@ PopupMenuItem<int> appPopupMenuItem(BuildContext context, int index, AppMenuItem
       if (item.checked || item.icon != null || choice) const SizedBox(width: 14),
       Expanded(
           child: Text(item.label, style: color == null ? null : TextStyle(color: color))),
-    ]),
+      ]),
+    ),
   );
 }

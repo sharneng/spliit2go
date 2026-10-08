@@ -39,11 +39,36 @@ void main() {
       expect(tester.widget<Icon>(find.byIcon(Icons.check)).color,
           spliit2goLightTheme.colorScheme.primary);
 
+      // A screen reader hears which order is current (#227 review).
+      final handle = tester.ensureSemantics();
+      expect(tester.getSemantics(find.text('Second')),
+          containsSemantics(hasCheckedState: true, isChecked: true, isInMutuallyExclusiveGroup: true));
+      for (final other in ['First', 'Third']) {
+        expect(tester.getSemantics(find.text(other)),
+            containsSemantics(hasCheckedState: true, isChecked: false, isInMutuallyExclusiveGroup: true));
+      }
+      handle.dispose();
+
       await tester.tap(find.text('Third'));
       await tester.pumpAndSettle();
       expect(picked, 'Third');
     });
   }
+
+  testWidgets('a disabled row'\''s label is dimmed (#227 review)', (tester) async {
+    await open(tester, [
+      AppMenuItem(label: 'Settings', icon: Icons.settings, enabled: false, onSelected: () {}),
+      AppMenuItem(label: 'Share', icon: Icons.share, onSelected: () {}),
+    ]);
+    Color label(String text) => DefaultTextStyle.of(tester.element(find.text(text))).style.color!;
+    final onSurface = spliit2goLightTheme.colorScheme.onSurface;
+    expect(label('Share'), onSurface);
+    expect(label('Settings'), onSurface.withValues(alpha: 0.38));
+    // Not a check: a row that isn't a choice says nothing about one.
+    final handle = tester.ensureSemantics();
+    expect(tester.getSemantics(find.text('Share')), isNot(containsSemantics(hasCheckedState: true)));
+    handle.dispose();
+  });
 
   testWidgets('an icon leads its label; a destructive row is red; rows are 40 tall', (tester) async {
     await open(tester, [

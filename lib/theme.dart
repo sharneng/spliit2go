@@ -100,8 +100,14 @@ ThemeData _appTheme(Brightness brightness, {bool highContrast = false}) {
       position: PopupMenuPosition.under,
       // 17, as iOS's body text, a step over bodyLarge's 16, so the
       // labels hold their own beside the 24pt icons.
-      labelTextStyle: WidgetStatePropertyAll(
-          theme.textTheme.bodyLarge?.copyWith(fontSize: 17, color: colorScheme.onSurface)),
+      // Dimmed when disabled, as Material's own menu style does: the menu
+      // relies on this style to dim a disabled row's label (#227 review).
+      labelTextStyle: WidgetStateProperty.resolveWith((states) =>
+          theme.textTheme.bodyLarge?.copyWith(
+              fontSize: 17,
+              color: states.contains(WidgetState.disabled)
+                  ? colorScheme.onSurface.withValues(alpha: 0.38)
+                  : colorScheme.onSurface)),
       iconColor: colorScheme.onSurfaceVariant,
     ),
     navigationBarTheme: NavigationBarThemeData(
