@@ -58,9 +58,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      # --no-renames lists a moved file's old path too, so moving something
+      # out of android/ still counts (#230 review).
       - id: diff
         run: |
-          if git diff --name-only "origin/$BASE_REF...HEAD" |
+          if git diff --name-only --no-renames "origin/$BASE_REF...HEAD" |
               grep -qE '^(android/|pubspec\.(yaml|lock)$|scripts/check_android_flavors$|\.github/workflows/ci\.yml$)'; then
             echo android=true >> "$GITHUB_OUTPUT"
           else
