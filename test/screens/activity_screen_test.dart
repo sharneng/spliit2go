@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:http/http.dart' as http;
@@ -626,6 +627,49 @@ void main() {
     expect(find.bySemanticsLabel(RegExp('^Alex added “Groceries”.\u2003 ?10:05\$')), findsOneWidget);
     expect(find.bySemanticsLabel('10:05'), findsNothing);
     semantics.dispose();
+  });
+
+  // #235 review: an older date with AM/PM at a large text size is wider
+  // than the sentence's column, so it can't trail the sentence.
+  testWidgets('a time wider than the column wraps under the sentence, inside it', (tester) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    final db = await newDb();
+    addTearDown(db.close);
+    final server = pagedServer({
+      0: ([activityJson('old', '2025-09-12T21:05:00.000Z')], false, 1),
+    });
+
+    await pumpActivity(tester, server.client, db,
+        now: () => DateTime(2026, 9, 24, 12),
+        toLocal: wallClock,
+        use24HourFormat: false,
+        builder: spliit2goAppBuilder);
+
+    expect(tester.takeException(), isNull);
+    final sentence = tester.getRect(find.text('Someone changed the group settings.'));
+    final time = find.text('Sep 12, 2025 9:05\u202fPM');
+    final timeBox = tester.getRect(time);
+    expect(timeBox.left, sentence.left);
+    expect(timeBox.right, sentence.right);
+    expect(timeBox.top, sentence.bottom, reason: 'under the sentence');
+    expect(tester.widget<Text>(time).textAlign, TextAlign.end);
+    // Each line within the column: wrapped, not one line pushed out left.
+    final paragraph = tester.renderObject<RenderParagraph>(
+        find.descendant(of: time, matching: find.byType(RichText)));
+    expect(paragraph.size.width, lessThanOrEqualTo(timeBox.width));
+    expect(paragraph.didExceedMaxLines, isFalse);
+    // No line starts outside the column, as one pushed out left did. (A
+    // line's trailing space hangs past its end, drawing nothing.)
+    expect(paragraph.getBoxesForSelection(
+            TextSelection(baseOffset: 0, extentOffset: paragraph.text.toPlainText().length))
+        .every((box) => box.left >= 0), isTrue);
+    expect(timeBox.height, greaterThan(28 * 1.5), reason: 'more than one line');
   });
 
   testWidgets('French at double text size on a narrow phone, in the real app wrapper (#91)',

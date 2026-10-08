@@ -426,17 +426,27 @@ class _SentenceWithTime extends StatelessWidget {
     ]);
     return LayoutBuilder(builder: (context, constraints) {
       final style = DefaultTextStyle.of(context).style;
+      final caption = TextPainter(
+          text: TextSpan(text: time, style: style.merge(timeStyle)),
+          textDirection: direction,
+          textScaler: scaler)
+        ..layout();
+      // A time wider than the column (an older date with AM/PM, at a large
+      // text size, #235 review) can't trail anything: it goes under the
+      // sentence, right-aligned, wrapping within the column.
+      if (caption.width > constraints.maxWidth) {
+        caption.dispose();
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(sentence),
+          Text(time, style: timeStyle, textAlign: TextAlign.end),
+        ]);
+      }
       final paragraph = TextPainter(
           text: TextSpan(style: style, children: [span]),
           textDirection: direction,
           textScaler: scaler)
         ..layout(maxWidth: constraints.maxWidth);
       final lastBaseline = paragraph.computeLineMetrics().last.baseline;
-      final caption = TextPainter(
-          text: TextSpan(text: time, style: style.merge(timeStyle)),
-          textDirection: direction,
-          textScaler: scaler)
-        ..layout();
       final top = lastBaseline - caption.computeDistanceToActualBaseline(TextBaseline.alphabetic);
       paragraph.dispose();
       caption.dispose();
