@@ -1,8 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spliit2go/theme.dart';
 
 void main() {
+  for (final locale in const [Locale('en'), Locale('zh')]) {
+    testWidgets('the font\'s own letter spacing, as native apps; row titles a little tighter ($locale)',
+        (tester) async {
+      late TextTheme text;
+      await tester.pumpWidget(MaterialApp(
+        theme: spliit2goLightTheme,
+        locale: locale,
+        supportedLocales: const [Locale('en'), Locale('zh')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        home: Builder(builder: (context) {
+          text = Theme.of(context).textTheme;
+          return const SizedBox();
+        }),
+      ));
+      for (final style in [
+        text.displayLarge, text.headlineSmall, text.titleLarge, text.titleMedium, text.titleSmall,
+        text.bodyMedium, text.bodySmall, text.labelLarge, text.labelMedium, text.labelSmall,
+      ]) {
+        expect(style!.letterSpacing, 0, reason: style.debugLabel);
+      }
+      expect(text.bodyLarge!.letterSpacing, bodyLargeLetterSpacing);
+      expect(bodyLargeLetterSpacing, -0.4);
+      expect(spliit2goLightTheme.listTileTheme.subtitleTextStyle!.letterSpacing, -0.2);
+      expect(spliit2goLightTheme.popupMenuTheme.labelTextStyle!.resolve({})!.letterSpacing, -0.4);
+      expect(text.bodyLarge!.fontSize, 16, reason: 'only the spacing changes');
+    });
+  }
+
   test('light and dark themes have matching brightness fields (issue #25)', () {
     expect(spliit2goLightTheme.brightness, Brightness.light);
     expect(spliit2goDarkTheme.brightness, Brightness.dark);

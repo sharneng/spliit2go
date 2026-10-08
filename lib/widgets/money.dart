@@ -82,7 +82,7 @@ class Money extends StatelessWidget {
       fontWeight: isReimbursement ? FontWeight.w400 : FontWeight.w600,
       fontStyle: isReimbursement ? FontStyle.italic : null,
       fontFeatures: const [FontFeature.tabularFigures()],
-      letterSpacing: -0.2,
+      letterSpacing: -0.4,
       color: color,
     );
   }

@@ -21,6 +21,8 @@ void main() {
     expect(style.fontWeight, FontWeight.w600);
     expect(style.fontStyle, isNot(FontStyle.italic));
     expect(style.color, spliit2goLightTheme.textTheme.bodyLarge!.color);
+    // A step tighter than the row titles around it.
+    expect(style.letterSpacing, -0.4);
   });
 
   testWidgets('sizes come from the text theme, so they follow text scaling',
