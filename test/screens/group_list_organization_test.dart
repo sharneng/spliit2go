@@ -6,6 +6,8 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:spliit2go/app_name.dart';
+import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/models/group_organization.dart';
@@ -113,6 +115,29 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(PopupMenuItem<int>, label));
     await tester.pumpAndSettle();
+  }
+
+  // Where the group screen's tab bar ends: above the whole inset on
+  // Android, over its lower part on iPhone, clear of the home indicator.
+  for (final (platform, gap) in [
+    (TargetPlatform.android, 34.0),
+    (TargetPlatform.iOS, 20.0),
+  ]) {
+    testWidgets('the list stops above the gesture bar, its end rounded, on ${platform.name} (#222)',
+        (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1;
+      tester.view.padding = const FakeViewPadding(bottom: 34);
+      addTearDown(tester.view.reset);
+      final db = await seed();
+      await pump(tester, db, platform: platform);
+
+      final clip = find.byType(GroupedScrollClip);
+      expect(tester.getRect(clip).bottom, 800 - gap);
+      // The list itself ends there too: nothing scrolls under the bar.
+      expect(tester.getRect(find.descendant(of: clip, matching: find.byType(ListView))).bottom,
+          800 - gap);
+    });
   }
 
   testWidgets(
@@ -478,7 +503,7 @@ void main() {
               date: DateTime(year, 12, 31)),
       ]);
       await pump(tester, db, locale: locale, scale: 1.5);
-      expect(find.text('Spliit2Go'), findsOneWidget);
+      expect(find.text(appName), findsOneWidget);
       expect(find.text(r'$'), findsNothing);
       expect(tester.takeException(), isNull);
     });

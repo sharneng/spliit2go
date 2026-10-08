@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -17,6 +16,7 @@ import '../services/group_url.dart';
 import '../services/settings_service.dart';
 import '../sync/outbox.dart';
 import '../widgets/expense_list.dart';
+import '../widgets/bottom_inset.dart';
 import 'expense_details_sheet.dart';
 import 'expense_search_screen.dart';
 import 'expense_screen.dart';
@@ -32,6 +32,7 @@ import '../widgets/receipt_download_indicator.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/grouped_section.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../app_name.dart';
 
 /// A single group's expenses, offline-first -- reached by pushing on top
 /// of GroupListScreen (the app's actual root; see main.dart and
@@ -238,7 +239,7 @@ class _GroupScreenState extends State<GroupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_group?.name ?? 'Spliit2Go'),
+        title: Text(_group?.name ?? appName),
         // A meatballs menu, like spliit-ios's group toolbar (issue #3):
         // group settings, and sharing the group's link. Room for more
         // later (a QR code).
@@ -319,7 +320,7 @@ class _GroupScreenState extends State<GroupScreen> {
     return Padding(
       // 12 above it: the list's rounded end stands off the bar.
       padding: EdgeInsets.fromLTRB(insets.left + _barInset, 12, insets.right + _barInset,
-          _barBottom(context, insets.bottom)),
+          bottomBarGap(context)),
       child: Material(
         // The cards' color, so it reads as one of them (#215), lifted
         // off the page by a shadow.
@@ -387,19 +388,6 @@ class _GroupScreenState extends State<GroupScreen> {
         ),
       ),
     );
-  }
-
-  /// The bar's distance from the screen's bottom. On Android, the gesture
-  /// bar's or the buttons' inset, which looks right with either (#198
-  /// review). On iOS that would leave it high: it sits over the lower part
-  /// of the home indicator's inset, as iOS's own tab bar does, clear of the
-  /// indicator itself. 12 where there's no inset.
-  static double _barBottom(BuildContext context, double inset) {
-    if (inset == 0) return 12;
-    return switch (Theme.of(context).platform) {
-      TargetPlatform.iOS => math.max(inset - 14, 12),
-      _ => inset,
-    };
   }
 
   /// NavigationBar never ellipsizes a label: one too wide for its tab

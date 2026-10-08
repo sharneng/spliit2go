@@ -21,6 +21,7 @@ import 'services/error_reporting.dart';
 import 'services/receipt_cache.dart';
 import 'services/receipt_scanner.dart';
 import 'widgets/error_message.dart';
+import 'app_name.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -65,7 +66,7 @@ class Spliit2GoApp extends StatelessWidget {
       child: ListenableBuilder(
         listenable: settings,
         builder: (context, _) => MaterialApp(
-          title: 'Spliit2Go',
+          title: appName,
           navigatorKey: appNavigatorKey,
           // Lets GroupListScreen hear about routes popped back to it
           // that weren't pushed by its own _openGroup -- e.g. _Root's

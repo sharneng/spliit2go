@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:spliit2go/app_name.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
@@ -106,7 +107,7 @@ void main() {
       final fab = tester.widget<FloatingActionButton>(find.byType(FloatingActionButton));
       expect(fab.onPressed, isNull);
       // No group name yet: the title falls back to the app's name (#105).
-      expect(find.widgetWithText(AppBar, 'Spliit2Go'), findsOneWidget);
+      expect(find.widgetWithText(AppBar, appName), findsOneWidget);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));

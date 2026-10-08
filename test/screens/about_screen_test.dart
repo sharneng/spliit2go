@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:spliit2go/app_name.dart';
 import 'package:spliit2go/legal/upstream_licenses.dart';
 import 'package:spliit2go/main.dart';
 import 'package:spliit2go/screens/about_screen.dart';
@@ -58,7 +59,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(AboutScreen), findsOneWidget);
-    expect(find.text('Spliit2Go'), findsOneWidget);
+    expect(find.text(appName), findsOneWidget);
     expect(find.text('Version 1.2.3 (45 · unknown)'), findsOneWidget);
     expect(find.byTooltip('Copy version and commit'), findsNothing);
     expect(
@@ -101,7 +102,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Copy version and commit'));
     await tester.pump();
-    expect(copied, ['Spliit2Go 1.2.3 (45 · $sha-dirty)']);
+    expect(copied, ['$appName 1.2.3 (45 · $sha-dirty)']);
     expect(find.text('Version and commit copied'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
