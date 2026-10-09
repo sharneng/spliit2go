@@ -397,8 +397,10 @@ class _ActivityIcon extends StatelessWidget {
       height: line,
       child: opens
           // Centered on the first line, past it if the line is shorter
-          // than the circle: the row's padding has room.
+          // than the circle: the row's padding has room. Both bounds, as a
+          // large text's line is taller than the circle (#250 review).
           ? OverflowBox(
+              minHeight: width,
               maxHeight: width,
               child: Container(
                 width: width,

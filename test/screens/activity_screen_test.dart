@@ -321,7 +321,12 @@ void main() {
 
   // #249: a row that opens its expense says so with a tonal emerald
   // circle; the others keep the plain gray icon, in the same column.
-  for (final (name, theme) in [('light', spliit2goLightTheme), ('dark', spliit2goDarkTheme)]) {
+  for (final (name, theme, scale) in [
+    ('light', spliit2goLightTheme, 1.0),
+    ('dark', spliit2goDarkTheme, 1.0),
+    // A line taller than the circle (#250 review).
+    ('light, 2x text', spliit2goLightTheme, 2.0),
+  ]) {
     testWidgets('an openable row\'s icon on a tonal emerald circle ($name)', (tester) async {
       final db = await newDb();
       addTearDown(db.close);
@@ -348,9 +353,14 @@ void main() {
         locale: const Locale('en'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
         home: ActivityScreen(client: client, db: db, outbox: outbox, group: group),
       ));
       await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
 
       Finder rowOf(String sentence) =>
           find.ancestor(of: find.textContaining(sentence), matching: find.byType(ListTile));
