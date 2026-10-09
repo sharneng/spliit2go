@@ -319,6 +319,77 @@ void main() {
     }
   });
 
+  // #249: a row that opens its expense says so with a tonal emerald
+  // circle; the others keep the plain gray icon, in the same column.
+  for (final (name, theme, scale) in [
+    ('light', spliit2goLightTheme, 1.0),
+    ('dark', spliit2goDarkTheme, 1.0),
+    // A line taller than the circle (#250 review).
+    ('light, 2x text', spliit2goLightTheme, 2.0),
+  ]) {
+    testWidgets('an openable row\'s icon on a tonal emerald circle ($name)', (tester) async {
+      final db = await newDb();
+      addTearDown(db.close);
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => http.Response(
+              pageBody(activities: [
+                {
+                  'id': 'a1', 'time': isoToday(12), 'activityType': 'UPDATE_EXPENSE',
+                  'participantId': 'alex', 'expenseId': 'e1', 'data': 'Taxi',
+                  'expense': {'id': 'e1'},
+                },
+                {
+                  'id': 'a2', 'time': isoToday(11), 'activityType': 'DELETE_EXPENSE',
+                  'participantId': 'alex', 'expenseId': 'e2', 'data': 'Bus', 'expense': null,
+                },
+              ], hasMore: false, nextCursor: 2),
+              200,
+            )),
+      );
+      final outbox = Outbox(db, client, groupId: 'g1');
+      await tester.pumpWidget(MaterialApp(
+        theme: theme,
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+        home: ActivityScreen(client: client, db: db, outbox: outbox, group: group),
+      ));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      Finder rowOf(String sentence) =>
+          find.ancestor(of: find.textContaining(sentence), matching: find.byType(ListTile));
+      Finder circleIn(Finder row) => find.descendant(
+          of: row,
+          matching: find.byWidgetPredicate((w) =>
+              w is Container && (w.decoration as BoxDecoration?)?.shape == BoxShape.circle));
+      final scheme = theme.colorScheme;
+
+      final opens = rowOf('Alex updated “Taxi”.');
+      expect(tester.widget<ListTile>(opens).onTap, isNotNull);
+      final circle = circleIn(opens);
+      expect(circle, findsOneWidget);
+      expect(tester.getSize(circle), const Size.square(28), reason: 'round, not squashed to the line');
+      expect((tester.widget<Container>(circle).decoration! as BoxDecoration).color, scheme.primaryContainer);
+      final icon = find.descendant(of: circle, matching: find.byType(Icon));
+      expect(tester.widget<Icon>(icon).color, scheme.onPrimaryContainer);
+
+      final gone = rowOf('Alex deleted “Bus”.');
+      expect(circleIn(gone), findsNothing);
+      expect(tester.widget<Icon>(find.descendant(of: gone, matching: find.byType(Icon))).color,
+          SpliitColors.of(tester.element(gone)).secondaryContent);
+
+      // The sentences still line up, circle or not.
+      expect(tester.getRect(find.textContaining('Alex updated')).left,
+          tester.getRect(find.textContaining('Alex deleted')).left);
+    });
+  }
+
   testWidgets('an activity for a since-deleted expense is not tappable', (tester) async {
     final db = await newDb();
     addTearDown(db.close);

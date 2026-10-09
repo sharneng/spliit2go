@@ -332,7 +332,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
             title: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _ActivityIcon(_icon(a)),
+                _ActivityIcon(_icon(a), opens: a.expenseExists),
                 const SizedBox(width: _ActivityIcon.gap),
                 Expanded(child: _SentenceWithTime(sentence: _summary(a), time: when)),
               ],
@@ -373,13 +373,17 @@ class _ActivityScreenState extends State<ActivityScreen> {
 /// line up. In a box one line of the sentence tall, so it centers on the
 /// first line however the sentence wraps, at any text size.
 class _ActivityIcon extends StatelessWidget {
-  const _ActivityIcon(this.icon);
+  const _ActivityIcon(this.icon, {required this.opens});
 
   final IconData icon;
 
-  /// Just the icon's own width, and a small gap: it's a marker, so the
-  /// sentence starts close by.
-  static const double width = 18;
+  /// Whether the row opens its expense: then the icon sits on a circle in
+  /// the add button's tonal emerald, a shape as well as a color.
+  final bool opens;
+
+  /// The circle's width, and a small gap: it's a marker, so the sentence
+  /// starts close by.
+  static const double width = 28;
   static const double gap = 10;
 
   @override
@@ -391,8 +395,22 @@ class _ActivityIcon extends StatelessWidget {
     return SizedBox(
       width: width,
       height: line,
-      // The captions' secondary color, as the time beside it (#233).
-      child: Icon(icon, size: 18, color: SpliitColors.of(context).secondaryContent),
+      child: opens
+          // Centered on the first line, past it if the line is shorter
+          // than the circle: the row's padding has room. Both bounds, as a
+          // large text's line is taller than the circle (#250 review).
+          ? OverflowBox(
+              minHeight: width,
+              maxHeight: width,
+              child: Container(
+                width: width,
+                height: width,
+                decoration: BoxDecoration(color: theme.colorScheme.primaryContainer, shape: BoxShape.circle),
+                child: Icon(icon, size: 16, color: theme.colorScheme.onPrimaryContainer),
+              ),
+            )
+          // The captions' secondary color, as the time beside it (#233).
+          : Icon(icon, size: 18, color: SpliitColors.of(context).secondaryContent),
     );
   }
 }
