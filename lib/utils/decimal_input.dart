@@ -1,3 +1,5 @@
+import '../models/currency.dart';
+
 /// Parses a decimal the user typed or pasted (an expense amount, or a
 /// shares/percentage/split-amount field), accepting `,` or `.` as the
 /// decimal separator whatever the device's locale (#37), and a pasted
@@ -5,9 +7,12 @@
 /// "CHF 1'234.50".
 ///
 /// The decision follows the receipt scanner's (`receiptAmounts`):
-/// - a currency symbol or code before or after the number is dropped,
-///   and so are spaces and apostrophes grouping it; any other text
-///   ("1.2k", "12abc") makes it invalid, not a different amount;
+/// - a currency before or after the number is dropped: any currency
+///   sign ("$", "€"), a supported currency's symbol or code ("Kč",
+///   "HK$", "CHF"), or one of [currencies] (the group's own, which may
+///   be custom); and so are spaces and apostrophes grouping it. Any
+///   other text ("1.2k", "12abc") makes it invalid, not a different
+///   amount;
 /// - a leading or trailing separator is the decimal one (".5", "12.");
 /// - with both separators, the last is the decimal one ("1.234,56");
 /// - one separator repeated groups thousands ("1,234,567");
@@ -18,10 +23,11 @@
 ///
 /// Returns null for anything that still isn't a number, a group of the
 /// wrong size ("1,23,4") among them (same contract as [double.tryParse]).
-double? parseFlexibleDecimal(String input, {String decimalSeparator = '.'}) {
-  final text = input
-      .replaceAll(_currencyAround, '')
-      .replaceAll(_grouping, '');
+double? parseFlexibleDecimal(String input,
+    {String decimalSeparator = '.', Iterable<String> currencies = const []}) {
+  final extra = currencies.where((c) => c.trim().isNotEmpty).toSet();
+  final around = extra.isEmpty ? _currencyAround : _currencyAroundWith(extra);
+  final text = input.trim().replaceAll(around, '').replaceAll(_grouping, '');
   final match = _number.firstMatch(text);
   if (match == null) return null;
   final sign = match[1]!;
@@ -62,11 +68,22 @@ double? parseFlexibleDecimal(String input, {String decimalSeparator = '.'}) {
 /// apostrophes (as Swiss) between the digits.
 final _grouping = RegExp("[\\s  '’]");
 
-/// A currency before or after the number: a symbol ("$", "€"), one with
-/// a country's letters ("US$", "HK$"), or an ISO code ("CHF", "JPY ¥").
-final _currencyAround = RegExp(
-    r'^\s*(?:[A-Z]{3}\s*\p{Sc}?|[A-Z]{1,2}\p{Sc}|\p{Sc})\s*|\s*(?:\p{Sc}?\s*[A-Z]{3}|\p{Sc})\s*$',
-    unicode: true);
+/// A currency before or after the number, from Spliit's currency data:
+/// a code, a symbol (longest first, so "HK$" isn't read as "HK" and
+/// "$"), or any other currency sign, with a country's letters too
+/// ("US$"); a code and a symbol together as well ("JPY ¥").
+final _currencyAround = _currencyAroundWith(const {});
+
+RegExp _currencyAroundWith(Set<String> extra) {
+  final tokens = {
+    for (final c in supportedCurrencies) ...[c.code, c.symbol],
+    ...extra.map((c) => c.trim()),
+  }.where((t) => t.isNotEmpty).toList()
+    ..sort((a, b) => b.length.compareTo(a.length));
+  final token = '(?:${tokens.map(RegExp.escape).join('|')}|[A-Z]{0,2}\\p{Sc})';
+  final run = '$token(?:\\s*$token)?';
+  return RegExp('^$run\\s*|\\s*$run\$', unicode: true);
+}
 
 /// An optional minus, then digits joined by dots and commas, or with a
 /// single separator before or after them.

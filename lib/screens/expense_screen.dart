@@ -718,7 +718,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// [parseFlexibleDecimal] with this locale's decimal separator, which
   /// decides only "1,234" (#238).
   double? _parseDecimal(String input) =>
-      parseFlexibleDecimal(input, decimalSeparator: _decimalSeparator);
+      parseFlexibleDecimal(input,
+          decimalSeparator: _decimalSeparator, currencies: [widget.group.currency]);
 
   /// Kept from the last build's locale, so parsing after an await (Save)
   /// doesn't need the context.

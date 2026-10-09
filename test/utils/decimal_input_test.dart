@@ -38,6 +38,14 @@ void main() {
       ('20,000 JPY', 20000.0),
       ('HK\$12.50', 12.5),
       ('£12.50', 12.5),
+      // Letter symbols from Spliit's currency data (#238 review).
+      ('Kč 1 234,50', 1234.5),
+      ('1 234,50 Kč', 1234.5),
+      ('Rs 1,234.50', 1234.5),
+      ('Rp 1.234.567', 1234567.0),
+      ('Dkr 12,50', 12.5),
+      ('R 12.50', 12.5),
+      ('12,50 zł', 12.5),
       ('1,234,567', 1234567.0),
       ('1.234.567,8', 1234567.8),
       ('-12,50', -12.5),
@@ -48,6 +56,11 @@ void main() {
         expect(parseFlexibleDecimal(input), value);
       });
     }
+
+    test("the group's own currency, even a custom one (#238 review)", () {
+      expect(parseFlexibleDecimal('12.50 pts', currencies: ['pts']), 12.5);
+      expect(parseFlexibleDecimal('12.50 pts'), isNull);
+    });
 
     test('only "1,234" is ambiguous, and the locale decides it', () {
       expect(parseFlexibleDecimal('1,234'), 1234);
