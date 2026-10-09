@@ -1,3 +1,5 @@
+import 'currency.dart';
+
 class Group {
   final String id;
   final String name;
@@ -22,6 +24,11 @@ class Group {
   /// real code behind it -- see models/currency.dart's `Currency.custom`
   /// and issue #23's "Custom" option.
   final String? currencyCode;
+
+  /// Decimal places of the group's currency (#251): every amount in the
+  /// group is stored in units of 10^-[decimalDigits] -- 0 for yen, 2 for
+  /// dollars and for a custom symbol.
+  int get decimalDigits => currencyByCode(currencyCode).decimalDigits;
 
   final List<Participant> participants;
 

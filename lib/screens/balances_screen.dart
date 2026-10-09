@@ -197,6 +197,7 @@ class _BalancesScreenState extends State<BalancesScreen> {
                 // Unsigned: the line above already says which way.
                 Money(
                   formatMoney(net.abs(), widget.group.currency,
+                      decimalDigits: widget.group.decimalDigits,
                       locale: context.appLocale),
                   size: MoneySize.hero,
                   sign: MoneySign.ofBalance(net),
@@ -267,6 +268,7 @@ class _BalancesScreenState extends State<BalancesScreen> {
                               : _name(b.participantId)),
                           trailing: Money(
                             formatMoney(b.netCents, widget.group.currency,
+                                decimalDigits: widget.group.decimalDigits,
                                 locale: context.appLocale),
                             sign: MoneySign.ofBalance(b.netCents),
                           ),
@@ -290,6 +292,7 @@ class _BalancesScreenState extends State<BalancesScreen> {
                                   onPressed: () => _openSettleUp(s),
                                   child: Text(context.l10n.balancesMarkAsPaid(formatMoney(
                                       s.amountCents, widget.group.currency,
+                                      decimalDigits: widget.group.decimalDigits,
                                       locale: context.appLocale))),
                                 ),
                         ),

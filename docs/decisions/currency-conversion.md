@@ -46,7 +46,7 @@ For example, ¥1,000 (stored as `1000`, JPY has no decimal places) at 0.006 EUR 
 
 #16 added a "Paid in other currency" checkbox with an original amount and a currency code. You typed both totals and the app worked out the rate as `amountCents / originalAmountCents`. It never looked a rate up; that was left out of scope on purpose. Researching this turned up two bugs:
 
-- **Every currency is treated as having cents** ([#251](https://github.com/sharneng/spliit2go/issues/251)). JPY, HUF, ISK, IDR, KRW, VND and COP have none, so a ¥1,000 expense from the web shows as ¥10.00, and one added here is sent 100 times too large. The rate formula above is wrong whenever the two currencies have different numbers of decimal places. This has to be fixed first.
+- **Every currency is treated as having cents** ([#251](https://github.com/sharneng/spliit2go/issues/251)). JPY, HUF, ISK, IDR, KRW, VND and COP have none, so a ¥1,000 expense from the web shows as ¥10.00, and one added here is sent 100 times too large. The rate formula above is wrong whenever the two currencies have different numbers of decimal places. Fixed in #251: `Currency.decimalDigits` comes from currency-data.json (0 for those seven, 2 otherwise and for a custom symbol), every amount is parsed, shown and stored with it, `originalAmount` uses the paid-in currency's own, and `conversionRateFor` in `lib/utils/money.dart` derives the rate in major units, following the first formula.
 - **Removing a conversion doesn't clear it:** `spliit_client.dart` leaves `originalCurrency` out when it's null. Fixed as part of [#252](https://github.com/sharneng/spliit2go/issues/252).
 
 ## The form (for #252)

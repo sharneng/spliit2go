@@ -140,7 +140,7 @@ void main() {
         settings: settings,
         home: Builder(
           builder: (context) =>
-              Text(formatMoney(-123456, '€', locale: context.appLocale)),
+              Text(formatMoney(-123456, '€', decimalDigits: 2, locale: context.appLocale)),
         ),
       ));
       await tester.pumpAndSettle();

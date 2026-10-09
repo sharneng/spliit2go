@@ -506,6 +506,7 @@ class _GroupScreenState extends State<GroupScreen> {
     return ExpenseDateList(
       expenses: _expenses,
       currency: _group?.currency ?? '\$',
+      decimalDigits: _group?.decimalDigits ?? 2,
       categoryFor: _categoryFor,
       participants: _group?.participants ?? const [],
       activeUserId: _activeUserId,

@@ -1,9 +1,11 @@
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:intl/intl.dart';
 
-/// Formats [cents] (always integer cents) with [currencySymbol] for
-/// [locale], e.g. `formatMoney(1250, '\$', locale: en)` == `'\$12.50'`,
-/// `formatMoney(-1250, '€', locale: fr)` == `'-12,50 €'`.
+/// Formats [amount] -- in the currency's smallest unit, 10^[decimalDigits]
+/// to one -- with [currencySymbol] for [locale], e.g.
+/// `formatMoney(1250, '\$', decimalDigits: 2, locale: en)` == `'\$12.50'`,
+/// `formatMoney(-1250, '€', decimalDigits: 2, locale: fr)` == `'-12,50 €'`,
+/// `formatMoney(1000, '¥', decimalDigits: 0, locale: en)` == `'¥1,000'`.
 ///
 /// The single shared money-formatting helper for the app (issue #50) --
 /// replaces the scattered hand-rolled `'\$${(cents / 100)...}'`
@@ -30,10 +32,11 @@ import 'package:intl/intl.dart';
 /// error, rather than a silently stale-locale display after a live
 /// language switch.
 ///
-/// [cents] must already be integer cents -- a caller holding a
-/// dollar-amount double (e.g. from a byAmount split's unallocated
-/// remainder) converts first: `formatMoney((dollars * 100).round(),
-/// symbol, locale: locale)`.
+/// [decimalDigits] is required for the same reason (#251): Spliit stores
+/// each currency in its own smallest unit, so yen have none and `amount`
+/// means nothing without it. Pass `Group.decimalDigits`, or
+/// `Currency.decimalDigits` for an expense's original currency. A caller
+/// holding a decimal amount converts first with [toMinorUnits].
 ///
 /// No `absolute` flag: every real caller in the app either wants the true
 /// signed value (a net balance, where negative means "you owe") or is
@@ -42,11 +45,48 @@ import 'package:intl/intl.dart';
 /// caller that actually needs to silently discard a sign, and dropping
 /// the flag removes that misuse from the API surface entirely rather than
 /// leaving it available to be passed by accident.
-String formatMoney(int cents, String currencySymbol, {required Locale locale}) {
+String formatMoney(int amount, String currencySymbol,
+    {required int decimalDigits, required Locale locale}) {
   final format = NumberFormat.currency(
     locale: locale.toString(),
     symbol: currencySymbol,
-    decimalDigits: 2,
+    decimalDigits: decimalDigits,
   );
-  return format.format(cents / 100);
+  return format.format(fromMinorUnits(amount, decimalDigits));
+}
+
+/// A decimal [amount] (as typed) in the currency's smallest unit, rounded
+/// -- spliit-web's `amountAsMinorUnits`: 12.5 with 2 digits is 1250, 1000
+/// with 0 is 1000.
+int toMinorUnits(double amount, int decimalDigits) =>
+    (amount * _unitsPerMajor(decimalDigits)).round();
+
+/// [amount] in minor units as a decimal -- spliit-web's `amountAsDecimal`.
+double fromMinorUnits(int amount, int decimalDigits) =>
+    amount / _unitsPerMajor(decimalDigits);
+
+/// [amount] in minor units as text for an amount field: '12.50', or
+/// '1000' for yen -- spliit-web's `formatAmountAsDecimal`.
+String minorUnitsText(int amount, int decimalDigits) =>
+    fromMinorUnits(amount, decimalDigits).toStringAsFixed(decimalDigits);
+
+/// The rate from an expense's paid-in currency to its group's, from the
+/// two stored amounts: groupAmount = originalAmount × rate, in major units
+/// (Spliit's convention, src/lib/currency-conversion.ts upstream). So
+/// `amount == round(originalAmount × rate × 10^decimalDigits /
+/// 10^originalDecimalDigits)` -- ¥1,000 paid as €6.10 is 0.0061, not 0.61.
+double conversionRateFor({
+  required int amount,
+  required int decimalDigits,
+  required int originalAmount,
+  required int originalDecimalDigits,
+}) =>
+    fromMinorUnits(amount, decimalDigits) / fromMinorUnits(originalAmount, originalDecimalDigits);
+
+int _unitsPerMajor(int decimalDigits) {
+  var units = 1;
+  for (var i = 0; i < decimalDigits; i++) {
+    units *= 10;
+  }
+  return units;
 }

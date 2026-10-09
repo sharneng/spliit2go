@@ -429,6 +429,26 @@ void main() {
     await closeTree(tester);
   });
 
+  testWidgets('an original amount in yen shows whole yen (#251)', (tester) async {
+    tallView(tester);
+    final db = await cachedDb(Expense(
+      id: 'e1',
+      groupId: 'g1',
+      title: 'Ramen',
+      amountCents: 610,
+      paidBy: 'alex',
+      paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
+      date: DateTime(2026, 9, 16),
+      originalAmountCents: 1000,
+      originalCurrency: 'JPY',
+      conversionRate: 0.0061,
+    ));
+    addTearDown(db.close);
+    await openSheet(tester, db);
+    expect(inSheet(find.text('Originally JPY ¥1,000')), findsOneWidget);
+    await closeTree(tester);
+  });
+
   testWidgets('a participant no longer in the group reads "Someone"', (tester) async {
     tallView(tester);
     final db = await cachedDb(Expense(

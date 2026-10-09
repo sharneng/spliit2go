@@ -58,6 +58,7 @@ void main() {
           expense: e,
           category: category,
           currency: r'$',
+          decimalDigits: 2,
           payer: payer,
           activeUserId: activeUserId,
           onTap: () {},
@@ -236,6 +237,7 @@ void main() {
           expense: expense(paidBy: 'jo'),
           category: general,
           currency: r'$',
+          decimalDigits: 2,
           payer: 'Jo',
           activeUserId: 'me',
           onTap: () {},
@@ -271,6 +273,7 @@ void main() {
                     expense(paidBy: 'jo', recurrence: RecurrenceRule.monthly, documents: 1),
                   ],
                   currency: r'$',
+                  decimalDigits: 2,
                   categoryFor: (_) => general,
                   participants: const [
                     Participant(id: 'me', name: 'Me'),

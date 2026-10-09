@@ -405,9 +405,10 @@ class SpliitClient {
   /// [createExpense] and [updateExpense] go through this one place
   /// rather than duplicating the field list.
   ///
-  /// [amountCents] and each [paidFor] share are in cents. For
-  /// [SplitMode.evenly], shares is just a nonzero weight (1 per person is
-  /// the common case); for [SplitMode.byAmount] it's the exact cents owed.
+  /// [amountCents] and each [paidFor] share are in the group currency's
+  /// smallest unit (#251). For [SplitMode.evenly], shares is just a
+  /// nonzero weight (1 per person is the common case); for
+  /// [SplitMode.byAmount] it's the exact amount owed.
   ///
   /// [originalAmountCents]/[originalCurrency]/[conversionRate] are the
   /// "Paid in" fields -- all three null together for an expense entered

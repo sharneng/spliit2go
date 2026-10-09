@@ -144,8 +144,10 @@ class Expense {
   final String id;
   final String groupId;
   final String title;
-  /// Amount in the group's smallest currency unit (cents), matching how
-  /// Spliit itself stores amounts -- avoids floating point drift.
+  /// Amount in the group's smallest currency unit -- cents, or whole yen
+  /// for a currency with no decimals ([Group.decimalDigits], #251) --
+  /// matching how Spliit itself stores amounts; avoids floating point
+  /// drift. "Cents" in names across the app means this unit.
   final int amountCents;
   final String paidBy;
   final List<ExpenseShare> paidFor;
@@ -161,8 +163,10 @@ class Expense {
   /// above is always in the *group's* currency -- these three describe
   /// the original entry, mirroring Spliit's own `Expense.originalCurrency`
   /// / `originalAmount` columns. `conversionRate` follows Spliit's
-  /// convention: `amountCents = originalAmountCents * conversionRate`
-  /// (see src/lib/currency-conversion.ts upstream). All null together
+  /// convention in major units: `amount = originalAmount * conversionRate`
+  /// (see src/lib/currency-conversion.ts upstream). [originalAmountCents]
+  /// is in the *original* currency's smallest unit (#251), so ¥1,000 in a
+  /// euro group is 1000 -- see `conversionRateFor`. All null together
   /// when the expense was simply entered in the group's own currency.
   final int? originalAmountCents;
   final String? originalCurrency;
