@@ -901,6 +901,47 @@ void main() {
     expect((saved.originalAmountCents! * saved.conversionRate! * 100).round(), saved.amountCents);
   });
 
+  // #254 review: a positive amount that rounds to zero in its currency
+  // would save 0 -- and as an original amount, an infinite rate that
+  // can't be sent.
+  Future<void> tapSave(WidgetTester tester) async {
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('a yen group rejects an amount under one yen (#254)', (tester) async {
+    final db = await pumpGroup(tester, yenGroup);
+    await fillCommonFields(tester, amount: '0.4');
+    await tapSave(tester);
+    expect(find.text('Enter a valid amount'), findsOneWidget);
+    expect(await db.pendingExpenses(), isEmpty);
+  });
+
+  testWidgets('an original amount under one yen is rejected, not saved as 0 (#254)',
+      (tester) async {
+    final db = await pumpGroup(tester, euroGroup);
+    await fillCommonFields(tester, amount: '6.10');
+    await paidIn(tester, '0.1', 'Yen', 'Japanese Yen (JPY)');
+    await tapSave(tester);
+    expect(find.text('Enter a valid amount'), findsOneWidget);
+    expect(await db.pendingExpenses(), isEmpty);
+
+    // A whole yen is fine.
+    await tester.enterText(find.widgetWithText(TextFormField, 'Original amount'), '1');
+    final saved = await save(tester, db);
+    expect(saved.originalAmountCents, 1);
+    expect(saved.conversionRate, closeTo(6.10, 1e-12));
+  });
+
+  testWidgets('a euro group rejects an amount under one cent (#254)', (tester) async {
+    final db = await pumpGroup(tester, euroGroup);
+    await fillCommonFields(tester, amount: '0.004');
+    await tapSave(tester);
+    expect(find.text('Enter a valid amount'), findsOneWidget);
+    expect(await db.pendingExpenses(), isEmpty);
+  });
+
   testWidgets('a yen group stores a euro expense in cents (#251)', (tester) async {
     final db = await pumpGroup(tester, yenGroup);
     await fillCommonFields(tester, amount: '1000');

@@ -227,6 +227,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// form is stored in its smallest unit.
   int get _digits => widget.group.decimalDigits;
 
+  /// The paid-in currency's decimal places: 2 until one is picked.
+  int get _originalDigits =>
+      currencyByCode(_originalCurrencyController.text.trim().toUpperCase()).decimalDigits;
+
+  /// Whether [text] is an amount of at least one smallest unit once
+  /// rounded to [decimalDigits] (#254 review): 0.1 yen rounds to 0, which
+  /// would save a zero amount, and as an original amount an infinite rate.
+  bool _isPositiveAmount(String? text, int decimalDigits) {
+    final parsed = _parseDecimal(text ?? '');
+    return parsed != null && toMinorUnits(parsed, decimalDigits) > 0;
+  }
+
   bool get _hasGroupCurrencyCode =>
       widget.group.currencyCode != null && widget.group.currencyCode!.isNotEmpty;
 
@@ -960,11 +972,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     helperText: _scanHint(_scanFill?.amountHint)),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 onChanged: (_) => setState(() {}), // amount feeds the by-amount hint below
-                validator: (v) {
-                  final parsed = _parseDecimal(v ?? '');
-                  if (parsed == null || parsed <= 0) return context.l10n.expenseInvalidAmount;
-                  return null;
-                },
+                validator: (v) => _isPositiveAmount(v, _digits) ? null : context.l10n.expenseInvalidAmount,
               ),
               const SizedBox(height: 12),
               InkWell(
@@ -1028,9 +1036,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         validator: (v) {
                           if (!_paidInOtherCurrency) return null;
-                          final parsed = _parseDecimal(v ?? '');
-                          if (parsed == null || parsed <= 0) return context.l10n.expenseInvalidAmount;
-                          return null;
+                          return _isPositiveAmount(v, _originalDigits)
+                              ? null
+                              : context.l10n.expenseInvalidAmount;
                         },
                       ),
                     ),
@@ -1360,8 +1368,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final code = _originalCurrencyController.text.trim().toUpperCase();
       originalCurrency = code.isEmpty ? null : code;
       // In the paid-in currency's own smallest unit (#251): ¥1,000 is
-      // 1000 even in a euro group.
-      final originalDigits = currencyByCode(originalCurrency).decimalDigits;
+      // 1000 even in a euro group. Never 0: the validator rejects that.
+      final originalDigits = _originalDigits;
       originalAmountCents = toMinorUnits(originalAmount, originalDigits);
       conversionRate = conversionRateFor(
         amount: amountCents,
