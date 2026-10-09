@@ -412,7 +412,8 @@ class SpliitClient {
   ///
   /// [originalAmountCents]/[originalCurrency]/[conversionRate] are the
   /// "Paid in" fields -- all three null together for an expense entered
-  /// directly in the group's own currency. `saveDefaultSplittingOptions`
+  /// directly in the group's own currency, the original amount in the
+  /// paid-in currency's smallest unit. `saveDefaultSplittingOptions`
   /// is a form-only action flag on Spliit's side (there's no persisted
   /// column for it on the Expense model) -- it's still sent on every
   /// call, just never round-tripped back into our own [Expense] model.
@@ -457,7 +458,11 @@ class SpliitClient {
       'notes': notes,
       'recurrenceRule': recurrenceRule.wireValue,
       if (originalAmountCents != null) 'originalAmount': originalAmountCents,
-      if (originalCurrency != null) 'originalCurrency': originalCurrency,
+      // Always sent, null when there's no conversion (#252): left out,
+      // the server keeps a removed conversion's currency. The amount and
+      // rate can't be cleared (the server rejects null) and are ignored
+      // without it.
+      'originalCurrency': originalCurrency,
       if (conversionRate != null) 'conversionRate': conversionRate,
     };
   }

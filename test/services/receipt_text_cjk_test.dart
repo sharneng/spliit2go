@@ -18,11 +18,10 @@ void main() {
         ReceiptFormState(
           titleEmpty: true,
           amountEmpty: true,
-          paidInOtherCurrency: false,
           dateChosen: false,
           categoryChosen: false,
-          groupCurrencyCode: code,
-          groupCurrency: symbol,
+          currencyCode: code,
+          currencySymbol: symbol,
         ),
       );
 

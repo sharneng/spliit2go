@@ -4,24 +4,25 @@ import 'receipt_text.dart';
 /// in or chosen, when the scan finishes rather than when it started.
 class ReceiptFormState {
   final bool titleEmpty;
-  final bool amountEmpty;
 
-  /// "Paid in a different currency" is on: the amount is the group's, and
-  /// a receipt's total belongs in the other field (a follow-up).
-  final bool paidInOtherCurrency;
+  /// Whether the field the total goes in is empty: the amount, or during
+  /// a conversion "Amount paid" (#252).
+  final bool amountEmpty;
   final bool dateChosen;
   final bool categoryChosen;
-  final String? groupCurrencyCode;
-  final String groupCurrency;
+
+  /// That field's currency: the group's, or during a conversion the one
+  /// it was paid in (#252). A total in another currency is only a hint.
+  final String? currencyCode;
+  final String currencySymbol;
 
   const ReceiptFormState({
     required this.titleEmpty,
     required this.amountEmpty,
-    required this.paidInOtherCurrency,
     required this.dateChosen,
     required this.categoryChosen,
-    required this.groupCurrencyCode,
-    required this.groupCurrency,
+    required this.currencyCode,
+    required this.currencySymbol,
   });
 }
 
@@ -64,8 +65,7 @@ ReceiptFill receiptFill(ReceiptScan scan, ReceiptFormState form) {
   final fillsTotal = total != null &&
       total.sure &&
       form.amountEmpty &&
-      !form.paidInOtherCurrency &&
-      (total.currency?.couldBe(groupCode: form.groupCurrencyCode, groupSymbol: form.groupCurrency) ?? true);
+      (total.currency?.couldBe(groupCode: form.currencyCode, groupSymbol: form.currencySymbol) ?? true);
   final fillsDate = scan.date != null && !form.dateChosen;
   final category = scan.categoryId;
   return ReceiptFill(

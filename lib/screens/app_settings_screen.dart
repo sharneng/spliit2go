@@ -6,10 +6,12 @@ import '../l10n/app_locales.dart';
 import '../l10n/context_l10n.dart';
 import '../services/app_settings.dart';
 import '../services/error_reporting.dart';
+import '../services/exchange_rates.dart';
 import '../services/receipt_cache.dart';
 import '../services/receipt_downloader.dart';
 import '../services/settings_service.dart';
 import '../utils/byte_size.dart';
+import '../utils/date_format.dart';
 import '../widgets/error_message.dart';
 import 'about_screen.dart';
 import '../widgets/grouped_section.dart';
@@ -72,6 +74,7 @@ class AppSettingsScreen extends StatelessWidget {
             GroupedSection(caption: l10n.appSettingsStorage, children: [
               _ReceiptStorageTile(receipts),
               _ReceiptDownloadSettings(receipts),
+              _ExchangeRatesTile(ExchangeRates.of(receipts.db)),
             ]),
           GroupedSection(caption: l10n.aboutTitle, children: [
             GroupedRow(
@@ -113,6 +116,86 @@ class AppSettingsScreen extends StatelessWidget {
           }
         },
       );
+}
+
+/// The exchange rates saved for offline use, with Update (#252): the
+/// "before I go offline" button. One update covers every currency.
+class _ExchangeRatesTile extends StatefulWidget {
+  const _ExchangeRatesTile(this.rates);
+  final ExchangeRates rates;
+
+  @override
+  State<_ExchangeRatesTile> createState() => _ExchangeRatesTileState();
+}
+
+class _ExchangeRatesTileState extends State<_ExchangeRatesTile> {
+  SavedRates? _saved;
+  bool _loaded = false;
+  bool _updating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _read();
+  }
+
+  Future<void> _read() async {
+    try {
+      final saved = await widget.rates.saved();
+      if (!mounted) return;
+      setState(() {
+        _saved = saved;
+        _loaded = true;
+      });
+    } catch (e, st) {
+      ErrorReporter.instance.report(e, st, operation: 'Reading saved exchange rates');
+    }
+  }
+
+  Future<void> _update() async {
+    setState(() => _updating = true);
+    try {
+      await widget.rates.downloadAhead(force: true);
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)
+          ?.showSnackBar(SnackBar(content: Text(context.l10n.appSettingsExchangeRatesUpdated)));
+    } catch (e, st) {
+      // Offline says so; anything else was logged by the fetch, with
+      // details.
+      final error = ErrorReporter.instance.report(e, st, operation: 'Updating exchange rates');
+      if (mounted) {
+        showErrorSnackBar(
+            context,
+            error.isUnexpected
+                ? context.l10n.appSettingsExchangeRatesFailed
+                : context.l10n.appSettingsExchangeRatesOffline,
+            diagnostics: error.diagnostics);
+      }
+    } finally {
+      if (mounted) setState(() => _updating = false);
+      await _read();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final saved = _saved;
+    return GroupedRow(
+      title: Text(l10n.appSettingsExchangeRates),
+      subtitle: Text(!_loaded
+          ? ''
+          : saved == null
+              ? l10n.appSettingsExchangeRatesNone
+              : l10n.appSettingsExchangeRatesSaved(
+                  formatDate(saved.publishedOn, locale: context.appLocale, withYear: false),
+                  saved.currencies)),
+      trailing: TextButton(
+        onPressed: _updating ? null : _update,
+        child: Text(l10n.appSettingsExchangeRatesUpdate),
+      ),
+    );
+  }
 }
 
 /// How much space stored receipts use, with Clear (#123). They're only

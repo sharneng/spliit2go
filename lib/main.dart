@@ -12,6 +12,7 @@ import 'l10n/app_localizations.dart';
 import 'screens/group_list_screen.dart';
 import 'screens/group_screen.dart';
 import 'screens/join_group_screen.dart';
+import 'services/exchange_rates.dart';
 import 'services/group_url.dart';
 import 'services/settings_service.dart';
 import 'services/app_settings.dart';
@@ -250,6 +251,8 @@ class _RootState extends State<AppRoot> {
     });
     // Receipt files whose expense went away while the app was closed (#123).
     unawaited(ReceiptCache.of(_db).sweep());
+    // Exchange rates fetched over 180 days ago (#252).
+    unawaited(ExchangeRates.of(_db).cleanUp());
     // The receipt storage limit chosen in App settings (#127).
     unawaited(_applyReceiptLimit());
     _start();

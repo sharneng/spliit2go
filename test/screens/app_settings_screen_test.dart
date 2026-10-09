@@ -1,6 +1,8 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spliit2go/app_name.dart';
 import 'package:spliit2go/db/app_database.dart';
@@ -9,6 +11,7 @@ import 'package:spliit2go/screens/app_settings_screen.dart';
 import 'package:spliit2go/screens/group_list_screen.dart';
 import 'package:spliit2go/screens/join_group_screen.dart';
 import 'package:spliit2go/services/app_settings.dart';
+import 'package:spliit2go/services/exchange_rates.dart';
 import 'package:spliit2go/services/receipt_cache.dart';
 import 'package:spliit2go/services/settings_service.dart';
 
@@ -183,6 +186,57 @@ void main() {
     expect(await SettingsService().receiptStorageLimitMb(), 1000);
     expect(receipts.limit, 1000 * 1024 * 1024);
     expect(find.text('1,000 MB'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  // #252: exchange rates saved for offline use, with Update.
+  Future<AppDatabase> pumpRates(WidgetTester tester, {required bool offline}) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    ExchangeRates.use(ExchangeRates(
+      db,
+      now: () => DateTime.utc(2026, 10, 9, 12),
+      client: MockClient((req) async {
+        if (offline) throw http.ClientException('offline');
+        return http.Response(
+            '[{"date":"2026-10-09","base":"EUR","quote":"USD","rate":1.1279},'
+            '{"date":"2026-10-09","base":"EUR","quote":"JPY","rate":173.1}]',
+            200);
+      }),
+    ));
+    final settings = await AppSettings.load(SettingsService());
+    addTearDown(settings.dispose);
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(Spliit2GoApp(
+        settings: settings, home: AppSettingsScreen(receipts: _NoFilesReceiptCache(db))));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pumpAndSettle();
+    return db;
+  }
+
+  testWidgets('Exchange rates: none saved, then Update saves every currency', (tester) async {
+    final db = await pumpRates(tester, offline: false);
+    expect(find.text('Exchange rates'), findsOneWidget);
+    expect(find.text('None saved'), findsOneWidget);
+
+    await tester.tap(find.text('Update'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+    await tester.pumpAndSettle();
+    expect(find.text('Exchange rates updated.'), findsOneWidget);
+    expect(find.text('Saved for offline use: rates of Oct 9 · 3 currencies'), findsOneWidget);
+    expect(await tester.runAsync(db.allRateDays), hasLength(16));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('Exchange rates: Update offline says so', (tester) async {
+    await pumpRates(tester, offline: true);
+    await tester.tap(find.text('Update'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pumpAndSettle();
+    expect(find.text("Couldn't reach the exchange rate service."), findsOneWidget);
+    expect(find.text('None saved'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

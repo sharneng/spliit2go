@@ -10,8 +10,10 @@ import '../l10n/context_l10n.dart';
 import '../models/category.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
+import '../models/group_organization.dart';
 import '../services/active_user.dart';
 import '../services/category_store.dart';
+import '../services/exchange_rates.dart';
 import '../services/group_url.dart';
 import '../services/settings_service.dart';
 import '../sync/outbox.dart';
@@ -175,6 +177,21 @@ class _GroupScreenState extends State<GroupScreen> {
         orElse: () => Category(id: id, name: 'Category $id', grouping: 'Other'),
       );
 
+  /// A favorite's, or a group converting lately's, exchange rates, ahead
+  /// for offline use (#252).
+  Future<void> _downloadRatesAhead(Group group, List<Expense> expenses) async {
+    try {
+      final row = await widget.db.groupRow(group.id);
+      await ExchangeRates.of(widget.db).downloadAheadFor(
+        groupCurrencyCode: group.currencyCode,
+        favorite: row?.organization == GroupOrganization.favorite,
+        expenses: [for (final e in expenses) (originalCurrency: e.originalCurrency, date: e.date)],
+      );
+    } catch (e, st) {
+      ErrorReporter.instance.report(e, st, operation: 'Downloading exchange rates ahead');
+    }
+  }
+
   /// Fetches the group + its expenses live and writes them to the local
   /// db. Deliberately doesn't touch [_group]/[_expenses] itself anymore
   /// (issue #47) -- [_groupSub]/[_expensesSub] pick up [cacheGroup]'s and
@@ -200,6 +217,8 @@ class _GroupScreenState extends State<GroupScreen> {
       // A favorite's receipts, ahead for offline (#127); in the
       // background, so the refresh doesn't wait.
       unawaited(ReceiptDownloader.of(widget.db).run(widget.groupId, widget.client));
+      // Exchange rates ahead for offline (#252), likewise.
+      unawaited(_downloadRatesAhead(group, fresh));
       if (!mounted) return;
       setState(() => _error = null);
     } catch (e, st) {
