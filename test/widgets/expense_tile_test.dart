@@ -244,7 +244,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(spoken(tester), startsWith('Dinner。Jo 于 2026年10月6日 支付 \$30.00，'));
-    expect(spoken(tester), endsWith('。你应付 \$10.00。'));
+    expect(spoken(tester), endsWith('。您应付 \$10.00。'));
   });
 
   // #208 review: at phone widths and large text sizes the second line
