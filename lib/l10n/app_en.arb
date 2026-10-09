@@ -767,7 +767,7 @@
   "@spokenSentenceEnd": {
     "description": "Ends each sentence of a spoken label (an expense or group row, the receipts clip), so a screen reader pauses between them."
   },
-  "expenseDetailsSummary": "Paid by {payer} on {date} for {category}",
+  "expenseDetailsSummary": "Paid by {payer} on {date} under {category}",
   "@expenseDetailsSummary": {
     "placeholders": {
       "payer": {
@@ -780,12 +780,15 @@
         "type": "String"
       }
     },
-    "description": "The expense details' one-sentence summary (#226). The fixed words are drawn in a secondary color, the placeholders in the text color."
+    "description": "The expense details' one-sentence summary (#226), for an expense paid for several people. The fixed words are drawn in a secondary color, the placeholders in the text color. category is the expense's category: \"under\" introduces it (#247)."
   },
-  "expenseDetailsSummaryRepeating": "Paid by {payer} on {date} for {category}, repeats {frequency}",
-  "@expenseDetailsSummaryRepeating": {
+  "expenseDetailsSummaryFor": "Paid by {payer} for {recipient} on {date} under {category}",
+  "@expenseDetailsSummaryFor": {
     "placeholders": {
       "payer": {
+        "type": "String"
+      },
+      "recipient": {
         "type": "String"
       },
       "date": {
@@ -793,12 +796,51 @@
       },
       "category": {
         "type": "String"
+      }
+    },
+    "description": "expenseDetailsSummary for an expense paid for one person (#247), named in place of the Paid for list. recipient is that person, or expenseDetailsRecipientYou, expenseDetailsYourself or expenseDetailsThemselves."
+  },
+  "expenseDetailsSummarySettlement": "Paid by {payer} on {date} for {settlement}",
+  "@expenseDetailsSummarySettlement": {
+    "placeholders": {
+      "payer": {
+        "type": "String"
       },
+      "date": {
+        "type": "String"
+      },
+      "settlement": {
+        "type": "String"
+      }
+    },
+    "description": "expenseDetailsSummary for a settlement paid to several people; settlement is expenseDetailsSettlement."
+  },
+  "expenseDetailsSummarySettlementTo": "Paid by {payer} to {recipient} on {date} for {settlement}",
+  "@expenseDetailsSummarySettlementTo": {
+    "placeholders": {
+      "payer": {
+        "type": "String"
+      },
+      "recipient": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "settlement": {
+        "type": "String"
+      }
+    },
+    "description": "expenseDetailsSummarySettlement paid to one person (#247): money paid back goes to them, hence \"to\". recipient as in expenseDetailsSummaryFor."
+  },
+  "expenseDetailsRepeats": ", repeats {frequency}",
+  "@expenseDetailsRepeats": {
+    "placeholders": {
       "frequency": {
         "type": "String"
       }
     },
-    "description": "expenseDetailsSummary for a recurring expense; frequency is expenseDetailsFrequencyDaily/Weekly/Monthly."
+    "description": "Ends any expenseDetailsSummary* sentence for a repeating expense; frequency is expenseDetailsFrequencyDaily/Weekly/Monthly."
   },
   "expenseDetailsFrequencyDaily": "daily",
   "expenseDetailsFrequencyWeekly": "weekly",
@@ -807,9 +849,21 @@
   "@expenseDetailsPayerYou": {
     "description": "The payer in expenseDetailsSummary when it is the active user."
   },
+  "expenseDetailsRecipientYou": "you",
+  "@expenseDetailsRecipientYou": {
+    "description": "The person paid for in expenseDetailsSummaryFor/SettlementTo when it is the active user."
+  },
+  "expenseDetailsYourself": "yourself",
+  "@expenseDetailsYourself": {
+    "description": "The person paid for when it is also the payer, and the active user."
+  },
+  "expenseDetailsThemselves": "themselves",
+  "@expenseDetailsThemselves": {
+    "description": "The person paid for when it is also the payer, someone other than the active user: gender-neutral."
+  },
   "expenseDetailsSettlement": "settlement",
   "@expenseDetailsSettlement": {
-    "description": "A settlement's category in expenseDetailsSummary: what it was paid for."
+    "description": "What a settlement was paid for, in expenseDetailsSummarySettlement/SettlementTo."
   },
   "expenseDetailsShowAmounts": "Show amounts",
   "expenseDetailsHideAmounts": "Hide amounts",
