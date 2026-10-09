@@ -9,7 +9,7 @@ class DateSpan {
   const DateSpan({required this.first, required this.last});
 }
 
-/// [DateSpan] across every one of [rows], including reimbursements/
+/// [DateSpan] across every one of [rows], including settlements/
 /// settlements -- unlike the spending totals in stats_calculator.dart,
 /// which deliberately exclude settlements as "not new spending". This
 /// is meant to answer "how long has this group

@@ -219,7 +219,7 @@ void main() {
     await closeTree(tester);
   });
 
-  testWidgets('an evenly split reimbursement with no extras', (tester) async {
+  testWidgets('an evenly split settlement with no extras', (tester) async {
     tallView(tester);
     final db = await cachedDb(Expense(
       id: 'e1',
@@ -228,7 +228,7 @@ void main() {
       amountCents: 1000,
       paidBy: 'alex',
       paidFor: const [ExpenseShare(participantId: 'bea', shares: 1)],
-      isReimbursement: true,
+      isSettlement: true,
       date: DateTime(2026, 9, 16),
     ));
     addTearDown(db.close);
@@ -357,16 +357,16 @@ void main() {
           amountCents: 1000,
           paidBy: 'alex',
           paidFor: const [ExpenseShare(participantId: 'bea', shares: 1)],
-          isReimbursement: true,
+          isSettlement: true,
           date: DateTime(2026, 9, 16),
         );
     for (final (name, expense, me, ending) in [
       ('someone else paid', null, 'alex', '. You owe \$40.00.'),
       ("you're not in it", null, 'cara', ". You aren't involved."),
       ('no one is you', null, null, ' for Dining Out, repeats weekly'),
-      ('a reimbursement paid to you', payback(), 'bea', '. You received \$10.00.'),
-      ('a reimbursement you paid', payback(), 'alex', ' for settlement'),
-      ('a reimbursement not yours', payback(), 'cara', ". You aren't involved."),
+      ('a settlement paid to you', payback(), 'bea', '. You received \$10.00.'),
+      ('a settlement you paid', payback(), 'alex', ' for settlement'),
+      ('a settlement not yours', payback(), 'cara', ". You aren't involved."),
     ]) {
       testWidgets(name, (tester) async {
         tallView(tester);
@@ -381,7 +381,7 @@ void main() {
     }
   });
 
-  testWidgets('a reimbursement received is in emerald', (tester) async {
+  testWidgets('a settlement received is in emerald', (tester) async {
     tallView(tester);
     final db = await cachedDb(Expense(
       id: 'e1',
@@ -390,7 +390,7 @@ void main() {
       amountCents: 1000,
       paidBy: 'alex',
       paidFor: const [ExpenseShare(participantId: 'bea', shares: 1)],
-      isReimbursement: true,
+      isSettlement: true,
       date: DateTime(2026, 9, 16),
     ));
     addTearDown(db.close);

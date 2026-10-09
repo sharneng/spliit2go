@@ -11,7 +11,7 @@ class Balance {
 /// One suggested transfer to bring [fromId] and [toId] closer to even --
 /// see [suggestSettlements] in lib/services/balance_calculator.dart.
 /// Mirrors Spliit's own "suggested reimbursements": mark one as paid by
-/// creating a reimbursement expense with `paidBy: fromId`,
+/// creating a settlement expense with `paidBy: fromId`,
 /// `paidFor: [ExpenseShare(participantId: toId, shares: 1)]` -- verified
 /// against the web app's own "Mark as paid" link, which pre-fills the
 /// create-expense form the same way (`?reimbursement=yes&from=...&to=...`).

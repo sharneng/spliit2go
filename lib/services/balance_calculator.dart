@@ -11,7 +11,7 @@ import 'expense_shares.dart';
 /// exact shape we haven't verified live the way groups.expenses.list and
 /// groups.expenses.create were (see decisions/mobile-platform.md).
 ///
-/// A reimbursement expense (see [Settlement]) needs no special-casing
+/// A settlement expense (see [Settlement]) needs no special-casing
 /// here: it's just a normal expense where the person settling up is
 /// `paidBy` and the person being paid back is the sole `paidFor` entry,
 /// so the ordinary paid-minus-owed math already nets it out correctly.

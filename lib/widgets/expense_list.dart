@@ -182,7 +182,7 @@ class ExpenseTile extends StatelessWidget {
     // meaning), what you lent or owe, the sync state, and the marks. Each
     // its own sentence, so the reader pauses between them.
     final categoryName = localizedCategoryName(context, category);
-    final paid = switch ((paidByYou, payer, e.isReimbursement)) {
+    final paid = switch ((paidByYou, payer, e.isSettlement)) {
       (true, _, false) => l10n.expenseRowSpokenYouPaid(amount, date, categoryName),
       (true, _, true) => l10n.expenseRowSpokenYouPaidBack(amount, date, categoryName),
       (false, final String name, false) => l10n.expenseRowSpokenPaid(name, amount, date, categoryName),
@@ -201,7 +201,7 @@ class ExpenseTile extends StatelessWidget {
       if (notes) l10n.expenseRowHasNotes,
     ], l10n.spokenSentenceEnd);
     return ListTile(
-      leading: CategoryIconGlyph(category: category, isReimbursement: e.isReimbursement),
+      leading: CategoryIconGlyph(category: category, isSettlement: e.isSettlement),
       title: Semantics(
         label: label,
         excludeSemantics: true,
@@ -215,15 +215,15 @@ class ExpenseTile extends StatelessWidget {
           // letters of the title (a narrow phone, a large text size, #208);
           // they're read out and shown in the details all the same. Past
           // that, the amount shrinks rather than overflow.
-          // A reimbursement's title is italic, not bold, as its amount is:
+          // A settlement's title is italic, not bold, as its amount is:
           // a payment between people, not an expense (#224).
-          final rowTitleStyle = e.isReimbursement ? _reimbursementTitleStyle : _titleStyle;
+          final rowTitleStyle = e.isSettlement ? _settlementTitleStyle : _titleStyle;
           final titleStyle = DefaultTextStyle.of(context).style.merge(rowTitleStyle);
           final fits = _textWidth(context, 'Mmm…', titleStyle) +
                   marks.length * (4 + titleMarkSize(context)) +
                   8 +
                   _textWidth(context, amount,
-                      Money.styleOf(context, isReimbursement: e.isReimbursement)) <=
+                      Money.styleOf(context, isSettlement: e.isSettlement)) <=
               constraints.maxWidth;
           return Row(children: [
             // A large text size leaves room for only a few letters a line,
@@ -249,7 +249,7 @@ class ExpenseTile extends StatelessWidget {
                   child: FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: AlignmentDirectional.centerEnd,
-                      child: Money(amount, isReimbursement: e.isReimbursement)),
+                      child: Money(amount, isSettlement: e.isSettlement)),
                 )),
           ]);
         }),
@@ -269,7 +269,7 @@ class ExpenseTile extends StatelessWidget {
   }
 
   static const _titleStyle = TextStyle(fontWeight: FontWeight.w600);
-  static const _reimbursementTitleStyle =
+  static const _settlementTitleStyle =
       TextStyle(fontWeight: FontWeight.w400, fontStyle: FontStyle.italic);
 
   /// How wide [text] lays out in [style] at the current text size.
@@ -341,9 +341,9 @@ class ExpenseTile extends StatelessWidget {
 
   /// What you lent (paid, less your share) or owe (your share of what
   /// someone else paid); null when you're not in it, or for a
-  /// reimbursement, whose amount already says it.
+  /// settlement, whose amount already says it.
   ({int cents, bool lent})? _yourPart() =>
-      expense.isReimbursement ? null : lentOrOwed(expense, activeUserId);
+      expense.isSettlement ? null : lentOrOwed(expense, activeUserId);
 
   /// [_yourPart] as Balances colors it, with an arrow out or in.
   Widget _yourAmount(BuildContext context, bool lent, String amount) {

@@ -14,7 +14,7 @@ import 'expense_shares.dart';
 /// pass (see issue #27) and a chart-rendering approach this app doesn't
 /// have yet. "All time" is the only range this first pass supports.
 ///
-/// Every function here excludes reimbursement expenses from spending
+/// Every function here excludes settlement expenses from spending
 /// totals, matching the web app's lib/totals.ts (a settlement isn't new
 /// spending, so counting it would double-count money that already
 /// appeared in the expense it's settling).
@@ -42,9 +42,9 @@ class CategorySpending {
   const CategorySpending({required this.categoryId, required this.totalCents});
 }
 
-/// The group's total non-reimbursement spending, in cents.
+/// The group's total non-settlement spending, in cents.
 int totalGroupSpendingCents(List<Expense> expenses) => expenses
-    .where((e) => !e.isReimbursement)
+    .where((e) => !e.isSettlement)
     .fold(0, (sum, e) => sum + e.amountCents);
 
 /// For every participant: how much they paid, how many expenses they
@@ -60,7 +60,7 @@ List<ParticipantSpending> computeParticipantSpending(
   final share = {for (final p in participants) p.id: 0};
 
   for (final e in expenses) {
-    if (e.isReimbursement) continue;
+    if (e.isSettlement) continue;
 
     if (paid.containsKey(e.paidBy)) {
       paid[e.paidBy] = paid[e.paidBy]! + e.amountCents;
@@ -95,7 +95,7 @@ List<ParticipantSpending> computeParticipantSpending(
 List<CategorySpending> computeCategorySpending(List<Expense> expenses) {
   final totals = <int, int>{};
   for (final e in expenses) {
-    if (e.isReimbursement) continue;
+    if (e.isSettlement) continue;
     totals[e.category] = (totals[e.category] ?? 0) + e.amountCents;
   }
 

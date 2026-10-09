@@ -17,7 +17,7 @@ void main() {
   // $30.00 split evenly three ways: $10.00 each.
   Expense expense({
     String paidBy = 'me',
-    bool reimbursement = false,
+    bool settlement = false,
     RecurrenceRule recurrence = RecurrenceRule.none,
     int documents = 0,
     String notes = '',
@@ -33,7 +33,7 @@ void main() {
         paidBy: paidBy,
         paidFor: [for (final p in paidFor) ExpenseShare(participantId: p, shares: 1)],
         date: DateTime(2026, 10, 6),
-        isReimbursement: reimbursement,
+        isSettlement: settlement,
         recurrenceRule: recurrence,
         documentCount: documents,
         notes: notes,
@@ -67,11 +67,11 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  // #224: a reimbursement isn't an expense, and looks it.
-  testWidgets('a reimbursement: a fixed emerald banknote on the lines\' color, an italic title',
+  // #224: a settlement isn't an expense, and looks it.
+  testWidgets('a settlement: a fixed emerald banknote on the lines\' color, an italic title',
       (tester) async {
     const groceries = Category(id: 9, name: 'Groceries', grouping: 'Food and Drink');
-    await pump(tester, expense(reimbursement: true), category: groceries);
+    await pump(tester, expense(settlement: true), category: groceries);
     final icon = tester.widget<Icon>(find.byIcon(LucideIcons.banknote));
     expect(icon.color, spliit2goLightTheme.colorScheme.primary);
     expect(find.byIcon(LucideIcons.shoppingCart), findsNothing);
@@ -84,7 +84,7 @@ void main() {
     expect(title.fontWeight, FontWeight.w400);
 
     // In dark mode, on the lines' lighter tone, which stands off the card.
-    await pump(tester, expense(reimbursement: true), category: groceries, theme: spliit2goDarkTheme);
+    await pump(tester, expense(settlement: true), category: groceries, theme: spliit2goDarkTheme);
     final darkCircle = tester.widget<Container>(
         find.ancestor(of: find.byIcon(LucideIcons.banknote), matching: find.byType(Container)).first);
     expect((darkCircle.decoration! as BoxDecoration).color, GroupedDivider.darkColor);
@@ -125,8 +125,8 @@ void main() {
     expect(find.text('Me'), findsOneWidget);
   });
 
-  testWidgets('a reimbursement shows who paid but no lent or owed amount', (tester) async {
-    await pump(tester, expense(paidBy: 'jo', reimbursement: true));
+  testWidgets('a settlement shows who paid but no lent or owed amount', (tester) async {
+    await pump(tester, expense(paidBy: 'jo', settlement: true));
     expect(find.text('Jo'), findsOneWidget);
     expect(find.text('\$10.00'), findsNothing);
   });
@@ -213,10 +213,10 @@ void main() {
         'Repeats. Has receipts. Has notes.');
   });
 
-  testWidgets('a reimbursement is read as paid back', (tester) async {
-    await pump(tester, expense(paidBy: 'jo', reimbursement: true));
+  testWidgets('a settlement is read as paid back', (tester) async {
+    await pump(tester, expense(paidBy: 'jo', settlement: true));
     expect(spoken(tester), 'Dinner. Jo paid back \$30.00 on Oct 6, 2026, General.');
-    await pump(tester, expense(reimbursement: true));
+    await pump(tester, expense(settlement: true));
     expect(spoken(tester), 'Dinner. You paid back \$30.00 on Oct 6, 2026, General.');
   });
 

@@ -25,7 +25,7 @@ void main() {
   // corrupt a DateTime.utc(...) fixture -- shifting it to the previous
   // calendar day on any machine west of UTC, exactly the bug class that
   // decision doc warns about.
-  Expense expense(String id, DateTime date, {bool isReimbursement = false}) => Expense(
+  Expense expense(String id, DateTime date, {bool isSettlement = false}) => Expense(
         id: id,
         groupId: 'g1',
         title: 'Coffee',
@@ -33,7 +33,7 @@ void main() {
         paidBy: 'p1',
         paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
         date: date,
-        isReimbursement: isReimbursement,
+        isSettlement: isSettlement,
         pending: true,
       );
 
@@ -64,15 +64,15 @@ void main() {
   });
 
   // Unlike the spending totals in stats_calculator.dart, which
-  // deliberately exclude reimbursements as "not new spending",
+  // deliberately exclude settlements as "not new spending",
   // computeDateSpan counts every cached expense -- a settlement is still
   // a dated event in the group's history (issue #55 defines the span as
   // "first expense date to last expense date", with no carve-out for
-  // reimbursements).
-  test('includes reimbursement expenses in the span, unlike the spending totals', () async {
+  // settlements).
+  test('includes settlement expenses in the span, unlike the spending totals', () async {
     await db.insertPending(expense('e1', DateTime(2026, 2, 1)));
     await db.insertPending(
-        expense('e2', DateTime(2026, 8, 30), isReimbursement: true));
+        expense('e2', DateTime(2026, 8, 30), isSettlement: true));
     final rows = await db.expensesForGroup('g1');
 
     final span = computeDateSpan(rows);

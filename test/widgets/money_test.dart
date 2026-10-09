@@ -62,9 +62,9 @@ void main() {
     }
   });
 
-  testWidgets('a reimbursement reads as an aside: regular and italic', (tester) async {
+  testWidgets('a settlement reads as an aside: regular and italic', (tester) async {
     final style =
-        await styleOf(tester, const Money('\$8.00', isReimbursement: true));
+        await styleOf(tester, const Money('\$8.00', isSettlement: true));
     expect(style.fontWeight, FontWeight.w400);
     expect(style.fontStyle, FontStyle.italic);
   });

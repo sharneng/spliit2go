@@ -37,7 +37,7 @@ enum MoneySign {
 /// Every amount the app shows on its own, in one treatment, after
 /// spliit-ios's `Money` (see THIRD_PARTY_NOTICES.md): tabular figures,
 /// semibold, slightly tightened, in one of four text-theme sizes so it
-/// follows the system text size. Reimbursements read as an aside:
+/// follows the system text size. Settlements read as an aside:
 /// regular weight, italic. A changed amount fades to its new value
 /// ([Motion]).
 ///
@@ -48,21 +48,21 @@ class Money extends StatelessWidget {
     super.key,
     this.size = MoneySize.row,
     this.sign = MoneySign.none,
-    this.isReimbursement = false,
+    this.isSettlement = false,
   });
 
   /// Already formatted by `formatMoney`.
   final String value;
   final MoneySize size;
   final MoneySign sign;
-  final bool isReimbursement;
+  final bool isSettlement;
 
   /// The style an amount of [size] is drawn in, for measuring one before
   /// it's laid out.
   static TextStyle? styleOf(BuildContext context,
       {MoneySize size = MoneySize.row,
       MoneySign sign = MoneySign.none,
-      bool isReimbursement = false}) {
+      bool isSettlement = false}) {
     final theme = Theme.of(context);
     final text = theme.textTheme;
     final base = switch (size) {
@@ -79,8 +79,8 @@ class Money extends StatelessWidget {
       MoneySign.settled => theme.colorScheme.onSurfaceVariant,
     };
     return base?.copyWith(
-      fontWeight: isReimbursement ? FontWeight.w400 : FontWeight.w600,
-      fontStyle: isReimbursement ? FontStyle.italic : null,
+      fontWeight: isSettlement ? FontWeight.w400 : FontWeight.w600,
+      fontStyle: isSettlement ? FontStyle.italic : null,
       fontFeatures: const [FontFeature.tabularFigures()],
       letterSpacing: -0.4,
       color: color,
@@ -92,7 +92,7 @@ class Money extends StatelessWidget {
     final amount = Text(
       value,
       key: ValueKey(value),
-      style: styleOf(context, size: size, sign: sign, isReimbursement: isReimbursement),
+      style: styleOf(context, size: size, sign: sign, isSettlement: isSettlement),
     );
     // Its own width, where a plain Text would be: at the start of a
     // stretched column, not across it.

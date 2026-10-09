@@ -31,7 +31,7 @@ The theme wasn't decided all at once. It was settled piece by piece, in focused 
    - Section headers are the row title's size, in bold.
 7. **Lucide icons and the web app's words**, so spliit.app users find their way ([#205](https://github.com/sharneng/spliit2go/issues/205), [expense-rows.md](expense-rows.md)):
    - Lucide icons for categories, marks and captions, as on spliit.app; categories are colored by their grouping.
-   - The web app's terms: Paid by, Paid for, the split modes, Reimbursement.
+   - The web app's terms: Paid by, Paid for, the split modes. Except settlement, not the web's "reimbursement" ([#242](https://github.com/sharneng/spliit2go/issues/242)): native speakers find it the accurate word for paying back within a group, and spliit-ios already moved off it. Only the API keeps `isReimbursement`, which `spliit_client.dart` maps at the edge.
 8. **How colors are matched to iOS.** When we follow an iOS color on our green-tinted palette, we don't copy Apple's value. We measure its contrast against its own background, then lighten or darken our color, keeping its hue, until it reaches the same contrast. The dark row line ([#213](https://github.com/sharneng/spliit2go/issues/213)) was set this way. Kenneth judges the result on a phone, next to iOS's own screens.
 9. **One popup menu on both platforms, styled after One UI's** ([#217](https://github.com/sharneng/spliit2go/issues/217)). Kenneth tried two iPhone-only menus and turned both down. Flutter's iOS pull-down menu (`CupertinoMenuAnchor`) is far from iOS 26's glass menus. Material's `MenuAnchor` made translucent showed the content behind it without iOS's blur, and imitating the blur would look clumsy. `MenuAnchor` adds nothing these short menus need.
    - The menu is a themed `PopupMenuButton` or `showMenu` (`popupMenuTheme`). Its rows come from `lib/widgets/app_menu.dart`.
@@ -45,7 +45,7 @@ The theme wasn't decided all at once. It was settled piece by piece, in focused 
     - Row captions (dates, who paid, counts): −0.2.
     - Amounts: −0.4.
 
-    Kenneth tuned these on the simulator against spliit-ios and on the emulator (2026-10-08). The reimbursement title's italic stays the font's own; Flutter can't change its angle except by slanting the drawn text, which Kenneth decided against.
+    Kenneth tuned these on the simulator against spliit-ios and on the emulator (2026-10-08). The settlement title's italic stays the font's own; Flutter can't change its angle except by slanting the drawn text, which Kenneth decided against.
 12. **Top bar buttons on a card, as iOS 26's toolbars, on both platforms** ([#228](https://github.com/sharneng/spliit2go/issues/228)). A single button gets a 44pt circle; several share one capsule, as the group list's sort and app settings do. They're in the cards' color with a light shadow (elevation 1, lighter than the tab bar's 3), 16pt from the screen's edges like the cards (`lib/widgets/top_bar_buttons.dart`). The back and close buttons get the same circle from the theme (`actionIconTheme`), with Flutter's own back icons. On iOS that's the centered rounded chevron, not `Icons.adaptive`'s, which sits left of center. Kenneth compared it with spliit-ios 2.6.1 on the simulator and checked it on the emulator (2026-10-08).
    - Expense search's clear button stays bare: it belongs to the search field, as on iOS.
    - The receipt-download indicator sits beside the group screen's ••• circle. It only shows while receipts download.

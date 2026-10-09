@@ -118,7 +118,7 @@ class _StatsScreenState extends State<StatsScreen> {
           final participants = computeParticipantSpending(widget.group.participants, expenses);
           final categories = computeCategorySpending(expenses);
           // Settlements alone aren't spending: still the empty state.
-          final noSpending = expenses.every((e) => e.isReimbursement);
+          final noSpending = expenses.every((e) => e.isSettlement);
           body = _body(context, noSpending, groupTotal, participants, categories);
         }
         if (widget.embedded) return body;

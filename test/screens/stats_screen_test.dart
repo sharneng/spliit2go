@@ -125,7 +125,7 @@ void main() {
     expect(find.text('The group'), findsOneWidget);
     expect(find.text('Total group spending'), findsOneWidget);
     expect(find.text('\$170.00'), findsOneWidget); // group total
-    expect(find.text('Settling up is not spending, so reimbursements are left out of every figure here.'),
+    expect(find.text('Settling up is not spending, so settlements are left out of every figure here.'),
         findsOneWidget);
     for (final gone in ['Summary', 'Totals', 'Average expense', 'Largest expense', 'Active span', 'You paid', 'Your share']) {
       expect(find.text(gone), findsNothing, reason: gone);
@@ -255,24 +255,24 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Expense expense(String id, int cents, {bool reimbursement = false}) => Expense(
+  Expense expense(String id, int cents, {bool settlement = false}) => Expense(
         id: id,
         groupId: 'g1',
         title: 'Expense $id',
         amountCents: cents,
         paidBy: 'alex',
         paidFor: const [ExpenseShare(participantId: 'bea', shares: 1)],
-        isReimbursement: reimbursement,
+        isSettlement: settlement,
         date: DateTime.utc(2026, 9, 1),
       );
 
   Finder headline(String amount) => find.byWidgetPredicate(
       (w) => w is Money && w.value == amount && w.size == MoneySize.hero);
 
-  testWidgets('the group total leaves reimbursements out (#103)', (tester) async {
+  testWidgets('the group total leaves settlements out (#103)', (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
-    await db.replaceServerExpenses('g1', [expense('e1', 4000), expense('r1', 1500, reimbursement: true)]);
+    await db.replaceServerExpenses('g1', [expense('e1', 4000), expense('r1', 1500, settlement: true)]);
     await pumpStats(tester, db);
 
     expect(headline('\$40.00'), findsOneWidget);
@@ -297,7 +297,7 @@ void main() {
   testWidgets('only settlements: still the empty state', (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
-    await db.replaceServerExpenses('g1', [expense('r1', 1500, reimbursement: true)]);
+    await db.replaceServerExpenses('g1', [expense('r1', 1500, settlement: true)]);
     await pumpStats(tester, db);
 
     expect(find.text('No expenses yet.'), findsOneWidget);

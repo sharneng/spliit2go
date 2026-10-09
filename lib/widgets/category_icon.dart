@@ -109,7 +109,7 @@ const Map<String, int> _groupingColors = {
 /// smaller size, inline in the expense form's category field and picker
 /// rows (this app's "expense screen" ask).
 ///
-/// A reimbursement isn't an expense, so its icon is its own (#224): the
+/// A settlement isn't an expense, so its icon is its own (#224): the
 /// Uncategorized banknote whatever its category, in the app's emerald on
 /// the color of the lines between rows: the page's color in light mode,
 /// and in dark the lighter tone that stands off the card (the page's
@@ -117,16 +117,16 @@ const Map<String, int> _groupingColors = {
 class CategoryIconGlyph extends StatelessWidget {
   final Category? category;
   final double size;
-  final bool isReimbursement;
+  final bool isSettlement;
 
   const CategoryIconGlyph(
-      {super.key, required this.category, this.size = 34, this.isReimbursement = false});
+      {super.key, required this.category, this.size = 34, this.isSettlement = false});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    if (isReimbursement) {
+    if (isSettlement) {
       return Container(
         width: size,
         height: size,

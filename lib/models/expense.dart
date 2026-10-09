@@ -153,7 +153,7 @@ class Expense {
   final int category;
   final String notes;
   final DateTime date;
-  final bool isReimbursement;
+  final bool isSettlement;
   final RecurrenceRule recurrenceRule;
 
   /// Set together to record that this expense was entered in a currency
@@ -214,7 +214,7 @@ class Expense {
     this.category = 0,
     this.notes = '',
     required this.date,
-    this.isReimbursement = false,
+    this.isSettlement = false,
     this.recurrenceRule = RecurrenceRule.none,
     this.originalAmountCents,
     this.originalCurrency,

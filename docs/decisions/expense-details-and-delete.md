@@ -25,7 +25,7 @@ Kenneth's point in [#90](https://github.com/sharneng/spliit2go/issues/90): tappi
 
 10. **The sheet's layout, to avoid scrolling** ([#226](https://github.com/sharneng/spliit2go/issues/226), Kenneth, 2026-10-08).
     - **The sheet has its own top bar, laid out like an app bar.** It has three parts:
-      - **The category icon leads,** at the buttons' 44pt. A reimbursement's banknote sits on the buttons' white card: its own circle is the sheet's color and disappeared there.
+      - **The category icon leads,** at the buttons' 44pt. A settlement's banknote sits on the buttons' white card: its own circle is the sheet's color and disappeared there.
       - **A short status follows,** left-aligned in the space before the buttons: "Sync failed" in red, or "No connection" or "Waiting to sync" in the secondary color. It's title-large, regular weight, and shrinks rather than wraps.
       - **The state's buttons are icons on one capsule** at the end, in the top bar buttons' style (#228), with the main action rightmost: Delete then Edit, or Discard, Sync without receipts, then Retry. Destructive buttons are red.
     - **Why:** the buttons beside the title squeezed a long one, and Kenneth found that a poor look. On a row of their own, the space beside them held the status that used to sit under the amount, and that status, small and centered, wrapped.
@@ -37,9 +37,9 @@ Kenneth's point in [#90](https://github.com/sharneng/spliit2go/issues/90): tappi
       - The payer reads "you" for the active user.
       - The date has no year within ten months, as in the activity log.
       - The category is always named, General too, since this is the only place it shows before editing.
-      - The Reimbursement and Repeats chips are gone, since the sentence says the same.
+      - The Settlement and Repeats chips are gone, since the sentence says the same.
     - **The sentence ends with your part,** as the list row's arrow amount (`lentOrOwed`): "You lent $X" in Balances' green, "You owe $X" in red, or "You aren't involved". Nothing is added when no one is "you" (it would be misleading), or when you paid only for yourself.
-    - **A reimbursement** reads "…for settlement". "Settlement" is main content, not dimmed: it marks a reimbursement clearly, and a settlement can pay several people. Your part is "You received $X" in the banknote's emerald, or "You aren't involved"; nothing is added when you paid it, since the sentence already says so. Its title is italic, as in the list (#224). The paid-for card stays.
+    - **A settlement** reads "…for settlement". "Settlement" is main content, not dimmed: it marks a settlement clearly, and a settlement can pay several people. Your part is "You received $X" in the banknote's emerald, or "You aren't involved"; nothing is added when you paid it, since the sentence already says so. Its title is italic, as in the list (#224). The paid-for card stays.
     - **An original amount carries its currency's code,** "Originally JPY ¥20,000", since ¥ could be yen or yuan and $ any dollar. It and the split method are in the text color, not the secondary one: they're real information (Kenneth). The main amount doesn't: it's the group's currency, the same on every row, and everyone in the group knows it.
     - **Paid for:**
       - A 24pt monogram before each person, in their fixed color (#218). "Who are you?" uses the same size.

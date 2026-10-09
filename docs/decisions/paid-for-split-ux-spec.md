@@ -31,7 +31,7 @@ Leading checkbox (checkmark-circle style, not a plain Material checkbox) + name.
 
 ### 4. When the live \$-per-participant preview appears
 
-Ported from `ExpenseFormDraft.showsShareAmounts`: shown when the expense is not a reimbursement, the split mode is not Amount, and either the mode is Evenly, or every included participant's typed value is a positive number — **and**, for Percent specifically, the percentages currently sum to exactly 100 (Shares has no such sum requirement; any positive ratio is valid and shows immediately). The amounts themselves use the same floor-plus-largest-remainder apportionment spliit2go already has in `lib/services/expense_shares.dart` (shared with Balances and Stats) — this spec doesn't change that math, only when/where it's displayed live instead of only after Save.
+Ported from `ExpenseFormDraft.showsShareAmounts`: shown when the expense is not a settlement, the split mode is not Amount, and either the mode is Evenly, or every included participant's typed value is a positive number — **and**, for Percent specifically, the percentages currently sum to exactly 100 (Shares has no such sum requirement; any positive ratio is valid and shows immediately). The amounts themselves use the same floor-plus-largest-remainder apportionment spliit2go already has in `lib/services/expense_shares.dart` (shared with Balances and Stats) — this spec doesn't change that math, only when/where it's displayed live instead of only after Save.
 
 ### 5. Default field values
 
@@ -51,7 +51,7 @@ This turns validation from "only checked at Save, one error at a time" into a ru
 
 The toggle moves into the "Paid for" section itself (bottom of the participant list), and stops being a no-op. Today, spliit2go already sends `saveDefaultSplittingOptions` to the server on every save — and the server ignores it, which turns out to be correct behavior to keep: spliit-ios's own doc comment on `DefaultSplit` confirms the tRPC procedures never read that flag; it exists only for whichever browser set it. What spliit-ios adds **on top** is a purely local, per-device, per-group memory:
 
-- Shown for every split mode except when the expense is a reimbursement (a reimbursement is a one-off, not representative of the group's normal expenses).
+- Shown for every split mode except when the expense is a settlement (a settlement is a one-off, not representative of the group's normal expenses).
 - Only takes effect **after** a save actually succeeds — a split remembered from a save the server rejected would wrongly go on prefilling future expenses.
 - What's remembered: the split mode, plus — for Shares and Percent — the exact per-participant values keyed by participant id. An Evenly split that covers literally everyone is remembered as "no shares data, just evenly" (so a newly-added participant is naturally included later, rather than left out). An Evenly split that *excludes* someone is remembered with that explicit membership. Amount is never remembered — one purchase's dollar amounts mean nothing for the next expense.
 - Applied when starting a **new** (not edit) expense in that group afterward: pre-selects the split mode and pre-fills each participant's included flag and value. If the remembered split names a participant no longer in the group, the whole remembered split is discarded for that draft (falls back to plain "everyone, evenly") rather than silently dropping just that name — a stale default should never quietly leave someone out of a real expense.

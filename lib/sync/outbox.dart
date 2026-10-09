@@ -100,7 +100,7 @@ class Outbox {
           category: local.category,
           notes: local.notes,
           date: local.date,
-          isReimbursement: local.isReimbursement,
+          isSettlement: local.isSettlement,
           recurrenceRule: local.recurrenceRule,
           originalAmountCents: local.originalAmountCents,
           originalCurrency: local.originalCurrency,
