@@ -13,7 +13,16 @@ An expense has three nullable columns besides `amount`:
 | `amount` | In the group's currency, in its minor units. **The only amount balances use.** |
 | `originalCurrency` | The ISO code the expense was paid in. Its presence is what says "converted". |
 | `originalAmount` | What was paid, in the **original currency's own minor units**. Web stored this in whole units until its PR #425, and repaired the old rows with migration `20260812213708_backfill_original_amount_minor_units`. |
-| `conversionRate` | `Decimal(65,30)`: 1 unit of the original currency in the group's currency, so `amount = originalAmount × rate`. Not scaled by anyone's minor units. |
+| `conversionRate` | `Decimal(65,30)`: 1 whole unit of the original currency in whole units of the group's currency. A rate between whole units, so it can't be applied to the two minor-unit columns directly (below). |
+
+The two amounts are in different minor units, so the stored values are related through each currency's number of decimal places (`groupDigits`, `originalDigits`):
+
+```
+amountMinor         = round(originalAmountMinor × rate × 10^groupDigits / 10^originalDigits)
+originalAmountMinor = round(amountMinor ÷ rate × 10^originalDigits / 10^groupDigits)   (settlements)
+```
+
+For example, ¥1,000 (stored as `1000`, JPY has no decimal places) at 0.006 EUR per JPY is €6.00, stored as `600` in a euro group. `1000 × 0.006` would give `6`, which is €0.06. spliit-web works the same way: `convertToGroupCurrency` multiplies the form's whole-unit amount and rounds to the destination currency's decimal places, and only then is the result stored in minor units. spliit-ios's `convertedAmountMinorUnits` uses the first formula.
 
 - **Only `originalCurrency` can be cleared.** The server accepts `null` for it. For `originalAmount` and `conversionRate` it rejects `null` and treats a missing field as "leave it". So an expense switched back to the group's currency keeps its old amount and rate in the database. Every reader ignores them while `originalCurrency` is null, and so must spliit2go.
 - **A group with only a custom symbol can't convert:** there's no ISO code to convert to. Both apps turn the feature off there.
@@ -43,7 +52,7 @@ An expense has three nullable columns besides `amount`:
 ## The form (for #252)
 
 - **Follow spliit-ios:** a "Paid in" row. When it differs from the group's currency, "Amount paid" and "Exchange rate" appear. The group-currency total is calculated and read-only. A line under the rate says where it comes from. A scanned receipt's total goes into "Amount paid" during a conversion.
-- **Take the settlement direction from spliit-web,** in the first version. When marking a settlement as paid in another currency, the amount settled stays fixed and the amount to transfer is calculated as `amount ÷ rate`. It uses the same rate, so nothing about rates or the cache changes.
+- **Take the settlement direction from spliit-web,** in the first version. When marking a settlement as paid in another currency, the amount settled stays fixed and the amount to transfer is calculated from it with the second formula above, rounded to the original currency's decimal places. It uses the same rate, so nothing about rates or the cache changes.
 - **The expense's own rate is the record.** Editing an expense shows its saved rate and never replaces it automatically. The outbox sends what was saved, and doesn't look the rate up again when it syncs. The rate cache below only ever *suggests* a rate.
 - **Not in the first version:** typing each share in the original currency (web's "by amount" convenience).
 
@@ -130,6 +139,8 @@ class RateDays extends Table {
   /// {"SDG":"2026-10-03"}. Usually {}.
   TextColumn get publishedOnExceptionsJson => text()();
 
+  /// When this answer was fetched. The day is final only once this is
+  /// 3 or more days after [day] (UTC); see "When a saved day is final".
   DateTimeColumn get fetchedAt => dateTime()();
 
   @override
@@ -142,16 +153,20 @@ class RateDays extends Table {
 - **The rate put in the form** is rounded to 6 significant figures. That one value is what's shown, saved on the expense and used to calculate the amount, so they can't disagree.
 - **Reads, not watches:** the table is read once per lookup, never `.watch()`ed, since drift re-emits on every write.
 
-### When a day is fetched again
+### When a saved day is final
 
-| Requested day D (UTC) | Treated as | Request | Fetched again |
-|---|---|---|---|
-| D > today | Clamped to today | — | — |
-| D = today | Not final | Undated (latest) | After 3 hours |
-| D = today−1, today−2 | Not final | Dated | After 3 hours |
-| D ≤ today−3 | Final | Dated | Never; only removed by the clean-up |
+Whether a saved day can still change depends on **when it was fetched**, not on how old the day is now. A day is **final** once it was fetched with a dated request at least 3 days after the day itself (`fetchedAt` in UTC ≥ D + 3 days). Until then it's **provisional**, however old D becomes.
 
-A day is final after three days because some central banks publish late, and the CDN can serve a cached answer for 24 hours plus another 24 hours stale (`stale-while-revalidate=86400`).
+For example, a table saved early on Oct 9 can still hold Oct 8's rates for some currencies. It only becomes final when Oct 9 is fetched again on Oct 12 or later. If the day were treated as final just for being three days old, that early answer would be used forever.
+
+| Saved day D | Treated as | When it's needed online |
+|---|---|---|
+| Not saved | — | Fetched |
+| Fetched 3 or more days after D | Final | Used as saved; never fetched again, only removed by the clean-up |
+| Fetched earlier | Provisional | Used if fetched in the last 3 hours, otherwise fetched again |
+
+- **The request:** a D in the future is clamped to today. D = today uses the undated request (latest); any other day uses a dated one. An undated answer is never final, since it's fetched on D itself.
+- **Why 3 days:** some central banks publish late, and the CDN can serve a cached answer for 24 hours plus another 24 hours stale (`stale-while-revalidate=86400`).
 
 ### Looking up a rate
 
@@ -159,12 +174,12 @@ A day is final after three days because some central banks publish late, and the
 
 1. Same currency: no rate needed.
 2. Clamp the day.
-3. Get the ECB day: from the cache if it's still fresh and `force` isn't set, otherwise from the network. If it has both currencies, use it.
+3. Get the ECB day: from the cache if it's final, or provisional and fetched in the last 3 hours, and `force` isn't set; otherwise from the network. If it has both currencies, use it.
 4. Otherwise get the averaged day the same way. If it has both, use it. If not, there's no published rate for the pair. The form says so, and you can type a rate.
 
 When the network fails:
 
-- If that day is saved, use it even if it's past its 3 hours, and mark it stale.
+- If that day is saved, use it even if it's provisional and past its 3 hours, and mark it stale.
 - Otherwise use the newest saved day before D that has both currencies. The form says "Offline: rate from {date}".
 - Otherwise the rate is unavailable. Typing a rate always works.
 
@@ -185,7 +200,13 @@ A whole day covers every currency, so there's nothing to choose. "Ready to go of
 - a **favorite**, or
 - has an expense in another currency dated within the last 30 days.
 
-Each run fetches today's ECB and averaged tables, plus any of the past 7 days not saved yet, so last week's expenses can still be entered offline at their own day's rate. It's about 2 KB compressed per table; a first run is at most 16 small requests. Data use is small enough that there's no Wi-Fi-only setting, unlike receipts (up to 5 MB each). Someone who never converts and has no favorites makes no requests at all.
+Each run fetches, for both sources:
+
+- today's table;
+- any of the past 7 days not saved yet, so last week's expenses can still be entered offline at their own day's rate;
+- **every saved day that's still provisional**, whatever its age, if it was fetched more than 3 hours ago. A table saved early is replaced by the day's dated answer once that answer settles, including after several days offline, when the day may already be more than a week back.
+
+There are never many provisional days: a run leaves only its own last 3 days provisional (6 tables), and the next run fetches them again. It's about 2 KB compressed per table, and a first run is at most 16 small requests. Data use is small enough that there's no Wi-Fi-only setting, unlike receipts (up to 5 MB each). Someone who never converts and has no favorites makes no requests at all.
 
 **By hand:** App settings › Storage gets an **Exchange rates** row next to Receipts:
 
