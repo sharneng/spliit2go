@@ -678,7 +678,6 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     final originalAmount = e.originalAmountCents;
     final originalCurrency = e.originalCurrency;
 
-    final secondary = SpliitColors.of(context).secondaryContent;
     final amount = formatMoney(e.amountCents, currency, locale: locale);
     final original = originalAmount != null && originalCurrency != null
         ? l10n.expenseDetailsOriginalAmount(
@@ -709,7 +708,8 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Money(amount, size: MoneySize.hero, isReimbursement: e.isReimbursement),
           if (original != null)
-            Text(original, style: theme.textTheme.bodyMedium?.copyWith(color: secondary)),
+            // Real information, so in the text color, not dimmed (#226).
+            Text(original, style: theme.textTheme.bodyMedium),
         ]),
       ),
       const SizedBox(height: 20),
@@ -739,8 +739,8 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
                       style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.primary)),
                 ),
               ),
-            Text(_splitLabel(context, e.splitMode),
-                style: theme.textTheme.bodyMedium?.copyWith(color: secondary)),
+            // How it was split: information, in the text color (#226).
+            Text(_splitLabel(context, e.splitMode), style: theme.textTheme.bodyMedium),
           ]),
         ),
         // Past the monogram, under the name.

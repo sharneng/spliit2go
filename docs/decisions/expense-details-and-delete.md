@@ -40,7 +40,7 @@ Kenneth's point in [#90](https://github.com/sharneng/spliit2go/issues/90): tappi
       - The Reimbursement and Repeats chips are gone, since the sentence says the same.
     - **The sentence ends with your part,** as the list row's arrow amount (`lentOrOwed`): "You lent $X" in Balances' green, "You owe $X" in red, or "You aren't involved". Nothing is added when no one is "you" (it would be misleading), or when you paid only for yourself.
     - **A reimbursement** reads "…for settlement". "Settlement" is main content, not dimmed: it marks a reimbursement clearly, and a settlement can pay several people. Your part is "You received $X" in the banknote's emerald, or "You aren't involved"; nothing is added when you paid it, since the sentence already says so. Its title is italic, as in the list (#224). The paid-for card stays.
-    - **An original amount carries its currency's code,** "Originally JPY ¥20,000", since ¥ could be yen or yuan and $ any dollar. The main amount doesn't: it's the group's currency, the same on every row, and everyone in the group knows it.
+    - **An original amount carries its currency's code,** "Originally JPY ¥20,000", since ¥ could be yen or yuan and $ any dollar. It and the split method are in the text color, not the secondary one: they're real information (Kenneth). The main amount doesn't: it's the group's currency, the same on every row, and everyone in the group knows it.
     - **Paid for:**
       - A 24pt monogram before each person, in their fixed color (#218). "Who are you?" uses the same size.
       - Rows are one line.
