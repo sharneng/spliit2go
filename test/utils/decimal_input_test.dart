@@ -8,7 +8,15 @@ void main() {
         expect(parseFlexibleDecimal(input), 12.5);
       });
     }
-    for (final input in ['', '   ', 'garbage', '1,23,4', '12abc34', '1.234.5,6,7', '1,2.34,5']) {
+    for (final (input, value) in [('.5', 0.5), (',5', 0.5), ('12.', 12.0), ('12,', 12.0), (',234', 0.234)]) {
+      test('a separator at either end is the decimal one: "$input" is $value (#238 review)', () {
+        expect(parseFlexibleDecimal(input), value);
+      });
+    }
+    for (final input in ['', '   ', 'garbage', '1,23,4', '12abc34', '1.234.5,6,7', '1,2.34,5',
+      // Text that isn't a currency makes it invalid, not a different
+      // amount (#238 review).
+      '1.2k', '12abc', 'abc12', '1,234.56 total', '.', '1.,5']) {
       test('rejects "$input"', () {
         expect(parseFlexibleDecimal(input), isNull);
       });
@@ -27,6 +35,9 @@ void main() {
       ('1\u202f234,56', 1234.56),
       ("CHF 1'234.50", 1234.5),
       ('JPY ¥20,000', 20000.0),
+      ('20,000 JPY', 20000.0),
+      ('HK\$12.50', 12.5),
+      ('£12.50', 12.5),
       ('1,234,567', 1234567.0),
       ('1.234.567,8', 1234567.8),
       ('-12,50', -12.5),

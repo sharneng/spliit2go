@@ -130,6 +130,19 @@ void main() {
     expect(db.rowToExpense(pending.single).amountCents, 123456);
   });
 
+  testWidgets("a shorthand like 1.2k isn't saved as another amount (#238 review)", (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await pumpScreen(tester, db);
+    await fillCommonFields(tester, amount: '1.2k');
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(await db.pendingExpensesForGroup(group.id), isEmpty);
+    expect(find.text('Enter a valid amount'), findsOneWidget);
+  });
+
   testWidgets('comma total and split amounts persist as integer cents',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());

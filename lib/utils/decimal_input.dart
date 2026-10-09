@@ -6,7 +6,9 @@
 ///
 /// The decision follows the receipt scanner's (`receiptAmounts`):
 /// - a currency symbol or code before or after the number is dropped,
-///   and so are spaces and apostrophes grouping it;
+///   and so are spaces and apostrophes grouping it; any other text
+///   ("1.2k", "12abc") makes it invalid, not a different amount;
+/// - a leading or trailing separator is the decimal one (".5", "12.");
 /// - with both separators, the last is the decimal one ("1.234,56");
 /// - one separator repeated groups thousands ("1,234,567");
 /// - one separator followed by other than three digits is the decimal
@@ -24,6 +26,10 @@ double? parseFlexibleDecimal(String input, {String decimalSeparator = '.'}) {
   if (match == null) return null;
   final sign = match[1]!;
   final body = match[2]!;
+  // ".5" and "12.", typed as ever: never grouping, even ",234".
+  if (_edgeDecimal.hasMatch(body)) {
+    return double.parse('${sign}0${body.replaceAll(',', '.')}0');
+  }
   final separators = [
     for (var i = 0; i < body.length; i++)
       if (body[i] == '.' || body[i] == ',') i,
@@ -56,9 +62,15 @@ double? parseFlexibleDecimal(String input, {String decimalSeparator = '.'}) {
 /// apostrophes (as Swiss) between the digits.
 final _grouping = RegExp("[\\s  '’]");
 
-/// A currency symbol or code before or after the number: "$", "US$",
-/// "€", "CHF".
-final _currencyAround = RegExp(r'^[\s\p{Sc}\p{L}]+|[\s\p{Sc}\p{L}]+$', unicode: true);
+/// A currency before or after the number: a symbol ("$", "€"), one with
+/// a country's letters ("US$", "HK$"), or an ISO code ("CHF", "JPY ¥").
+final _currencyAround = RegExp(
+    r'^\s*(?:[A-Z]{3}\s*\p{Sc}?|[A-Z]{1,2}\p{Sc}|\p{Sc})\s*|\s*(?:\p{Sc}?\s*[A-Z]{3}|\p{Sc})\s*$',
+    unicode: true);
 
-/// An optional minus, then digits joined by dots and commas.
-final _number = RegExp(r'^(-?)(\d+(?:[.,]\d+)*)$');
+/// An optional minus, then digits joined by dots and commas, or with a
+/// single separator before or after them.
+final _number = RegExp(r'^(-?)(\d+(?:[.,]\d+)*|[.,]\d+|\d+[.,])$');
+
+/// A lone separator at either end: the decimal one.
+final _edgeDecimal = RegExp(r'^[.,]\d+$|^\d+[.,]$');
