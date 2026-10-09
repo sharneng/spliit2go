@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spliit2go/theme.dart';
+import 'package:spliit2go/widgets/grouped_section.dart';
 
 void main() {
   // The typography that sets the letter spacing must keep Material's text
@@ -90,14 +91,16 @@ void main() {
     expect(spliit2goDarkTheme.colorScheme.primary, const Color(0xff10B981));
   });
 
-  test('one base background for screens, app bars, the tab bar and sheets (#186 review)', () {
+  test('one base background for screens, app bars and the tab bar (#186 review)', () {
     for (final theme in [spliit2goLightTheme, spliit2goDarkTheme]) {
       final base = theme.scaffoldBackgroundColor;
       final reason = '${theme.brightness}';
       expect(theme.appBarTheme.backgroundColor, base, reason: reason);
       expect(theme.navigationBarTheme.backgroundColor, base, reason: reason);
-      expect(theme.bottomSheetTheme.backgroundColor, base, reason: reason);
     }
+    // Sheets too in light; in dark they stand off it (#239, below).
+    expect(spliit2goLightTheme.bottomSheetTheme.backgroundColor,
+        spliit2goLightTheme.scaffoldBackgroundColor);
     // Grouped cards stand off it: lighter in light mode, a step up from
     // black in dark (#211).
     expect(spliit2goLightTheme.scaffoldBackgroundColor,
@@ -128,6 +131,16 @@ void main() {
       // And stays flat: no shadow either (#188 review).
       expect(bar().elevation, 0, reason: '${theme.brightness}');
     }
+  });
+
+  test('dark sheets stand off the page with a hairline edge; light ones unchanged (#239)', () {
+    final dark = spliit2goDarkTheme.bottomSheetTheme;
+    expect(dark.backgroundColor, isNot(spliit2goDarkTheme.scaffoldBackgroundColor));
+    expect(dark.backgroundColor, isNot(GroupedSection.cardColorOf(spliit2goDarkTheme.colorScheme)));
+    expect((dark.shape! as RoundedRectangleBorder).side.width, 0.5);
+    final light = spliit2goLightTheme.bottomSheetTheme;
+    expect(light.backgroundColor, spliit2goLightTheme.scaffoldBackgroundColor);
+    expect(light.shape, isNull);
   });
 
   test('add buttons are circles, in both modes (#199)', () {

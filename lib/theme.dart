@@ -147,7 +147,23 @@ ThemeData _appTheme(Brightness brightness, {bool highContrast = false}) {
               ? onAddColor
               : colorScheme.onSurfaceVariant)),
     ),
-    bottomSheetTheme: BottomSheetThemeData(backgroundColor: base),
+    // In dark, sheets a step off the black page, 2/3 of the way to the
+    // cards, so a sheet stands off the dimmed screen behind it and its own
+    // cards still stand off it (#239). The handle dimmed, as iOS's
+    // grabber.
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor:
+          dark ? Color.lerp(base, GroupedSection.cardColorOf(colorScheme), 2 / 3) : base,
+      dragHandleColor: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+      // And a hairline lighter edge in dark, as iOS's sheets, to mark
+      // where the sheet ends; Material's own corners.
+      shape: dark
+          ? RoundedRectangleBorder(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.15), width: 0.5),
+            )
+          : null,
+    ),
     // The add buttons are round, as spliit-ios's, not Material's rounded
     // square (#199).
     floatingActionButtonTheme: FloatingActionButtonThemeData(
