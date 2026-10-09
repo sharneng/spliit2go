@@ -25,8 +25,11 @@ import '../services/date_span_calculator.dart';
 /// symbols for [locale] are loaded by MaterialApp's own localizations
 /// delegates; a caller outside a widget tree (a unit test) has to call
 /// `initializeDateFormatting` first.
-String formatDate(DateTime d, {required Locale locale}) =>
-    DateFormat.yMMMd(locale.toString()).format(d);
+///
+/// Without the year when [withYear] is false (#226), CLDR's month and day
+/// for [locale]: `Sep 19`, `19 sept.`, `9月19日`.
+String formatDate(DateTime d, {required Locale locale, bool withYear = true}) =>
+    (withYear ? DateFormat.yMMMd(locale.toString()) : DateFormat.MMMd(locale.toString())).format(d);
 
 /// Formats [d] as [locale]'s own all-numeric date, zero-padded so every
 /// date has the same width (#207): `09/09/2026` (en-US), `09/09/2026`

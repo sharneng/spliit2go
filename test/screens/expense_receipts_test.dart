@@ -409,7 +409,9 @@ void main() {
     await openSheet(tester, db, offlineServer());
 
     expect(find.textContaining("If this server doesn't store receipts"), findsOneWidget);
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Sync without receipts'));
+    // An icon button in the sheet's top bar (#226).
+    await tester.tap(find.ancestor(
+        of: find.byTooltip('Sync without receipts'), matching: find.byType(IconButton)));
     await tester.pumpAndSettle();
     expect(find.textContaining('which has their only copy'), findsOneWidget);
     await tester.tap(find.widgetWithText(TextButton, 'Sync without receipts'));

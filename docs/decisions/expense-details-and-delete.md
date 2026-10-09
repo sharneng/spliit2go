@@ -14,7 +14,7 @@ Kenneth's point in [#90](https://github.com/sharneng/spliit2go/issues/90): tappi
    |---|---|
    | Synced | Edit (fetches fresh first, then opens the existing form) and Delete |
    | Pending | View only, until it reaches the server |
-   | Sync failed | Retry and Discard (this replaced the old separate Retry/Delete sheet) |
+   | Sync failed | Retry and Discard (this replaced the old separate Retry/Delete sheet), and Sync without receipts when it has unsent receipts |
 
 4. **Offline rules separate server changes from local ones** (Kenneth on #90). Edit and Delete change data on the server, so they're disabled while the phone reports no connection, with the reason shown *inside* the sheet (a SnackBar would be hidden behind it). Retry and Discard only touch this device's copy of an expense that never reached the server, so they stay available offline; Discard is the only way to clear a failed sync without a connection.
 5. **Delete is server-first.** It asks for confirmation (naming the expense, and saying it's deleted for everyone and can't be undone), deletes on the server, and only then removes the local copy. It isn't queued offline, consistent with [mobile-platform.md](mobile-platform.md)'s view-and-add-only offline scope.
@@ -22,6 +22,33 @@ Kenneth's point in [#90](https://github.com/sharneng/spliit2go/issues/90): tappi
 7. **A refresh can't undo this device's own edit or delete.** A refresh downloads the whole list, then overwrites the cache, so one that was already downloading when you deleted would write the expense back (and one downloading during an edit would briefly revert it). `AppDatabase` keeps a per-group counter (`expensesGeneration`), bumped by a delete and a saved edit; `replaceServerExpenses(..., fetchedAtGeneration:)` skips its write if the counter moved while it was fetching. The check and the delete's bump both run inside drift transactions, so they can't interleave. The counter is in memory only: it guards refreshes in flight, which never outlive the process.
 8. **Changes are credited to the active user in Spliit's activity log** (#92). The client used to send the literal `'None'` for every create and update, so nothing from spliit2go was attributed. It now sends the group's active participant, or `'None'` when there isn't one, as spliit-web does. "Nobody" (`'#nobody'`, see [multi-group-design.md](multi-group-design.md)) is never sent. Membership is checked when the participant is chosen: at save time for an edit or delete, and when the expense is added for a create (decision 9). So a participant who leaves the group after adding an expense offline is still credited when it syncs, deliberately preserving who added it. Upstream `Activity.participantId` is a plain string, not a foreign key, so such an id can't fail the write.
 9. **An offline-added expense is credited to whoever added it**, not whoever is the active user when it finally syncs. The active user is captured when the expense is added, stored on the pending row (`expenses.added_by_participant_id`, schema 11), and sent by the outbox on replay. Rows queued before that change sync unattributed.
+
+10. **The sheet's layout, to avoid scrolling** ([#226](https://github.com/sharneng/spliit2go/issues/226), Kenneth, 2026-10-08).
+    - **The sheet has its own top bar, laid out like an app bar.** It has three parts:
+      - **The category icon leads,** at the buttons' 44pt. A reimbursement's banknote sits on the buttons' white card: its own circle is the sheet's color and disappeared there.
+      - **A short status follows,** left-aligned in the space before the buttons: "Sync failed" in red, or "No connection" or "Waiting to sync" in the secondary color. It's title-large, regular weight, and shrinks rather than wraps.
+      - **The state's buttons are icons on one capsule** at the end, in the top bar buttons' style (#228), with the main action rightmost: Delete then Edit, or Discard, Sync without receipts, then Retry. Destructive buttons are red.
+    - **Why:** the buttons beside the title squeezed a long one, and Kenneth found that a poor look. On a row of their own, the space beside them held the status that used to sit under the amount, and that status, small and centered, wrapped.
+    - **What the status means is in one place, right under the bar:** the server's error, the hint, the receipts note, the offline reason, or a failed edit or delete (with its expandable details). Nothing shows there when all's well. The hints show each button's icon after its verb ("Retry ⟳ to send it again, or discard 🗑 it…"), drawn from the buttons' own icons, since the buttons have no labels.
+    - **The title then has the full width.**
+    - **The date, category and payer card is one sentence:** "Paid by <name> on <date> for <category>[, repeats <frequency>]".
+      - Each language has its own template, since French and Chinese order the parts differently.
+      - The fixed words are in the secondary color; the name, date and category in the text color.
+      - The payer reads "you" for the active user.
+      - The date has no year within ten months, as in the activity log.
+      - The category is always named, General too, since this is the only place it shows before editing.
+      - The Reimbursement and Repeats chips are gone, since the sentence says the same.
+    - **The sentence ends with your part,** as the list row's arrow amount (`lentOrOwed`): "You lent $X" in Balances' green, "You owe $X" in red, or "You aren't involved". Nothing is added when no one is "you" (it would be misleading), or when you paid only for yourself.
+    - **A reimbursement** reads "…for settlement". "Settlement" is main content, not dimmed: it marks a reimbursement clearly, and a settlement can pay several people. Your part is "You received $X" in the banknote's emerald, or "You aren't involved"; nothing is added when you paid it, since the sentence already says so. Its title is italic, as in the list (#224). The paid-for card stays.
+    - **An original amount carries its currency's code,** "Originally JPY ¥20,000", since ¥ could be yen or yuan and $ any dollar. It and the split method are in the text color, not the secondary one: they're real information (Kenneth). The main amount doesn't: it's the group's currency, the same on every row, and everyone in the group knows it.
+    - **Paid for:**
+      - A 24pt monogram before each person, in their fixed color (#218). "Who are you?" uses the same size.
+      - Rows are one line.
+      - For shares and percentages, each row shows the person's share by default, as the split was entered: the bare number ("2"; the heading already says Shares) or a percentage with two decimals ("66.67%", "50.00%") so a column lines up. It's in the amounts' digits.
+      - A "Show amounts" link before the split method swaps the shares for what they come to, and back. It isn't remembered.
+      - Kenneth turned down a two-line row with the share under the amount: the monogram no longer lined up with the name.
+    - **Screen readers** hear the title, amount and original amount as one item, then the sentence, then each person.
+    - **Notes:** a cached expense's notes never reach the sheet, because Spliit's expense list doesn't send them. See [#237](https://github.com/sharneng/spliit2go/issues/237).
 
 ## Bugs found in review
 

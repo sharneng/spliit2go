@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart' show NumberFormat;
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
@@ -27,6 +29,10 @@ import '../widgets/receipts.dart';
 import '../utils/haptics.dart';
 import '../widgets/grouped_section.dart';
 import '../widgets/bottom_inset.dart';
+import '../widgets/expense_list.dart' show participantColors;
+import '../widgets/group_monogram.dart';
+import '../widgets/top_bar_buttons.dart';
+import '../theme.dart';
 
 /// What tapping an expense does, from both the expense list and the
 /// Activity tab (issue #90): a bottom sheet showing the expense's details,
@@ -68,6 +74,7 @@ Future<bool> showExpenseDetails(
   String? activeUserId,
   bool fetchIfMissing = false,
   @visibleForTesting Stream<bool>? connectivity,
+  @visibleForTesting DateTime Function() now = DateTime.now,
 }) async {
   final action = await showModalBottomSheet<_SheetAction>(
     context: context,
@@ -83,6 +90,7 @@ Future<bool> showExpenseDetails(
       activeUserId: activeUserId,
       fetchIfMissing: fetchIfMissing,
       connectivity: connectivity ?? _deviceOnline(),
+      now: now,
     ),
   );
   if (!context.mounted) return false;
@@ -158,6 +166,9 @@ class _ExpenseDetailsSheet extends StatefulWidget {
   final bool fetchIfMissing;
   final Stream<bool> connectivity;
 
+  /// Today, for whether the summary's date needs its year.
+  final DateTime Function() now;
+
   const _ExpenseDetailsSheet({
     required this.expenseId,
     required this.group,
@@ -167,6 +178,7 @@ class _ExpenseDetailsSheet extends StatefulWidget {
     required this.activeUserId,
     required this.fetchIfMissing,
     required this.connectivity,
+    required this.now,
   });
 
   @override
@@ -194,6 +206,10 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   /// An Edit fetch, Delete, Retry or Discard is in flight. Every action
   /// is disabled meanwhile, so none can run twice.
   bool _busy = false;
+
+  /// For a split by shares or percentages: each person's amount in place
+  /// of their share (#226). Shares by default, as the split was entered.
+  bool _showAmounts = false;
 
   /// Which server action is running, for its button's spinner.
   _ServerAction? _running;
@@ -662,51 +678,88 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     final originalAmount = e.originalAmountCents;
     final originalCurrency = e.originalCurrency;
 
+    final amount = formatMoney(e.amountCents, currency, locale: locale);
+    final original = originalAmount != null && originalCurrency != null
+        ? l10n.expenseDetailsOriginalAmount(
+            _withCode(originalCurrency,
+                formatMoney(originalAmount, _symbolFor(originalCurrency), locale: locale)))
+        : null;
+    final colors = participantColors(widget.group.participants, widget.activeUserId);
+    final hasShares = e.splitMode == SplitMode.byShares || e.splitMode == SplitMode.byPercentage;
+
     return [
-      Row(
-        children: [
-          CategoryIconGlyph(category: known, size: 40),
-          const SizedBox(width: 12),
-          Expanded(child: Text(e.title, style: theme.textTheme.titleLarge)),
-        ],
+      // The sheet's own top bar (#226): the category, the status, the
+      // buttons. Beside the title, the buttons squeezed a long one.
+      _topBar(context, e, known),
+      const SizedBox(height: 8),
+      // What the top bar's status means, in one place under it (#226).
+      ..._status(context, e),
+      // The title, the amount and what it was originally are read as one:
+      // "Dinner, $90.00" (#226). The title has the full width.
+      Semantics(
+          label: [e.title, amount, if (original != null) original].join(', '),
+          excludeSemantics: true,
+          child: Text(e.title,
+              style: theme.textTheme.titleLarge?.copyWith(
+                  // A reimbursement's title italic, as in its row (#224).
+                  fontStyle: e.isReimbursement ? FontStyle.italic : null))),
+      const SizedBox(height: 12),
+      ExcludeSemantics(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Money(amount, size: MoneySize.hero, isReimbursement: e.isReimbursement),
+          if (original != null)
+            // Real information, so in the text color, not dimmed (#226).
+            Text(original, style: theme.textTheme.bodyMedium),
+        ]),
       ),
-      const SizedBox(height: 12),
-      Money(formatMoney(e.amountCents, currency, locale: locale),
-          size: MoneySize.hero, isReimbursement: e.isReimbursement),
-      if (originalAmount != null && originalCurrency != null)
-        Text(
-          l10n.expenseDetailsOriginalAmount(
-              formatMoney(originalAmount, _symbolFor(originalCurrency), locale: locale)),
-          style: theme.textTheme.bodyMedium
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-        ),
-      ..._badges(context, e),
-      const SizedBox(height: 12),
-      ..._actions(context, e),
       const SizedBox(height: 20),
       GroupedSection(
         margin: _sectionMargin,
-        dividerIndent: 56,
         children: [
-          _info(context, Icons.calendar_today_outlined, l10n.expenseDateLabel,
-              formatDate(e.date, locale: locale)),
-          _info(context, Icons.category_outlined, l10n.expenseCategoryLabel,
-              localizedCategoryLabel(context, e.category, known)),
-          _info(context, Icons.person_outline, l10n.expensePaidByLabel, _name(e.paidBy)),
+          Padding(padding: const EdgeInsets.all(16), child: _summary(context, e, known)),
         ],
       ),
       GroupedSection(
         margin: _sectionMargin,
         caption: l10n.expensePaidForHeading,
-        captionTrailing: Text(_splitLabel(context, e.splitMode),
-            style: theme.textTheme.bodyMedium
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        // In line with the amounts in the card, as the caption is with the
+        // names (#226): the caption's own end padding is 8, the card's 16.
+        captionTrailing: Padding(
+          padding: const EdgeInsetsDirectional.only(end: 8),
+          // The link over the split method when both don't fit (large text).
+          child: Wrap(spacing: 12, alignment: WrapAlignment.end, children: [
+            if (hasShares)
+              Semantics(
+                button: true,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() => _showAmounts = !_showAmounts),
+                  child: Text(
+                      _showAmounts ? l10n.expenseDetailsHideAmounts : l10n.expenseDetailsShowAmounts,
+                      style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.primary)),
+                ),
+              ),
+            // How it was split: information, in the text color (#226).
+            Text(_splitLabel(context, e.splitMode), style: theme.textTheme.bodyMedium),
+          ]),
+        ),
+        // Past the monogram, under the name.
+        dividerIndent: 56,
         children: [
           for (final share in e.paidFor)
             GroupedRow(
+              leading: Monogram(
+                  name: _participantName(share.participantId),
+                  color: colors[share.participantId] ?? monogramPalette.first,
+                  radius: 12),
+              // One line: the share, as the split was entered, or the
+              // amount it comes to (#226).
               title: Text(_name(share.participantId)),
-              trailing:
-                  Money(formatMoney(shares[share.participantId] ?? 0, currency, locale: locale)),
+              trailing: switch (_shareLabel(context, e.splitMode, share)) {
+                // In the amounts' digits, as an amount without its currency.
+                final label? when !_showAmounts => Money(label),
+                _ => Money(formatMoney(shares[share.participantId] ?? 0, currency, locale: locale)),
+              },
             ),
         ],
       ),
@@ -735,121 +788,271 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     ];
   }
 
-  List<Widget> _badges(BuildContext context, Expense e) {
-    final l10n = context.l10n;
-    final labels = [
-      if (e.isReimbursement) l10n.expenseDetailsReimbursement,
-      switch (e.recurrenceRule) {
-        RecurrenceRule.daily => l10n.expenseDetailsRepeatsDaily,
-        RecurrenceRule.weekly => l10n.expenseDetailsRepeatsWeekly,
-        RecurrenceRule.monthly => l10n.expenseDetailsRepeatsMonthly,
-        RecurrenceRule.none => null,
-      },
-    ].whereType<String>();
-    if (labels.isEmpty) return const [];
-    return [
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 4,
-        children: [
-          for (final label in labels)
-            Chip(label: Text(label), visualDensity: VisualDensity.compact),
-        ],
-      ),
-    ];
-  }
-
-  List<Widget> _actions(BuildContext context, Expense e) {
+  /// The details of the top bar's status, under it: why the sync failed
+  /// and what the buttons do, what offline or pending means, a failed
+  /// edit or delete. Nothing when all's well.
+  List<Widget> _status(BuildContext context, Expense e) {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final muted = theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant);
-    if (e.syncFailed) {
-      return [
-        Text(l10n.groupScreenSyncFailureTitle,
-            style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.error)),
+    final lines = <Widget>[
+      if (e.syncFailed) ...[
         if (e.lastError != null)
           Text(e.lastError!, maxLines: 3, overflow: TextOverflow.ellipsis, style: muted),
-        const SizedBox(height: 4),
-        Text(l10n.expenseDetailsFailedHint, style: muted),
-        if (_attachments.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(l10n.expenseDetailsReceiptsNotUploaded, style: muted),
-        ],
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            FilledButton.tonalIcon(
-              onPressed: _busy ? null : _retry,
-              icon: const Icon(Icons.refresh),
-              label: Text(l10n.commonRetry),
-            ),
-            if (_attachments.isNotEmpty)
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _retryWithoutReceipts,
-                icon: const Icon(Icons.sync),
-                label: Text(l10n.expenseDetailsSyncWithoutReceipts),
-              ),
-            OutlinedButton.icon(
-              onPressed: _busy ? null : _discard,
-              style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error),
-              icon: const Icon(Icons.delete_outline),
-              label: Text(l10n.expenseDetailsDiscard),
-            ),
-          ],
-        ),
-      ];
-    }
-    if (e.pending) return [Text(l10n.expenseDetailsPending, style: muted)];
-    final offline = _online == false;
-    final message = _actionError ?? (offline ? l10n.expenseDetailsNeedsConnection : null);
-    Widget icon(_ServerAction action, IconData data) => _running == action
-        ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-        : Icon(data);
-    return [
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          FilledButton.tonalIcon(
-            onPressed: _busy || offline ? null : _edit,
-            icon: icon(_ServerAction.edit, Icons.edit_outlined),
-            label: Text(l10n.expenseDetailsEdit),
-          ),
-          OutlinedButton.icon(
-            onPressed: _busy || offline ? null : () => _delete(e),
-            style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error),
-            icon: icon(_ServerAction.delete, Icons.delete_outline),
-            label: Text(l10n.commonDelete),
-          ),
-        ],
-      ),
-      if (message != null) ...[
-        const SizedBox(height: 4),
-        if (_actionDiagnostics != null)
-          ErrorMessage(message, diagnostics: _actionDiagnostics)
-        else
-          Text(message, style: muted),
+        _withIcons(context, muted,
+            (mark) => l10n.expenseDetailsFailedHint(mark(_retryIcon), mark(_discardIcon))),
+        if (_attachments.isNotEmpty)
+          _withIcons(context, muted,
+              (mark) => l10n.expenseDetailsReceiptsNotUploaded(mark(_syncWithoutReceiptsIcon))),
+      ] else if (e.pending)
+        Text(l10n.expenseDetailsPending, style: muted)
+      else ...[
+        if (_online == false) Text(l10n.expenseDetailsNeedsConnection, style: muted),
+        if (_actionError case final message?)
+          _actionDiagnostics != null
+              ? ErrorMessage(message, diagnostics: _actionDiagnostics)
+              : Text(message, style: muted),
       ],
+    ];
+    if (lines.isEmpty) return const [];
+    return [
+      for (var i = 0; i < lines.length; i++) ...[if (i > 0) const SizedBox(height: 4), lines[i]],
+      const SizedBox(height: 12),
     ];
   }
 
-  /// The sheet already has its own side padding.
-  static const _sectionMargin = EdgeInsets.only(bottom: 20);
+  static const _retryIcon = Icons.refresh;
+  static const _discardIcon = Icons.delete_outline;
+  static const _syncWithoutReceiptsIcon = Icons.sync;
 
-  /// A labeled value: the label small above it, the icon leading.
-  Widget _info(BuildContext context, IconData icon, String label, String value) {
+  /// A message naming the top bar's buttons with their icons drawn in it
+  /// (#226): "Retry ⟳ to send it again". [fill] fills the translation's
+  /// placeholders with whatever [mark] returns for each icon.
+  Widget _withIcons(BuildContext context, TextStyle? style,
+      String Function(String Function(IconData icon) mark) fill) {
+    final error = Theme.of(context).colorScheme.error;
+    final icons = <String, IconData>{};
+    // Private-use characters no translation contains.
+    final text = fill((icon) {
+      final mark = String.fromCharCode(0xF0020 + icons.length);
+      icons[mark] = icon;
+      return mark;
+    });
+    final size = (style?.fontSize ?? 14) * 1.2;
+    final spans = <InlineSpan>[];
+    text.splitMapJoin(RegExp(icons.keys.map(RegExp.escape).join('|')), onMatch: (m) {
+      final icon = icons[m[0]!]!;
+      spans.add(WidgetSpan(
+        alignment: PlaceholderAlignment.middle,
+        child: Icon(icon, size: size, color: icon == _discardIcon ? error : style?.color),
+      ));
+      return '';
+    }, onNonMatch: (t) {
+      spans.add(TextSpan(text: t));
+      return '';
+    });
+    return Text.rich(TextSpan(children: spans), style: style);
+  }
+
+  /// The sheet's top bar (#226), as an app bar's: the category icon
+  /// leading, a short status ("Sync failed", "No connection") as its
+  /// title, and the buttons for the expense's state as its actions.
+  Widget _topBar(BuildContext context, Expense e, Category? known) {
+    final l10n = context.l10n;
     final theme = Theme.of(context);
-    return GroupedRow(
-      leading: Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
-      title: Text(label,
-          style: theme.textTheme.labelMedium
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-      subtitle: Text(value, style: theme.textTheme.bodyLarge),
+    // Short, at a title's size; what it means is under the bar.
+    final title = theme.textTheme.titleLarge;
+    final muted = title?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final (String? message, TextStyle? style, List<Widget> buttons) = switch (e) {
+      Expense(syncFailed: true) => (
+          l10n.expenseDetailsStatusSyncFailed,
+          title?.copyWith(color: theme.colorScheme.error),
+          [
+            // Discard first, Retry at the end: the main action rightmost.
+            IconButton(
+              tooltip: l10n.expenseDetailsDiscard,
+              onPressed: _busy ? null : _discard,
+              color: theme.colorScheme.error,
+              icon: const Icon(_discardIcon),
+            ),
+            if (_attachments.isNotEmpty)
+              IconButton(
+                tooltip: l10n.expenseDetailsSyncWithoutReceipts,
+                onPressed: _busy ? null : _retryWithoutReceipts,
+                icon: const Icon(_syncWithoutReceiptsIcon),
+              ),
+            IconButton(
+              tooltip: l10n.commonRetry,
+              onPressed: _busy ? null : _retry,
+              icon: const Icon(_retryIcon),
+            ),
+          ],
+        ),
+      Expense(pending: true) => (l10n.expenseDetailsStatusPending, muted, const <Widget>[]),
+      _ => (
+          _online == false ? l10n.expenseDetailsStatusOffline : null,
+          muted,
+          _actionButtons(context, e),
+        ),
+    };
+    // The category icon at the start, as a top bar's leading button; the
+    // status in all the room between it and the buttons, from the start.
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: TopBarButtons.size),
+      child: Row(children: [
+        // A reimbursement's banknote is on the sheet's own color, so it
+        // gets the buttons' card to stand on; a category's color does.
+        e.isReimbursement
+            ? topBarCard(
+                context,
+                SizedBox.square(
+                  dimension: TopBarButtons.size,
+                  // As the glyph draws it, without its circle.
+                  child: Icon(LucideIcons.banknote,
+                      size: TopBarButtons.size * 0.55, color: theme.colorScheme.primary),
+                ))
+            : CategoryIconGlyph(category: known, size: TopBarButtons.size),
+        const SizedBox(width: 12),
+        Expanded(
+          child: message == null
+              ? const SizedBox.shrink()
+              // One line, shrunk rather than wrapped where it's long.
+              : FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(message, style: style, maxLines: 1)),
+        ),
+        if (buttons.isNotEmpty) ...[
+          const SizedBox(width: 8),
+          TopBarButtons(padding: EdgeInsets.zero, children: buttons),
+        ],
+      ]),
     );
   }
+
+  /// Edit and delete, as icons on a capsule (#226); off while offline or
+  /// busy, a spinner in place of the one running.
+  List<Widget> _actionButtons(BuildContext context, Expense e) {
+    final l10n = context.l10n;
+    final off = _busy || _online == false;
+    Widget icon(_ServerAction action, IconData data) => _running == action
+        ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+        : Icon(data);
+    // Delete first, Edit at the end: the main action rightmost.
+    return [
+      IconButton(
+        tooltip: l10n.commonDelete,
+        onPressed: off ? null : () => _delete(e),
+        color: Theme.of(context).colorScheme.error,
+        icon: icon(_ServerAction.delete, Icons.delete_outline),
+      ),
+      IconButton(
+        tooltip: l10n.expenseDetailsEdit,
+        onPressed: off ? null : _edit,
+        icon: icon(_ServerAction.edit, Icons.edit_outlined),
+      ),
+    ];
+  }
+
+  /// "Paid by Ken on Sep 12 for Groceries" (#226): the first card's three
+  /// rows as one sentence, its fixed words in the secondary color so the
+  /// names, date and category stand out. The language's own template, its
+  /// placeholders found by filling them with markers.
+  Widget _summary(BuildContext context, Expense e, Category? known) {
+    final l10n = context.l10n;
+    final locale = context.regionalDateLocale;
+    final theme = Theme.of(context);
+    final payer = e.paidBy == widget.activeUserId
+        ? l10n.expenseDetailsPayerYou
+        : _participantName(e.paidBy);
+    final date = formatDate(e.date,
+        locale: locale, withYear: !isWithinTenMonths(e.date, now: widget.now()));
+    final category = e.isReimbursement
+        ? l10n.expenseDetailsSettlement
+        : localizedCategoryLabel(context, e.category, known);
+    final frequency = switch (e.recurrenceRule) {
+      RecurrenceRule.daily => l10n.expenseDetailsFrequencyDaily,
+      RecurrenceRule.weekly => l10n.expenseDetailsFrequencyWeekly,
+      RecurrenceRule.monthly => l10n.expenseDetailsFrequencyMonthly,
+      RecurrenceRule.none => null,
+    };
+    // Private-use characters no translation contains.
+    const marks = ['\u{F0000}', '\u{F0001}', '\u{F0002}', '\u{F0003}'];
+    final values = [payer, date, category, if (frequency != null) frequency];
+    final template = frequency == null
+        ? l10n.expenseDetailsSummary(marks[0], marks[1], marks[2])
+        : l10n.expenseDetailsSummaryRepeating(marks[0], marks[1], marks[2], marks[3]);
+    // Then your part, as the list row's arrow says it (#226): "You lent
+    // $41.00", the amount in Balances' colors.
+    const money = '\u{F0004}';
+    final part = _yourPart(e);
+    final String? partTemplate = switch (part) {
+      null => null,
+      (cents: 0, lent: _) => l10n.expenseDetailsNotInvolved,
+      // A reimbursement's only part: what you were paid back.
+      (cents: _, lent: _) when e.isReimbursement => l10n.expenseDetailsYouReceived(money),
+      (cents: _, lent: true) => l10n.expenseDetailsYouLent(money),
+      (cents: _, lent: false) => l10n.expenseDetailsYouOwe(money),
+    };
+    final styled = <String, (String, TextStyle?)>{
+      for (var i = 0; i < values.length; i++) marks[i]: (values[i], null),
+      if (part != null && part.cents > 0)
+        money: (
+          formatMoney(part.cents, widget.group.currency, locale: context.appLocale),
+          e.isReimbursement
+              // In the emerald of its banknote, italic as its amount.
+              ? Money.styleOf(context, isReimbursement: true)
+                  ?.copyWith(color: Theme.of(context).colorScheme.primary)
+              : Money.styleOf(context, sign: part.lent ? MoneySign.positive : MoneySign.negative),
+        ),
+    };
+    final fixed = TextStyle(color: SpliitColors.of(context).secondaryContent);
+    final spans = <TextSpan>[];
+    (partTemplate == null ? template : l10n.expenseDetailsSentences(template, partTemplate))
+        .splitMapJoin(RegExp(styled.keys.join('|')), onMatch: (m) {
+      final (value, style) = styled[m[0]!]!;
+      spans.add(TextSpan(text: value, style: style));
+      return '';
+    }, onNonMatch: (text) {
+      if (text.isNotEmpty) spans.add(TextSpan(text: text, style: fixed));
+      return '';
+    });
+    return Text.rich(TextSpan(children: spans), style: theme.textTheme.bodyLarge);
+  }
+
+  /// The active user's part, as the list row has it ([lentOrOwed]), and
+  /// 0 cents when they're not in it at all. For a reimbursement, what they
+  /// were paid back; none when they paid it, as the sentence says so.
+  ({int cents, bool lent})? _yourPart(Expense e) {
+    final me = widget.activeUserId;
+    if (me == null) return null;
+    if (e.paidBy != me && !e.paidFor.any((s) => s.participantId == me)) {
+      return (cents: 0, lent: false);
+    }
+    if (!e.isReimbursement) return lentOrOwed(e, me);
+    if (e.paidBy == me) return null;
+    return (cents: expenseShareCents(e)[me] ?? 0, lent: false);
+  }
+
+  /// A person's part of a split by shares or percentages, shown in place
+  /// of their amount until "Show amounts" (#226); none for an even split
+  /// or exact amounts, whose amount says it all. Both are stored times 100, so a percentage keeps its two
+  /// decimals (66.67%, 0.01%), as the form takes them (#236 review).
+  String? _shareLabel(BuildContext context, SplitMode mode, ExpenseShare share) =>
+      switch (mode) {
+        // The heading already says Shares: just the number.
+        SplitMode.byShares =>
+          NumberFormat.decimalPattern(context.appLocale.toString()).format(share.shares / 100),
+        // Always two decimals, so a column of them lines up (#226).
+        SplitMode.byPercentage => (NumberFormat.percentPattern(context.appLocale.toString())
+              ..minimumFractionDigits = 2
+              ..maximumFractionDigits = 2)
+            .format(share.shares / 10000),
+        _ => null,
+      };
+
+  /// The sheet already has its own side padding.
+  static const _sectionMargin = EdgeInsets.only(bottom: 20);
 
   /// A participant's name, marked when it's this device's active user. A
   /// participant no longer in the group reads "Someone", as in Activity.
@@ -859,6 +1062,16 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     if (participant == null) return l10n.activitySomeone;
     return id == widget.activeUserId ? l10n.expenseDetailsYou(participant.name) : participant.name;
   }
+
+  /// A participant's name alone, or "Someone".
+  String _participantName(String id) =>
+      widget.group.participants.where((p) => p.id == id).firstOrNull?.name ??
+      context.l10n.activitySomeone;
+
+  /// [amount] after its currency's code, "JPY ¥20,000": ¥ alone could be
+  /// yen or yuan, $ any dollar. Once when the symbol is the code.
+  String _withCode(String code, String amount) =>
+      amount.contains(code) ? amount : '$code $amount';
 
   /// The "paid in" currency's symbol (€ for EUR), or its code when this
   /// app doesn't know it.

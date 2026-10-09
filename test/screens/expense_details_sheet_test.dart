@@ -14,13 +14,21 @@ import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/expense_details_sheet.dart';
 import 'package:spliit2go/services/receipt_cache.dart';
+import 'package:spliit2go/theme.dart';
 import 'package:spliit2go/sync/outbox.dart';
+import 'package:spliit2go/widgets/category_icon.dart';
 
 import '../support/error_log.dart';
 import '../support/haptics.dart';
 
 // Issue #90: tapping an expense shows its details in a sheet, with Edit,
 // Retry and Discard inside it depending on the expense's state.
+
+/// The expense details' edit or delete button, an icon on a capsule
+/// (#226), by its tooltip: still there while it shows a spinner.
+Finder actionButton(String tooltip) =>
+    find.ancestor(of: find.byTooltip(tooltip), matching: find.byType(IconButton));
+
 void main() {
   // Not named `group`: that would hide flutter_test's group().
   const banff = Group(
@@ -47,8 +55,9 @@ void main() {
                 ExpenseShare(participantId: 'bea', shares: 3333),
               ]
             : const [
-                ExpenseShare(participantId: 'alex', shares: 2),
-                ExpenseShare(participantId: 'bea', shares: 1),
+                // Stored times 100, as the server does.
+                ExpenseShare(participantId: 'alex', shares: 200),
+                ExpenseShare(participantId: 'bea', shares: 100),
               ],
         splitMode: splitMode,
         category: 8,
@@ -134,6 +143,7 @@ void main() {
                   activeUserId: activeUserId,
                   fetchIfMissing: fetchIfMissing,
                   connectivity: connectivity,
+                  now: () => DateTime(2026, 10, 8),
                 );
               },
               child: const Text('open'),
@@ -176,20 +186,31 @@ void main() {
 
     expect(inSheet(find.text('Dinner')), findsOneWidget);
     expect(inSheet(find.text('\$60.00')), findsOneWidget);
-    expect(inSheet(find.text('Originally €55.00')), findsOneWidget);
-    expect(inSheet(find.text('Repeats weekly')), findsOneWidget);
-    expect(inSheet(find.text('Sep 16, 2026')), findsOneWidget);
-    expect(inSheet(find.text('Dining Out')), findsOneWidget);
-    // Bea paid, and is this device's active user.
-    expect(inSheet(find.text('Bea (you)')), findsNWidgets(2));
-    // By shares, 2:1 -- the same apportionment Balances and Stats use.
+    // After its currency's code, as every original: ¥ alone is yen or yuan.
+    expect(inSheet(find.text('Originally EUR €55.00')), findsOneWidget);
+    // Who, when and what in one sentence (#226): Bea paid, and is this
+    // device's active user; within ten months, no year.
+    // Then your part, as the list row's arrow (#226).
+    expect(
+        inSheet(find.text('Paid by you on Sep 16 for Dining Out, repeats weekly. You lent \$40.00.')),
+        findsOneWidget);
+    expect(inSheet(find.text('Bea (you)')), findsOneWidget);
+    // By shares, 2:1: each person's shares, as entered (#226)...
     expect(inSheet(find.text('Shares')), findsOneWidget);
+    expect(inSheet(find.text('2')), findsOneWidget);
+    expect(inSheet(find.text('1')), findsOneWidget);
+    // ...or what they come to -- the same apportionment Balances and
+    // Stats use.
+    await tester.tap(inSheet(find.text('Show amounts')));
+    await tester.pumpAndSettle();
     expect(inSheet(find.text('\$40.00')), findsOneWidget);
     expect(inSheet(find.text('\$20.00')), findsOneWidget);
+    expect(inSheet(find.text('2')), findsNothing);
+    await tester.tap(inSheet(find.text('Hide amounts')));
+    await tester.pumpAndSettle();
+    expect(inSheet(find.text('2')), findsOneWidget);
     expect(inSheet(find.text('Birthday dinner')), findsOneWidget);
-    expect(inSheet(find.widgetWithText(FilledButton, 'Edit')), findsOneWidget);
-    expect(inSheet(find.text('Reimbursement')), findsNothing);
-
+    expect(inSheet(actionButton('Edit')), findsOneWidget);
     // Dismissing isn't a change.
     await tester.tapAt(const Offset(20, 20));
     await tester.pumpAndSettle();
@@ -213,14 +234,196 @@ void main() {
     addTearDown(db.close);
     await openSheet(tester, db);
 
-    expect(inSheet(find.text('Reimbursement')), findsOneWidget);
+    // For settlement, not its category; no repeats (#226).
+    expect(inSheet(find.text('Paid by Alex on Sep 16 for settlement')), findsOneWidget);
     expect(inSheet(find.text('Evenly')), findsOneWidget);
     expect(inSheet(find.textContaining('Originally')), findsNothing);
-    expect(inSheet(find.textContaining('Repeats')), findsNothing);
     expect(inSheet(find.text('Notes')), findsNothing);
-    // No active user: nobody is marked "you". Category 0 reads General.
+    // No active user: nobody is marked "you". An even split shows no shares.
     expect(inSheet(find.textContaining('(you)')), findsNothing);
-    expect(inSheet(find.text('General')), findsOneWidget);
+    expect(inSheet(find.textContaining('share')), findsNothing);
+    // Italic, as its row in the list (#224).
+    expect(tester.widget<Text>(inSheet(find.text('Payback'))).style!.fontStyle, FontStyle.italic);
+    await closeTree(tester);
+  });
+
+  // #226: the redesign.
+  testWidgets('a top bar of the category, status and buttons above the title; one sentence',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    tallView(tester);
+    final db = await cachedDb(dinner(title: 'A long title ' * 6));
+    addTearDown(db.close);
+    await openSheet(tester, db, activeUserId: 'bea');
+
+    final title = tester.getRect(inSheet(find.textContaining('A long title')));
+    for (final button in ['Edit', 'Delete']) {
+      final rect = tester.getRect(inSheet(actionButton(button)));
+      expect(rect.bottom, lessThanOrEqualTo(title.top), reason: '$button above the title');
+    }
+    // The title has the row to itself: as wide as the sheet allows.
+    expect(title.right, greaterThan(tester.getRect(inSheet(actionButton('Delete'))).left));
+    // Edit, the main action, rightmost; the category icon leading.
+    expect(tester.getRect(inSheet(actionButton('Edit'))).left,
+        greaterThan(tester.getRect(inSheet(actionButton('Delete'))).left));
+    expect(tester.getRect(inSheet(find.byType(CategoryIconGlyph))).bottom,
+        lessThanOrEqualTo(title.top));
+
+    // The sentence's fixed words dimmed, its names, date and category not.
+    final sentence = tester.widget<Text>(inSheet(find.textContaining('Paid by')));
+    final spans = (sentence.textSpan! as TextSpan).children!.cast<TextSpan>();
+    final colors = SpliitColors.of(tester.element(find.byType(BottomSheet)));
+    final color = {for (final span in spans) span.text!: span.style?.color};
+    final fixed = colors.secondaryContent;
+    expect(color, {
+      'Paid by ': fixed, 'you': null, ' on ': fixed, 'Sep 16': null, ' for ': fixed,
+      'Dining Out': null, ', repeats ': fixed, 'weekly': null, '. You lent ': fixed,
+      '\$40.00': colors.moneyPositive, '.': fixed,
+    });
+
+    // A monogram before each person.
+    expect(inSheet(find.text('A')), findsOneWidget);
+    expect(inSheet(find.text('B')), findsOneWidget);
+
+    // The title and amount read as one.
+    expect(find.bySemanticsLabel(RegExp(r'^A long title .*, \$60\.00, Originally EUR €55\.00$')),
+        findsOneWidget);
+    semantics.dispose();
+    await closeTree(tester);
+  });
+
+  testWidgets('a split by percentages shows each share as a percent, decimals kept (#226)',
+      (tester) async {
+    tallView(tester);
+    final db = await cachedDb(dinner(splitMode: SplitMode.byPercentage));
+    addTearDown(db.close);
+    await openSheet(tester, db);
+
+    expect(inSheet(find.text('66.67%')), findsOneWidget);
+    expect(inSheet(find.text('33.33%')), findsOneWidget);
+    await closeTree(tester);
+
+    // The smallest share isn't rounded to nothing (#236 review); every one
+    // has two decimals, so they line up.
+    for (final (shares, expected) in [
+      ((1, 9999), ('0.01%', '99.99%')),
+      ((5000, 5000), ('50.00%', '50.00%')),
+    ]) {
+      final split = Expense(
+        id: 'e1',
+        groupId: 'g1',
+        title: 'Split',
+        amountCents: 1000000,
+        paidBy: 'alex',
+        paidFor: [
+          ExpenseShare(participantId: 'alex', shares: shares.$1),
+          ExpenseShare(participantId: 'bea', shares: shares.$2),
+        ],
+        splitMode: SplitMode.byPercentage,
+        date: DateTime(2026, 9, 16),
+      );
+      final db = await cachedDb(split);
+      await openSheet(tester, db);
+      expect(inSheet(find.text(expected.$1)), findsWidgets, reason: expected.$1);
+      expect(inSheet(find.text(expected.$2)), findsWidgets, reason: expected.$2);
+      await closeTree(tester);
+      await db.close();
+    }
+  });
+
+  testWidgets('a date over ten months old keeps its year (#226)', (tester) async {
+    tallView(tester);
+    final db = await cachedDb(Expense(
+      id: 'e1',
+      groupId: 'g1',
+      title: 'Old',
+      amountCents: 1000,
+      paidBy: 'alex',
+      paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
+      date: DateTime(2025, 11, 30),
+    ));
+    addTearDown(db.close);
+    await openSheet(tester, db);
+
+    expect(inSheet(find.text('Paid by Alex on Nov 30, 2025 for General')), findsOneWidget);
+    await closeTree(tester);
+  });
+
+  group('the sentence ends with your part (#226)', () {
+    Expense payback() => Expense(
+          id: 'e1',
+          groupId: 'g1',
+          title: 'Payback',
+          amountCents: 1000,
+          paidBy: 'alex',
+          paidFor: const [ExpenseShare(participantId: 'bea', shares: 1)],
+          isReimbursement: true,
+          date: DateTime(2026, 9, 16),
+        );
+    for (final (name, expense, me, ending) in [
+      ('someone else paid', null, 'alex', '. You owe \$40.00.'),
+      ("you're not in it", null, 'cara', ". You aren't involved."),
+      ('no one is you', null, null, ' for Dining Out, repeats weekly'),
+      ('a reimbursement paid to you', payback(), 'bea', '. You received \$10.00.'),
+      ('a reimbursement you paid', payback(), 'alex', ' for settlement'),
+      ('a reimbursement not yours', payback(), 'cara', ". You aren't involved."),
+    ]) {
+      testWidgets(name, (tester) async {
+        tallView(tester);
+        final db = await cachedDb(expense ?? dinner());
+        addTearDown(db.close);
+        await openSheet(tester, db, activeUserId: me);
+        final sentence =
+            tester.widget<Text>(inSheet(find.textContaining('Paid by'))).textSpan!.toPlainText();
+        expect(sentence, endsWith(ending));
+        await closeTree(tester);
+      });
+    }
+  });
+
+  testWidgets('a reimbursement received is in emerald', (tester) async {
+    tallView(tester);
+    final db = await cachedDb(Expense(
+      id: 'e1',
+      groupId: 'g1',
+      title: 'Payback',
+      amountCents: 1000,
+      paidBy: 'alex',
+      paidFor: const [ExpenseShare(participantId: 'bea', shares: 1)],
+      isReimbursement: true,
+      date: DateTime(2026, 9, 16),
+    ));
+    addTearDown(db.close);
+    await openSheet(tester, db, activeUserId: 'bea');
+    final spans = (tester.widget<Text>(inSheet(find.textContaining('Paid by'))).textSpan!
+            as TextSpan)
+        .children!
+        .cast<TextSpan>();
+    final amount = spans.singleWhere((s) => s.text == '\$10.00');
+    expect(amount.style!.color,
+        Theme.of(tester.element(find.byType(BottomSheet))).colorScheme.primary);
+    await closeTree(tester);
+  });
+
+  testWidgets('an original amount in an unknown currency shows its code once (#226)',
+      (tester) async {
+    tallView(tester);
+    final db = await cachedDb(Expense(
+      id: 'e1',
+      groupId: 'g1',
+      title: 'Lunch',
+      amountCents: 1000,
+      paidBy: 'alex',
+      paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
+      date: DateTime(2026, 9, 16),
+      originalAmountCents: 900,
+      originalCurrency: 'XYZ',
+    ));
+    addTearDown(db.close);
+    await openSheet(tester, db);
+    expect(inSheet(find.textContaining('Originally')), findsOneWidget);
+    expect(tester.widget<Text>(inSheet(find.textContaining('Originally'))).data!
+        .split('XYZ').length - 1, 1);
     await closeTree(tester);
   });
 
@@ -241,7 +444,9 @@ void main() {
     addTearDown(db.close);
     await openSheet(tester, db);
 
-    expect(inSheet(find.text('Someone')), findsNWidgets(2));
+    expect(inSheet(find.text('Paid by Someone on Sep 16 for General')), findsOneWidget,
+        reason: 'General named: the only place the category shows');
+    expect(inSheet(find.text('Someone')), findsOneWidget);
     expect(inSheet(find.text('Alex')), findsOneWidget);
     await closeTree(tester);
   });
@@ -256,17 +461,20 @@ void main() {
 
     online.add(false);
     await tester.pumpAndSettle();
-    FilledButton edit() =>
-        tester.widget<FilledButton>(inSheet(find.widgetWithText(FilledButton, 'Edit')));
-    OutlinedButton delete() =>
-        tester.widget<OutlinedButton>(inSheet(find.widgetWithText(OutlinedButton, 'Delete')));
+    IconButton edit() =>
+        tester.widget<IconButton>(inSheet(actionButton('Edit')));
+    IconButton delete() =>
+        tester.widget<IconButton>(inSheet(actionButton('Delete')));
     const reason = 'Editing or deleting an expense needs a connection.';
     expect(edit().onPressed, isNull);
     expect(delete().onPressed, isNull);
     expect(inSheet(find.text(reason)), findsOneWidget);
+    // Short in the top bar, the reason under it (#226).
+    expect(inSheet(find.text('No connection')), findsOneWidget);
 
     online.add(true);
     await tester.pumpAndSettle();
+    expect(inSheet(find.text('No connection')), findsNothing);
     expect(edit().onPressed, isNotNull);
     expect(delete().onPressed, isNotNull);
     expect(inSheet(find.text(reason)), findsNothing);
@@ -278,7 +486,7 @@ void main() {
     addTearDown(db.close);
     await openSheet(tester, db, client: serverClient((_) async => http.Response(notFound, 404)));
 
-    await tester.tap(inSheet(find.widgetWithText(FilledButton, 'Edit')));
+    await tester.tap(inSheet(actionButton('Edit')));
     await tester.pumpAndSettle();
 
     expect(find.byType(BottomSheet), findsOneWidget);
@@ -296,7 +504,7 @@ void main() {
     await openSheet(tester, db,
         client: serverClient((_) async => http.Response('[{"result":{"data":{"json":{}}}}]', 200)));
 
-    await tester.tap(inSheet(find.widgetWithText(FilledButton, 'Edit')));
+    await tester.tap(inSheet(actionButton('Edit')));
     await tester.pumpAndSettle();
 
     expect(inSheet(find.text("Couldn't open this expense for editing.")), findsOneWidget);
@@ -312,7 +520,7 @@ void main() {
     await openSheet(tester, db,
         client: serverClient((_) async => throw http.ClientException('Failed host lookup')));
 
-    await tester.tap(inSheet(find.widgetWithText(FilledButton, 'Edit')));
+    await tester.tap(inSheet(actionButton('Edit')));
     await tester.pumpAndSettle();
 
     expect(inSheet(find.text('Editing an expense needs a connection.')), findsOneWidget);
@@ -335,7 +543,7 @@ void main() {
       throw http.ClientException('offline');
     }));
 
-    await tester.tap(inSheet(find.widgetWithText(FilledButton, 'Edit')));
+    await tester.tap(inSheet(actionButton('Edit')));
     await tester.pumpAndSettle();
     expect(find.text('Edit expense'), findsOneWidget);
 
@@ -377,7 +585,7 @@ void main() {
       throw http.ClientException('offline');
     }));
 
-    await tester.tap(inSheet(find.widgetWithText(FilledButton, 'Edit')));
+    await tester.tap(inSheet(actionButton('Edit')));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Dinner by the lake');
     final save = find.widgetWithText(FilledButton, 'Save');
@@ -437,8 +645,10 @@ void main() {
       await openSheet(tester, db);
 
       expect(inSheet(find.text('Snacks')), findsOneWidget);
-      expect(inSheet(find.textContaining('Waiting to sync')), findsOneWidget);
-      expect(inSheet(find.widgetWithText(FilledButton, 'Edit')), findsNothing);
+      // A short status in the top bar, what it means under it (#226).
+      expect(inSheet(find.text('Waiting to sync')), findsOneWidget);
+      expect(inSheet(find.textContaining('once it reaches the server')), findsOneWidget);
+      expect(inSheet(actionButton('Edit')), findsNothing);
       await closeTree(tester);
     });
 
@@ -447,9 +657,15 @@ void main() {
       addTearDown(db.close);
       await openSheet(tester, db);
 
-      expect(inSheet(find.text("Couldn't sync this expense")), findsOneWidget);
+      expect(inSheet(find.text('Sync failed')), findsOneWidget);
       expect(inSheet(find.textContaining('bad request')), findsOneWidget);
-      await tester.tap(inSheet(find.text('Retry')));
+      // Its buttons named in the hint, their icons drawn in it.
+      expect(inSheet(find.byWidgetPredicate((w) => w is Icon && w.icon == Icons.refresh)),
+          findsNWidgets(2));
+      // Retry rightmost, Discard before it.
+      expect(tester.getRect(inSheet(actionButton('Retry'))).left,
+          greaterThan(tester.getRect(inSheet(actionButton('Discard'))).left));
+      await tester.tap(inSheet(actionButton('Retry')));
       await tester.pumpAndSettle();
 
       expect(find.byType(BottomSheet), findsNothing);
@@ -464,7 +680,7 @@ void main() {
       addTearDown(db.close);
       await openSheet(tester, db);
 
-      await tester.tap(inSheet(find.text('Discard')));
+      await tester.tap(inSheet(actionButton('Discard')));
       await tester.pumpAndSettle();
 
       expect(find.byType(BottomSheet), findsNothing);
@@ -477,13 +693,13 @@ void main() {
       final db = await failedDb();
       addTearDown(db.close);
       await openSheet(tester, db);
-      expect(inSheet(find.text('Discard')), findsOneWidget);
+      expect(inSheet(actionButton('Discard')), findsOneWidget);
 
       await tester.runAsync(() => db.retrySyncFailure('e1'));
       await tester.pumpAndSettle();
 
-      expect(inSheet(find.text('Discard')), findsNothing);
-      expect(inSheet(find.textContaining('Waiting to sync')), findsOneWidget);
+      expect(inSheet(actionButton('Discard')), findsNothing);
+      expect(inSheet(find.text('Waiting to sync')), findsOneWidget);
       await closeTree(tester);
     });
   });
@@ -511,7 +727,7 @@ void main() {
           client: serverClient((_) async => http.Response(expenseResponse(), 200)));
 
       expect(inSheet(find.text('Dinner')), findsOneWidget);
-      expect(inSheet(find.widgetWithText(FilledButton, 'Edit')), findsOneWidget);
+      expect(inSheet(actionButton('Edit')), findsOneWidget);
       await closeTree(tester);
     });
 
@@ -523,7 +739,7 @@ void main() {
           client: serverClient((_) async => http.Response(notFound, 404)));
 
       expect(inSheet(find.text('This expense is no longer available.')), findsOneWidget);
-      expect(inSheet(find.text('Retry')), findsNothing);
+      expect(inSheet(actionButton('Retry')), findsNothing);
       await closeTree(tester);
     });
 
@@ -610,7 +826,7 @@ void main() {
         find.descendant(of: find.byWidgetPredicate((w) => w is AlertDialog), matching: f);
 
     Future<void> tapDelete(WidgetTester tester) async {
-      await tester.tap(inSheet(find.widgetWithText(OutlinedButton, 'Delete')));
+      await tester.tap(inSheet(actionButton('Delete')));
       await tester.pumpAndSettle();
     }
 
@@ -678,11 +894,10 @@ void main() {
       await tester.pump();
 
       expect(
-          tester.widget<FilledButton>(inSheet(find.widgetWithText(FilledButton, 'Edit'))).onPressed,
+          tester.widget<IconButton>(inSheet(actionButton('Edit'))).onPressed,
           isNull);
       expect(
-          tester
-              .widget<OutlinedButton>(inSheet(find.widgetWithText(OutlinedButton, 'Delete')))
+          tester.widget<IconButton>(inSheet(actionButton('Delete')))
               .onPressed,
           isNull);
       expect(inSheet(find.byType(CircularProgressIndicator)), findsOneWidget);
@@ -716,8 +931,7 @@ void main() {
       expect(await tester.runAsync(() => db.expensesForGroup('g1')), hasLength(1));
       expect(db.expensesGeneration('g1'), 0);
       expect(
-          tester
-              .widget<OutlinedButton>(inSheet(find.widgetWithText(OutlinedButton, 'Delete')))
+          tester.widget<IconButton>(inSheet(actionButton('Delete')))
               .onPressed,
           isNotNull);
       await closeTree(tester);
@@ -891,7 +1105,7 @@ void main() {
       final (pops, db) = await openFromCaller(tester, serverClient((_) => response.future));
       addTearDown(db.close);
 
-      await tester.tap(inSheet(find.widgetWithText(FilledButton, 'Edit')));
+      await tester.tap(inSheet(actionButton('Edit')));
       await tester.pump();
       await tester.tapAt(const Offset(20, 20)); // the modal barrier
       await tester.pump(const Duration(milliseconds: 10));
@@ -918,7 +1132,7 @@ void main() {
         if (req.url.toString().contains('groups.expenses.delete')) deletes.add(req.body);
         return http.Response('[{"result":{"data":{"json":{}}}}]', 200);
       }));
-      await tester.tap(inSheet(find.widgetWithText(OutlinedButton, 'Delete')));
+      await tester.tap(inSheet(actionButton('Delete')));
       await tester.pumpAndSettle();
       expect(inDialog(find.text('Delete this expense?')), findsOneWidget);
 

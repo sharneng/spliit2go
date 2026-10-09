@@ -61,8 +61,8 @@ class _ActiveUserPickerState extends State<ActiveUserPicker> {
   /// group doesn't change who you are in the next.
   late bool _rememberName = widget.defaultName == null;
 
-  /// Past the monogram: 16 + 32 + ListTile's 16 gap, where the names start.
-  static const _nameIndent = 64.0;
+  /// Past the monogram: 16 + 24 + ListTile's 16 gap, where the names start.
+  static const _nameIndent = 56.0;
 
   void _pick(String id) => Navigator.of(context)
       .pop(ActiveUserChoice(id, rememberName: id != nobodyParticipantId && _rememberName));
@@ -96,7 +96,7 @@ class _ActiveUserPickerState extends State<ActiveUserPicker> {
               children: [
                 for (final p in widget.participants)
                   _option(p.id, p.name,
-                      leading: Monogram(name: p.name, color: colors[p.id]!, radius: 16)),
+                      leading: Monogram(name: p.name, color: colors[p.id]!, radius: 12)),
               ],
             ),
             GroupedSection(

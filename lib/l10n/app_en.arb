@@ -101,7 +101,6 @@
   "groupScreenServerError": "Couldn't load this group.",
   "groupScreenSyncFailed": "sync failed",
   "groupScreenSyncing": "syncing…",
-  "groupScreenSyncFailureTitle": "Couldn't sync this expense",
   "groupScreenEditNeedsConnection": "Editing an expense needs a connection.",
   "groupScreenActiveUserDialogTitle": "Who are you?",
   "groupScreenActiveUserNone": "Nobody",
@@ -441,10 +440,6 @@
       }
     }
   },
-  "expenseDetailsReimbursement": "Reimbursement",
-  "expenseDetailsRepeatsDaily": "Repeats daily",
-  "expenseDetailsRepeatsWeekly": "Repeats weekly",
-  "expenseDetailsRepeatsMonthly": "Repeats monthly",
   "expenseDetailsOriginalAmount": "Originally {amount}",
   "@expenseDetailsOriginalAmount": {
     "placeholders": {
@@ -454,7 +449,7 @@
     }
   },
   "expenseDetailsPending": "Waiting to sync. You can edit it once it reaches the server.",
-  "expenseDetailsFailedHint": "Retry to send it again, or discard it from this device. Discarding can't be undone.",
+  "expenseDetailsFailedHint": "Retry {retry} to send it again, or discard {discard} it from this device. Discarding can't be undone.",
   "expenseDetailsNotFound": "This expense is no longer available.",
   "expenseDetailsLoadFailed": "Couldn't load this expense.",
   "expenseDetailsNeedsConnection": "Editing or deleting an expense needs a connection.",
@@ -535,7 +530,7 @@
   "expenseDetailsSyncWithoutReceiptsBody": "The receipts that aren't uploaded are removed from this phone, which has their only copy. The expense then syncs without them.",
   "expenseDetailsSyncWithoutReceiptsTitle": "Sync without its receipts?",
   "expenseDetailsSyncWithoutReceipts": "Sync without receipts",
-  "expenseDetailsReceiptsNotUploaded": "It has receipts that aren't uploaded. If this server doesn't store receipts, sync it without them.",
+  "expenseDetailsReceiptsNotUploaded": "It has receipts that aren't uploaded. If this server doesn't store receipts, sync {sync} it without them.",
   "expenseReceiptsUploadOrRemove": "Wait for receipts to upload, or remove the ones that weren't.",
   "expenseReceiptNotUploadedServerEdit": "A receipt wasn't uploaded. This server may not store receipts. Tap ↻ on it to try again, or remove it.",
   "expenseReceiptNotUploadedConnectionEdit": "A receipt wasn't uploaded: couldn't reach the server. Tap ↻ on it to try again, or remove it.",
@@ -771,5 +766,131 @@
   "spokenSentenceEnd": ".",
   "@spokenSentenceEnd": {
     "description": "Ends each sentence of a spoken label (an expense or group row, the receipts clip), so a screen reader pauses between them."
+  },
+  "expenseDetailsSummary": "Paid by {payer} on {date} for {category}",
+  "@expenseDetailsSummary": {
+    "placeholders": {
+      "payer": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "category": {
+        "type": "String"
+      }
+    },
+    "description": "The expense details' one-sentence summary (#226). The fixed words are drawn in a secondary color, the placeholders in the text color."
+  },
+  "expenseDetailsSummaryRepeating": "Paid by {payer} on {date} for {category}, repeats {frequency}",
+  "@expenseDetailsSummaryRepeating": {
+    "placeholders": {
+      "payer": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "category": {
+        "type": "String"
+      },
+      "frequency": {
+        "type": "String"
+      }
+    },
+    "description": "expenseDetailsSummary for a recurring expense; frequency is expenseDetailsFrequencyDaily/Weekly/Monthly."
+  },
+  "expenseDetailsFrequencyDaily": "daily",
+  "expenseDetailsFrequencyWeekly": "weekly",
+  "expenseDetailsFrequencyMonthly": "monthly",
+  "expenseDetailsPayerYou": "you",
+  "@expenseDetailsPayerYou": {
+    "description": "The payer in expenseDetailsSummary when it is the active user."
+  },
+  "expenseDetailsSettlement": "settlement",
+  "@expenseDetailsSettlement": {
+    "description": "A reimbursement's category in expenseDetailsSummary: what it was paid for."
+  },
+  "expenseDetailsShowAmounts": "Show amounts",
+  "expenseDetailsHideAmounts": "Hide amounts",
+  "@expenseDetailsShowAmounts": {
+    "description": "Link before the split method in Paid for, for a split by shares or percentages: shows each person's amount in place of their share."
+  },
+  "@expenseDetailsHideAmounts": {
+    "description": "The same link while amounts are shown: back to each person's share."
+  },
+  "expenseDetailsSentences": "{first}. {second}.",
+  "@expenseDetailsSentences": {
+    "description": "The details sheet's sentence followed by the active user's part: \"Paid by you on Sep 16 for Dining Out. You lent $41.00.\"",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseDetailsYouLent": "You lent {amount}",
+  "@expenseDetailsYouLent": {
+    "description": "The active user's part when they paid: what the others owe them.",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseDetailsYouOwe": "You owe {amount}",
+  "@expenseDetailsYouOwe": {
+    "description": "The active user's part when someone else paid: their share.",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseDetailsNotInvolved": "You aren't involved",
+  "@expenseDetailsNotInvolved": {
+    "description": "The active user neither paid nor is among those it was paid for."
+  },
+  "expenseDetailsStatusSyncFailed": "Sync failed",
+  "@expenseDetailsStatusSyncFailed": {
+    "description": "The details sheet's top bar, short: the expense couldn't be sent to the server."
+  },
+  "expenseDetailsStatusOffline": "No connection",
+  "@expenseDetailsStatusOffline": {
+    "description": "The details sheet's top bar, short: the phone is offline, so edit and delete are off."
+  },
+  "expenseDetailsStatusPending": "Waiting to sync",
+  "@expenseDetailsStatusPending": {
+    "description": "The details sheet's top bar, short: added offline, not on the server yet."
+  },
+  "expenseDetailsYouReceived": "You received {amount}",
+  "@expenseDetailsYouReceived": {
+    "description": "A reimbursement's sentence, when the active user was paid back: their part of it.",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "@expenseDetailsFailedHint": {
+    "description": "Under a failed sync's top bar. {retry} and {discard} are the top bar buttons' icons, drawn in the text.",
+    "placeholders": {
+      "retry": {
+        "type": "String"
+      },
+      "discard": {
+        "type": "String"
+      }
+    }
+  },
+  "@expenseDetailsReceiptsNotUploaded": {
+    "description": "Under a failed sync's top bar, when it has receipts. {sync} is the Sync without receipts button's icon, drawn in the text.",
+    "placeholders": {
+      "sync": {
+        "type": "String"
+      }
+    }
   }
 }

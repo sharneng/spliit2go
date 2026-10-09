@@ -24,6 +24,12 @@ import '../support/error_log.dart';
 // group() would be shadowed by it if used here (see
 // group_settings_screen_test.dart / expense_screen_test.dart for the
 // same pattern).
+
+/// The expense details' edit or delete button, an icon on a capsule
+/// (#226), by its tooltip: still there while it shows a spinner.
+Finder actionButton(String tooltip) =>
+    find.ancestor(of: find.byTooltip(tooltip), matching: find.byType(IconButton));
+
 void main() {
   const group = Group(
     id: 'g1',
@@ -775,7 +781,7 @@ void main() {
 
     expect(find.byType(BottomSheet), findsOneWidget);
     expect(find.text('\$90.00'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Edit'), findsOneWidget);
+    expect(actionButton('Edit'), findsOneWidget);
     expect(find.text('Edit expense'), findsNothing);
 
     // The sheet watches the db (see group_screen_test's teardown note).

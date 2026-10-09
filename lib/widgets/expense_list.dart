@@ -342,14 +342,8 @@ class ExpenseTile extends StatelessWidget {
   /// What you lent (paid, less your share) or owe (your share of what
   /// someone else paid); null when you're not in it, or for a
   /// reimbursement, whose amount already says it.
-  ({int cents, bool lent})? _yourPart() {
-    final e = expense;
-    final me = activeUserId;
-    if (me == null || e.isReimbursement) return null;
-    final share = expenseShareCents(e)[me] ?? 0;
-    final cents = e.paidBy == me ? e.amountCents - share : share;
-    return cents > 0 ? (cents: cents, lent: e.paidBy == me) : null;
-  }
+  ({int cents, bool lent})? _yourPart() =>
+      expense.isReimbursement ? null : lentOrOwed(expense, activeUserId);
 
   /// [_yourPart] as Balances colors it, with an arrow out or in.
   Widget _yourAmount(BuildContext context, bool lent, String amount) {
