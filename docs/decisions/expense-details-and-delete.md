@@ -31,7 +31,8 @@ Kenneth's point in [#90](https://github.com/sharneng/spliit2go/issues/90): tappi
     - **Why:** the buttons beside the title squeezed a long one, and Kenneth found that a poor look. On a row of their own, the space beside them held the status that used to sit under the amount, and that status, small and centered, wrapped.
     - **What the status means is in one place, right under the bar:** the server's error, the hint, the receipts note, the offline reason, or a failed edit or delete (with its expandable details). Nothing shows there when all's well. The hints show each button's icon after its verb ("Retry ⟳ to send it again, or discard 🗑 it…"), drawn from the buttons' own icons, since the buttons have no labels.
     - **The title then has the full width.**
-    - **The date, category and payer card is one sentence:** "Paid by <name> on <date> for <category>[, repeats <frequency>]".
+    - **The date, category and payer card is one sentence:** "Paid by <name> on <date> under <category>[, repeats <frequency>]". "under" introduces a category; "in" read like a place ([#247](https://github.com/sharneng/spliit2go/issues/247)).
+    - **Paid for one person, the sentence names them** and the Paid for section is left out (#247, Kenneth): "Paid by Alex **for** Bea on Oct 1 under Dining out", and for a settlement "Paid by Alex **to** Bea on Oct 1 for settlement", since money paid back goes to someone. The active user is "you"; the payer paid for themselves is "yourself" for the active user, otherwise "themselves" (French "vous-même" and the gender-neutral "soi-même"; Chinese 自己). Chinese reads 类别为 before a category and keeps 用于 for a settlement. The repeat ending is one suffix for every sentence.
       - Each language has its own template, since French and Chinese order the parts differently.
       - The fixed words are in the secondary color; the name, date and category in the text color.
       - The payer reads "you" for the active user.

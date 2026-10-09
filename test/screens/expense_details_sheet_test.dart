@@ -192,7 +192,7 @@ void main() {
     // device's active user; within ten months, no year.
     // Then your part, as the list row's arrow (#226).
     expect(
-        inSheet(find.text('Paid by you on Sep 16 for Dining Out, repeats weekly. You lent \$40.00.')),
+        inSheet(find.text('Paid by you on Sep 16 under Dining Out, repeats weekly. You lent \$40.00.')),
         findsOneWidget);
     expect(inSheet(find.text('Bea (you)')), findsOneWidget);
     // By shares, 2:1: each person's shares, as entered (#226)...
@@ -234,9 +234,11 @@ void main() {
     addTearDown(db.close);
     await openSheet(tester, db);
 
-    // For settlement, not its category; no repeats (#226).
-    expect(inSheet(find.text('Paid by Alex on Sep 16 for settlement')), findsOneWidget);
-    expect(inSheet(find.text('Evenly')), findsOneWidget);
+    // For settlement, not its category; no repeats (#226). Paid to one
+    // person, named in the sentence instead of a list (#247).
+    expect(inSheet(find.text('Paid by Alex to Bea on Sep 16 for settlement')), findsOneWidget);
+    expect(inSheet(find.text('Paid for')), findsNothing);
+    expect(inSheet(find.text('Evenly')), findsNothing);
     expect(inSheet(find.textContaining('Originally')), findsNothing);
     expect(inSheet(find.text('Notes')), findsNothing);
     // No active user: nobody is marked "you". An even split shows no shares.
@@ -276,7 +278,7 @@ void main() {
     final color = {for (final span in spans) span.text!: span.style?.color};
     final fixed = colors.secondaryContent;
     expect(color, {
-      'Paid by ': fixed, 'you': null, ' on ': fixed, 'Sep 16': null, ' for ': fixed,
+      'Paid by ': fixed, 'you': null, ' on ': fixed, 'Sep 16': null, ' under ': fixed,
       'Dining Out': null, ', repeats ': fixed, 'weekly': null, '. You lent ': fixed,
       '\$40.00': colors.moneyPositive, '.': fixed,
     });
@@ -345,7 +347,7 @@ void main() {
     addTearDown(db.close);
     await openSheet(tester, db);
 
-    expect(inSheet(find.text('Paid by Alex on Nov 30, 2025 for General')), findsOneWidget);
+    expect(inSheet(find.text('Paid by Alex for themselves on Nov 30, 2025 under General')), findsOneWidget);
     await closeTree(tester);
   });
 
@@ -363,7 +365,7 @@ void main() {
     for (final (name, expense, me, ending) in [
       ('someone else paid', null, 'alex', '. You owe \$40.00.'),
       ("you're not in it", null, 'cara', ". You aren't involved."),
-      ('no one is you', null, null, ' for Dining Out, repeats weekly'),
+      ('no one is you', null, null, ' under Dining Out, repeats weekly'),
       ('a settlement paid to you', payback(), 'bea', '. You received \$10.00.'),
       ('a settlement you paid', payback(), 'alex', ' for settlement'),
       ('a settlement not yours', payback(), 'cara', ". You aren't involved."),
@@ -444,7 +446,7 @@ void main() {
     addTearDown(db.close);
     await openSheet(tester, db);
 
-    expect(inSheet(find.text('Paid by Someone on Sep 16 for General')), findsOneWidget,
+    expect(inSheet(find.text('Paid by Someone on Sep 16 under General')), findsOneWidget,
         reason: 'General named: the only place the category shows');
     expect(inSheet(find.text('Someone')), findsOneWidget);
     expect(inSheet(find.text('Alex')), findsOneWidget);
@@ -818,6 +820,92 @@ void main() {
       await closeTree(tester);
     });
   }
+
+  // #247: paid for one person, the sentence names them in place of the
+  // Paid for list.
+  group('one person paid for', () {
+    Expense paid({required String by, required List<String> forIds, bool settlement = false}) => Expense(
+          id: 'e1',
+          groupId: 'g1',
+          title: 'Coffee',
+          amountCents: 1000,
+          paidBy: by,
+          paidFor: [for (final id in forIds) ExpenseShare(participantId: id, shares: 1)],
+          isSettlement: settlement,
+          category: 8,
+          date: DateTime(2026, 9, 16),
+        );
+    String sentence(WidgetTester tester) =>
+        tester.widget<Text>(inSheet(find.textContaining('Paid by'))).textSpan!.toPlainText();
+
+    for (final (name, expense, me, start) in [
+      ('an expense for someone', paid(by: 'alex', forIds: ['bea']), null,
+          'Paid by Alex for Bea on Sep 16 under Dining Out'),
+      ('an expense for you', paid(by: 'alex', forIds: ['bea']), 'bea',
+          'Paid by Alex for you on Sep 16 under Dining Out. You owe'),
+      ('an expense for yourself', paid(by: 'bea', forIds: ['bea']), 'bea',
+          'Paid by you for yourself on Sep 16 under Dining Out'),
+      ('an expense for themselves', paid(by: 'alex', forIds: ['alex']), 'bea',
+          "Paid by Alex for themselves on Sep 16 under Dining Out. You aren't involved."),
+      ('a settlement to someone', paid(by: 'alex', forIds: ['bea'], settlement: true), null,
+          'Paid by Alex to Bea on Sep 16 for settlement'),
+      ('a settlement to you', paid(by: 'alex', forIds: ['bea'], settlement: true), 'bea',
+          'Paid by Alex to you on Sep 16 for settlement. You received'),
+    ]) {
+      testWidgets('$name: named in the sentence, no Paid for list', (tester) async {
+        tallView(tester);
+        final db = await cachedDb(expense);
+        addTearDown(db.close);
+        await openSheet(tester, db, activeUserId: me);
+        expect(sentence(tester), startsWith(start));
+        expect(inSheet(find.text('Paid for')), findsNothing);
+        await closeTree(tester);
+      });
+    }
+
+    testWidgets('paid for two: the list, and the sentence names no one', (tester) async {
+      tallView(tester);
+      final db = await cachedDb(paid(by: 'alex', forIds: ['alex', 'bea'], settlement: true));
+      addTearDown(db.close);
+      await openSheet(tester, db);
+      expect(sentence(tester), 'Paid by Alex on Sep 16 for settlement');
+      expect(inSheet(find.text('Paid for')), findsOneWidget);
+      await closeTree(tester);
+    });
+
+    for (final locale in const [Locale('en'), Locale('fr'), Locale('zh')]) {
+      testWidgets('fits a narrow phone at double text size ($locale)', (tester) async {
+        tester.view.physicalSize = const Size(360, 740);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final db = await cachedDb(paid(by: 'alex', forIds: ['bea'], settlement: true));
+        addTearDown(db.close);
+        await openSheet(tester, db,
+            locale: locale,
+            activeUserId: 'bea',
+            builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(2)),
+                  child: child!,
+                ));
+        expect(tester.takeException(), isNull);
+        await closeTree(tester);
+      });
+    }
+
+    for (final (locale, expected) in const [
+      (Locale('fr'), 'Payé par Alex pour Bea le 16 sept. dans '),
+      (Locale('zh'), '由Alex于9月16日为Bea支付，类别为'),
+    ]) {
+      testWidgets('in $locale', (tester) async {
+        tallView(tester);
+        final db = await cachedDb(paid(by: 'alex', forIds: ['bea']));
+        addTearDown(db.close);
+        await openSheet(tester, db, locale: locale);
+        expect(tester.widget<Text>(inSheet(find.textContaining(expected))), isNotNull);
+        await closeTree(tester);
+      });
+    }
+  });
 
   group('Delete (#90 part 2)', () {
     const ok = '[{"result":{"data":{"json":{}}}}]';

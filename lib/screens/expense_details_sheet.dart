@@ -719,6 +719,8 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
           Padding(padding: const EdgeInsets.all(16), child: _summary(context, e, known)),
         ],
       ),
+      // Paid for one person, the sentence names them (#247).
+      if (_onlyRecipient(e) == null)
       GroupedSection(
         margin: _sectionMargin,
         caption: l10n.expensePaidForHeading,
@@ -954,10 +956,12 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     ];
   }
 
-  /// "Paid by Ken on Sep 12 for Groceries" (#226): the first card's three
-  /// rows as one sentence, its fixed words in the secondary color so the
-  /// names, date and category stand out. The language's own template, its
-  /// placeholders found by filling them with markers.
+  /// "Paid by Ken on Sep 12 under Groceries" (#226): the first card's
+  /// three rows as one sentence, its fixed words in the secondary color so
+  /// the names, date and category stand out. The language's own template,
+  /// its placeholders found by filling them with markers. Paid for one
+  /// person, the sentence names them in place of the list (#247): "for
+  /// Bea", or "to Bea" for a settlement.
   Widget _summary(BuildContext context, Expense e, Category? known) {
     final l10n = context.l10n;
     final locale = context.regionalDateLocale;
@@ -970,6 +974,14 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     final category = e.isSettlement
         ? l10n.expenseDetailsSettlement
         : localizedCategoryLabel(context, e.category, known);
+    final only = _onlyRecipient(e);
+    final recipient = only == null
+        ? null
+        : only == e.paidBy
+            ? (only == widget.activeUserId ? l10n.expenseDetailsYourself : l10n.expenseDetailsThemselves)
+            : only == widget.activeUserId
+                ? l10n.expenseDetailsRecipientYou
+                : _participantName(only);
     final frequency = switch (e.recurrenceRule) {
       RecurrenceRule.daily => l10n.expenseDetailsFrequencyDaily,
       RecurrenceRule.weekly => l10n.expenseDetailsFrequencyWeekly,
@@ -977,11 +989,16 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       RecurrenceRule.none => null,
     };
     // Private-use characters no translation contains.
-    const marks = ['\u{F0000}', '\u{F0001}', '\u{F0002}', '\u{F0003}'];
-    final values = [payer, date, category, if (frequency != null) frequency];
-    final template = frequency == null
-        ? l10n.expenseDetailsSummary(marks[0], marks[1], marks[2])
-        : l10n.expenseDetailsSummaryRepeating(marks[0], marks[1], marks[2], marks[3]);
+    const marks = ['\u{F0000}', '\u{F0001}', '\u{F0002}', '\u{F0003}', '\u{F0005}'];
+    final values = [payer, date, category, frequency ?? '', recipient ?? ''];
+    final (p, d, c, f, r) = (marks[0], marks[1], marks[2], marks[3], marks[4]);
+    final template = switch ((e.isSettlement, recipient != null)) {
+          (false, false) => l10n.expenseDetailsSummary(p, d, c),
+          (false, true) => l10n.expenseDetailsSummaryFor(p, r, d, c),
+          (true, false) => l10n.expenseDetailsSummarySettlement(p, d, c),
+          (true, true) => l10n.expenseDetailsSummarySettlementTo(p, r, d, c),
+        } +
+        (frequency == null ? '' : l10n.expenseDetailsRepeats(f));
     // Then your part, as the list row's arrow says it (#226): "You lent
     // $41.00", the amount in Balances' colors.
     const money = '\u{F0004}';
@@ -1019,6 +1036,10 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     });
     return Text.rich(TextSpan(children: spans), style: theme.textTheme.bodyLarge);
   }
+
+  /// The one person [e] was paid for, whom the sentence names in place of
+  /// the Paid for list (#247); none when it was several.
+  static String? _onlyRecipient(Expense e) => e.paidFor.length == 1 ? e.paidFor.single.participantId : null;
 
   /// The active user's part, as the list row has it ([lentOrOwed]), and
   /// 0 cents when they're not in it at all. For a settlement, what they
