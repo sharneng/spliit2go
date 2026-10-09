@@ -701,12 +701,12 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
           excludeSemantics: true,
           child: Text(e.title,
               style: theme.textTheme.titleLarge?.copyWith(
-                  // A reimbursement's title italic, as in its row (#224).
-                  fontStyle: e.isReimbursement ? FontStyle.italic : null))),
+                  // A settlement's title italic, as in its row (#224).
+                  fontStyle: e.isSettlement ? FontStyle.italic : null))),
       const SizedBox(height: 12),
       ExcludeSemantics(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Money(amount, size: MoneySize.hero, isReimbursement: e.isReimbursement),
+          Money(amount, size: MoneySize.hero, isSettlement: e.isSettlement),
           if (original != null)
             // Real information, so in the text color, not dimmed (#226).
             Text(original, style: theme.textTheme.bodyMedium),
@@ -900,9 +900,9 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: TopBarButtons.size),
       child: Row(children: [
-        // A reimbursement's banknote is on the sheet's own color, so it
+        // A settlement's banknote is on the sheet's own color, so it
         // gets the buttons' card to stand on; a category's color does.
-        e.isReimbursement
+        e.isSettlement
             ? topBarCard(
                 context,
                 SizedBox.square(
@@ -967,7 +967,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
         : _participantName(e.paidBy);
     final date = formatDate(e.date,
         locale: locale, withYear: !isWithinTenMonths(e.date, now: widget.now()));
-    final category = e.isReimbursement
+    final category = e.isSettlement
         ? l10n.expenseDetailsSettlement
         : localizedCategoryLabel(context, e.category, known);
     final frequency = switch (e.recurrenceRule) {
@@ -989,8 +989,8 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     final String? partTemplate = switch (part) {
       null => null,
       (cents: 0, lent: _) => l10n.expenseDetailsNotInvolved,
-      // A reimbursement's only part: what you were paid back.
-      (cents: _, lent: _) when e.isReimbursement => l10n.expenseDetailsYouReceived(money),
+      // A settlement's only part: what you were paid back.
+      (cents: _, lent: _) when e.isSettlement => l10n.expenseDetailsYouReceived(money),
       (cents: _, lent: true) => l10n.expenseDetailsYouLent(money),
       (cents: _, lent: false) => l10n.expenseDetailsYouOwe(money),
     };
@@ -999,9 +999,9 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       if (part != null && part.cents > 0)
         money: (
           formatMoney(part.cents, widget.group.currency, locale: context.appLocale),
-          e.isReimbursement
+          e.isSettlement
               // In the emerald of its banknote, italic as its amount.
-              ? Money.styleOf(context, isReimbursement: true)
+              ? Money.styleOf(context, isSettlement: true)
                   ?.copyWith(color: Theme.of(context).colorScheme.primary)
               : Money.styleOf(context, sign: part.lent ? MoneySign.positive : MoneySign.negative),
         ),
@@ -1021,7 +1021,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   }
 
   /// The active user's part, as the list row has it ([lentOrOwed]), and
-  /// 0 cents when they're not in it at all. For a reimbursement, what they
+  /// 0 cents when they're not in it at all. For a settlement, what they
   /// were paid back; none when they paid it, as the sentence says so.
   ({int cents, bool lent})? _yourPart(Expense e) {
     final me = widget.activeUserId;
@@ -1029,7 +1029,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     if (e.paidBy != me && !e.paidFor.any((s) => s.participantId == me)) {
       return (cents: 0, lent: false);
     }
-    if (!e.isReimbursement) return lentOrOwed(e, me);
+    if (!e.isSettlement) return lentOrOwed(e, me);
     if (e.paidBy == me) return null;
     return (cents: expenseShareCents(e)[me] ?? 0, lent: false);
   }

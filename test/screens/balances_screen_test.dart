@@ -77,7 +77,7 @@ void main() {
         .widget<GroupedSection>(find.ancestor(of: find.text(text), matching: find.byType(GroupedSection)))
         .caption;
     expect(captionOf('Alex'), 'Balances');
-    expect(captionOf('Bea owes Alex'), 'Suggested reimbursements');
+    expect(captionOf('Bea owes Alex'), 'Suggested settlements');
     expect(find.byType(GroupedSection), findsNWidgets(3));
     expect(
         tester
@@ -131,7 +131,7 @@ void main() {
                         },
                         {
                           'id': 'settle-1',
-                          'title': 'Reimbursement',
+                          'title': 'Settlement',
                           'amount': 3000,
                           'paidBy': 'bea',
                           'paidFor': [
@@ -176,9 +176,9 @@ void main() {
     expect(find.text('Add expense'), findsOneWidget);
     expect(find.text('Bea paid Alex'), findsOneWidget);
     expect(find.text('30.00'), findsOneWidget);
-    final reimbursementTile = tester.widget<CheckboxListTile>(
-        find.widgetWithText(CheckboxListTile, 'This is a reimbursement'));
-    expect(reimbursementTile.value, isTrue);
+    final settlementTile = tester.widget<CheckboxListTile>(
+        find.widgetWithText(CheckboxListTile, 'This is a settlement'));
+    expect(settlementTile.value, isTrue);
 
     await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));

@@ -133,18 +133,18 @@ void main() {
       expect(byId['bea'], -3000);
     });
 
-    test('a reimbursement expense needs no special-casing to net out correctly', () {
+    test('a settlement expense needs no special-casing to net out correctly', () {
       // Bea settles her $30 debt to Alex: paidBy=Bea, sole paidFor=Alex --
       // exactly the shape the web app's "Mark as paid" link produces
       // (see decisions/feature-backlog.md).
       final settlement = Expense(
         id: 'settle-1',
         groupId: 'g1',
-        title: 'Reimbursement',
+        title: 'Settlement',
         amountCents: 3000,
         paidBy: 'bea',
         paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
-        isReimbursement: true,
+        isSettlement: true,
         date: DateTime.utc(2026, 9, 16),
       );
       final balances =

@@ -33,7 +33,7 @@ void main() {
       );
 
   group('totalGroupSpendingCents', () {
-    test('sums non-reimbursement expenses only', () {
+    test('sums non-settlement expenses only', () {
       final expenses = [
         evenExpense(id: 'e1', amountCents: 9000, paidBy: 'alex', date: DateTime.utc(2026, 9, 1)),
         Expense(
@@ -44,7 +44,7 @@ void main() {
           paidBy: 'bea',
           paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
           date: DateTime.utc(2026, 9, 2),
-          isReimbursement: true,
+          isSettlement: true,
         ),
       ];
       expect(totalGroupSpendingCents(expenses), 9000);

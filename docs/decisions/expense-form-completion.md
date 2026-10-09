@@ -8,7 +8,7 @@ Add-expense already had Title, Amount, Category, Paid by, Paid for, Split mode. 
 
 - **Date** — a tappable field opening `showDatePicker`, defaulting to today for new expenses and to the expense's own date when editing.
 - **"Paid in" a different currency** — a checkbox that reveals an original-amount + currency-code pair. On save, `conversionRate` is computed client-side as `groupAmountCents / originalAmountCents`, matching Spliit's own convention (`groupAmount = originalAmount * conversionRate`, from `currency-conversion.ts`). Live exchange-rate auto-fetching (the web app's `useCurrencyRate`, an external API call) is out of scope — this app never calls out for a rate, only computes one from what the user typed.
-- **"This is a reimbursement"** — a checkbox wired straight to the existing `isReimbursement` field (previously only settable via the balances screen's "mark as paid" flow, never directly).
+- **"This is a settlement"** — a checkbox wired straight to the existing `isSettlement` field (previously only settable via the balances screen's "mark as paid" flow, never directly).
 - **"Save as default splitting options"** — sent on every create/update call (`saveDefaultSplittingOptions` in `expenseFormValues`) but **not** persisted anywhere locally: it's a form-only action flag on Spliit's side, not a column on the `Expense` Prisma model. Storing it locally would have been a fabricated field.
 - **Expense Recurrence** — a `RecurrenceRule` enum (`none/daily/weekly/monthly`) mirroring Spliit's own enum, sent through unchanged. No client-side scheduling logic needed — recurrence is entirely server-driven.
 - **Notes** — a multiline text field, capped at 5000 characters to match Spliit's own `EXPENSE_NOTES_MAX`.

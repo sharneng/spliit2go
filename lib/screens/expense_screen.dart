@@ -38,10 +38,10 @@ import '../utils/haptics.dart';
 import '../widgets/bottom_inset.dart';
 
 /// Adds -- or, given [existingExpense], edits -- an expense. An expense
-/// with [Expense.isReimbursement] set is a settlement/"paid back"
+/// with [Expense.isSettlement] set is a settlement/"paid back"
 /// entry -- same fields, same screen, no special-casing needed here.
 /// (balances_screen.dart's own "mark as paid" writes a pending
-/// reimbursement expense directly rather than opening this screen, but
+/// settlement expense directly rather than opening this screen, but
 /// it's still this same [Expense] shape -- see that file's doc comment.)
 /// Renamed from AddExpenseScreen/add_expense_screen.dart (issue #21) once
 /// "add expense screen" stopped describing what this actually covers.
@@ -70,7 +70,7 @@ import '../widgets/bottom_inset.dart';
 ///
 /// Field set matches Spliit's own add/edit expense form (issue #16):
 /// title, amount, category, paid by, paid for/split mode, date, "paid
-/// in" a different currency, reimbursement flag, save-as-default-split,
+/// in" a different currency, settlement flag, save-as-default-split,
 /// recurrence, notes, and receipts (#123): photos are uploaded as they're
 /// added, so they're documents by the time the expense is saved; see
 /// [ReceiptAttachmentsController] for what happens to one that isn't
@@ -211,7 +211,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// The language the last scan found missing, for its message.
   ReceiptScript? _missingScript;
 
-  bool _isReimbursement = false;
+  bool _isSettlement = false;
   bool _saveDefaultSplittingOptions = false;
   RecurrenceRule _recurrenceRule = RecurrenceRule.none;
   bool _paidInOtherCurrency = false;
@@ -288,10 +288,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       );
       // Only for a plain brand-new expense -- not for edit (_prefillFrom
       // above already set the real split) and not for a draft like
-      // balances_screen's "mark as paid" (its reimbursement split is the
+      // balances_screen's "mark as paid" (its settlement split is the
       // whole point of that flow and shouldn't be overridden by a
       // remembered default -- isSplitWorthRemembering excludes
-      // reimbursements for the same reason on the write side).
+      // settlements for the same reason on the write side).
       _loadDefaultSplit();
     }
     _loadCategories();
@@ -425,7 +425,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     _paidBy = e.paidBy;
     _category = e.category;
     _date = e.date;
-    _isReimbursement = e.isReimbursement;
+    _isSettlement = e.isSettlement;
     _recurrenceRule = e.recurrenceRule;
     _splitMode = e.splitMode;
 
@@ -798,7 +798,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// (the typed field already *is* the amount); Percent only once the
   /// typed percentages land exactly on 100.
   bool get _showsLivePreview {
-    if (_isReimbursement || _splitMode == SplitMode.byAmount) return false;
+    if (_isSettlement || _splitMode == SplitMode.byAmount) return false;
     if (_includedParticipants.isEmpty) return false;
     if (_splitMode == SplitMode.evenly) return true;
     for (final p in _includedParticipants) {
@@ -1059,9 +1059,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 const SizedBox(height: 12),
               ],
               CheckboxListTile(
-                value: _isReimbursement,
-                onChanged: (v) => setState(() => _isReimbursement = v ?? false),
-                title: Text(context.l10n.expenseIsReimbursement),
+                value: _isSettlement,
+                onChanged: (v) => setState(() => _isSettlement = v ?? false),
+                title: Text(context.l10n.expenseIsSettlement),
                 controlAffinity: ListTileControlAffinity.leading,
                 contentPadding: EdgeInsets.zero,
               ),
@@ -1135,10 +1135,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ),
               const SizedBox(height: 4),
               for (final p in widget.group.participants) _paidForRow(p),
-              // Hidden for a reimbursement -- a settlement is a one-off,
+              // Hidden for a settlement -- a settlement is a one-off,
               // not representative of the group's normal expenses (issue
               // #29 section 7).
-              if (!_isReimbursement)
+              if (!_isSettlement)
                 CheckboxListTile(
                   value: _saveDefaultSplittingOptions,
                   onChanged: (v) =>
@@ -1413,7 +1413,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// Only takes effect after a save actually *succeeds* -- a split
   /// remembered from a save the server rejected would wrongly go on
   /// prefilling future expenses (issue #29 section 7). No-op for a
-  /// reimbursement (the toggle is hidden for one, but this is the real
+  /// settlement (the toggle is hidden for one, but this is the real
   /// gate) or when the toggle wasn't checked.
   ///
   /// Never fails the save (#119 review): the expense is already saved, so
@@ -1421,7 +1421,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// Retrying the save would add the expense a second time, and the split
   /// can be saved as the default with the next expense.
   Future<void> _rememberDefaultSplitIfRequested(List<ExpenseShare> paidFor) async {
-    if (!_saveDefaultSplittingOptions || _isReimbursement) return;
+    if (!_saveDefaultSplittingOptions || _isSettlement) return;
     try {
       await widget.db.setDefaultSplit(
         widget.group.id,
@@ -1458,7 +1458,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       category: _category,
       notes: _notesController.text.trim(),
       date: _date,
-      isReimbursement: _isReimbursement,
+      isSettlement: _isSettlement,
       recurrenceRule: _recurrenceRule,
       originalAmountCents: originalAmountCents,
       originalCurrency: originalCurrency,
@@ -1522,7 +1522,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       category: _category,
       notes: _notesController.text.trim(),
       date: _date,
-      isReimbursement: _isReimbursement,
+      isSettlement: _isSettlement,
       recurrenceRule: _recurrenceRule,
       saveDefaultSplittingOptions: _saveDefaultSplittingOptions,
       // The ones still attached, plus uploads: Spliit deletes any not

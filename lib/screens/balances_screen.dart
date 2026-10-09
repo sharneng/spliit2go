@@ -27,7 +27,7 @@ import '../widgets/bottom_inset.dart';
 /// settlement recorded here, an expense added/edited/synced elsewhere in
 /// the app -- the moment it's written, with no reload wiring of its own
 /// needed. "Mark as paid" opens ExpenseScreen pre-filled with the
-/// suggested settlement (amount, "this is a reimbursement" checked,
+/// suggested settlement (amount, "this is a settlement" checked,
 /// payer/payee, a "<payer> paid <payee>" title) rather than recording it
 /// directly (issue #22) -- matching the web/iOS apps' own settle-up
 /// flow, and letting the amount be edited down for a partial payment.
@@ -106,7 +106,7 @@ class _BalancesScreenState extends State<BalancesScreen> {
       paidFor: [ExpenseShare(participantId: s.toId, shares: 1)],
       splitMode: SplitMode.evenly,
       date: DateTime.now(),
-      isReimbursement: true,
+      isSettlement: true,
     );
 
     final saved = await Navigator.of(context).push<bool>(
@@ -275,7 +275,7 @@ class _BalancesScreenState extends State<BalancesScreen> {
                   ),
                 if (settlements.isNotEmpty)
                   GroupedSection(
-                    caption: context.l10n.balancesSuggestedReimbursements,
+                    caption: context.l10n.balancesSuggestedSettlements,
                     children: [
                       for (final s in settlements)
                         GroupedRow(

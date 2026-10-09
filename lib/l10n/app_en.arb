@@ -157,7 +157,7 @@
   "expenseCurrencyLabel": "Currency",
   "expenseCurrencySelectPlaceholder": "Select",
   "expenseCurrencyConversionUnavailable": "Conversion unavailable",
-  "expenseIsReimbursement": "This is a reimbursement",
+  "expenseIsSettlement": "This is a settlement",
   "expenseRepeatLabel": "Repeat",
   "expenseRepeatNone": "Does not repeat",
   "expenseRepeatDaily": "Daily",
@@ -259,7 +259,7 @@
   "statsSectionGroup": "The group",
   "statsGroupTotalSpending": "Total group spending",
   "statsGroupTotalEarnings": "Total group earnings",
-  "statsGroupFooter": "Settling up is not spending, so reimbursements are left out of every figure here.",
+  "statsGroupFooter": "Settling up is not spending, so settlements are left out of every figure here.",
   "statsSectionByParticipant": "By participant",
   "statsSectionByCategory": "By category",
   "statsParticipantPaidCount": "{count, plural, =1{Paid 1 expense} other{Paid {count} expenses}}",
@@ -337,7 +337,7 @@
   "balancesYouOwe": "You owe",
   "balancesYouSettled": "You’re settled up",
   "balancesYouHint": "Pick yourself once and this group is read from where you stand: your own balance first, and your name already filled in on a new expense.",
-  "balancesSuggestedReimbursements": "Suggested reimbursements",
+  "balancesSuggestedSettlements": "Suggested settlements",
   "balancesOwes": "{from} owes {to}",
   "@balancesOwes": {
     "placeholders": {
@@ -718,7 +718,7 @@
   },
   "expenseRowSpokenPaidBack": "{payer} paid back {amount} on {date}, {category}",
   "@expenseRowSpokenPaidBack": {
-    "description": "As expenseRowSpokenPaid, for a reimbursement.",
+    "description": "As expenseRowSpokenPaid, for a settlement.",
     "placeholders": {
       "payer": {
         "type": "String"
@@ -809,7 +809,7 @@
   },
   "expenseDetailsSettlement": "settlement",
   "@expenseDetailsSettlement": {
-    "description": "A reimbursement's category in expenseDetailsSummary: what it was paid for."
+    "description": "A settlement's category in expenseDetailsSummary: what it was paid for."
   },
   "expenseDetailsShowAmounts": "Show amounts",
   "expenseDetailsHideAmounts": "Hide amounts",
@@ -867,7 +867,7 @@
   },
   "expenseDetailsYouReceived": "You received {amount}",
   "@expenseDetailsYouReceived": {
-    "description": "A reimbursement's sentence, when the active user was paid back: their part of it.",
+    "description": "A settlement's sentence, when the active user was paid back: their part of it.",
     "placeholders": {
       "amount": {
         "type": "String"

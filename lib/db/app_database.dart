@@ -36,7 +36,7 @@ class Expenses extends Table {
   IntColumn get category => integer().withDefault(const Constant(0))();
   TextColumn get notes => text().withDefault(const Constant(''))();
   DateTimeColumn get date => dateTime()();
-  BoolColumn get isReimbursement =>
+  BoolColumn get isSettlement =>
       boolean().withDefault(const Constant(false))();
   TextColumn get recurrenceRule => text().withDefault(const Constant('NONE'))();
 
@@ -319,7 +319,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -435,6 +435,19 @@ class AppDatabase extends _$AppDatabase {
             };
             for (final column in [groups.receiptsCheckedActivityId, groups.receiptsCheckedAt]) {
               if (!present.contains(column.name)) await m.addColumn(groups, column);
+            }
+          }
+          if (from < 18) {
+            // A settlement by its name, not the web's "reimbursement"
+            // (#242); RENAME COLUMN keeps the data. Only when the old name
+            // is there: a database built from today's tables already has
+            // the new one (the older steps' tests start from those).
+            final columns = {
+              for (final c in await customSelect('PRAGMA table_info(expenses)').get())
+                c.read<String>('name'),
+            };
+            if (columns.contains('is_reimbursement')) {
+              await m.renameColumn(expenses, 'is_reimbursement', expenses.isSettlement);
             }
           }
         },
@@ -1021,7 +1034,7 @@ class AppDatabase extends _$AppDatabase {
         category: Value(e.category),
         notes: Value(e.notes),
         date: e.date,
-        isReimbursement: Value(e.isReimbursement),
+        isSettlement: Value(e.isSettlement),
         recurrenceRule: Value(e.recurrenceRule.wireValue),
         originalAmountCents: Value(e.originalAmountCents),
         originalCurrency: Value(e.originalCurrency),
@@ -1236,7 +1249,7 @@ class AppDatabase extends _$AppDatabase {
         category: row.category,
         notes: row.notes,
         date: row.date,
-        isReimbursement: row.isReimbursement,
+        isSettlement: row.isSettlement,
         recurrenceRule: RecurrenceRuleWire.fromWire(row.recurrenceRule),
         originalAmountCents: row.originalAmountCents,
         originalCurrency: row.originalCurrency,

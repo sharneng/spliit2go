@@ -166,7 +166,8 @@ class SpliitClient {
           category: m['category'] == null ? 0 : extractCategoryId(m['category']),
           notes: m['notes'] as String? ?? '',
           date: dateOnlyFromUtcMidnight(_asDateTime(m['expenseDate'])),
-          isReimbursement: m['isReimbursement'] as bool? ?? false,
+          // The API's name for a settlement; the app's is settlement (#242).
+          isSettlement: m['isReimbursement'] as bool? ?? false,
           recurrenceRule: RecurrenceRuleWire.fromWire(m['recurrenceRule'] as String? ?? 'NONE'),
           originalAmountCents: (m['originalAmount'] as num?)?.round(),
           originalCurrency: m['originalCurrency'] as String?,
@@ -252,7 +253,7 @@ class SpliitClient {
       category: m['category'] == null ? 0 : extractCategoryId(m['category']),
       notes: m['notes'] as String? ?? '',
       date: dateOnlyFromUtcMidnight(_asDateTime(m['expenseDate'])),
-      isReimbursement: m['isReimbursement'] as bool? ?? false,
+      isSettlement: m['isReimbursement'] as bool? ?? false,
       recurrenceRule: RecurrenceRuleWire.fromWire(m['recurrenceRule'] as String? ?? 'NONE'),
       originalAmountCents: (m['originalAmount'] as num?)?.round(),
       originalCurrency: m['originalCurrency'] as String?,
@@ -427,7 +428,7 @@ class SpliitClient {
     required int category,
     required String notes,
     required DateTime date,
-    required bool isReimbursement,
+    required bool isSettlement,
     required RecurrenceRule recurrenceRule,
     required bool saveDefaultSplittingOptions,
     required List<ExpenseDocument> documents,
@@ -450,7 +451,7 @@ class SpliitClient {
       'paidFor': paidFor.map((s) => s.toJson()).toList(),
       'splitMode': splitMode.wireValue,
       'saveDefaultSplittingOptions': saveDefaultSplittingOptions,
-      'isReimbursement': isReimbursement,
+      'isReimbursement': isSettlement,
       'documents': [for (final d in documents) d.toJson()],
       'notes': notes,
       'recurrenceRule': recurrenceRule.wireValue,
@@ -470,7 +471,7 @@ class SpliitClient {
   static String _activityParticipant(String? participantId) =>
       participantId ?? 'None';
 
-  /// Creates an expense (or, with [isReimbursement], a settlement payment)
+  /// Creates an expense (or, with [isSettlement], a settlement payment)
   /// on the server. Called either immediately (online) or later by the
   /// outbox once connectivity returns (see lib/sync/outbox.dart) -- this
   /// method itself has no offline logic. [participantId] is who to credit
@@ -485,7 +486,7 @@ class SpliitClient {
     int category = 0,
     String notes = '',
     DateTime? date,
-    bool isReimbursement = false,
+    bool isSettlement = false,
     RecurrenceRule recurrenceRule = RecurrenceRule.none,
     bool saveDefaultSplittingOptions = false,
     int? originalAmountCents,
@@ -503,7 +504,7 @@ class SpliitClient {
       category: category,
       notes: notes,
       date: date ?? DateTime.now(),
-      isReimbursement: isReimbursement,
+      isSettlement: isSettlement,
       recurrenceRule: recurrenceRule,
       saveDefaultSplittingOptions: saveDefaultSplittingOptions,
       // Already uploaded; the server gives them new ids (#123, #124).
@@ -577,7 +578,7 @@ class SpliitClient {
     int category = 0,
     String notes = '',
     DateTime? date,
-    bool isReimbursement = false,
+    bool isSettlement = false,
     RecurrenceRule recurrenceRule = RecurrenceRule.none,
     bool saveDefaultSplittingOptions = false,
     int? originalAmountCents,
@@ -594,7 +595,7 @@ class SpliitClient {
       category: category,
       notes: notes,
       date: date ?? DateTime.now(),
-      isReimbursement: isReimbursement,
+      isSettlement: isSettlement,
       recurrenceRule: recurrenceRule,
       saveDefaultSplittingOptions: saveDefaultSplittingOptions,
       documents: documents,

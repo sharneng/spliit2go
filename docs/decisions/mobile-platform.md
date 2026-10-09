@@ -28,7 +28,7 @@ The wire format was originally ported from a separate sibling project, **`splitw
 - Every call (query or mutation) uses tRPC's batch format: `?batch=1` plus an `input`/body shaped like `{"0": {"json": {...}}}`; responses are always a JSON array, unwrapped as `resp[0]['result']['data']['json']`.
 - `expenseDate` needs a superjson `meta` entry (`{"values": {"expenseFormValues.expenseDate": ["Date"]}}`) or the server parses it as a plain string.
 - `groups.expenses.list` paginates (~10/page); a full fetch follows `hasMore`/`nextCursor`.
-- Expense creation is nested under `expenseFormValues` (title, amount, paidBy, paidFor, splitMode, category, isReimbursement, notes, documents), not a flat payload.
+- Expense creation is nested under `expenseFormValues` (title, amount, paidBy, paidFor, splitMode, category, isSettlement, notes, documents), not a flat payload.
 - **Found only once actually reading responses in the app:** `paidBy` and each `paidFor` entry's `participant`, which we *send* as bare id strings on create, come back from `groups.expenses.list` as expanded `{id, name, ...}` objects. The Python importer never hit this because it only ever wrote expenses, never parsed them back. The Dart client now accepts either shape rather than assuming one — deliberately, since this is exactly the kind of upstream internal we don't want the client bound to.
 
 ## Offline scope and sync model
