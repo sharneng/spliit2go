@@ -141,6 +141,8 @@ void main() {
     final light = spliit2goLightTheme.bottomSheetTheme;
     expect(light.backgroundColor, spliit2goLightTheme.scaffoldBackgroundColor);
     expect(light.shape, isNull);
+    expect(light.dragHandleColor, isNull);
+    expect(dark.dragHandleColor, isNotNull);
   });
 
   test('add buttons are circles, in both modes (#199)', () {
