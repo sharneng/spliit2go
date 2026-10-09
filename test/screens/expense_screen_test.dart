@@ -950,6 +950,70 @@ void main() {
         (0.00609756097560976, 610, 1000, 'JPY'));
   });
 
+  testWidgets('editing a web expense keeps its total until its conversion changes (#255 review)',
+      (tester) async {
+    Map<String, dynamic>? sent;
+    await pumpGroup(
+      tester,
+      euroGroup,
+      server: MockClient((req) async {
+        if (!req.url.path.endsWith('groups.expenses.update')) throw http.ClientException('offline');
+        sent = (jsonDecode(req.body) as Map)['0']['json']['expenseFormValues'] as Map<String, dynamic>;
+        return http.Response('[{"result":{"data":{"json":{"expenseId":"e3"}}}}]', 200);
+      }),
+      // spliit-web lets the total differ from 1000 × 0.0061 = 610.
+      editing: Expense(
+        id: 'e3',
+        groupId: 'g4',
+        title: 'Ramen',
+        amountCents: 615,
+        paidBy: 'alex',
+        paidFor: const [
+          ExpenseShare(participantId: 'alex', shares: 315),
+          ExpenseShare(participantId: 'bea', shares: 300),
+        ],
+        splitMode: SplitMode.byAmount,
+        date: DateTime.utc(2026, 10, 1),
+        originalAmountCents: 1000,
+        originalCurrency: 'JPY',
+        conversionRate: 0.0061,
+      ),
+    );
+    expect(find.text('€6.15'), findsOneWidget);
+
+    // Changing the amount paid works it out again; back, it's as saved.
+    await tester.enterText(find.widgetWithText(TextFormField, 'Amount paid'), '2000');
+    await tester.pump();
+    expect(find.text('€12.20'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextFormField, 'Amount paid'), '1000');
+    await tester.pump();
+    expect(find.text('€6.15'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Ramen'), 'Ramen and gyoza');
+    await tapSave(tester);
+    expect((sent!['amount'], sent!['originalAmount'], sent!['conversionRate']), (615, 1000, 0.0061));
+  });
+
+  testWidgets('a rate typed while the published one is on its way is kept (#255 review)',
+      (tester) async {
+    late _FakeRates rates;
+    await pumpGroup(tester, euroGroup, rates: (db) => rates = _FakeRates(db));
+    await paidIn(tester, '1000', 'Yen', 'Japanese Yen (JPY)');
+    await tester.enterText(rateField(), '0.006');
+    await tester.pump();
+
+    final answer = Completer<ExchangeRate>();
+    rates.answer = (_, __, ___) => answer.future;
+    await tester.ensureVisible(find.text('Use the published rate'));
+    await tester.tap(find.text('Use the published rate'));
+    await tester.pump();
+    await tester.enterText(rateField(), '0.007');
+    answer.complete(_FakeRates.published(0.0062));
+    await tester.pumpAndSettle();
+    expect(rateText(tester), '0.007');
+    expect(find.text('€7.00'), findsOneWidget);
+  });
+
   testWidgets('back to the group currency keeps the total and drops the conversion (#252)',
       (tester) async {
     final db = await pumpGroup(tester, euroGroup);

@@ -236,6 +236,27 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// Which lookup is current: an answer to an older one is ignored.
   int _rateLookups = 0;
 
+  /// Counts what's typed in the rate field, so "Use the published rate"
+  /// replaces only the rate it was asked to, not one typed while it was
+  /// on its way.
+  int _rateEdits = 0;
+
+  /// The edited expense's own amounts (#255 review): spliit-web lets its
+  /// total differ a little from the amount paid times the rate, so they
+  /// stay as saved until the conversion itself is changed.
+  ({int amount, int originalAmount})? _savedConversion;
+
+  /// The conversion is the edited expense's, untouched: same currency,
+  /// rate, settlement flag and the amount it was worked out from.
+  bool get _conversionUnchanged {
+    final (saved, existing) = (_savedConversion, widget.existingExpense);
+    if (saved == null || existing == null || _savedRate == null) return false;
+    return _paidIn == existing.originalCurrency &&
+        _isSettlement == existing.isSettlement &&
+        _rateController.text.trim() == _savedRate &&
+        (_isSettlement ? _typedAmount == saved.amount : _originalAmount == saved.originalAmount);
+  }
+
   /// The calculated amount (or amount to transfer) can't be saved, e.g.
   /// it rounds to zero.
   String? _convertedAmountError;
@@ -281,6 +302,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// typed otherwise, and for a settlement, whose amount settled is fixed.
   int? get _amountMinor {
     if (!_converting || _isSettlement) return _typedAmount;
+    if (_conversionUnchanged) return _savedConversion!.amount;
     final (original, rate) = (_originalAmount, _rate);
     if (original == null || rate == null) return null;
     return convertToGroupAmount(
@@ -290,6 +312,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// A settlement in another currency (web's direction): what to transfer
   /// in it to settle the amount.
   int? get _transferAmount {
+    if (_conversionUnchanged) return _savedConversion!.originalAmount;
     final (amount, rate) = (_typedAmount, _rate);
     if (amount == null || rate == null) return null;
     return convertToOriginalAmount(
@@ -549,6 +572,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _paidIn = e.originalCurrency;
       if (e.originalAmountCents case final original?) {
         _originalAmountController.text = minorUnitsText(original, _originalDigits);
+        // Not for a draft: it's a new expense, worked out afresh.
+        if (identical(e, widget.existingExpense)) {
+          _savedConversion = (amount: e.amountCents, originalAmount: original);
+        }
       }
       // Shown in the locale's own decimals, once it's known.
       _savedRateToShow = e.conversionRate;
@@ -854,6 +881,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// for [force] ("Use the published rate").
   Future<void> _lookUpRate({bool force = false}) async {
     final lookup = ++_rateLookups;
+    final edits = _rateEdits;
     final from = _paidIn, to = widget.group.currencyCode;
     if (!_converting || from == null || to == null) {
       setState(() => _rateState = _RateState.idle);
@@ -881,7 +909,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _rateState = state;
       _foundRate = found;
       final current = _rateController.text.trim();
-      if (found != null && (force || current.isEmpty || current == _autoFilledRate)) {
+      if (found != null &&
+          ((force && edits == _rateEdits) || current.isEmpty || current == _autoFilledRate)) {
         _rateController.text = _autoFilledRate = _rateText(found.rate);
         _savedRate = null;
       }
@@ -1432,7 +1461,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             helperMaxLines: 3,
           ),
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          onChanged: (_) => setState(() => _convertedAmountError = null),
+          onChanged: (_) => setState(() {
+            _rateEdits++;
+            _convertedAmountError = null;
+          }),
           validator: (_) => _rate == null ? l10n.expenseInvalidRate : null,
         ),
         if (_canRefreshRate)
