@@ -53,7 +53,11 @@ Widget topBarCard(BuildContext context, Widget child) => Material(
       elevation: 1,
       shadowColor: Theme.of(context).colorScheme.shadow,
       surfaceTintColor: Colors.transparent,
-      shape: const StadiumBorder(),
+      // A shadow doesn't show on black, so in dark a hairline lighter
+      // edge lifts it instead, as the sheets' (#239).
+      shape: Theme.of(context).brightness == Brightness.dark
+          ? StadiumBorder(side: BorderSide(color: Colors.white.withValues(alpha: 0.15), width: 0.5))
+          : const StadiumBorder(),
       clipBehavior: Clip.antiAlias,
       child: child,
     );

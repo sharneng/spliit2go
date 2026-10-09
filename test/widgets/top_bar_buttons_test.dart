@@ -8,11 +8,11 @@ void main() {
   const width = 400.0;
 
   Future<void> pumpBar(WidgetTester tester, List<Widget> buttons,
-      {TargetPlatform platform = TargetPlatform.iOS}) async {
+      {TargetPlatform platform = TargetPlatform.iOS, ThemeData? base}) async {
     tester.view.physicalSize = const Size(width, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final theme = spliit2goLightTheme.copyWith(platform: platform);
+    final theme = (base ?? spliit2goLightTheme).copyWith(platform: platform);
     await tester.pumpWidget(MaterialApp(
       theme: theme,
       home: const Scaffold(body: Text('first')),
@@ -64,5 +64,16 @@ void main() {
     expect(cardOf(tester, find.byIcon(Icons.settings)), capsule);
     expect(capsule.size, const Size(88, 44));
     expect(width - capsule.right, 16);
+  });
+
+  testWidgets('a hairline lighter edge in dark, where a shadow can\'t show; none in light (#239)',
+      (tester) async {
+    BorderSide edge() =>
+        (tester.widget<Material>(card(find.byIcon(Icons.more_horiz))).shape! as StadiumBorder).side;
+    final more = [IconButton(icon: const Icon(Icons.more_horiz), onPressed: () {})];
+    await pumpBar(tester, more);
+    expect(edge(), BorderSide.none);
+    await pumpBar(tester, more, base: spliit2goDarkTheme);
+    expect(edge().width, 0.5);
   });
 }
