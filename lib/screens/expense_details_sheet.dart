@@ -673,16 +673,18 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     final locale = context.appLocale;
     final theme = Theme.of(context);
     final currency = widget.group.currency;
+    final digits = widget.group.decimalDigits;
     final shares = expenseShareCents(e);
     final known = widget.categories.where((c) => c.id == e.category).firstOrNull;
     final originalAmount = e.originalAmountCents;
     final originalCurrency = e.originalCurrency;
 
-    final amount = formatMoney(e.amountCents, currency, locale: locale);
+    final amount = formatMoney(e.amountCents, currency, decimalDigits: digits, locale: locale);
     final original = originalAmount != null && originalCurrency != null
         ? l10n.expenseDetailsOriginalAmount(
             _withCode(originalCurrency,
-                formatMoney(originalAmount, _symbolFor(originalCurrency), locale: locale)))
+                formatMoney(originalAmount, _symbolFor(originalCurrency),
+                    decimalDigits: currencyByCode(originalCurrency).decimalDigits, locale: locale)))
         : null;
     final colors = participantColors(widget.group.participants, widget.activeUserId);
     final hasShares = e.splitMode == SplitMode.byShares || e.splitMode == SplitMode.byPercentage;
@@ -760,7 +762,8 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
               trailing: switch (_shareLabel(context, e.splitMode, share)) {
                 // In the amounts' digits, as an amount without its currency.
                 final label? when !_showAmounts => Money(label),
-                _ => Money(formatMoney(shares[share.participantId] ?? 0, currency, locale: locale)),
+                _ => Money(formatMoney(shares[share.participantId] ?? 0, currency,
+                    decimalDigits: digits, locale: locale)),
               },
             ),
         ],
@@ -1015,7 +1018,8 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       for (var i = 0; i < values.length; i++) marks[i]: (values[i], null),
       if (part != null && part.cents > 0)
         money: (
-          formatMoney(part.cents, widget.group.currency, locale: context.appLocale),
+          formatMoney(part.cents, widget.group.currency,
+              decimalDigits: widget.group.decimalDigits, locale: context.appLocale),
           e.isSettlement
               // In the emerald of its banknote, italic as its amount.
               ? Money.styleOf(context, isSettlement: true)

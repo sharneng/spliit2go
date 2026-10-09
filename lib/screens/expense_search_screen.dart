@@ -126,6 +126,7 @@ class _ExpenseSearchScreenState extends State<ExpenseSearchScreen> {
     return ExpenseDateList(
       expenses: matches,
       currency: widget.group.currency,
+      decimalDigits: widget.group.decimalDigits,
       categoryFor: _categoryFor,
       participants: widget.group.participants,
       activeUserId: widget.activeUserId,

@@ -16,7 +16,20 @@ class Currency {
   final String name;
   final String symbol;
 
-  const Currency({required this.code, required this.name, required this.symbol});
+  /// How many decimal places the currency has (#251): amounts are stored
+  /// in its smallest unit, 10^[decimalDigits] to one, as spliit-web's
+  /// `amountAsMinorUnits` does -- so ¥1,000 is stored as 1000 and \$10 as
+  /// 1000. From currency-data.json's `decimal_digits`: 2 for all but the
+  /// 7 currencies with no minor unit in use; a custom symbol gets 2, like
+  /// spliit-web's `getCurrencyFromGroup`.
+  final int decimalDigits;
+
+  const Currency({
+    required this.code,
+    required this.name,
+    required this.symbol,
+    this.decimalDigits = 2,
+  });
 
   /// A group (or an expense's "paid in a different currency") that isn't
   /// one of the 34 known codes -- just a free-typed symbol, no exchange
@@ -51,20 +64,23 @@ class Currency {
 /// The 34 currencies Spliit supports, in the same order the web app
 /// declares `supportedCurrencyCodes` (not alphabetical) -- names/symbols
 /// are the `en-US` entries from currency-data.json.
+///
+/// [Currency.decimalDigits] is 2 unless given: JPY, HUF, ISK, IDR, KRW,
+/// VND and COP have 0.
 const List<Currency> supportedCurrencies = [
   Currency(code: 'USD', name: 'US Dollar', symbol: '\$'),
   Currency(code: 'EUR', name: 'Euro', symbol: '€'),
-  Currency(code: 'JPY', name: 'Japanese Yen', symbol: '¥'),
+  Currency(code: 'JPY', name: 'Japanese Yen', symbol: '¥', decimalDigits: 0),
   Currency(code: 'BGN', name: 'Bulgarian Lev', symbol: 'BGN'),
   Currency(code: 'CZK', name: 'Czech Koruna', symbol: 'Kč'),
   Currency(code: 'DKK', name: 'Danish Krone', symbol: 'Dkr'),
   Currency(code: 'GBP', name: 'British Pound', symbol: '£'),
-  Currency(code: 'HUF', name: 'Hungarian Forint', symbol: 'Ft'),
+  Currency(code: 'HUF', name: 'Hungarian Forint', symbol: 'Ft', decimalDigits: 0),
   Currency(code: 'PLN', name: 'Polish Zloty', symbol: 'zł'),
   Currency(code: 'RON', name: 'Romanian Leu', symbol: 'RON'),
   Currency(code: 'SEK', name: 'Swedish Krona', symbol: 'Skr'),
   Currency(code: 'CHF', name: 'Swiss Franc', symbol: 'CHF'),
-  Currency(code: 'ISK', name: 'Icelandic Króna', symbol: 'Ikr'),
+  Currency(code: 'ISK', name: 'Icelandic Króna', symbol: 'Ikr', decimalDigits: 0),
   Currency(code: 'NOK', name: 'Norwegian Krone', symbol: 'Nkr'),
   Currency(code: 'TRY', name: 'Turkish Lira', symbol: 'TL'),
   Currency(code: 'AUD', name: 'Australian Dollar', symbol: 'AU\$'),
@@ -72,10 +88,10 @@ const List<Currency> supportedCurrencies = [
   Currency(code: 'CAD', name: 'Canadian Dollar', symbol: 'CA\$'),
   Currency(code: 'CNY', name: 'Chinese Yuan', symbol: 'CN¥'),
   Currency(code: 'HKD', name: 'Hong Kong Dollar', symbol: 'HK\$'),
-  Currency(code: 'IDR', name: 'Indonesian Rupiah', symbol: 'Rp'),
+  Currency(code: 'IDR', name: 'Indonesian Rupiah', symbol: 'Rp', decimalDigits: 0),
   Currency(code: 'ILS', name: 'Israeli New Shekel', symbol: '₪'),
   Currency(code: 'INR', name: 'Indian Rupee', symbol: 'Rs'),
-  Currency(code: 'KRW', name: 'South Korean Won', symbol: '₩'),
+  Currency(code: 'KRW', name: 'South Korean Won', symbol: '₩', decimalDigits: 0),
   Currency(code: 'MKD', name: 'Macedonian Denar', symbol: 'MKD'),
   Currency(code: 'MXN', name: 'Mexican Peso', symbol: 'MX\$'),
   Currency(code: 'MYR', name: 'Malaysian Ringgit', symbol: 'RM'),
@@ -83,9 +99,9 @@ const List<Currency> supportedCurrencies = [
   Currency(code: 'PHP', name: 'Philippine Peso', symbol: '₱'),
   Currency(code: 'SGD', name: 'Singapore Dollar', symbol: 'S\$'),
   Currency(code: 'THB', name: 'Thai Baht', symbol: '฿'),
-  Currency(code: 'VND', name: 'Vietnamese Dong', symbol: '₫'),
+  Currency(code: 'VND', name: 'Vietnamese Dong', symbol: '₫', decimalDigits: 0),
   Currency(code: 'ZAR', name: 'South African Rand', symbol: 'R'),
-  Currency(code: 'COP', name: 'Colombian Peso', symbol: 'CO\$'),
+  Currency(code: 'COP', name: 'Colombian Peso', symbol: 'CO\$', decimalDigits: 0),
 ];
 
 /// Looks up a currency by its ISO code (case-sensitive, matching the

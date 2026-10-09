@@ -27,6 +27,7 @@ class ExpenseDateList extends StatelessWidget {
     super.key,
     required this.expenses,
     required this.currency,
+    required this.decimalDigits,
     required this.categoryFor,
     required this.onTap,
     this.participants = const [],
@@ -38,6 +39,9 @@ class ExpenseDateList extends StatelessWidget {
   /// Newest first, as the db returns them.
   final List<Expense> expenses;
   final String currency;
+
+  /// The group's [Group.decimalDigits]: amounts are in its smallest unit.
+  final int decimalDigits;
   final Category Function(int id) categoryFor;
   final void Function(Expense) onTap;
 
@@ -87,6 +91,7 @@ class ExpenseDateList extends StatelessWidget {
             expense: e,
             category: categoryFor(e.category),
             currency: currency,
+            decimalDigits: decimalDigits,
             payer: names[e.paidBy],
             payerColor: colors[e.paidBy],
             activeUserId: activeUserId,
@@ -136,6 +141,7 @@ class ExpenseTile extends StatelessWidget {
     required this.expense,
     required this.category,
     required this.currency,
+    required this.decimalDigits,
     required this.onTap,
     this.payer,
     this.payerColor,
@@ -145,6 +151,9 @@ class ExpenseTile extends StatelessWidget {
   final Expense expense;
   final Category category;
   final String currency;
+
+  /// The group's [Group.decimalDigits]: amounts are in its smallest unit.
+  final int decimalDigits;
   final VoidCallback onTap;
 
   /// The payer's name; null when the group doesn't know them.
@@ -160,7 +169,7 @@ class ExpenseTile extends StatelessWidget {
     final l10n = context.l10n;
     final locale = context.appLocale;
     final mark = SpliitColors.of(context).secondaryContent;
-    final amount = formatMoney(e.amountCents, currency, locale: locale);
+    final amount = formatMoney(e.amountCents, currency, decimalDigits: decimalDigits, locale: locale);
     // e.date is already a date-only value (year/month/day of the
     // calendar day the expense happened on, not a real instant -- see
     // lib/services/date_only.dart) -- no .toLocal() here, that would
@@ -171,7 +180,7 @@ class ExpenseTile extends StatelessWidget {
     // Read out spelled out, shown padded so the column lines up.
     final shortDate = formatShortDate(e.date, locale: locale);
     final yours = _yourPart();
-    final yoursText = yours == null ? null : formatMoney(yours.cents, currency, locale: locale);
+    final yoursText = yours == null ? null : formatMoney(yours.cents, currency, decimalDigits: decimalDigits, locale: locale);
     final paidByYou = activeUserId != null && e.paidBy == activeUserId;
     final recurring = e.recurrenceRule != RecurrenceRule.none;
     final receipts = e.documentCount > 0 || e.documents.isNotEmpty;

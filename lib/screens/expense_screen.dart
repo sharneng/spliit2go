@@ -223,6 +223,22 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// original-currency field is a picker at all, since there's no
   /// exchange rate to convert against for a currency Spliit doesn't
   /// recognize.
+  /// The group currency's decimal places (#251): every amount on this
+  /// form is stored in its smallest unit.
+  int get _digits => widget.group.decimalDigits;
+
+  /// The paid-in currency's decimal places: 2 until one is picked.
+  int get _originalDigits =>
+      currencyByCode(_originalCurrencyController.text.trim().toUpperCase()).decimalDigits;
+
+  /// Whether [text] is an amount of at least one smallest unit once
+  /// rounded to [decimalDigits] (#254 review): 0.1 yen rounds to 0, which
+  /// would save a zero amount, and as an original amount an infinite rate.
+  bool _isPositiveAmount(String? text, int decimalDigits) {
+    final parsed = _parseDecimal(text ?? '');
+    return parsed != null && toMinorUnits(parsed, decimalDigits) > 0;
+  }
+
   bool get _hasGroupCurrencyCode =>
       widget.group.currencyCode != null && widget.group.currencyCode!.isNotEmpty;
 
@@ -420,7 +436,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// [existingExpense] afterwards.
   void _prefillFrom(Expense e) {
     _titleController.text = e.title;
-    _amountController.text = (e.amountCents / 100).toStringAsFixed(2);
+    _amountController.text = minorUnitsText(e.amountCents, _digits);
     _notesController.text = e.notes;
     _paidBy = e.paidBy;
     _category = e.category;
@@ -437,7 +453,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final controller = _splitControllers[share.participantId];
       if (controller == null) continue;
       controller.text = switch (e.splitMode) {
-        SplitMode.byAmount => (share.shares / 100).toStringAsFixed(2),
+        SplitMode.byAmount => minorUnitsText(share.shares, _digits),
         // Shares/Percentage are both x100 on the wire (issue #34) --
         // inverse of the x100 done in _buildPaidFor, formatted back down
         // to at most 2 decimal places with no trailing zeros so "150"
@@ -459,7 +475,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
     if (e.originalAmountCents != null && e.originalCurrency != null) {
       _paidInOtherCurrency = true;
-      _originalAmountController.text = (e.originalAmountCents! / 100).toStringAsFixed(2);
+      _originalAmountController.text = minorUnitsText(
+          e.originalAmountCents!, currencyByCode(e.originalCurrency).decimalDigits);
       _originalCurrencyController.text = e.originalCurrency!;
     }
 
@@ -581,7 +598,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         final filled = _ScanFilled();
         if (fill.title case final title?) _titleController.text = filled.title = title;
         if (fill.amountCents case final cents?) {
-          _amountController.text = filled.amount = (cents / 100).toStringAsFixed(2);
+          // A receipt total is read in hundredths whatever the currency.
+          _amountController.text = filled.amount = (cents / 100).toStringAsFixed(_digits);
         }
         if (fill.date case final date?) {
           filled.date = (date, _date);
@@ -816,7 +834,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     if (!_showsLivePreview) return null;
     final amount = _parseDecimal(_amountController.text.trim());
     if (amount == null) return null;
-    final amountCents = (amount * 100).round();
+    final amountCents = toMinorUnits(amount, _digits);
     final paidFor = _splitMode == SplitMode.evenly
         ? _includedParticipants
             .map((p) => ExpenseShare(participantId: p.id, shares: 1))
@@ -862,16 +880,16 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
 
     // byAmount
-    final amountCents = ((_parseDecimal(_amountController.text.trim()) ?? 0) * 100).round();
+    final amountCents = toMinorUnits(_parseDecimal(_amountController.text.trim()) ?? 0, _digits);
     var totalCents = 0;
     for (final p in included) {
       final value = _parseDecimal(_splitControllers[p.id]!.text.trim());
       if (value == null || value < 0) return context.l10n.expenseEnterAmount(p.name);
-      totalCents += (value * 100).round();
+      totalCents += toMinorUnits(value, _digits);
     }
     if (totalCents != amountCents) {
       final diff = formatMoney((amountCents - totalCents).abs(), widget.group.currency,
-          locale: context.appLocale);
+          decimalDigits: _digits, locale: context.appLocale);
       return context.l10n.expenseAmountMismatch(diff);
     }
     return null;
@@ -897,8 +915,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             : context.l10n.expensePercentRemaining(formatted);
       }
       final formattedAmount =
-          formatMoney((magnitude * 100).round(), widget.group.currency,
-              locale: context.appLocale);
+          formatMoney(toMinorUnits(magnitude, _digits), widget.group.currency,
+              decimalDigits: _digits, locale: context.appLocale);
       return over
           ? context.l10n.expenseAmountOver(formattedAmount)
           : context.l10n.expenseAmountRemaining(formattedAmount);
@@ -954,11 +972,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     helperText: _scanHint(_scanFill?.amountHint)),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 onChanged: (_) => setState(() {}), // amount feeds the by-amount hint below
-                validator: (v) {
-                  final parsed = _parseDecimal(v ?? '');
-                  if (parsed == null || parsed <= 0) return context.l10n.expenseInvalidAmount;
-                  return null;
-                },
+                validator: (v) => _isPositiveAmount(v, _digits) ? null : context.l10n.expenseInvalidAmount,
               ),
               const SizedBox(height: 12),
               InkWell(
@@ -1022,9 +1036,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         validator: (v) {
                           if (!_paidInOtherCurrency) return null;
-                          final parsed = _parseDecimal(v ?? '');
-                          if (parsed == null || parsed <= 0) return context.l10n.expenseInvalidAmount;
-                          return null;
+                          return _isPositiveAmount(v, _originalDigits)
+                              ? null
+                              : context.l10n.expenseInvalidAmount;
                         },
                       ),
                     ),
@@ -1249,7 +1263,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 preview != null
                     ? Money(
                         formatMoney(preview, widget.group.currency,
-                            locale: context.appLocale),
+                            decimalDigits: _digits, locale: context.appLocale),
                         size: MoneySize.support)
                     : null,
             controlAffinity: ListTileControlAffinity.leading,
@@ -1318,7 +1332,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       SplitMode.byAmount => included
           .map((p) => ExpenseShare(
               participantId: p.id,
-              shares: (_parseDecimal(_splitControllers[p.id]!.text.trim())! * 100).round()))
+              shares: toMinorUnits(_parseDecimal(_splitControllers[p.id]!.text.trim())!, _digits)))
           .toList(),
     };
   }
@@ -1339,7 +1353,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       return _refuse();
     }
 
-    final amountCents = (_parseDecimal(_amountController.text)! * 100).round();
+    final amountCents = toMinorUnits(_parseDecimal(_amountController.text)!, _digits);
     final paidFor = _buildPaidFor(amountCents);
     if (paidFor == null) return _refuse();
 
@@ -1348,15 +1362,21 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     double? conversionRate;
     if (_paidInOtherCurrency) {
       final originalAmount = _parseDecimal(_originalAmountController.text.trim())!;
-      originalAmountCents = (originalAmount * 100).round();
       // No code to send when the group's own currency has none to
       // convert against (see _hasGroupCurrencyCode) -- the field is
       // disabled in that case, so there's nothing the user picked.
       final code = _originalCurrencyController.text.trim().toUpperCase();
       originalCurrency = code.isEmpty ? null : code;
-      // groupAmount = originalAmount * conversionRate (Spliit's own
-      // convention -- see src/lib/currency-conversion.ts upstream).
-      conversionRate = amountCents / originalAmountCents;
+      // In the paid-in currency's own smallest unit (#251): ¥1,000 is
+      // 1000 even in a euro group. Never 0: the validator rejects that.
+      final originalDigits = _originalDigits;
+      originalAmountCents = toMinorUnits(originalAmount, originalDigits);
+      conversionRate = conversionRateFor(
+        amount: amountCents,
+        decimalDigits: _digits,
+        originalAmount: originalAmountCents,
+        originalDecimalDigits: originalDigits,
+      );
     }
 
     // A new expense keeps photos that didn't upload, and syncs with them

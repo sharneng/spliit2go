@@ -756,6 +756,203 @@ void main() {
     final pending = await db.pendingExpenses();
     expect(pending, hasLength(1));
     expect(pending.single.originalCurrency, 'JPY');
+      // #251: yen have no decimals, so ¥5,000 is stored as 5000, not
+    // 500000 -- what spliit-web's amountAsMinorUnits stores.
+    final saved = db.rowToExpense(pending.single);
+    expect(saved.amountCents, 5000);
+    expect(saved.originalAmountCents, 5000);
+    expect(saved.conversionRate, closeTo(0.01, 1e-12));
+  });
+
+  // #251: Spliit stores each currency in its own smallest unit -- whole
+  // yen, cents of a euro -- as spliit-web's amountAsMinorUnits does.
+  Future<AppDatabase> pumpGroup(WidgetTester tester, Group group, {Expense? editing}) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final client = SpliitClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((req) async => throw http.ClientException('offline')),
+    );
+    await db.cacheGroup(group);
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: ExpenseScreen(
+        client: client,
+        db: db,
+        outbox: Outbox(db, client, groupId: group.id),
+        group: group,
+        existingExpense: editing,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    return db;
+  }
+
+  const yenGroup = Group(
+    id: 'g3',
+    name: 'Kyoto',
+    currency: '¥',
+    currencyCode: 'JPY',
+    participants: [
+      Participant(id: 'alex', name: 'Alex'),
+      Participant(id: 'bea', name: 'Bea'),
+    ],
+  );
+  const euroGroup = Group(
+    id: 'g4',
+    name: 'Lisbon',
+    currency: '€',
+    currencyCode: 'EUR',
+    participants: [
+      Participant(id: 'alex', name: 'Alex'),
+      Participant(id: 'bea', name: 'Bea'),
+    ],
+  );
+
+  Future<void> paidIn(WidgetTester tester, String amount, String currencySearch, String currency) async {
+    await tester.ensureVisible(find.widgetWithText(CheckboxListTile, 'Paid in a different currency'));
+    await tester.tap(find.widgetWithText(CheckboxListTile, 'Paid in a different currency'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Original amount'), amount);
+    await tester.tap(find.widgetWithText(InputDecorator, 'Select'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Search currency...'), currencySearch);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(currency));
+    await tester.pumpAndSettle();
+  }
+
+  Future<Expense> save(WidgetTester tester, AppDatabase db) async {
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+    return db.rowToExpense((await db.pendingExpenses()).single);
+  }
+
+  testWidgets('a yen group stores whole yen, amounts and split amounts alike (#251)',
+      (tester) async {
+    final db = await pumpGroup(tester, yenGroup);
+    await fillCommonFields(tester, amount: '1,000');
+    await selectSplitMode(tester, 'Amount');
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(2), '600');
+    await tester.enterText(fields.at(3), '400');
+
+    final saved = await save(tester, db);
+    expect(saved.amountCents, 1000);
+    expect({for (final s in saved.paidFor) s.participantId: s.shares}, {'alex': 600, 'bea': 400});
+  });
+
+  testWidgets('a yen group shows a split left over in whole yen (#251)', (tester) async {
+    await pumpGroup(tester, yenGroup);
+    await fillCommonFields(tester, amount: '1000');
+    await selectSplitMode(tester, 'Amount');
+    await tester.enterText(find.byType(TextFormField).at(2), '600');
+    await tester.enterText(find.byType(TextFormField).at(3), '300');
+    await tester.pumpAndSettle();
+    expect(find.text('¥100 still to allocate.'), findsOneWidget);
+  });
+
+  testWidgets('editing a yen expense shows its amount in yen, not hundredths (#251)',
+      (tester) async {
+    await pumpGroup(
+      tester,
+      yenGroup,
+      editing: Expense(
+        id: 'e1',
+        groupId: 'g3',
+        title: 'Ramen',
+        amountCents: 1000,
+        paidBy: 'alex',
+        paidFor: const [
+          ExpenseShare(participantId: 'alex', shares: 600),
+          ExpenseShare(participantId: 'bea', shares: 400),
+        ],
+        splitMode: SplitMode.byAmount,
+        category: 0,
+        notes: '',
+        date: DateTime.utc(2026, 10, 1),
+        originalAmountCents: 610,
+        originalCurrency: 'EUR',
+        conversionRate: 1000 / 6.10,
+      ),
+    );
+    expect(find.text('1000'), findsOneWidget);
+    expect(find.text('600'), findsOneWidget);
+    expect(find.text('400'), findsOneWidget);
+    expect(find.text('6.10'), findsOneWidget);
+  });
+
+  testWidgets('a euro group stores a yen expense in whole yen, with the rate in major units (#251)',
+      (tester) async {
+    final db = await pumpGroup(tester, euroGroup);
+    await fillCommonFields(tester, amount: '6.10');
+    await paidIn(tester, '1000', 'Yen', 'Japanese Yen (JPY)');
+
+    // What spliit-web stores for €6.10 paid as ¥1,000.
+    final saved = await save(tester, db);
+    expect(saved.amountCents, 610);
+    expect(saved.originalAmountCents, 1000);
+    expect(saved.originalCurrency, 'JPY');
+    expect(saved.conversionRate, closeTo(0.0061, 1e-12));
+    // amount = round(originalAmount × rate × 10^2 / 10^0)
+    expect((saved.originalAmountCents! * saved.conversionRate! * 100).round(), saved.amountCents);
+  });
+
+  // #254 review: a positive amount that rounds to zero in its currency
+  // would save 0 -- and as an original amount, an infinite rate that
+  // can't be sent.
+  Future<void> tapSave(WidgetTester tester) async {
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('a yen group rejects an amount under one yen (#254)', (tester) async {
+    final db = await pumpGroup(tester, yenGroup);
+    await fillCommonFields(tester, amount: '0.4');
+    await tapSave(tester);
+    expect(find.text('Enter a valid amount'), findsOneWidget);
+    expect(await db.pendingExpenses(), isEmpty);
+  });
+
+  testWidgets('an original amount under one yen is rejected, not saved as 0 (#254)',
+      (tester) async {
+    final db = await pumpGroup(tester, euroGroup);
+    await fillCommonFields(tester, amount: '6.10');
+    await paidIn(tester, '0.1', 'Yen', 'Japanese Yen (JPY)');
+    await tapSave(tester);
+    expect(find.text('Enter a valid amount'), findsOneWidget);
+    expect(await db.pendingExpenses(), isEmpty);
+
+    // A whole yen is fine.
+    await tester.enterText(find.widgetWithText(TextFormField, 'Original amount'), '1');
+    final saved = await save(tester, db);
+    expect(saved.originalAmountCents, 1);
+    expect(saved.conversionRate, closeTo(6.10, 1e-12));
+  });
+
+  testWidgets('a euro group rejects an amount under one cent (#254)', (tester) async {
+    final db = await pumpGroup(tester, euroGroup);
+    await fillCommonFields(tester, amount: '0.004');
+    await tapSave(tester);
+    expect(find.text('Enter a valid amount'), findsOneWidget);
+    expect(await db.pendingExpenses(), isEmpty);
+  });
+
+  testWidgets('a yen group stores a euro expense in cents (#251)', (tester) async {
+    final db = await pumpGroup(tester, yenGroup);
+    await fillCommonFields(tester, amount: '1000');
+    await paidIn(tester, '6.10', 'Euro', 'Euro (EUR)');
+
+    final saved = await save(tester, db);
+    expect(saved.amountCents, 1000);
+    expect(saved.originalAmountCents, 610);
+    expect(saved.conversionRate, closeTo(1000 / 6.10, 1e-9));
+    // amount = round(originalAmount × rate × 10^0 / 10^2)
+    expect((saved.originalAmountCents! * saved.conversionRate! / 100).round(), saved.amountCents);
   });
 
   // issue #29: "Paid for" UX rework (segmented control, select all/none,

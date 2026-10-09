@@ -95,7 +95,8 @@ class _StatsScreenState extends State<StatsScreen> {
   // to avoid a churny diff; it's still the same shared formatting logic
   // everywhere.
   String _money(int cents) =>
-      formatMoney(cents, widget.group.currency, locale: context.appLocale);
+      formatMoney(cents, widget.group.currency,
+          decimalDigits: widget.group.decimalDigits, locale: context.appLocale);
 
   // Translated at presentation time (issue #51); an id whose Category
   // hasn't been fetched falls back to the localized "General" (id 0) or
