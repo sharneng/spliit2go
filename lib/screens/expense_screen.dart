@@ -2,6 +2,7 @@ import 'dart:async' show unawaited;
 
 import 'package:flutter/foundation.dart' show TargetPlatform, Uint8List, defaultTargetPlatform, visibleForTesting;
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart' show NumberFormat;
 import 'package:uuid/uuid.dart';
 
 import '../api/spliit_client.dart';
@@ -714,13 +715,29 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     });
   }
 
+  /// [parseFlexibleDecimal] with this locale's decimal separator, which
+  /// decides only "1,234" (#238).
+  double? _parseDecimal(String input) =>
+      parseFlexibleDecimal(input, decimalSeparator: _decimalSeparator);
+
+  /// Kept from the last build's locale, so parsing after an await (Save)
+  /// doesn't need the context.
+  String _decimalSeparator = '.';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _decimalSeparator =
+        NumberFormat.decimalPattern(Localizations.localeOf(context).toString()).symbols.DECIMAL_SEP;
+  }
+
   /// The typed value for [p] in the current non-evenly split mode, or
   /// null if it isn't currently a number -- every non-evenly mode takes
   /// a decimal now (issue #34), matching [_buildPaidFor]'s own parsing
   /// so the live footer/preview never disagree with what Save would
   /// actually do.
   double? _typedValue(Participant p) =>
-      parseFlexibleDecimal(_splitControllers[p.id]!.text.trim());
+      _parseDecimal(_splitControllers[p.id]!.text.trim());
 
   /// Rounded basis points (percentage x 100) for [p]'s typed value --
   /// the exact integer [_buildPaidFor] sends on the wire, and the same
@@ -762,7 +779,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       return (10000 - totalBasisPoints) / 100;
     }
     if (_splitMode == SplitMode.byAmount) {
-      final amount = parseFlexibleDecimal(_amountController.text.trim());
+      final amount = _parseDecimal(_amountController.text.trim());
       if (amount == null) return null;
       var total = 0.0;
       for (final p in _includedParticipants) {
@@ -796,7 +813,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// [_showsLivePreview] is false or the amount field isn't parseable yet.
   Map<String, int>? _livePreviewAmounts() {
     if (!_showsLivePreview) return null;
-    final amount = parseFlexibleDecimal(_amountController.text.trim());
+    final amount = _parseDecimal(_amountController.text.trim());
     if (amount == null) return null;
     final amountCents = (amount * 100).round();
     final paidFor = _splitMode == SplitMode.evenly
@@ -844,10 +861,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
 
     // byAmount
-    final amountCents = ((parseFlexibleDecimal(_amountController.text.trim()) ?? 0) * 100).round();
+    final amountCents = ((_parseDecimal(_amountController.text.trim()) ?? 0) * 100).round();
     var totalCents = 0;
     for (final p in included) {
-      final value = parseFlexibleDecimal(_splitControllers[p.id]!.text.trim());
+      final value = _parseDecimal(_splitControllers[p.id]!.text.trim());
       if (value == null || value < 0) return context.l10n.expenseEnterAmount(p.name);
       totalCents += (value * 100).round();
     }
@@ -937,7 +954,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 onChanged: (_) => setState(() {}), // amount feeds the by-amount hint below
                 validator: (v) {
-                  final parsed = parseFlexibleDecimal(v ?? '');
+                  final parsed = _parseDecimal(v ?? '');
                   if (parsed == null || parsed <= 0) return context.l10n.expenseInvalidAmount;
                   return null;
                 },
@@ -1004,7 +1021,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         validator: (v) {
                           if (!_paidInOtherCurrency) return null;
-                          final parsed = parseFlexibleDecimal(v ?? '');
+                          final parsed = _parseDecimal(v ?? '');
                           if (parsed == null || parsed <= 0) return context.l10n.expenseInvalidAmount;
                           return null;
                         },
@@ -1300,7 +1317,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       SplitMode.byAmount => included
           .map((p) => ExpenseShare(
               participantId: p.id,
-              shares: (parseFlexibleDecimal(_splitControllers[p.id]!.text.trim())! * 100).round()))
+              shares: (_parseDecimal(_splitControllers[p.id]!.text.trim())! * 100).round()))
           .toList(),
     };
   }
@@ -1321,7 +1338,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       return _refuse();
     }
 
-    final amountCents = (parseFlexibleDecimal(_amountController.text)! * 100).round();
+    final amountCents = (_parseDecimal(_amountController.text)! * 100).round();
     final paidFor = _buildPaidFor(amountCents);
     if (paidFor == null) return _refuse();
 
@@ -1329,7 +1346,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     String? originalCurrency;
     double? conversionRate;
     if (_paidInOtherCurrency) {
-      final originalAmount = parseFlexibleDecimal(_originalAmountController.text.trim())!;
+      final originalAmount = _parseDecimal(_originalAmountController.text.trim())!;
       originalAmountCents = (originalAmount * 100).round();
       // No code to send when the group's own currency has none to
       // convert against (see _hasGroupCurrencyCode) -- the field is
