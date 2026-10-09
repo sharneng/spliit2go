@@ -1012,6 +1012,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(rateText(tester), '0.007');
     expect(find.text('€7.00'), findsOneWidget);
+
+    // Even typed back to the rate filled in before, it's the user's.
+    final again = Completer<ExchangeRate>();
+    rates.answer = (_, __, ___) => again.future;
+    await tester.tap(find.text('Use the published rate'));
+    await tester.pump();
+    await tester.enterText(rateField(), '0.0061');
+    again.complete(_FakeRates.published(0.0063));
+    await tester.pumpAndSettle();
+    expect(rateText(tester), '0.0061');
   });
 
   testWidgets('back to the group currency keeps the total and drops the conversion (#252)',

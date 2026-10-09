@@ -909,8 +909,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _rateState = state;
       _foundRate = found;
       final current = _rateController.text.trim();
+      // Anything typed since the request wins, even a rate that happens
+      // to match the one filled in before (#255 review); an empty field
+      // has nothing to lose.
       if (found != null &&
-          ((force && edits == _rateEdits) || current.isEmpty || current == _autoFilledRate)) {
+          (current.isEmpty || (edits == _rateEdits && (force || current == _autoFilledRate)))) {
         _rateController.text = _autoFilledRate = _rateText(found.rate);
         _savedRate = null;
       }
