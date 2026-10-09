@@ -270,7 +270,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(BottomSheet), findsOneWidget);
-      expect(find.textContaining('Waiting to sync'), findsOneWidget);
+      expect(find.text('Waiting to sync'), findsOneWidget);
       expect(actionButton('Edit'), findsNothing);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
@@ -488,13 +488,13 @@ void main() {
       await tester.tap(find.text('Snacks'));
       await tester.pumpAndSettle();
 
-      expect(find.text("Couldn't sync this expense"), findsOneWidget);
+      expect(find.text('Sync failed'), findsOneWidget);
       expect(find.textContaining("participant doesn't exist"), findsOneWidget);
-      expect(find.text('Retry'), findsOneWidget);
-      expect(find.text('Discard'), findsOneWidget);
+      expect(actionButton('Retry'), findsOneWidget);
+      expect(actionButton('Discard'), findsOneWidget);
       // Deliberately no Edit: it never reached the server, and this app
       // is view+add only offline, never offline edit.
-      expect(find.text('Edit'), findsNothing);
+      expect(actionButton('Edit'), findsNothing);
       // See the first test above for why. (issue #47)
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
@@ -529,7 +529,7 @@ void main() {
 
       await tester.tap(find.text('Snacks'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Retry'));
+      await tester.tap(actionButton('Retry'));
       await tester.pumpAndSettle();
 
       expect(find.text('sync failed'), findsNothing);
@@ -567,7 +567,7 @@ void main() {
 
       await tester.tap(find.text('Snacks'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Discard'));
+      await tester.tap(actionButton('Discard'));
       await tester.pumpAndSettle();
 
       expect(find.byType(BottomSheet), findsNothing);

@@ -26,6 +26,19 @@ Map<String, int> expenseShareCents(Expense e) => shareCentsFor(
       paidFor: e.paidFor,
     );
 
+/// What [participantId] lent on [e] (paid, less their own share) or owes
+/// (their share of what someone else paid), for the list row's arrow
+/// amount and the details sheet's "You lent" (#226). Null when they're
+/// not in it, paid only for themselves, or there's no one ([participantId]
+/// null).
+({int cents, bool lent})? lentOrOwed(Expense e, String? participantId) {
+  if (participantId == null) return null;
+  final share = expenseShareCents(e)[participantId] ?? 0;
+  final lent = e.paidBy == participantId;
+  final cents = lent ? e.amountCents - share : share;
+  return cents > 0 ? (cents: cents, lent: lent) : null;
+}
+
 /// The lower-level apportionment [expenseShareCents] delegates to --
 /// exposed on its own so a form still being typed into (issue #29's live
 /// per-participant \$ preview) can compute the same split from draft

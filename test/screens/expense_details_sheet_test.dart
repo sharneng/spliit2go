@@ -14,7 +14,9 @@ import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/expense_details_sheet.dart';
 import 'package:spliit2go/services/receipt_cache.dart';
+import 'package:spliit2go/theme.dart';
 import 'package:spliit2go/sync/outbox.dart';
+import 'package:spliit2go/widgets/category_icon.dart';
 
 import '../support/error_log.dart';
 import '../support/haptics.dart';
@@ -184,18 +186,29 @@ void main() {
 
     expect(inSheet(find.text('Dinner')), findsOneWidget);
     expect(inSheet(find.text('\$60.00')), findsOneWidget);
-    expect(inSheet(find.text('Originally €55.00')), findsOneWidget);
+    // After its currency's code, as every original: ¥ alone is yen or yuan.
+    expect(inSheet(find.text('Originally EUR €55.00')), findsOneWidget);
     // Who, when and what in one sentence (#226): Bea paid, and is this
     // device's active user; within ten months, no year.
-    expect(inSheet(find.text('Paid by you on Sep 16 for Dining Out, repeats weekly')),
+    // Then your part, as the list row's arrow (#226).
+    expect(
+        inSheet(find.text('Paid by you on Sep 16 for Dining Out, repeats weekly. You lent \$40.00.')),
         findsOneWidget);
     expect(inSheet(find.text('Bea (you)')), findsOneWidget);
-    // By shares, 2:1 -- the same apportionment Balances and Stats use.
+    // By shares, 2:1: each person's shares, as entered (#226)...
     expect(inSheet(find.text('Shares')), findsOneWidget);
-    expect(inSheet(find.text('2 shares')), findsOneWidget);
-    expect(inSheet(find.text('1 share')), findsOneWidget);
+    expect(inSheet(find.text('2')), findsOneWidget);
+    expect(inSheet(find.text('1')), findsOneWidget);
+    // ...or what they come to -- the same apportionment Balances and
+    // Stats use.
+    await tester.tap(inSheet(find.text('Show amounts')));
+    await tester.pumpAndSettle();
     expect(inSheet(find.text('\$40.00')), findsOneWidget);
     expect(inSheet(find.text('\$20.00')), findsOneWidget);
+    expect(inSheet(find.text('2')), findsNothing);
+    await tester.tap(inSheet(find.text('Hide amounts')));
+    await tester.pumpAndSettle();
+    expect(inSheet(find.text('2')), findsOneWidget);
     expect(inSheet(find.text('Birthday dinner')), findsOneWidget);
     expect(inSheet(actionButton('Edit')), findsOneWidget);
     // Dismissing isn't a change.
@@ -235,7 +248,7 @@ void main() {
   });
 
   // #226: the redesign.
-  testWidgets('edit and delete on a row of their own above the title; one sentence; monograms',
+  testWidgets('a top bar of the category, status and buttons above the title; one sentence',
       (tester) async {
     final semantics = tester.ensureSemantics();
     tallView(tester);
@@ -250,14 +263,22 @@ void main() {
     }
     // The title has the row to itself: as wide as the sheet allows.
     expect(title.right, greaterThan(tester.getRect(inSheet(actionButton('Delete'))).left));
+    // Edit, the main action, rightmost; the category icon leading.
+    expect(tester.getRect(inSheet(actionButton('Edit'))).left,
+        greaterThan(tester.getRect(inSheet(actionButton('Delete'))).left));
+    expect(tester.getRect(inSheet(find.byType(CategoryIconGlyph))).bottom,
+        lessThanOrEqualTo(title.top));
 
     // The sentence's fixed words dimmed, its names, date and category not.
     final sentence = tester.widget<Text>(inSheet(find.textContaining('Paid by')));
     final spans = (sentence.textSpan! as TextSpan).children!.cast<TextSpan>();
-    final dimmed = {for (final span in spans) span.text!: span.style?.color != null};
-    expect(dimmed, {
-      'Paid by ': true, 'you': false, ' on ': true, 'Sep 16': false, ' for ': true,
-      'Dining Out': false, ', repeats ': true, 'weekly': false,
+    final colors = SpliitColors.of(tester.element(find.byType(BottomSheet)));
+    final color = {for (final span in spans) span.text!: span.style?.color};
+    final fixed = colors.secondaryContent;
+    expect(color, {
+      'Paid by ': fixed, 'you': null, ' on ': fixed, 'Sep 16': null, ' for ': fixed,
+      'Dining Out': null, ', repeats ': fixed, 'weekly': null, '. You lent ': fixed,
+      '\$40.00': colors.moneyPositive, '.': fixed,
     });
 
     // A monogram before each person.
@@ -265,7 +286,7 @@ void main() {
     expect(inSheet(find.text('B')), findsOneWidget);
 
     // The title and amount read as one.
-    expect(find.bySemanticsLabel(RegExp(r'^A long title .*, \$60\.00, Originally €55\.00$')),
+    expect(find.bySemanticsLabel(RegExp(r'^A long title .*, \$60\.00, Originally EUR €55\.00$')),
         findsOneWidget);
     semantics.dispose();
     await closeTree(tester);
@@ -282,9 +303,12 @@ void main() {
     expect(inSheet(find.text('33.33%')), findsOneWidget);
     await closeTree(tester);
 
-    // The smallest share isn't rounded to nothing; a whole one has no
-    // decimals (#236 review).
-    for (final (shares, expected) in [((1, 9999), ('0.01%', '99.99%')), ((5000, 5000), ('50%', '50%'))]) {
+    // The smallest share isn't rounded to nothing (#236 review); every one
+    // has two decimals, so they line up.
+    for (final (shares, expected) in [
+      ((1, 9999), ('0.01%', '99.99%')),
+      ((5000, 5000), ('50.00%', '50.00%')),
+    ]) {
       final split = Expense(
         id: 'e1',
         groupId: 'g1',
@@ -322,6 +346,84 @@ void main() {
     await openSheet(tester, db);
 
     expect(inSheet(find.text('Paid by Alex on Nov 30, 2025 for General')), findsOneWidget);
+    await closeTree(tester);
+  });
+
+  group('the sentence ends with your part (#226)', () {
+    Expense payback() => Expense(
+          id: 'e1',
+          groupId: 'g1',
+          title: 'Payback',
+          amountCents: 1000,
+          paidBy: 'alex',
+          paidFor: const [ExpenseShare(participantId: 'bea', shares: 1)],
+          isReimbursement: true,
+          date: DateTime(2026, 9, 16),
+        );
+    for (final (name, expense, me, ending) in [
+      ('someone else paid', null, 'alex', '. You owe \$40.00.'),
+      ("you're not in it", null, 'cara', ". You aren't involved."),
+      ('no one is you', null, null, ' for Dining Out, repeats weekly'),
+      ('a reimbursement paid to you', payback(), 'bea', '. You received \$10.00.'),
+      ('a reimbursement you paid', payback(), 'alex', ' for settlement'),
+      ('a reimbursement not yours', payback(), 'cara', ". You aren't involved."),
+    ]) {
+      testWidgets(name, (tester) async {
+        tallView(tester);
+        final db = await cachedDb(expense ?? dinner());
+        addTearDown(db.close);
+        await openSheet(tester, db, activeUserId: me);
+        final sentence =
+            tester.widget<Text>(inSheet(find.textContaining('Paid by'))).textSpan!.toPlainText();
+        expect(sentence, endsWith(ending));
+        await closeTree(tester);
+      });
+    }
+  });
+
+  testWidgets('a reimbursement received is in emerald', (tester) async {
+    tallView(tester);
+    final db = await cachedDb(Expense(
+      id: 'e1',
+      groupId: 'g1',
+      title: 'Payback',
+      amountCents: 1000,
+      paidBy: 'alex',
+      paidFor: const [ExpenseShare(participantId: 'bea', shares: 1)],
+      isReimbursement: true,
+      date: DateTime(2026, 9, 16),
+    ));
+    addTearDown(db.close);
+    await openSheet(tester, db, activeUserId: 'bea');
+    final spans = (tester.widget<Text>(inSheet(find.textContaining('Paid by'))).textSpan!
+            as TextSpan)
+        .children!
+        .cast<TextSpan>();
+    final amount = spans.singleWhere((s) => s.text == '\$10.00');
+    expect(amount.style!.color,
+        Theme.of(tester.element(find.byType(BottomSheet))).colorScheme.primary);
+    await closeTree(tester);
+  });
+
+  testWidgets('an original amount in an unknown currency shows its code once (#226)',
+      (tester) async {
+    tallView(tester);
+    final db = await cachedDb(Expense(
+      id: 'e1',
+      groupId: 'g1',
+      title: 'Lunch',
+      amountCents: 1000,
+      paidBy: 'alex',
+      paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
+      date: DateTime(2026, 9, 16),
+      originalAmountCents: 900,
+      originalCurrency: 'XYZ',
+    ));
+    addTearDown(db.close);
+    await openSheet(tester, db);
+    expect(inSheet(find.textContaining('Originally')), findsOneWidget);
+    expect(tester.widget<Text>(inSheet(find.textContaining('Originally'))).data!
+        .split('XYZ').length - 1, 1);
     await closeTree(tester);
   });
 
@@ -367,9 +469,12 @@ void main() {
     expect(edit().onPressed, isNull);
     expect(delete().onPressed, isNull);
     expect(inSheet(find.text(reason)), findsOneWidget);
+    // Short in the top bar, the reason under it (#226).
+    expect(inSheet(find.text('No connection')), findsOneWidget);
 
     online.add(true);
     await tester.pumpAndSettle();
+    expect(inSheet(find.text('No connection')), findsNothing);
     expect(edit().onPressed, isNotNull);
     expect(delete().onPressed, isNotNull);
     expect(inSheet(find.text(reason)), findsNothing);
@@ -540,7 +645,9 @@ void main() {
       await openSheet(tester, db);
 
       expect(inSheet(find.text('Snacks')), findsOneWidget);
-      expect(inSheet(find.textContaining('Waiting to sync')), findsOneWidget);
+      // A short status in the top bar, what it means under it (#226).
+      expect(inSheet(find.text('Waiting to sync')), findsOneWidget);
+      expect(inSheet(find.textContaining('once it reaches the server')), findsOneWidget);
       expect(inSheet(actionButton('Edit')), findsNothing);
       await closeTree(tester);
     });
@@ -550,9 +657,15 @@ void main() {
       addTearDown(db.close);
       await openSheet(tester, db);
 
-      expect(inSheet(find.text("Couldn't sync this expense")), findsOneWidget);
+      expect(inSheet(find.text('Sync failed')), findsOneWidget);
       expect(inSheet(find.textContaining('bad request')), findsOneWidget);
-      await tester.tap(inSheet(find.text('Retry')));
+      // Its buttons named in the hint, their icons drawn in it.
+      expect(inSheet(find.byWidgetPredicate((w) => w is Icon && w.icon == Icons.refresh)),
+          findsNWidgets(2));
+      // Retry rightmost, Discard before it.
+      expect(tester.getRect(inSheet(actionButton('Retry'))).left,
+          greaterThan(tester.getRect(inSheet(actionButton('Discard'))).left));
+      await tester.tap(inSheet(actionButton('Retry')));
       await tester.pumpAndSettle();
 
       expect(find.byType(BottomSheet), findsNothing);
@@ -567,7 +680,7 @@ void main() {
       addTearDown(db.close);
       await openSheet(tester, db);
 
-      await tester.tap(inSheet(find.text('Discard')));
+      await tester.tap(inSheet(actionButton('Discard')));
       await tester.pumpAndSettle();
 
       expect(find.byType(BottomSheet), findsNothing);
@@ -580,13 +693,13 @@ void main() {
       final db = await failedDb();
       addTearDown(db.close);
       await openSheet(tester, db);
-      expect(inSheet(find.text('Discard')), findsOneWidget);
+      expect(inSheet(actionButton('Discard')), findsOneWidget);
 
       await tester.runAsync(() => db.retrySyncFailure('e1'));
       await tester.pumpAndSettle();
 
-      expect(inSheet(find.text('Discard')), findsNothing);
-      expect(inSheet(find.textContaining('Waiting to sync')), findsOneWidget);
+      expect(inSheet(actionButton('Discard')), findsNothing);
+      expect(inSheet(find.text('Waiting to sync')), findsOneWidget);
       await closeTree(tester);
     });
   });
@@ -626,7 +739,7 @@ void main() {
           client: serverClient((_) async => http.Response(notFound, 404)));
 
       expect(inSheet(find.text('This expense is no longer available.')), findsOneWidget);
-      expect(inSheet(find.text('Retry')), findsNothing);
+      expect(inSheet(actionButton('Retry')), findsNothing);
       await closeTree(tester);
     });
 
