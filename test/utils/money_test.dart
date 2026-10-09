@@ -107,22 +107,27 @@ void main() {
       expect(minorUnitsText(5, 2), '0.05');
     });
 
-    test('derives a rate in major units, whatever the two currencies\' digits', () {
-      // €6.10 paid as ¥1,000.
-      final yenToEuro = conversionRateFor(
-          amount: 610, decimalDigits: 2, originalAmount: 1000, originalDecimalDigits: 0);
-      expect(yenToEuro, closeTo(0.0061, 1e-12));
-      expect((1000 * yenToEuro * 100 / 1).round(), 610);
-
-      // ¥1,000 paid as €6.10.
-      final euroToYen = conversionRateFor(
-          amount: 1000, decimalDigits: 0, originalAmount: 610, originalDecimalDigits: 2);
-      expect((610 * euroToYen * 1 / 100).round(), 1000);
-
-      // \$10.00 paid as €9.20: both in cents, as before.
+    test('converts with each currency\'s own digits (#252)', () {
+      // ¥1,000 at 0.0061 EUR per yen is €6.10.
       expect(
-          conversionRateFor(amount: 1000, decimalDigits: 2, originalAmount: 920, originalDecimalDigits: 2),
-          closeTo(1000 / 920, 1e-12));
+          convertToGroupAmount(
+              originalAmount: 1000, rate: 0.0061, originalDecimalDigits: 0, decimalDigits: 2),
+          610);
+      // €6.10 at 163.934 yen per euro is ¥1,000.
+      expect(
+          convertToGroupAmount(
+              originalAmount: 610, rate: 163.934, originalDecimalDigits: 2, decimalDigits: 0),
+          1000);
+      // Settling €6.10 in yen at 0.0061 means transferring ¥1,000.
+      expect(
+          convertToOriginalAmount(
+              amount: 610, rate: 0.0061, decimalDigits: 2, originalDecimalDigits: 0),
+          1000);
+      // \$10.00 paid as €9.20 at 1.08696.
+      expect(
+          convertToGroupAmount(
+              originalAmount: 920, rate: 1.08696, originalDecimalDigits: 2, decimalDigits: 2),
+          1000);
     });
   });
 }

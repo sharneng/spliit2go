@@ -960,7 +960,7 @@ void main() {
     // shape a server with no "paid in" values on this expense expects
     // (no originalAmount/originalCurrency/conversionRate keys at all,
     // rather than sending explicit nulls).
-    test('sends recurrenceRule and omits original-currency fields when unset', () async {
+    test('sends recurrenceRule, and originalCurrency null when unset (#252)', () async {
       http.Request? captured;
       final client = SpliitClient(
         baseUrl: 'https://example.test',
@@ -984,7 +984,9 @@ void main() {
           (sent['0'] as Map<String, dynamic>)['json']['expenseFormValues'] as Map<String, dynamic>;
       expect(formValues['recurrenceRule'], 'WEEKLY');
       expect(formValues.containsKey('originalAmount'), isFalse);
-      expect(formValues.containsKey('originalCurrency'), isFalse);
+      // Left out, the server would keep a removed conversion's currency.
+      expect(formValues.containsKey('originalCurrency'), isTrue);
+      expect(formValues['originalCurrency'], isNull);
       expect(formValues.containsKey('conversionRate'), isFalse);
     });
 

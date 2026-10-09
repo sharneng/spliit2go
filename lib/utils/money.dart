@@ -70,18 +70,28 @@ double fromMinorUnits(int amount, int decimalDigits) =>
 String minorUnitsText(int amount, int decimalDigits) =>
     fromMinorUnits(amount, decimalDigits).toStringAsFixed(decimalDigits);
 
-/// The rate from an expense's paid-in currency to its group's, from the
-/// two stored amounts: groupAmount = originalAmount × rate, in major units
-/// (Spliit's convention, src/lib/currency-conversion.ts upstream). So
-/// `amount == round(originalAmount × rate × 10^decimalDigits /
-/// 10^originalDecimalDigits)` -- ¥1,000 paid as €6.10 is 0.0061, not 0.61.
-double conversionRateFor({
-  required int amount,
-  required int decimalDigits,
+/// What [originalAmount] (in its currency's smallest unit) comes to in
+/// the group's at [rate], 1 original unit in group units (#252):
+/// `round(originalAmount × rate × 10^decimalDigits / 10^originalDecimalDigits)`.
+/// ¥1,000 at 0.0061 is €6.10, stored as 610.
+int convertToGroupAmount({
   required int originalAmount,
+  required double rate,
+  required int originalDecimalDigits,
+  required int decimalDigits,
+}) =>
+    (fromMinorUnits(originalAmount, originalDecimalDigits) * rate * _unitsPerMajor(decimalDigits))
+        .round();
+
+/// The other way, for a settlement (#252): what to transfer in the paid-in
+/// currency to settle [amount] of the group's, at the same [rate].
+int convertToOriginalAmount({
+  required int amount,
+  required double rate,
+  required int decimalDigits,
   required int originalDecimalDigits,
 }) =>
-    fromMinorUnits(amount, decimalDigits) / fromMinorUnits(originalAmount, originalDecimalDigits);
+    (fromMinorUnits(amount, decimalDigits) / rate * _unitsPerMajor(originalDecimalDigits)).round();
 
 int _unitsPerMajor(int decimalDigits) {
   var units = 1;

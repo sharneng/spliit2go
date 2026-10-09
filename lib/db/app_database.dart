@@ -314,12 +314,50 @@ class CachedCategories extends Table {
   Set<Column> get primaryKey => {serverUrl, id};
 }
 
-@DriftDatabase(tables: [Expenses, Groups, ExpenseDocuments, ReceiptFiles, CachedCategories, ReceiptAttachments])
+/// One day of exchange rates from one source, as Frankfurter answered
+/// for that day (#252). Global: a rate depends on neither the group nor
+/// the Spliit server. See docs/decisions/currency-conversion.md.
+@DataClassName('RateDayRow')
+class RateDays extends Table {
+  /// The day asked for, yyyy-MM-dd, after clamping to today (UTC).
+  TextColumn get day => text()();
+
+  /// 'ecb' or 'averaged'.
+  TextColumn get source => text()();
+
+  /// Units of each currency per 1 EUR: {"USD":1.1279,"VND":29263,...}.
+  /// {} when Frankfurter had nothing for the day, which is kept too.
+  TextColumn get perEuroJson => text()();
+
+  /// The date most of the day's rates are from (Friday, for a Sunday).
+  TextColumn get publishedOn => text()();
+
+  /// Only the currencies whose rate is from another date:
+  /// {"SDG":"2026-10-03"}. Usually {}.
+  TextColumn get publishedOnExceptionsJson => text()();
+
+  /// When this answer was fetched. The day is final only once this is
+  /// 3 or more days after [day] (UTC); see "When a saved day is final".
+  DateTimeColumn get fetchedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {day, source};
+}
+
+@DriftDatabase(tables: [
+  Expenses,
+  Groups,
+  ExpenseDocuments,
+  ReceiptFiles,
+  CachedCategories,
+  ReceiptAttachments,
+  RateDays,
+])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -450,8 +488,42 @@ class AppDatabase extends _$AppDatabase {
               await m.renameColumn(expenses, 'is_reimbursement', expenses.isSettlement);
             }
           }
+          if (from < 19) {
+            // Exchange rates kept for offline use (#252).
+            await m.createTable(rateDays);
+          }
         },
       );
+
+  /// [day]'s saved rates from [source], if any (#252).
+  Future<RateDayRow?> rateDay(String day, String source) => (select(rateDays)
+        ..where((r) => r.day.equals(day) & r.source.equals(source)))
+      .getSingleOrNull();
+
+  /// Every saved day of rates, newest day first.
+  Future<List<RateDayRow>> allRateDays() =>
+      (select(rateDays)..orderBy([(r) => OrderingTerm.desc(r.day)])).get();
+
+  /// Saves a day of rates, replacing what was saved for it in one write.
+  Future<void> saveRateDay(RateDayRow row) => into(rateDays).insertOnConflictUpdate(row);
+
+  /// Deletes days fetched before [cutoff], except each source's newest
+  /// day, kept as the offline fallback. Returns how many were deleted.
+  Future<int> deleteRateDaysFetchedBefore(DateTime cutoff) => transaction(() async {
+        final rows = await allRateDays();
+        final newest = <String, String>{};
+        for (final r in rows) {
+          newest.putIfAbsent(r.source, () => r.day);
+        }
+        var deleted = 0;
+        for (final r in rows) {
+          if (!r.fetchedAt.isBefore(cutoff) || newest[r.source] == r.day) continue;
+          deleted += await (delete(rateDays)
+                ..where((x) => x.day.equals(r.day) & x.source.equals(r.source)))
+              .go();
+        }
+        return deleted;
+      });
 
   SimpleSelectStatement<$CachedCategoriesTable, CachedCategoryRow> _categoriesOf(
           String serverUrl) =>

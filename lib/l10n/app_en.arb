@@ -144,19 +144,6 @@
   "expenseDateLabel": "Date",
   "expenseCategoryLabel": "Category",
   "expensePaidByLabel": "Paid by",
-  "expensePaidInOtherCurrency": "Paid in a different currency",
-  "expenseGroupCurrency": "Group currency: {currency}",
-  "@expenseGroupCurrency": {
-    "placeholders": {
-      "currency": {
-        "type": "String"
-      }
-    }
-  },
-  "expenseOriginalAmountLabel": "Original amount",
-  "expenseCurrencyLabel": "Currency",
-  "expenseCurrencySelectPlaceholder": "Select",
-  "expenseCurrencyConversionUnavailable": "Conversion unavailable",
   "expenseIsSettlement": "This is a settlement",
   "expenseRepeatLabel": "Repeat",
   "expenseRepeatNone": "Does not repeat",
@@ -401,22 +388,38 @@
   "groupListSpokenFirstExpense": "First expense {date}",
   "@groupListSpokenFirstExpense": {
     "description": "A group row's date, as a screen reader says it after the group's name; the list is sorted by this date.",
-    "placeholders": {"date": {"type": "String"}}
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
   },
   "groupListSpokenLastExpense": "Last expense {date}",
   "@groupListSpokenLastExpense": {
     "description": "A group row's date, as a screen reader says it after the group's name; the list is sorted by this date.",
-    "placeholders": {"date": {"type": "String"}}
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
   },
   "groupListSpokenCreated": "Created {date}",
   "@groupListSpokenCreated": {
     "description": "A group row's date, as a screen reader says it after the group's name; the list is sorted by this date.",
-    "placeholders": {"date": {"type": "String"}}
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
   },
   "groupListSpokenOpened": "Last opened {date}",
   "@groupListSpokenOpened": {
     "description": "A group row's date, as a screen reader says it after the group's name; the list is sorted by this date.",
-    "placeholders": {"date": {"type": "String"}}
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
   },
   "groupListSpokenNoExpenses": "No expenses yet",
   "@groupListSpokenNoExpenses": {
@@ -946,5 +949,71 @@
         "type": "String"
       }
     }
-  }
+  },
+  "appSettingsExchangeRates": "Exchange rates",
+  "appSettingsExchangeRatesSaved": "Saved for offline use: rates of {date} · {count} currencies",
+  "@appSettingsExchangeRatesSaved": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "appSettingsExchangeRatesNone": "None saved",
+  "appSettingsExchangeRatesUpdate": "Update",
+  "appSettingsExchangeRatesUpdated": "Exchange rates updated.",
+  "appSettingsExchangeRatesOffline": "Couldn't reach the exchange rate service.",
+  "appSettingsExchangeRatesFailed": "Couldn't update exchange rates.",
+  "expensePaidIn": "Paid in",
+  "expenseAmountPaid": "Amount paid",
+  "expenseExchangeRate": "Exchange rate",
+  "expenseAmountToTransfer": "Amount to transfer",
+  "expenseAmountCalculated": "Calculated at this exchange rate.",
+  "expenseAmountNotYetKnown": "Not yet known",
+  "expenseRateQuote": "{from} 1 = {to} {rate}",
+  "@expenseRateQuote": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      },
+      "rate": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseRateOnDay": "{quote} — the rate on {date}.",
+  "@expenseRateOnDay": {
+    "placeholders": {
+      "quote": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseRateOffline": "Offline: rate from {date}. {quote}",
+  "@expenseRateOffline": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "quote": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseRateLoading": "Getting the exchange rate…",
+  "expenseRateTyped": "Using the rate you entered.",
+  "expenseRateSaved": "Using the rate saved with this expense.",
+  "expenseRateNone": "No published rate for this pair. Enter the rate yourself.",
+  "expenseRateUnavailable": "Couldn't reach the rates service. Enter the rate yourself.",
+  "expenseUsePublishedRate": "Use the published rate",
+  "expenseInvalidRate": "Enter a rate greater than zero"
 }

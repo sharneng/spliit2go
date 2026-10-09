@@ -1,6 +1,6 @@
 # spliit2go: currency conversion and exchange rates (issues #251, #252)
 
-Written 2026-10-09. **Status: designed, not built.** Kenneth asked for this as the last part of the UI Polished milestone: restyle the add/edit expense screen, and finish currency conversion along the way. This records the research into spliit-web and spliit-ios, and the design agreed with Kenneth: where rates come from, how they're kept on the phone, and how they can be downloaded ahead before going offline.
+Written 2026-10-09. **Status: built in #252** (form, rates, cache and downloading ahead; the restyle of the rest of the screen is separate). Kenneth asked for this as the last part of the UI Polished milestone: restyle the add/edit expense screen, and finish currency conversion along the way. This records the research into spliit-web and spliit-ios, and the design agreed with Kenneth: where rates come from, how they're kept on the phone, and how they can be downloaded ahead before going offline.
 
 Sources checked: spliit-web at b73d551 (`prisma/schema.prisma`, `src/lib/schemas.ts`, `src/lib/currency-conversion.ts`, `src/lib/hooks.ts`, `expense-form.tsx`), spliit-ios at 2e25cb4 (`ExchangeRates.swift`, `ExpenseFormDraft.swift`, `ExpenseFormView.swift`, from its #32), and the Frankfurter API, probed on 2026-10-09.
 
@@ -46,7 +46,7 @@ For example, ¥1,000 (stored as `1000`, JPY has no decimal places) at 0.006 EUR 
 
 #16 added a "Paid in other currency" checkbox with an original amount and a currency code. You typed both totals and the app worked out the rate as `amountCents / originalAmountCents`. It never looked a rate up; that was left out of scope on purpose. Researching this turned up two bugs:
 
-- **Every currency is treated as having cents** ([#251](https://github.com/sharneng/spliit2go/issues/251)). JPY, HUF, ISK, IDR, KRW, VND and COP have none, so a ¥1,000 expense from the web shows as ¥10.00, and one added here is sent 100 times too large. The rate formula above is wrong whenever the two currencies have different numbers of decimal places. Fixed in #251: `Currency.decimalDigits` comes from currency-data.json (0 for those seven, 2 otherwise and for a custom symbol), every amount is parsed, shown and stored with it, `originalAmount` uses the paid-in currency's own, and `conversionRateFor` in `lib/utils/money.dart` derives the rate in major units, following the first formula.
+- **Every currency is treated as having cents** ([#251](https://github.com/sharneng/spliit2go/issues/251)). JPY, HUF, ISK, IDR, KRW, VND and COP have none, so a ¥1,000 expense from the web shows as ¥10.00, and one added here is sent 100 times too large. The rate formula above is wrong whenever the two currencies have different numbers of decimal places. Fixed in #251: `Currency.decimalDigits` comes from currency-data.json (0 for those seven, 2 otherwise and for a custom symbol), every amount is parsed, shown and stored with it, `originalAmount` uses the paid-in currency's own, and the rate is in major units, following the first formula. Since #252 the rate is typed or looked up rather than derived, and `convertToGroupAmount`/`convertToOriginalAmount` in `lib/utils/money.dart` work out the other amount from it.
 - **Removing a conversion doesn't clear it:** `spliit_client.dart` leaves `originalCurrency` out when it's null. Fixed as part of [#252](https://github.com/sharneng/spliit2go/issues/252).
 
 ## The form (for #252)
@@ -57,6 +57,8 @@ For example, ¥1,000 (stored as `1000`, JPY has no decimal places) at 0.006 EUR 
 - **Not in the first version:** typing each share in the original currency (web's "by amount" convenience).
 
 The layout itself is part of the expense screen restyle.
+
+**As built** (`lib/screens/expense_screen.dart`): "Paid in" sits under the date, as in spliit-ios, and only in a group with an ISO currency code. The rate field is filled in on opening a conversion, picking a currency, or changing the date (by hand or from a scan), but only while it's empty or still holds the rate the form filled in; a typed rate, or the saved one when editing, stays until "Use the published rate", which is only offered when it would change something (a typed or saved rate, a failed lookup, an offline rate). Changing the paid-in currency clears the rate, since a rate belongs to its pair; going back to the group's currency keeps the calculated total as the amount. A saved rate is shown with up to 15 significant digits, so editing doesn't round it. Editing keeps the saved amounts while the currency, rate, amount paid (or, for a settlement, the amount settled) and settlement flag are as saved, since spliit-web lets its total differ slightly from the amount paid times the rate; changing any of them works the total out again. "Use the published rate" replaces only the rate it was asked to replace, not one typed while the request was on its way. The client always sends `originalCurrency` (null without a conversion), because the server keeps the old currency when the field is left out; it rejects a null amount or rate, which it ignores without a currency.
 
 ## Where rates come from
 

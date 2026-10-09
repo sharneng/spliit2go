@@ -1,4 +1,5 @@
 import 'dart:async' show unawaited;
+import 'dart:math' show ln10, log;
 
 import 'package:flutter/foundation.dart' show TargetPlatform, Uint8List, defaultTargetPlatform, visibleForTesting;
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
+import '../services/exchange_rates.dart';
 import '../models/category.dart';
 import '../models/currency.dart';
 import '../models/expense.dart';
@@ -156,8 +158,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   final _titleController = TextEditingController();
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
+  /// "Amount paid", in the paid-in currency (#252).
   final _originalAmountController = TextEditingController();
-  final _originalCurrencyController = TextEditingController();
+  final _rateController = TextEditingController();
   String? _paidBy;
   bool _saving = false;
 
@@ -214,22 +217,107 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   bool _isSettlement = false;
   bool _saveDefaultSplittingOptions = false;
   RecurrenceRule _recurrenceRule = RecurrenceRule.none;
-  bool _paidInOtherCurrency = false;
-  String? _originalCurrencyError;
+  /// The currency the expense was paid in (#252): the group's unless
+  /// another is picked, which only a group with an ISO code can do.
+  late String? _paidIn = widget.group.currencyCode;
 
-  /// Whether [widget.group] has a real ISO currency code (as opposed to
-  /// a free-typed custom symbol with no code) -- exactly the condition
-  /// the web app's expense-form.tsx uses to decide whether the
-  /// original-currency field is a picker at all, since there's no
-  /// exchange rate to convert against for a currency Spliit doesn't
-  /// recognize.
+  /// The last rate this form filled in by itself, so a rate typed over
+  /// it is never overwritten by a lookup.
+  String? _autoFilledRate;
+
+  /// The rate saved with the expense being edited: the record, never
+  /// looked up again by itself.
+  String? _savedRate;
+  double? _savedRateToShow;
+
+  _RateState _rateState = _RateState.idle;
+  ExchangeRate? _foundRate;
+
+  /// Which lookup is current: an answer to an older one is ignored.
+  int _rateLookups = 0;
+
+  /// Counts what's typed in the rate field, so "Use the published rate"
+  /// replaces only the rate it was asked to, not one typed while it was
+  /// on its way.
+  int _rateEdits = 0;
+
+  /// The edited expense's own amounts (#255 review): spliit-web lets its
+  /// total differ a little from the amount paid times the rate, so they
+  /// stay as saved until the conversion itself is changed.
+  ({int amount, int originalAmount})? _savedConversion;
+
+  /// The conversion is the edited expense's, untouched: same currency,
+  /// rate, settlement flag and the amount it was worked out from.
+  bool get _conversionUnchanged {
+    final (saved, existing) = (_savedConversion, widget.existingExpense);
+    if (saved == null || existing == null || _savedRate == null) return false;
+    return _paidIn == existing.originalCurrency &&
+        _isSettlement == existing.isSettlement &&
+        _rateController.text.trim() == _savedRate &&
+        (_isSettlement ? _typedAmount == saved.amount : _originalAmount == saved.originalAmount);
+  }
+
+  /// The calculated amount (or amount to transfer) can't be saved, e.g.
+  /// it rounds to zero.
+  String? _convertedAmountError;
+
   /// The group currency's decimal places (#251): every amount on this
   /// form is stored in its smallest unit.
   int get _digits => widget.group.decimalDigits;
 
-  /// The paid-in currency's decimal places: 2 until one is picked.
-  int get _originalDigits =>
-      currencyByCode(_originalCurrencyController.text.trim().toUpperCase()).decimalDigits;
+  /// Paid in another currency than the group's (#252): "Amount paid" and
+  /// "Exchange rate" show, and one amount is calculated from the other.
+  bool get _converting =>
+      _hasGroupCurrencyCode && _paidIn != null && _paidIn != widget.group.currencyCode;
+
+  Currency get _paidInCurrency => currencyByCode(_paidIn);
+
+  /// The paid-in currency's decimal places.
+  int get _originalDigits => _paidInCurrency.decimalDigits;
+
+  /// The paid-in currency's symbol, or its code when it has none.
+  String get _paidInSymbol =>
+      _paidInCurrency.symbol.isEmpty ? (_paidIn ?? '') : _paidInCurrency.symbol;
+
+  /// The rate typed or filled in, if it's a number above zero.
+  double? get _rate {
+    final rate = _parseDecimal(_rateController.text.trim());
+    return rate != null && rate > 0 ? rate : null;
+  }
+
+  /// The amount as typed, in the group currency's smallest unit.
+  int? get _typedAmount => switch (_parseDecimal(_amountController.text.trim())) {
+        final amount? => toMinorUnits(amount, _digits),
+        null => null,
+      };
+
+  /// "Amount paid", in the paid-in currency's smallest unit.
+  int? get _originalAmount => switch (_parseDecimal(_originalAmountController.text.trim())) {
+        final amount? => toMinorUnits(amount, _originalDigits),
+        null => null,
+      };
+
+  /// The expense's amount in the group's currency: calculated from the
+  /// amount paid during a conversion, so the rate always explains it;
+  /// typed otherwise, and for a settlement, whose amount settled is fixed.
+  int? get _amountMinor {
+    if (!_converting || _isSettlement) return _typedAmount;
+    if (_conversionUnchanged) return _savedConversion!.amount;
+    final (original, rate) = (_originalAmount, _rate);
+    if (original == null || rate == null) return null;
+    return convertToGroupAmount(
+        originalAmount: original, rate: rate, originalDecimalDigits: _originalDigits, decimalDigits: _digits);
+  }
+
+  /// A settlement in another currency (web's direction): what to transfer
+  /// in it to settle the amount.
+  int? get _transferAmount {
+    if (_conversionUnchanged) return _savedConversion!.originalAmount;
+    final (amount, rate) = (_typedAmount, _rate);
+    if (amount == null || rate == null) return null;
+    return convertToOriginalAmount(
+        amount: amount, rate: rate, decimalDigits: _digits, originalDecimalDigits: _originalDigits);
+  }
 
   /// Whether [text] is an amount of at least one smallest unit once
   /// rounded to [decimalDigits] (#254 review): 0.1 yen rounds to 0, which
@@ -289,6 +377,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   @override
   void initState() {
     super.initState();
+    // A conversion opened without a rate gets one (#252); a saved rate is
+    // the record and isn't looked up again.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _converting) unawaited(_lookUpRate());
+    });
     final existing = widget.existingExpense;
     final draft = widget.initialDraft;
     if (existing != null) {
@@ -375,7 +468,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     final filled = _scanFilled;
     if (filled == null) return;
     if (filled.title != null && _titleController.text == filled.title) _titleController.text = '';
-    if (filled.amount != null && _amountController.text == filled.amount) _amountController.text = '';
+    if (filled.amountField case final field? when field.text == filled.amount) field.text = '';
     if (filled.date case (final date, final before)? when _date == date) {
       _date = before;
       _dateChosen = false;
@@ -473,11 +566,19 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       };
     }
 
-    if (e.originalAmountCents != null && e.originalCurrency != null) {
-      _paidInOtherCurrency = true;
-      _originalAmountController.text = minorUnitsText(
-          e.originalAmountCents!, currencyByCode(e.originalCurrency).decimalDigits);
-      _originalCurrencyController.text = e.originalCurrency!;
+    // Only originalCurrency says "converted": the server keeps the old
+    // amount and rate of a conversion that was removed (#252).
+    if (e.originalCurrency != null && _hasGroupCurrencyCode) {
+      _paidIn = e.originalCurrency;
+      if (e.originalAmountCents case final original?) {
+        _originalAmountController.text = minorUnitsText(original, _originalDigits);
+        // Not for a draft: it's a new expense, worked out afresh.
+        if (identical(e, widget.existingExpense)) {
+          _savedConversion = (amount: e.amountCents, originalAmount: original);
+        }
+      }
+      // Shown in the locale's own decimals, once it's known.
+      _savedRateToShow = e.conversionRate;
     }
 
     // No pre-population needed here for a category id this device
@@ -493,7 +594,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
     _notesController.dispose();
     _originalAmountController.dispose();
-    _originalCurrencyController.dispose();
+    _rateController.dispose();
     _receipts.dispose();
     super.dispose();
   }
@@ -581,25 +682,29 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final scan = readReceipt(receiptRows(blocks), categories: _categories, today: DateTime.now());
       if (!mounted) return;
       // The form as it is now, not as it was when the scan started: the
-      // user may have typed meanwhile.
+      // user may have typed meanwhile. During a conversion the total is
+      // what was paid, in the currency it was paid in (#252).
+      final paidIn = _converting && !_isSettlement;
+      final amountField = paidIn ? _originalAmountController : _amountController;
       final fill = receiptFill(
         scan,
         ReceiptFormState(
           titleEmpty: _titleController.text.trim().isEmpty,
-          amountEmpty: _amountController.text.trim().isEmpty,
-          paidInOtherCurrency: _paidInOtherCurrency,
+          amountEmpty: amountField.text.trim().isEmpty,
           dateChosen: _dateChosen,
           categoryChosen: _categoryChosen,
-          groupCurrencyCode: widget.group.currencyCode,
-          groupCurrency: widget.group.currency,
+          currencyCode: paidIn ? _paidIn : widget.group.currencyCode,
+          currencySymbol: paidIn ? _paidInSymbol : widget.group.currency,
         ),
       );
+      final dateBefore = _date;
       setState(() {
         final filled = _ScanFilled();
         if (fill.title case final title?) _titleController.text = filled.title = title;
         if (fill.amountCents case final cents?) {
           // A receipt total is read in hundredths whatever the currency.
-          _amountController.text = filled.amount = (cents / 100).toStringAsFixed(_digits);
+          amountField.text = filled.amount = (cents / 100).toStringAsFixed(paidIn ? _originalDigits : _digits);
+          filled.amountField = amountField;
         }
         if (fill.date case final date?) {
           filled.date = (date, _date);
@@ -613,12 +718,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         }
         _scanFilled = filled;
         _scanFill = fill;
+        _convertedAmountError = null;
         _scan = scan.isEmpty
             ? _Scan.nothing
             : fill.filledAny
                 ? _Scan.filled
                 : _Scan.hintsOnly;
       });
+      // The receipt's day has its own rate (#252).
+      if (_date != dateBefore) unawaited(_lookUpRate());
     } on ReceiptTextModelMissing catch (e) {
       // Removed, or Play services' data was cleared, since the form
       // opened: the picker offers it for download again.
@@ -748,6 +856,105 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     super.didChangeDependencies();
     _decimalSeparator =
         NumberFormat.decimalPattern(Localizations.localeOf(context).toString()).symbols.DECIMAL_SEP;
+    if (_savedRateToShow case final rate?) {
+      _rateController.text = _savedRate = _rateText(rate);
+      _savedRateToShow = null;
+    }
+  }
+
+  /// [rate] as the rate field shows it: plain decimals, never an exponent,
+  /// in the locale's separator, no trailing zeros.
+  String _rateText(double rate) {
+    // 15 significant digits, all a double holds, so a saved rate shows
+    // as it was saved: 14 places after the first digit.
+    final exponent = rate <= 0 ? 0 : (log(rate) / ln10).floor();
+    var text = rate.toStringAsFixed((14 - exponent).clamp(0, 20));
+    if (text.contains('.')) {
+      text = text.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+    }
+    return text.replaceAll('.', _decimalSeparator);
+  }
+
+  /// Asks for the rate of the paid-in currency on the expense's day,
+  /// unless the field holds a rate of the user's or the saved one. The
+  /// rate is filled in only into an empty or auto-filled field, or always
+  /// for [force] ("Use the published rate").
+  Future<void> _lookUpRate({bool force = false}) async {
+    final lookup = ++_rateLookups;
+    final edits = _rateEdits;
+    final from = _paidIn, to = widget.group.currencyCode;
+    if (!_converting || from == null || to == null) {
+      setState(() => _rateState = _RateState.idle);
+      return;
+    }
+    final text = _rateController.text.trim();
+    if (!force && text.isNotEmpty && text != _autoFilledRate) return;
+    setState(() => _rateState = _RateState.loading);
+    _RateState state;
+    ExchangeRate? found;
+    try {
+      found = await ExchangeRates.of(widget.db).rate(_date, from, to, force: force);
+      state = _RateState.found;
+    } on NoPublishedRate {
+      state = _RateState.noRate;
+    } on RatesUnavailable {
+      state = _RateState.unavailable;
+    } catch (e, st) {
+      ErrorReporter.instance.report(e, st, operation: 'Looking up the $from to $to rate');
+      state = _RateState.unavailable;
+    }
+    // An answer to a question the form isn't asking any more.
+    if (!mounted || lookup != _rateLookups) return;
+    setState(() {
+      _rateState = state;
+      _foundRate = found;
+      final current = _rateController.text.trim();
+      // Anything typed since the request wins, even a rate that happens
+      // to match the one filled in before (#255 review); an empty field
+      // has nothing to lose.
+      if (found != null &&
+          (current.isEmpty || (edits == _rateEdits && (force || current == _autoFilledRate)))) {
+        _rateController.text = _autoFilledRate = _rateText(found.rate);
+        _savedRate = null;
+      }
+    });
+  }
+
+  /// Where the rate in the field comes from, under it.
+  String _rateStatus(BuildContext context) {
+    final l10n = context.l10n;
+    final text = _rateController.text.trim();
+    if (text.isNotEmpty && text != _autoFilledRate) {
+      return text == _savedRate ? l10n.expenseRateSaved : l10n.expenseRateTyped;
+    }
+    final found = _foundRate;
+    return switch (_rateState) {
+      _RateState.idle || _RateState.loading => l10n.expenseRateLoading,
+      _RateState.noRate => l10n.expenseRateNone,
+      _RateState.unavailable => l10n.expenseRateUnavailable,
+      _RateState.found when found != null => () {
+          final quote = l10n.expenseRateQuote(
+              _paidIn ?? '', widget.group.currencyCode ?? '', _rateText(found.rate));
+          final day = formatDate(found.publishedOn, locale: context.appLocale);
+          if (found.offline) return l10n.expenseRateOffline(day, quote);
+          // Rates are published on working days: a Sunday's is Friday's.
+          return dayKey(found.publishedOn) == dayKey(_date) ? quote : l10n.expenseRateOnDay(quote, day);
+        }(),
+      _RateState.found => l10n.expenseRateLoading,
+    };
+  }
+
+  /// "Use the published rate", only where it would change something: a
+  /// typed or saved rate, a lookup that failed, or an offline one.
+  bool get _canRefreshRate {
+    final text = _rateController.text.trim();
+    if (_rateState == _RateState.loading) return false;
+    if (text.isNotEmpty && text != _autoFilledRate) return true;
+    return switch (_rateState) {
+      _RateState.noRate || _RateState.unavailable => true,
+      _RateState.found => _foundRate?.offline ?? false,
+      _ => false,
+    };
   }
 
   /// The typed value for [p] in the current non-evenly split mode, or
@@ -798,8 +1005,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       return (10000 - totalBasisPoints) / 100;
     }
     if (_splitMode == SplitMode.byAmount) {
-      final amount = _parseDecimal(_amountController.text.trim());
-      if (amount == null) return null;
+      final amountMinor = _amountMinor;
+      if (amountMinor == null) return null;
+      final amount = fromMinorUnits(amountMinor, _digits);
       var total = 0.0;
       for (final p in _includedParticipants) {
         final v = _typedValue(p);
@@ -832,9 +1040,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// [_showsLivePreview] is false or the amount field isn't parseable yet.
   Map<String, int>? _livePreviewAmounts() {
     if (!_showsLivePreview) return null;
-    final amount = _parseDecimal(_amountController.text.trim());
-    if (amount == null) return null;
-    final amountCents = toMinorUnits(amount, _digits);
+    final amountCents = _amountMinor;
+    if (amountCents == null) return null;
     final paidFor = _splitMode == SplitMode.evenly
         ? _includedParticipants
             .map((p) => ExpenseShare(participantId: p.id, shares: 1))
@@ -880,7 +1087,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
 
     // byAmount
-    final amountCents = toMinorUnits(_parseDecimal(_amountController.text.trim()) ?? 0, _digits);
+    final amountCents = _amountMinor ?? 0;
     var totalCents = 0;
     for (final p in included) {
       final value = _parseDecimal(_splitControllers[p.id]!.text.trim());
@@ -964,16 +1171,25 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 validator: (v) => (v == null || v.isEmpty) ? context.l10n.commonRequired : null,
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _amountController,
-                decoration: InputDecoration(
-                    labelText: context.l10n.expenseAmountLabel,
-                    prefixText: widget.group.currency,
-                    helperText: _scanHint(_scanFill?.amountHint)),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                onChanged: (_) => setState(() {}), // amount feeds the by-amount hint below
-                validator: (v) => _isPositiveAmount(v, _digits) ? null : context.l10n.expenseInvalidAmount,
-              ),
+              if (_converting && !_isSettlement)
+                _calculatedAmount(
+                  context,
+                  label: context.l10n.expenseAmountLabel,
+                  amount: _amountMinor,
+                  symbol: widget.group.currency,
+                  decimalDigits: _digits,
+                )
+              else
+                TextFormField(
+                  controller: _amountController,
+                  decoration: InputDecoration(
+                      labelText: context.l10n.expenseAmountLabel,
+                      prefixText: widget.group.currency,
+                      helperText: _converting ? null : _scanHint(_scanFill?.amountHint)),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}), // amount feeds the by-amount hint below
+                  validator: (v) => _isPositiveAmount(v, _digits) ? null : context.l10n.expenseInvalidAmount,
+                ),
               const SizedBox(height: 12),
               InkWell(
                 onTap: _pickDate,
@@ -984,6 +1200,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 ),
               ),
               const SizedBox(height: 12),
+              // Next to the amount and its day, as in spliit-ios (#252).
+              if (_hasGroupCurrencyCode) ..._currencySection(context),
               InkWell(
                 onTap: _pickCategory,
                 child: InputDecorator(
@@ -1016,62 +1234,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 validator: (v) => v == null ? context.l10n.commonRequired : null,
               ),
               const SizedBox(height: 12),
-              CheckboxListTile(
-                value: _paidInOtherCurrency,
-                onChanged: (v) => setState(() => _paidInOtherCurrency = v ?? false),
-                title: Text(context.l10n.expensePaidInOtherCurrency),
-                subtitle: Text(context.l10n.expenseGroupCurrency(widget.group.currency)),
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-              ),
-              if (_paidInOtherCurrency) ...[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _originalAmountController,
-                        decoration:
-                            InputDecoration(labelText: context.l10n.expenseOriginalAmountLabel),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        validator: (v) {
-                          if (!_paidInOtherCurrency) return null;
-                          return _isPositiveAmount(v, _originalDigits)
-                              ? null
-                              : context.l10n.expenseInvalidAmount;
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    SizedBox(
-                      width: 160,
-                      child: _hasGroupCurrencyCode
-                          ? InkWell(
-                              onTap: _pickOriginalCurrency,
-                              child: InputDecorator(
-                                decoration: InputDecoration(
-                                  labelText: context.l10n.expenseCurrencyLabel,
-                                  errorText: _originalCurrencyError,
-                                ),
-                                child: Text(
-                                  _originalCurrencyController.text.isEmpty
-                                      ? context.l10n.expenseCurrencySelectPlaceholder
-                                      : currencyByCode(_originalCurrencyController.text).toString(),
-                                ),
-                              ),
-                            )
-                          : InputDecorator(
-                              decoration: InputDecoration(
-                                labelText: context.l10n.expenseCurrencyLabel,
-                                helperText: context.l10n.expenseCurrencyConversionUnavailable,
-                              ),
-                              child: Text(widget.group.currency),
-                            ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-              ],
               CheckboxListTile(
                 value: _isSettlement,
                 onChanged: (v) => setState(() => _isSettlement = v ?? false),
@@ -1207,6 +1369,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         _date = picked;
         _dateChosen = true;
       });
+      // The new day's rate, into a field that isn't the user's.
+      unawaited(_lookUpRate());
     }
   }
 
@@ -1228,22 +1392,117 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
   }
 
-  /// Opens the shared currency picker (issue #23) for "paid in a
-  /// different currency" -- no Custom option here, since converting
-  /// against a currency with no ISO code isn't possible (see
-  /// [_hasGroupCurrencyCode], which gates this field being shown at
-  /// all).
-  Future<void> _pickOriginalCurrency() async {
+  /// "Paid in" (#252), the shared currency picker (issue #23) without a
+  /// Custom option: a conversion needs an ISO code on both sides, so the
+  /// row only shows in a group that has one.
+  Future<void> _pickPaidIn() async {
     final picked = await pickCurrency(
       context,
       currencies: supportedCurrencies,
-      selectedCode: _originalCurrencyController.text,
+      selectedCode: _paidIn ?? '',
     );
-    if (picked == null) return;
+    if (picked == null || picked.code == _paidIn) return;
+    // Back to the group's own currency, the calculated total is kept as
+    // the amount (spliit-ios).
+    final converted = _converting && !_isSettlement ? _amountMinor : null;
     setState(() {
-      _originalCurrencyController.text = picked.code;
-      _originalCurrencyError = null;
+      _paidIn = picked.code;
+      // A rate belongs to a pair of currencies: it can't come along.
+      _rateController.text = '';
+      _autoFilledRate = _savedRate = null;
+      _foundRate = null;
+      _convertedAmountError = null;
+      if (!_converting && converted != null) {
+        _amountController.text = minorUnitsText(converted, _digits);
+      }
     });
+    unawaited(_lookUpRate());
+  }
+
+  /// "Paid in", and during a conversion "Amount paid" and "Exchange
+  /// rate" with where the rate comes from (#252, after spliit-ios). For a
+  /// settlement, web's direction: the amount settled is fixed, and
+  /// "Amount to transfer" is calculated in the paid-in currency.
+  List<Widget> _currencySection(BuildContext context) {
+    final l10n = context.l10n;
+    return [
+      InkWell(
+        onTap: _pickPaidIn,
+        child: InputDecorator(
+          decoration: InputDecoration(labelText: l10n.expensePaidIn),
+          child: Text(_paidInCurrency.toString()),
+        ),
+      ),
+      const SizedBox(height: 12),
+      if (_converting) ...[
+        if (_isSettlement)
+          _calculatedAmount(
+            context,
+            label: l10n.expenseAmountToTransfer,
+            amount: _transferAmount,
+            symbol: _paidInSymbol,
+            decimalDigits: _originalDigits,
+          )
+        else
+          TextFormField(
+            controller: _originalAmountController,
+            decoration: InputDecoration(
+                labelText: l10n.expenseAmountPaid,
+                prefixText: _paidInSymbol,
+                helperText: _scanHint(_scanFill?.amountHint)),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => setState(() => _convertedAmountError = null),
+            validator: (v) =>
+                _isPositiveAmount(v, _originalDigits) ? null : l10n.expenseInvalidAmount,
+          ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _rateController,
+          decoration: InputDecoration(
+            labelText: l10n.expenseExchangeRate,
+            helperText: _rateStatus(context),
+            helperMaxLines: 3,
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          onChanged: (_) => setState(() {
+            _rateEdits++;
+            _convertedAmountError = null;
+          }),
+          validator: (_) => _rate == null ? l10n.expenseInvalidRate : null,
+        ),
+        if (_canRefreshRate)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton(
+              onPressed: () => _lookUpRate(force: true),
+              child: Text(l10n.expenseUsePublishedRate),
+            ),
+          ),
+        const SizedBox(height: 12),
+      ],
+    ];
+  }
+
+  /// An amount the form works out rather than takes (#252): the total of
+  /// a conversion, or a settlement's amount to transfer.
+  Widget _calculatedAmount(
+    BuildContext context, {
+    required String label,
+    required int? amount,
+    required String symbol,
+    required int decimalDigits,
+  }) {
+    final l10n = context.l10n;
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: l10n.expenseAmountCalculated,
+        errorText: _convertedAmountError,
+      ),
+      child: amount == null
+          ? Text('—', semanticsLabel: l10n.expenseAmountNotYetKnown)
+          : Money(formatMoney(amount, symbol, decimalDigits: decimalDigits, locale: context.appLocale)),
+    );
   }
 
   Widget _paidForRow(Participant p) {
@@ -1342,42 +1601,31 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _hasAttemptedSave = true;
       _saveError = null;
       _saveErrorDiagnostics = null;
-      _originalCurrencyError = null;
+      _convertedAmountError = null;
     });
     // Each refusal below says why on screen; the haptic says to look.
     if (!_formKey.currentState!.validate()) return _refuse();
-    if (_paidInOtherCurrency &&
-        _hasGroupCurrencyCode &&
-        _originalCurrencyController.text.trim().isEmpty) {
-      setState(() => _originalCurrencyError = context.l10n.commonRequired);
-      return _refuse();
-    }
 
-    final amountCents = toMinorUnits(_parseDecimal(_amountController.text)!, _digits);
-    final paidFor = _buildPaidFor(amountCents);
-    if (paidFor == null) return _refuse();
-
+    // A conversion's amounts are in each currency's own smallest unit
+    // (#251), related by the rate (#252): the amount is calculated from
+    // the amount paid, or for a settlement the amount to transfer from
+    // the amount settled. Either can round to nothing.
     int? originalAmountCents;
     String? originalCurrency;
     double? conversionRate;
-    if (_paidInOtherCurrency) {
-      final originalAmount = _parseDecimal(_originalAmountController.text.trim())!;
-      // No code to send when the group's own currency has none to
-      // convert against (see _hasGroupCurrencyCode) -- the field is
-      // disabled in that case, so there's nothing the user picked.
-      final code = _originalCurrencyController.text.trim().toUpperCase();
-      originalCurrency = code.isEmpty ? null : code;
-      // In the paid-in currency's own smallest unit (#251): ¥1,000 is
-      // 1000 even in a euro group. Never 0: the validator rejects that.
-      final originalDigits = _originalDigits;
-      originalAmountCents = toMinorUnits(originalAmount, originalDigits);
-      conversionRate = conversionRateFor(
-        amount: amountCents,
-        decimalDigits: _digits,
-        originalAmount: originalAmountCents,
-        originalDecimalDigits: originalDigits,
-      );
+    if (_converting) {
+      originalCurrency = _paidIn;
+      conversionRate = _rate;
+      originalAmountCents = _isSettlement ? _transferAmount : _originalAmount;
+      if ((originalAmountCents ?? 0) <= 0 || (_amountMinor ?? 0) <= 0) {
+        setState(() => _convertedAmountError = context.l10n.expenseInvalidAmount);
+        return _refuse();
+      }
     }
+
+    final amountCents = _amountMinor!;
+    final paidFor = _buildPaidFor(amountCents);
+    if (paidFor == null) return _refuse();
 
     // A new expense keeps photos that didn't upload, and syncs with them
     // later (#124); only ones still on their way hold it back. An edit is
@@ -1576,9 +1824,15 @@ enum _Scan { idle, reading, filled, hintsOnly, nothing, failed, modelMissing }
 
 /// What a reading put in the form (#153), and for the date and category
 /// what they were before, so reading the photo again can take it back.
+/// Where the rate lookup stands (#252).
+enum _RateState { idle, loading, found, noRate, unavailable }
+
 class _ScanFilled {
   String? title;
   String? amount;
+
+  /// The field [amount] went in: the amount, or "Amount paid" (#252).
+  TextEditingController? amountField;
   (DateTime, DateTime)? date;
   (int, int)? category;
 }

@@ -166,7 +166,7 @@ class Expense {
   /// convention in major units: `amount = originalAmount * conversionRate`
   /// (see src/lib/currency-conversion.ts upstream). [originalAmountCents]
   /// is in the *original* currency's smallest unit (#251), so ¥1,000 in a
-  /// euro group is 1000 -- see `conversionRateFor`. All null together
+  /// euro group is 1000 -- see `convertToGroupAmount`. All null together
   /// when the expense was simply entered in the group's own currency.
   final int? originalAmountCents;
   final String? originalCurrency;

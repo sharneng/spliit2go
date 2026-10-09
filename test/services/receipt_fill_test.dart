@@ -8,7 +8,6 @@ void main() {
   ReceiptFormState form({
     bool titleEmpty = true,
     bool amountEmpty = true,
-    bool paidInOtherCurrency = false,
     bool dateChosen = false,
     bool categoryChosen = false,
     String? code = 'EUR',
@@ -17,11 +16,10 @@ void main() {
       ReceiptFormState(
         titleEmpty: titleEmpty,
         amountEmpty: amountEmpty,
-        paidInOtherCurrency: paidInOtherCurrency,
         dateChosen: dateChosen,
         categoryChosen: categoryChosen,
-        groupCurrencyCode: code,
-        groupCurrency: symbol,
+        currencyCode: code,
+        currencySymbol: symbol,
       );
 
   const euro = ReceiptCurrency('€', {'EUR'});
@@ -72,9 +70,12 @@ void main() {
     expect((fill.amountCents, fill.amountHint), (null, 'USD 19.62'));
   });
 
-  test('with "paid in a different currency" on, the total is only a hint', () {
-    final fill = receiptFill(scan, form(paidInOtherCurrency: true));
-    expect((fill.amountCents, fill.amountHint), (null, '15,95'));
+  test('paid in yen, a euro total is only a hint, and a yen total fills it (#252)', () {
+    const euros = ReceiptScan(total: ReceiptTotal(cents: 1595, text: '15,95', currency: euro, sure: true));
+    expect(receiptFill(euros, form(code: 'JPY', symbol: '¥')).amountCents, isNull);
+    const yen = ReceiptScan(
+        total: ReceiptTotal(cents: 100000, text: '1,000', currency: ReceiptCurrency('¥', {'JPY', 'CNY'}), sure: true));
+    expect(receiptFill(yen, form(code: 'JPY', symbol: '¥')).amountCents, 100000);
   });
 
   test('a total the parser isn\'t sure of is only a hint', () {
