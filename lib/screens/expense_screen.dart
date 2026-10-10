@@ -10,6 +10,7 @@ import '../api/spliit_client.dart';
 import '../db/app_database.dart';
 import '../services/exchange_rates.dart';
 import 'expense_form/expense_form_model.dart';
+import 'expense_form/form_text.dart';
 import '../models/category.dart';
 import '../models/currency.dart';
 import '../models/expense.dart';
@@ -832,7 +833,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     final label = _m.isSettlement ? l10n.expenseFromLabel : l10n.expensePaidByLabel;
     return GroupedSection(children: [
       GroupedRow(
-        title: Text(label),
+        title: formLabel(context, label),
         trailing: payer == null
             ? null
             : Row(mainAxisSize: MainAxisSize.min, children: [
@@ -862,9 +863,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         child: field,
       );
 
-  /// A row's value at its end: the rows' text size, dimmed, as iOS's.
-  Widget _value(BuildContext context, String value) => Text(value,
-      style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: SpliitColors.of(context).secondaryContent));
+  /// A row's value at its end: the main content, in the primary color.
+  Widget _value(BuildContext context, String value) => Text(value, style: formValueStyle(context));
 
   String _repeatLabel(RecurrenceRule rule) => switch (rule) {
         RecurrenceRule.none => context.l10n.expenseRepeatNone,
@@ -894,7 +894,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 choice: true),
         ],
         child: GroupedRow(
-          title: Text(context.l10n.expenseRepeatLabel),
+          title: formLabel(context, context.l10n.expenseRepeatLabel),
           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
             _value(context, _repeatLabel(_m.recurrenceRule)),
             const Icon(Icons.arrow_drop_down),
@@ -943,8 +943,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         // Fields sit on the cards, so they draw no box of their own.
         data: pageTheme.copyWith(
           inputDecorationTheme: InputDecorationTheme(
-            // A placeholder in the rows' dimmed color, as their values.
+            // A placeholder in the dimmed color, as the rows' labels.
             hintStyle: TextStyle(color: SpliitColors.of(context).secondaryContent),
+            // A field's label too, as the rows', until it's focused or
+            // wrong: then Material's.
+            labelStyle: WidgetStateTextStyle.resolveWith((states) =>
+                states.contains(WidgetState.error) || states.contains(WidgetState.focused)
+                    ? const TextStyle()
+                    : TextStyle(color: SpliitColors.of(context).secondaryContent)),
             border: InputBorder.none,
             enabledBorder: InputBorder.none,
             focusedBorder: InputBorder.none,
@@ -982,8 +988,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     // ExpenseFormModel.categoryToSave.
                     if (!_m.isSettlement)
                       GroupedRow(
-                        leading: CategoryIconGlyph(category: _selectedCategory, size: 24),
-                        title: Text(l10n.expenseCategoryLabel),
+                        title: formLabel(context, l10n.expenseCategoryLabel),
                         subtitle: switch (_scanHint(switch (_scanFill?.categoryHint) {
                           final id? => localizedCategoryLabel(
                               context, id, _categories.where((c) => c.id == id).firstOrNull),
@@ -992,11 +997,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                           final hint? => Text(hint),
                           null => null,
                         },
-                        trailing: _value(context, localizedCategoryLabel(context, _m.category, _knownCategory)),
+                        // The icon goes with the category it shows, as
+                        // Paid by's monogram with the payer.
+                        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                          CategoryIconGlyph(category: _selectedCategory, size: 24),
+                          const SizedBox(width: 8),
+                          Flexible(
+                              child: _value(context, localizedCategoryLabel(context, _m.category, _knownCategory))),
+                        ]),
                         onTap: _pickCategory,
                       ),
                     GroupedRow(
-                      title: Text(l10n.expenseDateLabel),
+                      title: formLabel(context, l10n.expenseDateLabel),
                       subtitle: switch (_scanHint(_scanFill?.dateHint)) {
                         final hint? => Text(hint),
                         null => null,
@@ -1014,6 +1026,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     onUsePublishedRate: _canRefreshRate ? () => _lookUpRate(force: true) : null,
                     amountHint: _scanHint(_scanFill?.amountHint),
                     calculatedKey: _calculatedKey,
+                    showErrors: _hasAttemptedSave,
                   ),
                   _paidByCard(context),
                   SplitCard(model: _m, showErrors: _hasAttemptedSave, footerKey: _paidForFooterKey),

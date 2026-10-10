@@ -163,7 +163,7 @@
   "expenseCategoryLabel": "Category",
   "expensePaidByLabel": "Paid by",
   "expenseRepeatLabel": "Repeat",
-  "expenseRepeatNone": "Does not repeat",
+  "expenseRepeatNone": "Never",
   "expenseRepeatDaily": "Daily",
   "expenseRepeatWeekly": "Weekly",
   "expenseRepeatMonthly": "Monthly",

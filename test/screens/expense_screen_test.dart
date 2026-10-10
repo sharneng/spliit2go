@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:spliit2go/widgets/segmented_pill.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
@@ -88,13 +89,13 @@ void main() {
     await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), amount);
   }
 
-  // Taps the named segment of the "Paid for" section's SegmentedButton
+  // Taps the named segment of the "Paid for" section's mode control
   // (issue #29's replacement for the old split-mode dropdown). Scoped to
   // that widget specifically, since e.g. 'Amount' is ambiguous with the
   // main Amount field's own label text.
   Future<void> selectSplitMode(WidgetTester tester, String label) async {
     final finder = find.descendant(
-      of: find.byType(SegmentedButton<SplitMode>),
+      of: find.byType(SegmentedPill<SplitMode>),
       matching: find.text(label),
     );
     await tester.ensureVisible(finder);
@@ -1309,9 +1310,8 @@ void main() {
       // Re-open the screen for a brand-new expense in the same group.
       await pumpScreen(tester, db);
 
-      final segmented =
-          tester.widget<SegmentedButton<SplitMode>>(find.byType(SegmentedButton<SplitMode>));
-      expect(segmented.selected, {SplitMode.byShares});
+      final segmented = tester.widget<SegmentedPill<SplitMode>>(find.byType(SegmentedPill<SplitMode>));
+      expect(segmented.selected, SplitMode.byShares);
       final reopenedFields = find.byType(TextFormField);
       expect(tester.widget<TextFormField>(reopenedFields.at(2)).controller!.text, '2');
       expect(tester.widget<TextFormField>(reopenedFields.at(3)).controller!.text, '1');

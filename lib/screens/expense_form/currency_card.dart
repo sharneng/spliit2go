@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/context_l10n.dart';
 import '../../models/currency.dart';
-import '../../theme.dart';
 import '../../utils/money.dart';
 import '../../widgets/grouped_section.dart';
 import '../../widgets/money.dart';
+import '../../theme.dart';
 import 'expense_form_model.dart';
+import 'form_text.dart';
 
 /// The currency and the amount (#261), in the order of a conversion: Paid
 /// in, the amount typed in it, the rate as one number with the more
@@ -25,6 +26,7 @@ class CurrencyCard extends StatelessWidget {
     required this.onUsePublishedRate,
     this.amountHint,
     this.calculatedKey,
+    this.showErrors = false,
   });
 
   final ExpenseFormModel model;
@@ -42,6 +44,9 @@ class CurrencyCard extends StatelessWidget {
 
   /// On the worked-out amount, for a refused save to scroll to.
   final Key? calculatedKey;
+
+  /// Once a save has been tried: the amount's error, under its row.
+  final bool showErrors;
 
   ExpenseFormModel get _m => model;
 
@@ -76,8 +81,8 @@ class CurrencyCard extends StatelessWidget {
               // Only an ISO code converts.
               if (_m.hasGroupCurrencyCode)
                 GroupedRow(
-                  title: Text(l10n.expensePaidIn),
-                  trailing: Text(_m.paidInCurrency.name, style: _valueStyle(context)),
+                  title: formLabel(context, l10n.expensePaidIn),
+                  trailing: Text(_m.paidInCurrency.name, style: formValueStyle(context)),
                   navigates: true,
                   onTap: onPickPaidIn,
                 ),
@@ -112,9 +117,6 @@ class CurrencyCard extends StatelessWidget {
     );
   }
 
-  TextStyle? _valueStyle(BuildContext context) =>
-      Theme.of(context).textTheme.bodyLarge?.copyWith(color: SpliitColors.of(context).secondaryContent);
-
   /// A label, and the field it names at the row's end.
   Widget _fieldRow(BuildContext context, Widget label, Widget field) => ConstrainedBox(
         constraints: const BoxConstraints(minHeight: GroupedRow.oneLineMinHeight),
@@ -128,18 +130,66 @@ class CurrencyCard extends StatelessWidget {
         ),
       );
 
+  /// The amount, its currency symbol right before the digits (Kenneth,
+  /// 2026-10-10): always there, rather than Material's prefix, which
+  /// shows only once the field has the focus, and at its start edge, far
+  /// from the right-aligned digits. Grey with the "0" hint until typed.
   Widget _amountRow(BuildContext context, TextEditingController controller, String symbol, int digits) {
     final l10n = context.l10n;
-    return _fieldRow(
-      context,
-      Text(l10n.expenseAmountLabel),
-      TextFormField(
-        key: amountFieldKey,
-        controller: controller,
-        textAlign: TextAlign.end,
-        decoration: InputDecoration(prefixText: '$symbol ', hintText: '$symbol 0'),
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        validator: (v) => _m.isPositiveAmount(v, digits) ? null : l10n.expenseInvalidAmount,
+    final focus = _m.amountFocus;
+    // The row is the form's field (a refused save scrolls to it), and
+    // says what's wrong under it, rather than under the text field, which
+    // is only as wide as its digits.
+    return FormField<void>(
+      validator: (_) => _m.isPositiveAmount(controller.text, digits) ? null : l10n.expenseInvalidAmount,
+      builder: (_) => ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          _amountField(context, controller, symbol, digits, focus),
+          if (showErrors && !_m.isPositiveAmount(controller.text, digits))
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(l10n.expenseInvalidAmount,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error)),
+            ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _amountField(
+      BuildContext context, TextEditingController controller, String symbol, int digits, FocusNode focus) {
+    final l10n = context.l10n;
+    return GestureDetector(
+      // The whole row is the field's: its text is only as wide as typed.
+      behavior: HitTestBehavior.opaque,
+      onTap: focus.requestFocus,
+      child: _fieldRow(
+        context,
+        formLabel(context, l10n.expenseAmountLabel),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text('$symbol ',
+                style: controller.text.isEmpty
+                    ? TextStyle(color: SpliitColors.of(context).secondaryContent)
+                    : formValueStyle(context)),
+            Flexible(
+              child: IntrinsicWidth(
+                child: TextFormField(
+                  key: amountFieldKey,
+                  controller: controller,
+                  focusNode: focus,
+                  textAlign: TextAlign.end,
+                  decoration: const InputDecoration(hintText: '0', isDense: true),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -181,9 +231,9 @@ class CurrencyCard extends StatelessWidget {
   Widget _workedOut(BuildContext context, String label, int? amount, String symbol, int digits) => KeyedSubtree(
         key: calculatedKey,
         child: GroupedRow(
-          title: Text(label),
+          title: formLabel(context, label),
           trailing: amount == null
-              ? Text('—', semanticsLabel: context.l10n.expenseAmountNotYetKnown, style: _valueStyle(context))
+              ? Text('—', semanticsLabel: context.l10n.expenseAmountNotYetKnown, style: formValueStyle(context))
               : Money(formatMoney(amount, symbol, decimalDigits: digits, locale: context.appLocale)),
         ),
       );

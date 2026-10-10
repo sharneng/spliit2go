@@ -12,7 +12,11 @@ import 'package:spliit2go/screens/expense_form/currency_card.dart';
 import 'package:spliit2go/screens/expense_form/split_card.dart';
 import 'package:spliit2go/screens/expense_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
+import 'package:spliit2go/screens/expense_form/form_text.dart';
+import 'package:spliit2go/theme.dart';
+import 'package:spliit2go/widgets/category_icon.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
+import 'package:spliit2go/widgets/segmented_pill.dart';
 
 import '../../support/haptics.dart';
 
@@ -270,6 +274,78 @@ void main() {
     testWidgets('Paid by', (tester) => check(tester, 'Paid by', () => tester.tap(find.text('Bea').last)));
     testWidgets('Repeat', (tester) => check(tester, 'Repeat', () => tester.tap(find.text('Weekly').last)));
     testWidgets('Date', (tester) => check(tester, 'Date', () => tester.tap(find.text('OK'))));
+  });
+
+  group('rows: a dimmed label, the value in the primary color (#274)', () {
+    // Not the split mode's "Amount".
+    Finder amountLabel() => find.descendant(of: find.byType(CurrencyCard), matching: find.text('Amount'));
+
+    testWidgets('labels are dimmed; values and the category icon are at the end', (tester) async {
+      await open(tester);
+      final context = tester.element(find.byType(ExpenseScreen));
+      final dimmed = SpliitColors.of(context).secondaryContent;
+      for (final label in ['Category', 'Date', 'Repeat', 'Paid by']) {
+        expect(tester.widget<Text>(find.text(label)).style?.color, dimmed, reason: label);
+      }
+      expect(tester.widget<Text>(amountLabel()).style?.color, dimmed);
+      expect(tester.widget<Text>(find.text('Never')).style, formValueStyle(context));
+      final category = find.widgetWithText(GroupedRow, 'Category');
+      expect(tester.widget<GroupedRow>(category).leading, isNull);
+      expect(tester.getCenter(find.descendant(of: category, matching: find.byType(CategoryIconGlyph))).dx,
+          greaterThan(tester.getCenter(find.text('Category')).dx));
+    });
+
+    testWidgets('the currency symbol is always right before the amount, and its error under the row',
+        (tester) async {
+      await open(tester);
+      final amount = find.byKey(CurrencyCard.amountFieldKey);
+      final symbol = find.text('\$ ');
+      expect(symbol, findsOneWidget);
+      double gap() => tester.getTopLeft(amount).dx - tester.getTopRight(symbol).dx;
+      expect(gap(), lessThan(1));
+
+      await tester.tap(find.byTooltip('Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('Enter a valid amount'), findsOneWidget);
+      // Under the row, starting where its label does.
+      expect(tester.getTopLeft(find.text('Enter a valid amount')).dx, tester.getTopLeft(amountLabel()).dx);
+
+      // A tap on the label puts the cursor in the field.
+      await tester.tap(amountLabel());
+      await tester.pump();
+      expect(tester.widget<EditableText>(find.descendant(of: amount, matching: find.byType(EditableText))).focusNode.hasFocus,
+          isTrue);
+      await tester.enterText(amount, '12');
+      await tester.pumpAndSettle();
+      expect(find.text('Enter a valid amount'), findsNothing);
+      expect(symbol, findsOneWidget);
+      expect(gap(), lessThan(1));
+    });
+
+    testWidgets('Select none doesn\'t make the Paid for caption taller than the others', (tester) async {
+      await open(tester);
+      final caption = find.widgetWithText(GroupedCaption, 'Paid for');
+      final withLink = tester.getSize(caption).height;
+      await tester.ensureVisible(find.text('Shares'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Shares'));
+      await tester.pumpAndSettle();
+      expect(find.text('Select none'), findsNothing);
+      expect(tester.getSize(caption).height, closeTo(withLink, 4));
+    });
+
+    testWidgets('the split mode is a pill with the chosen mode selected', (tester) async {
+      await open(tester);
+      final pill = find.byType(SegmentedPill<SplitMode>);
+      expect(tester.widget<SegmentedPill<SplitMode>>(pill).selected, SplitMode.evenly);
+      await tester.ensureVisible(pill);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Percent'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<SegmentedPill<SplitMode>>(pill).selected, SplitMode.byPercentage);
+      expect(tester.getSemantics(find.text('Percent')), matchesSemantics(isButton: true, isSelected: true,
+          hasSelectedState: true, isInMutuallyExclusiveGroup: true, hasTapAction: false, label: 'Percent'));
+    });
   });
 
   testWidgets('Notes come last, 12 lines before they scroll (#268)', (tester) async {
