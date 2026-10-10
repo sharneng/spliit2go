@@ -181,7 +181,10 @@ class ExpenseFormModel extends ChangeNotifier {
         notesController.text,
         if (converting) ...[originalAmountController.text, rateIsOwn ? rateController.text : null],
         _paidIn,
-        for (final p in group.participants) ...[splitControllers[p.id]!.text, _included[p.id]],
+        // Only what the mode uses: Evenly's checks, or the others' values.
+        // Switching away and back leaves the hidden ones filled in (#266).
+        for (final p in group.participants)
+          _splitMode == SplitMode.evenly ? _included[p.id] : splitControllers[p.id]!.text,
         _paidBy,
         _date,
         _category,

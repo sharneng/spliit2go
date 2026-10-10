@@ -428,6 +428,20 @@ void main() {
       expect(values(m), ['', '', '1']);
     });
 
+    test('there and back is no change; a value typed on the way still is (#266)', () {
+      final m = model(euros)..amountController.text = '10';
+      m.markUnchanged();
+      m.splitMode = SplitMode.byShares;
+      expect(m.hasChanges, isTrue);
+      m.splitMode = SplitMode.evenly;
+      expect(m.hasChanges, isFalse);
+
+      m.splitMode = SplitMode.byShares;
+      m.splitControllers['cy']!.text = '';
+      m.splitMode = SplitMode.evenly;
+      expect(m.hasChanges, isTrue, reason: 'cy is no longer included');
+    });
+
     test('tells listeners once', () {
       final m = model(euros)..amountController.text = '10';
       var notified = 0;
