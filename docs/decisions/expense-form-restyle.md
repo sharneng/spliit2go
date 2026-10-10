@@ -186,10 +186,37 @@ Expense, converted:  Amount (typed) = originalAmount ──convert──▶ amou
 - **Typed amounts are in the paid-in currency:** a settlement's "To" amounts, and an expense's per-person amounts when split by amount. Not converting, the paid-in currency is the group's, and nothing changes from today.
 - **`amount = round(originalAmount × rate × 10^groupDigits / 10^originalDigits)`**, as in [currency-conversion.md](currency-conversion.md).
 - **Shares are stored in the group currency's minor units,** as Spliit stores them, and must add up to `amount` exactly. Converting each person on their own and rounding could miss by a cent. So the converted `amount` is shared out in proportion to the typed amounts, with the largest-remainder rounding already in `lib/services/expense_shares.dart`. One function, used for both the settlement and the expense.
-- **Opening an existing one** shows each person's amount in the paid-in currency: `originalAmount` shared out in proportion to the stored shares, with the same rounding, so they add up to `originalAmount` exactly.
-- **"Mark as paid" from Balances** prefills From, one To, and the balance as that recipient's amount (Kenneth, 2026-10-09). Paid in the group's currency, the amount is exactly the balance. Choosing another currency converts the prefilled amount once (balance ÷ rate, rounded to that currency), so it still settles the balance. After that it's an ordinary typed amount.
+- **Opening an existing one** shows each person's amount in the paid-in currency: `originalAmount` shared out in proportion to the stored shares, with the same rounding, so they add up to `originalAmount` exactly. That's for display only: what's saved is decided by the rule below.
+
+### What's saved stays saved until its inputs change
+
+Ezra's review of #257: converting into the paid-in currency for display and back again for saving doesn't always give back what was there, because each way rounds. A title-only edit, or a "Mark as paid" nobody typed into, mustn't move money. So, extending #255's rule (an edited conversion keeps its saved amounts while the currency, rate, amount paid and settlement flag are as saved):
+
+- **A value worked out from others is saved as it already stands while none of the inputs it comes from has changed.** "Changed" means the field reads differently from when the form opened. Typing a value and back doesn't count, as in #255.
+
+  | Saved value | Kept while these read as they did when the form opened |
+  |---|---|
+  | `amount`, `originalAmount` | Paid in, the rate, the typed Amount or the "To" amounts, the settlement switch |
+  | Each person's share | The above, plus the split mode, who's included, and each person's value |
+  | `conversionRate` | Paid in, the rate field, and its swap. The rate is shown as a rounded inverse, so it's only worked out from the field once the field is changed |
+
+  Title, category, date, repeat, Paid by / From, notes and receipts are inputs to none of them.
+- **Once one of the inputs changes,** everything that depends on it is worked out afresh from what's on screen, as described above. That includes the rows nobody touched: their shares can shift by a minor unit, which is the rounding of the amounts that are now there.
+- **"Mark as paid" settles the balance exactly.** The balance is what's being settled, so it's kept as the group-currency `amount` and the recipient's share. Paid in the group's currency, the "To" amount is the balance. Paid in another currency, the "To" amount is filled in with the balance converted into that currency (balance ÷ rate, rounded), and changing the currency or the rate fills it in again, while `amount` stays the balance. Once you type a "To" amount or add a recipient, the forward conversion takes over. The saved `originalAmount × rate` can then differ from `amount` by the rounding, which Spliit already allows (#255).
 
   This replaces #252's reversed settlement direction, where the group-currency amount was fixed and the amount to transfer was worked out from it.
+
+**Acceptance cases** (Ezra's examples), as model tests in step 1 or wherever the behaviour lands:
+
+1. **Mark as paid, converted.** JPY group, Bob owes Alice ¥1,000, paid in EUR at `EUR/JPY = 176.84`.
+   - Prefilled: To Alice €5.65.
+   - Saved untouched: `amount` 1000, Alice's share 1000, `originalAmount` 565. Forward conversion would give ¥999 and leave ¥1 owed.
+   - Typing €5.66 instead: `amount` = round(566 × 176.84 / 100) = 1001.
+2. **Unequal shares that look equal.** JPY expense, `amount` 1001, `originalAmount` 566 (EUR cents), rate 176.84, split by amount with stored shares [500, 501].
+   - Opening it shows [€2.83, €2.83].
+   - A title-only edit saves [500, 501] unchanged. Forward allocation would make it a tie and could swap who owes the extra yen.
+   - Changing either amount re-allocates both.
+3. **A rate from the web.** Stored `conversionRate` 0.00565 shows as `EUR/JPY = 176.991`. Saving with the rate field untouched sends 0.00565, not 1 / 176.991.
 
 ## The exchange rate, as one number
 
@@ -204,7 +231,7 @@ Kenneth, 2026-10-09: `JPY 1 = EUR 0.0056547` doesn't read naturally. A rate read
 - **The order comes from a currency ranking.** A list of every currency by value (euros per unit) ships with the app, built once from a Frankfurter table. Whenever a new rate table is saved, the ranking is redone from it, so it stays right as currencies move. The ranking is used even when no rate for the pair is known, offline with nothing saved.
 - **Tap `EUR/JPY` to swap** to `JPY/EUR = 0.0056548`. The number flips with it (1 ÷ the number, 6 significant figures). The swap is remembered on this device for that pair, in both directions, and it wins over the ranking from then on.
 - **One rate field, and the footer is only for reference.** The field is the rate that's used, in the order shown. It's filled in with the published rate, and you can overwrite it with any value. The footer shows the published rate for the date in the same order, and says when the field differs from it, with "Use the published rate" to put it back.
-- **What's stored doesn't change:** `conversionRate` is still 1 paid-in unit in group units, so `1 / 176.84` here, or the number itself when the paid-in currency comes first. The shown number is rounded to 6 significant figures when it's filled in. Saving and the amounts use the rate worked out from that same number, so what's shown, saved and calculated agree. This replaces #252's rounding of the stored rate to 6 significant figures.
+- **What's stored doesn't change:** `conversionRate` is still 1 paid-in unit in group units, so `1 / 176.84` here, or the number itself when the paid-in currency comes first. The shown number is rounded to 6 significant figures when it's filled in. Saving and the amounts use the rate worked out from that same number, so what's shown, saved and calculated agree. A saved rate is the exception: it's sent back as stored until the field is changed (see [What's saved stays saved](#whats-saved-stays-saved-until-its-inputs-change)). This replaces #252's rounding of the stored rate to 6 significant figures.
 - **The server can hold it:** `conversionRate` is `DECIMAL(65,30)` in PostgreSQL (Prisma `Decimal?`), 30 digits after the point. It reaches the server through a JavaScript number, so a write keeps about 15 significant digits. `1 / 176.84` = `0.00565483…` fits easily, and reading it back shows `176.84` again.
 - **An expense saved with a rate from the web** (for example `0.00565`) shows as `EUR/JPY = 176.991`.
 
@@ -240,7 +267,8 @@ Kenneth, 2026-10-09: don't make everyone pay for accessibility. The split contro
 | 2026-10-09 | A settlement's category is hidden. A settlement created here is saved with Payment. Editing never changes the category, whether it was already a settlement or is switched to one |
 | 2026-10-09 | Settlements can have several recipients, amounts only |
 | 2026-10-09 | A settlement's amount is the sum of its "To" amounts, converted to the group's currency. A converted expense split by amount takes per-person amounts in the paid-in currency too |
-| 2026-10-09 | "Mark as paid" in another currency converts the prefilled balance once, then works like any typed amount |
+| 2026-10-09 | "Mark as paid" in another currency keeps the balance as the amount until a "To" amount is typed, then works like any typed amount (Ezra's review) |
+| 2026-10-09 | Saved amounts, shares and rate stay as saved until an input they come from changes (extends #255; Ezra's review) |
 | 2026-10-09 | Checkboxes only in Evenly. In other modes, and in "To", empty or 0 means not included |
 | 2026-10-09 | The exchange rate is one number, the more valuable currency first: `EUR/JPY = 176.84`. The order comes from a bundled currency ranking, redone from each new rate table. Tap the pair to swap, remembered per pair |
 | 2026-10-09 | One rate field, prefilled from the published rate and freely editable. The footer shows the published rate for reference. |
