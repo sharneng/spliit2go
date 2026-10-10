@@ -569,7 +569,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Edit expense'), findsOneWidget);
 
-    final save = find.widgetWithText(FilledButton, 'Save');
+    final save = find.byTooltip('Save');
     await tester.ensureVisible(save);
     await tester.tap(save);
     await tester.pumpAndSettle();
@@ -610,7 +610,7 @@ void main() {
     await tester.tap(inSheet(actionButton('Edit')));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Dinner by the lake');
-    final save = find.widgetWithText(FilledButton, 'Save');
+    final save = find.byTooltip('Save');
     await tester.ensureVisible(save);
     await tester.tap(save);
     await tester.pumpAndSettle();

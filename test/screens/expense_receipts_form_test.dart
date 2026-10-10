@@ -170,7 +170,7 @@ void main() {
       await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Coffee');
       await tester.enterText(find.widgetWithText(TextFormField, 'Amount'), '18.60');
     }
-    final save = find.widgetWithText(FilledButton, 'Save');
+    final save = find.byTooltip('Save');
     await tester.ensureVisible(save);
     await tester.tap(save);
     await tester.pumpAndSettle();
@@ -395,14 +395,15 @@ void main() {
     final popped = await openForm(tester, db, server().client, _FakePicker());
     await addReceipt(tester);
 
-    await tester.pageBack();
+    await tester.tap(find.byType(CloseButton));
     await tester.pumpAndSettle();
-    expect(find.text('Discard new receipts?'), findsOneWidget);
+    expect(find.text('Discard changes?'), findsOneWidget);
+    expect(find.text("The receipts you added haven't been saved with this expense."), findsOneWidget);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(find.byType(ExpenseScreen), findsOneWidget);
 
-    await tester.pageBack();
+    await tester.tap(find.byType(CloseButton));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Discard'));
     await tester.pumpAndSettle();
@@ -416,7 +417,7 @@ void main() {
     addTearDown(db.close);
     await openForm(tester, db, server().client, _FakePicker());
 
-    await tester.pageBack();
+    await tester.tap(find.byType(CloseButton));
     await tester.pumpAndSettle();
     expect(find.byType(ExpenseScreen), findsNothing);
     await closeTree(tester);

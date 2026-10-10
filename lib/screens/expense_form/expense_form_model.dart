@@ -39,6 +39,7 @@ class ExpenseFormModel extends ChangeNotifier {
     for (final c in [amountController, originalAmountController, rateController]) {
       c.addListener(_amountsChanged);
     }
+    markUnchanged();
   }
 
   final Group group;
@@ -114,6 +115,45 @@ class ExpenseFormModel extends ChangeNotifier {
   SplitMode get splitMode => _splitMode;
   set splitMode(SplitMode value) => _set(() => _splitMode = value);
 
+  /// The category saved (#259): a settlement made here is a Payment,
+  /// whatever was picked before it was switched to one. An edit keeps its
+  /// category, hidden for a settlement, so switching there and back costs
+  /// nothing.
+  int get categoryToSave => existing == null && isSettlement ? paymentCategoryId : category;
+
+  /// Spliit's "Payment" category.
+  static const paymentCategoryId = 1;
+
+  // ---------------------------------------------------------------------
+  // Changes, for "Discard changes?" (#259).
+
+  List<Object?>? _unchanged;
+
+  /// What the user can change, as it stands. A rate filled in from the
+  /// published ones isn't the user's, so only a rate of their own counts.
+  List<Object?> _state() => [
+        titleController.text,
+        amountController.text,
+        notesController.text,
+        if (converting) ...[originalAmountController.text, rateIsOwn ? rateController.text : null],
+        _paidIn,
+        for (final p in group.participants) ...[splitControllers[p.id]!.text, _included[p.id]],
+        _paidBy,
+        _date,
+        _category,
+        _isSettlement,
+        _saveDefaultSplit,
+        _recurrenceRule,
+        _splitMode,
+      ];
+
+  /// Takes the form as it is now as where it started: once it's filled
+  /// in, and shows an edit's saved rate.
+  void markUnchanged() => _unchanged = _state();
+
+  /// Whether anything differs from where the form started.
+  bool get hasChanges => _unchanged != null && !listEquals(_unchanged, _state());
+
   /// The calculated amount (or amount to transfer) can't be saved, e.g.
   /// it rounds to zero. Set by [amountsToSave], cleared once an amount,
   /// the rate or the currency changes.
@@ -140,7 +180,9 @@ class ExpenseFormModel extends ChangeNotifier {
     _decimalSeparator = separator;
     if (_savedRateToShow case final rate?) {
       _savedRateToShow = null;
+      final unchanged = !hasChanges;
       rateController.text = _savedRate = rateText(rate);
+      if (unchanged) markUnchanged();
     }
   }
 
@@ -339,6 +381,9 @@ class ExpenseFormModel extends ChangeNotifier {
   /// to the group's current participants.
   void applyDefaultSplit(DefaultSplit split) {
     if (!split.appliesTo(group.participants)) return;
+    // It arrives after the form opens: what it fills in is where the
+    // form starts, not a change of the user's.
+    final unchanged = !hasChanges;
     _splitMode = split.splitMode;
     if (split.shares case final shares?) {
       for (final p in group.participants) {
@@ -353,6 +398,7 @@ class ExpenseFormModel extends ChangeNotifier {
         };
       }
     }
+    if (unchanged) markUnchanged();
     notifyListeners();
   }
 

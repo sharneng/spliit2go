@@ -12,6 +12,7 @@ import '../services/error_reporting.dart';
 import '../services/receipt_cache.dart';
 import '../services/receipt_photo.dart';
 import 'error_message.dart';
+import 'grouped_section.dart';
 import 'receipts.dart';
 
 enum ReceiptUpload { uploading, uploaded, failed }
@@ -186,12 +187,12 @@ class ReceiptAttachmentsController extends ChangeNotifier {
   }
 }
 
-/// The form's Receipts field (#123): thumbnails with Remove, Retry on the
-/// ones that didn't upload, and Add receipt. Tapping one opens them all
-/// full screen at that one (#148), existing receipts and photos added
-/// here alike, uploaded or not.
-class ReceiptAttachmentsField extends StatelessWidget {
-  const ReceiptAttachmentsField(
+/// The form's Receipts card (#123, #259): thumbnails with Remove, Retry on
+/// the ones that didn't upload, and Add receipt. Tapping one opens them
+/// all full screen at that one (#148), existing receipts and photos added
+/// here alike, uploaded or not. A failed upload says so under the card.
+class ReceiptsCard extends StatelessWidget {
+  const ReceiptsCard(
       {super.key, required this.controller, required this.onAdd, this.keepsUnsent = false});
 
   final ReceiptAttachmentsController controller;
@@ -206,7 +207,6 @@ class ReceiptAttachmentsField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final theme = Theme.of(context);
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
@@ -221,38 +221,47 @@ class ReceiptAttachmentsField extends StatelessWidget {
             .map((a) => a.error)
             .firstOrNull;
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.fromLTRB(
+              GroupedSection.inset, 0, GroupedSection.inset, GroupedSection.spacing),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(l10n.expenseReceiptsHeading, style: theme.textTheme.titleSmall),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              GroupedSection(
+                caption: l10n.expenseReceiptsHeading,
+                margin: EdgeInsets.zero,
                 children: [
-                  for (final (i, d) in controller.kept.indexed)
-                    _RemovableTile(
-                      key: ValueKey(d.url),
-                      onRemove: () => controller.removeExisting(d),
-                      onTap: () => open(i),
-                      child: ReceiptImage(cache: controller.cache, groupId: controller.groupId, url: d.url),
+                  Padding(
+                    padding: const EdgeInsets.all(GroupedSection.inset),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final (i, d) in controller.kept.indexed)
+                          _RemovableTile(
+                            key: ValueKey(d.url),
+                            onRemove: () => controller.removeExisting(d),
+                            onTap: () => open(i),
+                            child: ReceiptImage(
+                                cache: controller.cache, groupId: controller.groupId, url: d.url),
+                          ),
+                        for (final (i, a) in controller.added.indexed)
+                          _RemovableTile(
+                            key: ObjectKey(a),
+                            onRemove: () => controller.remove(a),
+                            onRetry: a.state == ReceiptUpload.failed ? () => controller.retry(a) : null,
+                            onTap: () => open(controller.kept.length + i),
+                            child: _AddedPhoto(a),
+                          ),
+                        for (var i = 0; i < controller.preparing; i++)
+                          const _RemovableTile(child: _Spinner()),
+                        _AddTile(onAdd: onAdd),
+                      ],
                     ),
-                  for (final (i, a) in controller.added.indexed)
-                    _RemovableTile(
-                      key: ObjectKey(a),
-                      onRemove: () => controller.remove(a),
-                      onRetry: a.state == ReceiptUpload.failed ? () => controller.retry(a) : null,
-                      onTap: () => open(controller.kept.length + i),
-                      child: _AddedPhoto(a),
-                    ),
-                  for (var i = 0; i < controller.preparing; i++)
-                    const _RemovableTile(child: _Spinner()),
-                  _AddTile(onAdd: onAdd),
+                  ),
                 ],
               ),
               if (failure != null) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 ErrorMessage(
                   switch ((failure.kind == ErrorKind.connection, keepsUnsent)) {
                     (true, true) => l10n.expenseReceiptNotUploadedConnection,
