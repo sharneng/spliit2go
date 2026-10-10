@@ -13,6 +13,8 @@ import 'expense_form_model.dart';
 /// valuable currency first (EUR/JPY = 176.84; a tap on the pair swaps
 /// it), and what that comes to in the group's currency, worked out. Where
 /// the rate comes from goes under the card, with "Use the published rate".
+/// A settlement's amount is on its To card (#262): here, only the currency
+/// and the rate.
 class CurrencyCard extends StatelessWidget {
   const CurrencyCard({
     super.key,
@@ -55,11 +57,14 @@ class CurrencyCard extends StatelessWidget {
     final secondary = theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant);
     final footer = [
       if (amountHint case final hint?) Text(hint, style: secondary),
-      if (_m.convertedAmountInvalid)
+      // A settlement's says so on its To card.
+      if (_m.convertedAmountInvalid && !_m.isSettlement)
         Text(l10n.expenseConvertedAmountInvalid,
             style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
       if (converting && rateStatus != null) Text(rateStatus!, style: secondary),
     ];
+    // A settlement in a group without a currency code has nothing here.
+    if (_m.isSettlement && !_m.hasGroupCurrencyCode) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(GroupedSection.inset, 0, GroupedSection.inset, GroupedSection.spacing),
       child: Column(
@@ -76,18 +81,17 @@ class CurrencyCard extends StatelessWidget {
                   navigates: true,
                   onTap: onPickPaidIn,
                 ),
-              // A settlement's amount is the group's until #262; an
-              // expense's is what was paid, in the currency it was paid in.
-              if (converting && !_m.isSettlement)
-                _amountRow(context, _m.originalAmountController, _m.paidInSymbol, _m.originalDigits)
-              else
-                _amountRow(context, _m.amountController, _m.group.currency, _m.digits),
+              // An expense's amount is what was paid, in the currency it
+              // was paid in. A settlement's is its To amounts' sum (#262),
+              // on the To card.
+              if (!_m.isSettlement)
+                if (converting)
+                  _amountRow(context, _m.originalAmountController, _m.paidInSymbol, _m.originalDigits)
+                else
+                  _amountRow(context, _m.amountController, _m.group.currency, _m.digits),
               if (converting) ...[
                 _rateRow(context),
-                if (_m.isSettlement)
-                  _workedOut(context, l10n.expenseAmountToTransfer, _m.transferAmount, _m.paidInSymbol,
-                      _m.originalDigits)
-                else
+                if (!_m.isSettlement)
                   _workedOut(context, l10n.expenseInCurrency(currencyByCode(_m.group.currencyCode).name),
                       _m.amount, _m.group.currency, _m.digits),
               ],

@@ -972,7 +972,6 @@
   "appSettingsExchangeRatesFailed": "Couldn't update exchange rates.",
   "expensePaidIn": "Paid in",
   "expenseExchangeRate": "Exchange rate",
-  "expenseAmountToTransfer": "Amount to transfer",
   "expenseAmountNotYetKnown": "Not yet known",
   "expenseRateLoading": "Getting the exchange rate…",
   "expenseRateTyped": "Using the rate you entered.",
@@ -1018,5 +1017,45 @@
   },
   "expenseSwapRate": "Swap the currencies",
   "expenseConvertedAmountInvalid": "The amount in the group's currency rounds to nothing. Change the amount or the rate.",
+  "expenseFromLabel": "From",
+  "expenseToHeading": "To",
+  "expenseSettlementTotal": "Total",
+  "expenseSettlementDefaultTitle": "Settlement",
+  "expenseSettlementSentence": "{from} paid {recipients}.",
+  "@expenseSettlementSentence": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "recipients": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseSettlementRecipient": "{name} {amount}",
+  "@expenseSettlementRecipient": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseListTwo": "{first} and {second}",
+  "@expenseListTwo": {
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseListSeparator": ", ",
+  "expenseSettlementHint": "Enter what each person was paid.",
+  "expenseSettlementNoRecipient": "Enter an amount for at least one person",
   "expenseInvalidRate": "Enter a rate greater than zero"
 }

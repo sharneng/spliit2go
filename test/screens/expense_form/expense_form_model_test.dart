@@ -134,15 +134,15 @@ void main() {
           (610, 1000, 'JPY', 0.0061));
     });
 
-    test('a settlement keeps its amount and works out the amount to transfer', () {
+    test('a settlement\'s amount is its To amounts, converted (#262)', () {
       final m = model(euros)
-        ..isSettlement = true
-        ..amountController.text = '6.10'
+        ..setSettlement(true, title: 'Settlement')
         ..choosePaidIn('JPY')
         // Written as #252 typed it: 1 yen in euros (#261 shows EUR/JPY).
         ..rateBase = 'JPY'
         ..rateController.text = '0.0061';
-      expect((m.amount, m.transferAmount), (610, 1000));
+      m.splitControllers['bea']!.text = '1000';
+      expect((m.settlementTotal, m.amount), (1000, 610));
     });
 
     test('a conversion that rounds to nothing can\'t be saved, until an amount changes', () {
@@ -266,15 +266,25 @@ void main() {
       expect(m.amount, 610);
     });
 
-    test('a settlement keeps its saved amount to transfer', () {
+    test('a settlement keeps its saved amounts and split while untouched (#262)', () {
       final m = model(euros,
           existing: expense(
-              amount: 610, settlement: true, originalAmount: 1001, originalCurrency: 'JPY', rate: 0.0061))
+              amount: 610,
+              settlement: true,
+              paidFor: const [ExpenseShare(participantId: 'bea', shares: 100)],
+              originalAmount: 1001,
+              originalCurrency: 'JPY',
+              rate: 0.0061))
         ..rateBase = 'JPY'
         ..decimalSeparator = '.';
-      expect((m.amount, m.transferAmount), (610, 1001));
-      m.amountController.text = '6.11';
-      expect(m.transferAmount, 1002);
+      expect(m.splitControllers['bea']!.text, '1001');
+      m.titleController.text = 'Paid back';
+      expect((m.amount, m.amountsToSave()!.originalAmount, m.splitModeToSave), (610, 1001, SplitMode.evenly));
+      expect(m.paidFor()!.single.shares, 100);
+
+      m.splitControllers['bea']!.text = '1002';
+      expect((m.amount, m.splitModeToSave), (611, SplitMode.byAmount));
+      expect(m.paidFor()!.single.shares, 611);
     });
 
     test('a removed conversion\'s leftovers don\'t count without its currency', () {
@@ -502,7 +512,7 @@ void main() {
     test('a settlement shows no live preview', () {
       final m = model(euros)
         ..amountController.text = '10'
-        ..isSettlement = true;
+        ..setSettlement(true, title: 'Settlement');
       expect(m.livePreviewAmounts(), isNull);
     });
   });
@@ -590,9 +600,10 @@ void main() {
       expect(m.hasChanges, isTrue);
       m.titleController.text = '';
       expect(m.hasChanges, isFalse);
-      m.isSettlement = true;
+      m.setSettlement(true, title: 'Settlement');
       expect(m.hasChanges, isTrue);
-      m.isSettlement = false;
+      m.setSettlement(false, title: 'Settlement');
+      expect(m.hasChanges, isFalse);
       m.setIncluded('cy', false);
       expect(m.hasChanges, isTrue);
     });
@@ -622,19 +633,152 @@ void main() {
     });
   });
 
+  group('a settlement (#262)', () {
+    // Bob owes Alice ¥1,000; Balances' "Mark as paid" opens this.
+    final markAsPaid = Expense(
+      id: '',
+      groupId: 'g',
+      title: 'Bea paid Alex',
+      amountCents: 1000,
+      paidBy: 'bea',
+      paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
+      splitMode: SplitMode.evenly,
+      date: DateTime.utc(2026, 10, 1),
+      isSettlement: true,
+    );
+
+    test('Mark as paid saves the balance exactly, until a To amount is typed (acceptance case 1)', () {
+      final m = model(yen, draft: markAsPaid)..decimalSeparator = '.';
+      expect((m.splitMode, m.splitControllers['alex']!.text, m.amount), (SplitMode.byAmount, '1000', 1000));
+
+      m.choosePaidIn('EUR');
+      expect((m.splitControllers['alex']!.text, m.amount), ('', 1000));
+      m.fillRate(176.84, force: false, editsAtRequest: m.rateEdits);
+      expect(m.rateController.text, '176.84');
+      expect(m.splitControllers['alex']!.text, '5.65');
+      expect(m.splitProblem(), isNull);
+      final saved = m.amountsToSave()!;
+      expect((saved.amount, saved.originalAmount), (1000, 565));
+      expect(m.paidFor()!.map((s) => (s.participantId, s.shares)), [('alex', 1000)]);
+
+      // Another rate fills it in again.
+      m.rateTyped();
+      m.rateController.text = '180';
+      expect((m.splitControllers['alex']!.text, m.amount), ('5.56', 1000));
+      m.rateController.text = '176.84';
+
+      // Typed, the forward conversion takes over.
+      m.splitControllers['alex']!.text = '5.66';
+      expect((m.amount, m.amountsToSave()!.originalAmount), (1001, 566));
+      expect(m.paidFor()!.single.shares, 1001);
+    });
+
+    test('adding a recipient ends Mark as paid\'s balance too', () {
+      final m = model(yen, draft: markAsPaid)..decimalSeparator = '.';
+      m.splitControllers['cy']!.text = '500';
+      expect((m.amount, m.settlementTotal), (1500, 1500));
+      expect(m.paidFor()!.map((s) => s.shares), [1000, 500]);
+    });
+
+    test('several recipients, converted: the shares add up to the amount exactly', () {
+      final m = model(euros)
+        ..setSettlement(true, title: 'Settlement')
+        ..choosePaidIn('JPY')
+        ..rateBase = 'JPY'
+        ..rateController.text = '0.0061';
+      m.splitControllers['alex']!.text = '3000';
+      m.splitControllers['bea']!.text = '1001';
+      expect((m.settlementTotal, m.amount), (4001, 2441));
+      final shares = m.paidFor()!.map((s) => s.shares).toList();
+      expect(shares, [1830, 611]);
+      expect(shares.fold(0, (a, b) => a + b), 2441);
+    });
+
+    test('To amounts moved between people are worked out afresh, though the sum is the same (#271 review)', () {
+      final m = model(euros,
+          existing: expense(
+              amount: 615,
+              settlement: true,
+              mode: SplitMode.byAmount,
+              paidFor: const [ExpenseShare(participantId: 'alex', shares: 300), ExpenseShare(participantId: 'bea', shares: 315)],
+              originalAmount: 1000,
+              originalCurrency: 'JPY',
+              rate: 0.0061))
+        ..rateBase = 'JPY'
+        ..decimalSeparator = '.';
+      expect(m.amount, 615);
+      m.splitControllers['alex']!.text = '400';
+      m.splitControllers['bea']!.text = '600';
+      expect(m.amountsToSave()!.amount, 610);
+      expect(m.paidFor()!.map((s) => s.shares), [244, 366]);
+    });
+
+    test('a corrected To amount clears "rounds to nothing" (#271 review)', () {
+      final m = model(euros)
+        ..setSettlement(true, title: 'Settlement')
+        ..choosePaidIn('JPY')
+        ..rateBase = 'JPY'
+        ..rateController.text = '0.001';
+      m.splitControllers['alex']!.text = '1';
+      expect(m.amountsToSave(), isNull);
+      expect(m.convertedAmountInvalid, isTrue);
+      m.splitControllers['alex']!.text = '1000';
+      expect(m.convertedAmountInvalid, isFalse);
+      expect(m.amountsToSave()!.amount, 100);
+    });
+
+    test('a recipient\'s amount must be at least a smallest unit; someone must have one', () {
+      final m = model(euros)..setSettlement(true, title: 'Settlement');
+      expect(m.splitProblem(), isA<NoOneIncluded>());
+      m.splitControllers['alex']!.text = '0.001';
+      expect(m.splitProblem(), isA<InvalidValue>());
+      m.splitControllers['alex']!.text = '5';
+      expect((m.splitProblem(), m.amount, m.unallocated()), (null, 500, null));
+    });
+
+    test('switching there and back brings the split and an untouched title back', () {
+      final m = model(euros)..splitMode = SplitMode.byShares;
+      m.splitControllers['alex']!.text = '2';
+      m.setSettlement(true, title: 'Settlement');
+      expect((m.titleController.text, m.splitMode, m.includedParticipants.length), ('Settlement', SplitMode.byAmount, 0));
+      m.splitControllers['bea']!.text = '7';
+      m.setSettlement(false, title: 'Settlement');
+      expect((m.titleController.text, m.splitMode, m.splitControllers['alex']!.text), ('', SplitMode.byShares, '2'));
+      m.setSettlement(true, title: 'Settlement');
+      expect(m.splitControllers['bea']!.text, '7');
+
+      // A title typed over it stays.
+      m.titleController.text = 'Paid back';
+      m.setSettlement(false, title: 'Settlement');
+      expect(m.titleController.text, 'Paid back');
+    });
+
+    test('an edited settlement switched to an expense splits evenly between its recipients', () {
+      final m = model(euros,
+          existing: expense(
+              amount: 900,
+              settlement: true,
+              mode: SplitMode.byAmount,
+              paidFor: const [ExpenseShare(participantId: 'bea', shares: 600), ExpenseShare(participantId: 'cy', shares: 300)]));
+      m.setSettlement(false, title: 'Settlement');
+      expect((m.splitMode, m.includedParticipants.map((p) => p.id).join(','), m.amountController.text),
+          (SplitMode.evenly, 'bea,cy', '9.00'));
+    });
+  });
+
   group('a settlement\'s category (#259)', () {
     test('a new one is a Payment, whatever was picked; switching back brings the pick back', () {
       final m = model(euros)..setCategory(8);
-      m.isSettlement = true;
+      m.setSettlement(true, title: 'Settlement');
       expect(m.categoryToSave, ExpenseFormModel.paymentCategoryId);
-      m.isSettlement = false;
+      m.setSettlement(false, title: 'Settlement');
       expect(m.categoryToSave, 8);
     });
 
     test('an edit never changes it', () {
       final settlement = model(euros, existing: expense(settlement: true));
       expect(settlement.categoryToSave, 8);
-      final switched = model(euros, existing: expense())..isSettlement = true;
+      final switched = model(euros, existing: expense())..setSettlement(true, title: 'Settlement');
       expect(switched.categoryToSave, 8);
     });
   });
