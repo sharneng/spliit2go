@@ -173,15 +173,11 @@ void main() {
     await tester.tap(find.textContaining('Mark as paid').first);
     await tester.pumpAndSettle();
 
-    expect(find.text('Add expense'), findsOneWidget);
+    expect(find.text('New settlement'), findsOneWidget);
     expect(find.text('Bea paid Alex'), findsOneWidget);
     expect(find.text('30.00'), findsOneWidget);
-    final settlementTile = tester.widget<CheckboxListTile>(
-        find.widgetWithText(CheckboxListTile, 'This is a settlement'));
-    expect(settlementTile.value, isTrue);
 
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
 
     // Back on the balances screen -- Bea<->Alex is now settled (synced
@@ -216,8 +212,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(find.widgetWithText(TextFormField, '30.00'), '10.00');
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
 
     // A partial $10 payment leaves $20 of the original $30 still owed --

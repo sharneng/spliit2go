@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
@@ -298,13 +299,13 @@ void main() {
     final printed = '01/02/$year';
     final scanner = _FakeScanner()..text = ['CHEZ NOUS', printed, 'TOTAL 8,00'];
     await openForm(tester, db, scanner);
-    final before = tester.widget<InputDecorator>(find.widgetWithText(InputDecorator, 'Date'));
+    String date() => '${tester.widget<GroupedRow>(find.widgetWithText(GroupedRow, 'Date')).trailing}';
+    final before = date();
 
     await scan(tester);
 
     expect(find.text('Receipt: $printed'), findsOneWidget);
-    expect(tester.widget<InputDecorator>(find.widgetWithText(InputDecorator, 'Date')).child.toString(),
-        before.child.toString());
+    expect(date(), before);
     await closeTree(tester);
   });
 
@@ -453,6 +454,18 @@ void main() {
 
     expect(find.text("Couldn't read the receipt. The photo is kept."), findsOneWidget);
     expect(uploads, hasLength(1));
+    await closeTree(tester);
+  });
+
+  testWidgets('not offered for a settlement, which it can\'t read (#259)', (tester) async {
+    await openForm(tester, newDb(), _FakeScanner());
+    expect(find.text('Scan receipt'), findsOneWidget);
+    await tester.tap(find.byTooltip('Switch to settlement'));
+    await tester.pumpAndSettle();
+    expect(find.text('Scan receipt'), findsNothing);
+    await tester.tap(find.byTooltip('Switch to expense'));
+    await tester.pumpAndSettle();
+    expect(find.text('Scan receipt'), findsOneWidget);
     await closeTree(tester);
   });
 

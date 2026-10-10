@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
@@ -86,8 +87,7 @@ void main() {
     await pumpScreen(tester, db);
 
     await fillCommonFields(tester, amount: '90');
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
 
     final pending = await db.pendingExpenses();
@@ -110,8 +110,7 @@ void main() {
     await tester.ensureVisible(find.widgetWithText(CheckboxListTile, 'Cid'));
     await tester.tap(find.widgetWithText(CheckboxListTile, 'Cid'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
 
     final pending = await db.pendingExpenses();
@@ -124,8 +123,7 @@ void main() {
     addTearDown(db.close);
     await pumpScreen(tester, db);
     await fillCommonFields(tester, amount: r'$1,234.56');
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
 
     final pending = await db.pendingExpensesForGroup(group.id);
@@ -137,8 +135,7 @@ void main() {
     addTearDown(db.close);
     await pumpScreen(tester, db);
     await fillCommonFields(tester, amount: '1.2k');
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
 
     expect(await db.pendingExpensesForGroup(group.id), isEmpty);
@@ -160,8 +157,7 @@ void main() {
     final fields = find.byType(TextFormField);
     await tester.enterText(fields.at(2), '6,25');
     await tester.enterText(fields.at(3), '6,25');
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
 
     // Offline creates are the persisted rows consumed by Outbox.flush.
@@ -192,8 +188,7 @@ void main() {
     await tester.enterText(amountFields.at(3), '30');
     await tester.enterText(amountFields.at(4), '20'); // 30+30+20 = 80, not 90
 
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
 
     expect(await db.pendingExpenses(), isEmpty);
@@ -217,8 +212,7 @@ void main() {
     await tester.enterText(amountFields.at(3), '30');
     await tester.enterText(amountFields.at(4), '10');
 
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
 
     final pending = await db.pendingExpenses();
@@ -243,8 +237,7 @@ void main() {
     await tester.enterText(amountFields.at(3), '30');
     await tester.enterText(amountFields.at(4), '10'); // sums to 90, not 100
 
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
 
     expect(await db.pendingExpenses(), isEmpty);
@@ -267,8 +260,7 @@ void main() {
     await tester.enterText(amountFields.at(3), '30');
     await tester.enterText(amountFields.at(4), '20'); // sums to 100
 
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
 
     final pending = await db.pendingExpenses();
@@ -337,13 +329,13 @@ void main() {
     // (rather than saving and reading the persisted expense back)
     // sidesteps needing a full save-flow round trip through a form this
     // test isn't otherwise exercising.
-    await tester.ensureVisible(find.widgetWithText(InputDecorator, 'General'));
-    await tester.tap(find.widgetWithText(InputDecorator, 'General'));
+    await tester.ensureVisible(find.widgetWithText(GroupedRow, 'General'));
+    await tester.tap(find.widgetWithText(GroupedRow, 'General'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Groceries'));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(InputDecorator, 'Groceries'), findsOneWidget);
+    expect(find.widgetWithText(GroupedRow, 'Groceries'), findsOneWidget);
   });
 
   // #132: offline, the picker used to have General only.
@@ -353,15 +345,15 @@ void main() {
     addTearDown(db.close);
     await pumpScreen(tester, db); // pumpScreen's client always throws (offline)
 
-    await tester.ensureVisible(find.widgetWithText(InputDecorator, 'General'));
-    await tester.tap(find.widgetWithText(InputDecorator, 'General'));
+    await tester.ensureVisible(find.widgetWithText(GroupedRow, 'General'));
+    await tester.tap(find.widgetWithText(GroupedRow, 'General'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Search categories'), 'gro');
     await tester.pumpAndSettle();
     await tester.tap(find.text('Groceries'));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(InputDecorator, 'Groceries'), findsOneWidget);
+    expect(find.widgetWithText(GroupedRow, 'Groceries'), findsOneWidget);
   });
 
   testWidgets('offline, the picker has the server\'s list as last read', (tester) async {
@@ -373,8 +365,8 @@ void main() {
         ]));
     await pumpScreen(tester, db);
 
-    await tester.ensureVisible(find.widgetWithText(InputDecorator, 'General'));
-    await tester.tap(find.widgetWithText(InputDecorator, 'General'));
+    await tester.ensureVisible(find.widgetWithText(GroupedRow, 'General'));
+    await tester.tap(find.widgetWithText(GroupedRow, 'General'));
     await tester.pumpAndSettle();
 
     expect(find.text('Hobbies'), findsOneWidget);
@@ -398,8 +390,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.widgetWithText(InputDecorator, 'General'));
-      await tester.tap(find.widgetWithText(InputDecorator, 'General'));
+      await tester.ensureVisible(find.widgetWithText(GroupedRow, 'General'));
+      await tester.tap(find.widgetWithText(GroupedRow, 'General'));
       await tester.pumpAndSettle();
 
       // Grouping headers are shown, and "Groceries"/"Dining Out" both
@@ -429,8 +421,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.widgetWithText(InputDecorator, 'General'));
-      await tester.tap(find.widgetWithText(InputDecorator, 'General'));
+      await tester.ensureVisible(find.widgetWithText(GroupedRow, 'General'));
+      await tester.tap(find.widgetWithText(GroupedRow, 'General'));
       await tester.pumpAndSettle();
 
       await tester.enterText(find.widgetWithText(TextField, 'Search categories'), 'gas');
@@ -640,8 +632,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(find.widgetWithText(TextFormField, 'Groceries'), 'Groceries (updated)');
-      await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.tap(find.byTooltip('Save'));
       await tester.pumpAndSettle();
 
       expect(captured, isNotNull);
@@ -675,8 +666,7 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.tap(find.byTooltip('Save'));
       await tester.pumpAndSettle();
 
       expect(find.text("Couldn't reach the server. Check your connection and try again."), findsOneWidget);
@@ -762,8 +752,7 @@ void main() {
 
   // #254 review: an amount that rounds to zero is refused.
   Future<void> tapSave(WidgetTester tester) async {
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
   }
 
@@ -771,8 +760,7 @@ void main() {
   String rateText(WidgetTester tester) => tester.widget<TextFormField>(rateField()).controller!.text;
 
   Future<Expense> save(WidgetTester tester, AppDatabase db) async {
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
     return db.rowToExpense((await db.pendingExpenses()).single);
   }
@@ -874,7 +862,7 @@ void main() {
 
     // Nor does another day's rate replace it.
     rates.answer = (_, __, ___) async => _FakeRates.published(0.0062);
-    await tester.tap(find.widgetWithText(InputDecorator, 'Date'));
+    await tester.tap(find.widgetWithText(GroupedRow, 'Date'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('15'));
     await tester.tap(find.text('OK'));
@@ -1040,8 +1028,7 @@ void main() {
       (tester) async {
     final db = await pumpGroup(tester, euroGroup);
     await fillCommonFields(tester, amount: '6.10');
-    await tester.ensureVisible(find.text('This is a settlement'));
-    await tester.tap(find.text('This is a settlement'));
+    await tester.tap(find.byTooltip('Switch to settlement'));
     await tester.pumpAndSettle();
     await paidIn(tester, '', 'Yen', 'Japanese Yen (JPY)');
     // The amount settled stays typed; what to send is in yen.
@@ -1184,8 +1171,7 @@ void main() {
 
       await tester.ensureVisible(find.widgetWithText(CheckboxListTile, 'Save as default split'));
       await tester.tap(find.widgetWithText(CheckboxListTile, 'Save as default split'));
-      await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.tap(find.byTooltip('Save'));
       await tester.pumpAndSettle();
 
       expect(await db.defaultSplitFor('g1'), isNotNull);
@@ -1246,8 +1232,7 @@ void main() {
     await tester.enterText(splitFields.at(3), '1'); // bea
     await tester.enterText(splitFields.at(4), '1'); // cid
 
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
 
     final pending = await db.pendingExpenses();
@@ -1273,8 +1258,7 @@ void main() {
     await tester.enterText(splitFields.at(3), '33.3');
     await tester.enterText(splitFields.at(4), '33.4'); // 33.3+33.3+33.4 = 100.0 exactly
 
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
 
     final pending = await db.pendingExpenses();
@@ -1331,8 +1315,8 @@ void main() {
         ]));
     await pumpScreen(tester, db);
 
-    await tester.ensureVisible(find.widgetWithText(InputDecorator, 'General'));
-    await tester.tap(find.widgetWithText(InputDecorator, 'General'));
+    await tester.ensureVisible(find.widgetWithText(GroupedRow, 'General'));
+    await tester.tap(find.widgetWithText(GroupedRow, 'General'));
     await tester.pumpAndSettle();
 
     // The field's own icon, plus one per row in the now-open picker
@@ -1374,8 +1358,7 @@ void main() {
     await pumpScreen(tester, db);
     await db.setActiveParticipant('g1', activeParticipant);
     await fillCommonFields(tester, amount: '90');
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
   }
 
@@ -1439,8 +1422,7 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
 
     expect(captured, isNotNull);
@@ -1462,14 +1444,15 @@ void main() {
     await pumpScreen(tester, db);
     await fillCommonFields(tester, amount: '30');
 
-    final save = find.widgetWithText(FilledButton, 'Save');
-    await tester.ensureVisible(save);
-    await tester.tap(save);
+    // From the bottom of the form: the error shows at the top (#259).
+    await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -2000));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
 
-    expect(find.text("Couldn't save this expense."), findsOneWidget);
+    expect(find.text("Couldn't save this expense.").hitTestable(), findsOneWidget);
     expect(find.text('Tap for details'), findsOneWidget);
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Save')).onPressed,
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.check)).onPressed,
         isNotNull);
     expect(loggedUnexpectedErrors.where((e) => '${e.error}'.contains('disk I/O error')), hasLength(1));
   });
@@ -1518,7 +1501,7 @@ void main() {
       final checkbox = find.widgetWithText(CheckboxListTile, 'Save as default split');
       await tester.ensureVisible(checkbox);
       await tester.tap(checkbox);
-      final save = find.widgetWithText(FilledButton, 'Save');
+      final save = find.byTooltip('Save');
       await tester.ensureVisible(save);
       await tester.tap(save);
       await tester.pumpAndSettle();

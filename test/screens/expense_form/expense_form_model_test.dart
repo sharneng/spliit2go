@@ -375,6 +375,60 @@ void main() {
     });
   });
 
+  group('changes, for "Discard changes?" (#259)', () {
+    test('typing, picking and choosing are changes; undoing them isn\'t', () {
+      final m = model(euros);
+      expect(m.hasChanges, isFalse);
+      m.titleController.text = 'Lunch';
+      expect(m.hasChanges, isTrue);
+      m.titleController.text = '';
+      expect(m.hasChanges, isFalse);
+      m.isSettlement = true;
+      expect(m.hasChanges, isTrue);
+      m.isSettlement = false;
+      m.setIncluded('cy', false);
+      expect(m.hasChanges, isTrue);
+    });
+
+    test('a remembered split and an edit\'s saved rate are where the form starts', () {
+      final m = model(euros)
+        ..applyDefaultSplit(const DefaultSplit(splitMode: SplitMode.byShares, shares: {'alex': 200, 'bea': 100}));
+      expect(m.hasChanges, isFalse);
+
+      final edit = model(euros, existing: expense(originalAmount: 1000, originalCurrency: 'JPY', rate: 0.0061))
+        ..decimalSeparator = '.';
+      expect((edit.rateController.text, edit.hasChanges), ('0.0061', false));
+      edit.rateTyped();
+      edit.rateController.text = '0.0062';
+      expect(edit.hasChanges, isTrue);
+    });
+
+    test('a published rate filled in isn\'t the user\'s change; picking the currency is', () {
+      final m = model(euros)..choosePaidIn('JPY');
+      expect(m.hasChanges, isTrue);
+      m.markUnchanged();
+      m.fillRate(0.0061, force: false, editsAtRequest: m.rateEdits);
+      expect(m.hasChanges, isFalse);
+    });
+  });
+
+  group('a settlement\'s category (#259)', () {
+    test('a new one is a Payment, whatever was picked; switching back brings the pick back', () {
+      final m = model(euros)..setCategory(8);
+      m.isSettlement = true;
+      expect(m.categoryToSave, ExpenseFormModel.paymentCategoryId);
+      m.isSettlement = false;
+      expect(m.categoryToSave, 8);
+    });
+
+    test('an edit never changes it', () {
+      final settlement = model(euros, existing: expense(settlement: true));
+      expect(settlement.categoryToSave, 8);
+      final switched = model(euros, existing: expense())..isSettlement = true;
+      expect(switched.categoryToSave, 8);
+    });
+  });
+
   test('trimTrailingZeros', () {
     expect([trimTrailingZeros(1.5), trimTrailingZeros(2), trimTrailingZeros(33.333)], ['1.5', '2', '33.33']);
   });

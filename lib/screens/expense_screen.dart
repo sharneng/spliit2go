@@ -34,8 +34,13 @@ import '../services/receipt_text.dart';
 import '../services/settings_service.dart';
 import '../widgets/receipt_attachments.dart';
 import '../widgets/receipt_language.dart';
+import '../theme.dart';
 import '../utils/haptics.dart';
+import '../widgets/app_menu.dart';
 import '../widgets/bottom_inset.dart';
+import '../widgets/grouped_section.dart';
+import '../widgets/top_bar_buttons.dart';
+import 'expense_form/receipt_scan_card.dart';
 
 /// Adds -- or, given [existingExpense], edits -- an expense. An expense
 /// with [Expense.isSettlement] set is a settlement/"paid back"
@@ -153,6 +158,12 @@ class ExpenseScreen extends StatefulWidget {
 
 class _ExpenseScreenState extends State<ExpenseScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _scroll = ScrollController();
+
+  /// What a refused save scrolls to, besides the fields (#259): the split's
+  /// footer, and a calculated amount that can't be saved.
+  final _paidForFooterKey = GlobalKey();
+  final _calculatedKey = GlobalKey();
 
   /// What's typed and picked, and what it works out to (#258).
   late final _m = ExpenseFormModel(
@@ -369,6 +380,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     _m.removeListener(_changed);
     _m.dispose();
     _receipts.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -522,62 +534,41 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   Widget _scanSection(BuildContext context) {
     final l10n = context.l10n;
-    final theme = Theme.of(context);
-    final reading = _scan == _Scan.reading;
-    final status = switch (_scan) {
-      _Scan.idle => l10n.expenseScanIntro,
-      _Scan.reading => l10n.expenseScanReading,
-      _Scan.filled => l10n.expenseScanFilled,
-      _Scan.hintsOnly => '${l10n.expenseScanHintsOnly} ${l10n.expenseScanTryLanguage}',
-      _Scan.nothing => '${l10n.expenseScanNothing} ${l10n.expenseScanTryLanguage}',
-      _Scan.failed => l10n.expenseScanFailed,
-      _Scan.modelMissing => l10n.expenseScanModelMissing(receiptScriptName(context, _missingScript!)),
-    };
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: reading ? null : _scanReceipt,
-                  icon: reading
-                      ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.document_scanner_outlined),
-                  label: Text(l10n.expenseScanReceipt),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Tooltip(
-                message: l10n.receiptLanguage,
-                child: OutlinedButton.icon(
-                  onPressed: reading ? null : _pickReceiptLanguage,
-                  icon: const Icon(Icons.translate),
-                  label: Text(receiptScriptShortName(_receiptScript)),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          _scan == _Scan.failed
-              ? ErrorMessage(status, diagnostics: _scanDiagnostics)
-              : Text(status, style: theme.textTheme.bodySmall),
-        ],
-      ),
+    return ReceiptScanCard(
+      status: switch (_scan) {
+        _Scan.idle => l10n.expenseScanIntro,
+        _Scan.reading => l10n.expenseScanReading,
+        _Scan.filled => l10n.expenseScanFilled,
+        _Scan.hintsOnly => '${l10n.expenseScanHintsOnly} ${l10n.expenseScanTryLanguage}',
+        _Scan.nothing => '${l10n.expenseScanNothing} ${l10n.expenseScanTryLanguage}',
+        _Scan.failed => l10n.expenseScanFailed,
+        _Scan.modelMissing => l10n.expenseScanModelMissing(receiptScriptName(context, _missingScript!)),
+      },
+      reading: _scan == _Scan.reading,
+      failed: _scan == _Scan.failed,
+      diagnostics: _scanDiagnostics,
+      language: receiptScriptShortName(_receiptScript),
+      onScan: _scanReceipt,
+      onPickLanguage: _pickReceiptLanguage,
     );
   }
 
-  /// Leaving with photos added here asks first (#123): nothing else keeps
-  /// them.
+  /// Whether closing loses anything (#259): a change to the form, or to
+  /// its receipts.
+  bool get _hasChanges =>
+      _m.hasChanges ||
+      _receipts.hasNew ||
+      _receipts.kept.length != (widget.existingExpense?.documents.length ?? 0);
+
+  /// Closing with changes asks first (#259); photos added here, which
+  /// nothing else keeps, are named (#123).
   Future<void> _confirmLeave() async {
     final l10n = context.l10n;
     final discard = await showAdaptiveDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog.adaptive(
-        title: Text(l10n.expenseReceiptsDiscardTitle),
-        content: Text(l10n.expenseReceiptsDiscardBody),
+        title: Text(l10n.expenseDiscardChangesTitle),
+        content: _receipts.hasNew ? Text(l10n.expenseReceiptsDiscardBody) : null,
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext, false), child: Text(l10n.commonCancel)),
@@ -722,7 +713,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     return ListenableBuilder(
       listenable: _receipts,
       builder: (context, child) => PopScope(
-        canPop: !_receipts.hasNew,
+        canPop: !_hasChanges,
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop) _confirmLeave();
         },
@@ -732,209 +723,308 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
+  /// The title says what's being added or edited (#259).
+  String _title(BuildContext context) => switch ((widget.isEditing, _m.isSettlement)) {
+        (false, false) => context.l10n.expenseAddTitle,
+        (false, true) => context.l10n.expenseAddSettlementTitle,
+        (true, false) => context.l10n.expenseEditTitle,
+        (true, true) => context.l10n.expenseEditSettlementTitle,
+      };
+
+  /// One tap switches between an expense and a settlement (#259, Kenneth
+  /// on a device: a title menu's arrow is easy to miss, and a capsule
+  /// switch costs the title). The icon is the kind it switches to.
+  Widget _kindButton(BuildContext context) => IconButton(
+        icon: Icon(_m.isSettlement ? Icons.receipt_long_outlined : Icons.payments_outlined),
+        tooltip: _m.isSettlement ? context.l10n.expenseSwitchToExpense : context.l10n.expenseSwitchToSettlement,
+        onPressed: _saving ? null : () => _m.isSettlement = !_m.isSettlement,
+      );
+
+  /// A field on a card, which draws no box of its own.
+  Widget _cell(Widget field) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: field,
+      );
+
+  /// A row's value at its end: the rows' text size, dimmed, as iOS's.
+  Widget _value(BuildContext context, String value) => Text(value,
+      style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: SpliitColors.of(context).secondaryContent));
+
+  String _repeatLabel(RecurrenceRule rule) => switch (rule) {
+        RecurrenceRule.none => context.l10n.expenseRepeatNone,
+        RecurrenceRule.daily => context.l10n.expenseRepeatDaily,
+        RecurrenceRule.weekly => context.l10n.expenseRepeatWeekly,
+        RecurrenceRule.monthly => context.l10n.expenseRepeatMonthly,
+      };
+
+  /// "Repeat", whose value opens a menu of the choices.
+  Widget _repeatRow(BuildContext context) => PopupMenuButton<int>(
+        tooltip: context.l10n.expenseRepeatLabel,
+        position: PopupMenuPosition.under,
+        onSelected: (i) => _m.recurrenceRule = RecurrenceRule.values[i],
+        itemBuilder: (context) => [
+          for (final (i, rule) in RecurrenceRule.values.indexed)
+            appPopupMenuItem(
+                context,
+                i,
+                AppMenuItem(
+                    label: _repeatLabel(rule), checked: rule == _m.recurrenceRule, onSelected: () {}),
+                choice: true),
+        ],
+        child: GroupedRow(
+          title: Text(context.l10n.expenseRepeatLabel),
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            _value(context, _repeatLabel(_m.recurrenceRule)),
+            const Icon(Icons.arrow_drop_down),
+          ]),
+        ),
+      );
+
   Widget _form(BuildContext context) {
+    final l10n = context.l10n;
+    // Today's look, for the fields steps 3-5 of #256 restyle.
+    final pageTheme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-          title:
-              Text(widget.isEditing ? context.l10n.expenseEditTitle : context.l10n.expenseAddTitle)),
-      body: SingleChildScrollView(
-        padding: withBottomInset(context, const EdgeInsets.all(16)),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_offersScan) _scanSection(context),
-              TextFormField(
-                controller: _m.titleController,
-                decoration: InputDecoration(
-                    labelText: context.l10n.expenseTitleLabel, helperText: _scanHint(_scanFill?.titleHint)),
-                validator: (v) => (v == null || v.isEmpty) ? context.l10n.commonRequired : null,
-              ),
-              const SizedBox(height: 12),
-              if (_m.converting && !_m.isSettlement)
-                _calculatedAmount(
-                  context,
-                  label: context.l10n.expenseAmountLabel,
-                  amount: _m.amount,
-                  symbol: widget.group.currency,
-                  decimalDigits: _m.digits,
-                )
-              else
-                TextFormField(
-                  controller: _m.amountController,
-                  decoration: InputDecoration(
-                      labelText: context.l10n.expenseAmountLabel,
-                      prefixText: widget.group.currency,
-                      helperText: _m.converting ? null : _scanHint(_scanFill?.amountHint)),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  validator: (v) => _m.isPositiveAmount(v, _m.digits) ? null : context.l10n.expenseInvalidAmount,
-                ),
-              const SizedBox(height: 12),
-              InkWell(
-                onTap: _pickDate,
-                child: InputDecorator(
-                  decoration: InputDecoration(
-                      labelText: context.l10n.expenseDateLabel, helperText: _scanHint(_scanFill?.dateHint)),
-                  child: Text(formatDate(_m.date, locale: context.appLocale)),
-                ),
-              ),
-              const SizedBox(height: 12),
-              // Next to the amount and its day, as in spliit-ios (#252).
-              if (_m.hasGroupCurrencyCode) ..._currencySection(context),
-              InkWell(
-                onTap: _pickCategory,
-                child: InputDecorator(
-                  decoration: InputDecoration(
-                    labelText: context.l10n.expenseCategoryLabel,
-                    helperText: _scanHint(switch (_scanFill?.categoryHint) {
-                      final id? => localizedCategoryLabel(
-                          context, id, _categories.where((c) => c.id == id).firstOrNull),
-                      null => null,
-                    }),
+        // Adding or editing is a task finished or abandoned (#259): ✕
+        // closes, asking first if anything changed, and ✓ saves. It asks
+        // the form itself rather than waiting on PopScope, which learns
+        // of a change a frame later.
+        leading: CloseButton(
+            onPressed: () => _hasChanges ? _confirmLeave() : Navigator.of(context).maybePop()),
+        title: Text(_title(context)),
+        centerTitle: false,
+        actions: [
+          TopBarButtons(children: [
+            _kindButton(context),
+            _saving
+                ? const SizedBox.square(
+                    dimension: TopBarButtons.size,
+                    child: Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.check),
+                    tooltip: l10n.expenseSaveButton,
+                    onPressed: _save,
                   ),
-                  child: Row(
+          ]),
+        ],
+      ),
+      body: Theme(
+        // Fields sit on the cards, so they draw no box of their own.
+        data: pageTheme.copyWith(
+          inputDecorationTheme: InputDecorationTheme(
+            // A placeholder in the rows' dimmed color, as their values.
+            hintStyle: TextStyle(color: SpliitColors.of(context).secondaryContent),
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            disabledBorder: InputBorder.none,
+            errorBorder: InputBorder.none,
+            focusedErrorBorder: InputBorder.none,
+            filled: false,
+          ),
+        ),
+        child: GroupedScrollClip(
+          child: SingleChildScrollView(
+            controller: _scroll,
+            padding: withBottomInset(context, const EdgeInsets.symmetric(vertical: 16)),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Why the last save failed, where the list scrolls to.
+                  if (_saveError != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: ErrorMessage(_saveError!, diagnostics: _saveErrorDiagnostics),
+                    ),
+                  // The scanner reads expenses, not settlements.
+                  if (_offersScan && !_m.isSettlement) _scanSection(context),
+                  GroupedSection(children: [
+                    _cell(TextFormField(
+                      controller: _m.titleController,
+                      decoration: InputDecoration(
+                          labelText: l10n.expenseTitleLabel, helperText: _scanHint(_scanFill?.titleHint)),
+                      validator: (v) => (v == null || v.isEmpty) ? l10n.commonRequired : null,
+                    )),
+                    // A settlement has no category (#259): see
+                    // ExpenseFormModel.categoryToSave.
+                    if (!_m.isSettlement)
+                      GroupedRow(
+                        leading: CategoryIconGlyph(category: _selectedCategory, size: 24),
+                        title: Text(l10n.expenseCategoryLabel),
+                        subtitle: switch (_scanHint(switch (_scanFill?.categoryHint) {
+                          final id? => localizedCategoryLabel(
+                              context, id, _categories.where((c) => c.id == id).firstOrNull),
+                          null => null,
+                        })) {
+                          final hint? => Text(hint),
+                          null => null,
+                        },
+                        trailing: _value(context, localizedCategoryLabel(context, _m.category, _knownCategory)),
+                        onTap: _pickCategory,
+                      ),
+                    GroupedRow(
+                      title: Text(l10n.expenseDateLabel),
+                      subtitle: switch (_scanHint(_scanFill?.dateHint)) {
+                        final hint? => Text(hint),
+                        null => null,
+                      },
+                      trailing: _value(context, formatDate(_m.date, locale: context.appLocale)),
+                      onTap: _pickDate,
+                    ),
+                    _repeatRow(context),
+                  ]),
+                  Theme(
+                    data: pageTheme,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, GroupedSection.spacing),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: _amountsAndSplit(context),
+                      ),
+                    ),
+                  ),
+                  GroupedSection(
+                    caption: l10n.expenseNotesLabel,
                     children: [
-                      CategoryIconGlyph(category: _selectedCategory, size: 24),
-                      const SizedBox(width: 8),
-                      Text(localizedCategoryLabel(
-                          context, _m.category, _knownCategory)),
+                      _cell(TextFormField(
+                        controller: _m.notesController,
+                        decoration: InputDecoration(hintText: l10n.expenseNotesHint),
+                        minLines: 1,
+                        maxLines: 6,
+                        maxLength: 5000, // matches Spliit's EXPENSE_NOTES_MAX
+                      )),
                     ],
                   ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _m.paidBy,
-                decoration: InputDecoration(labelText: context.l10n.expensePaidByLabel),
-                items: widget.group.participants
-                    .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name)))
-                    .toList(),
-                onChanged: (v) => _m.paidBy = v,
-                validator: (v) => v == null ? context.l10n.commonRequired : null,
-              ),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                value: _m.isSettlement,
-                onChanged: (v) => _m.isSettlement = v ?? false,
-                title: Text(context.l10n.expenseIsSettlement),
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<RecurrenceRule>(
-                initialValue: _m.recurrenceRule,
-                decoration: InputDecoration(labelText: context.l10n.expenseRepeatLabel),
-                items: [
-                  DropdownMenuItem(
-                      value: RecurrenceRule.none, child: Text(context.l10n.expenseRepeatNone)),
-                  DropdownMenuItem(
-                      value: RecurrenceRule.daily, child: Text(context.l10n.expenseRepeatDaily)),
-                  DropdownMenuItem(
-                      value: RecurrenceRule.weekly, child: Text(context.l10n.expenseRepeatWeekly)),
-                  DropdownMenuItem(
-                      value: RecurrenceRule.monthly,
-                      child: Text(context.l10n.expenseRepeatMonthly)),
-                ],
-                onChanged: (v) => _m.recurrenceRule = v ?? RecurrenceRule.none,
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Text(context.l10n.expensePaidForHeading, style: Theme.of(context).textTheme.titleMedium),
-                  const Spacer(),
-                  // Always offers the opposite of the current state --
-                  // issue #29 section 2 (spliit-ios: "with everyone
-                  // already in the split, 'select all' has nothing left
-                  // to do").
-                  TextButton(
-                    onPressed: _m.toggleSelectAll,
-                    child: Text(_m.allIncluded
-                        ? context.l10n.expenseSelectNone
-                        : context.l10n.expenseSelectAll),
-                  ),
+                  ReceiptsCard(controller: _receipts, onAdd: _addReceipt, keepsUnsent: !widget.isEditing),
                 ],
               ),
-              SegmentedButton<SplitMode>(
-                segments: [
-                  ButtonSegment(
-                      value: SplitMode.evenly, label: Text(context.l10n.expenseSplitEvenly)),
-                  ButtonSegment(
-                      value: SplitMode.byShares, label: Text(context.l10n.expenseSplitShares)),
-                  ButtonSegment(
-                      value: SplitMode.byPercentage,
-                      label: Text(context.l10n.expenseSplitPercent)),
-                  ButtonSegment(
-                      value: SplitMode.byAmount, label: Text(context.l10n.expenseSplitAmount)),
-                ],
-                selected: {_m.splitMode},
-                // The selected segment is already highlighted -- with 4
-                // segments crammed into the row, the extra check icon
-                // pushed a label like "Percent" onto 3 lines (issue #32).
-                showSelectedIcon: false,
-                onSelectionChanged: (selection) {
-                  // Switching to Evenly removes every per-participant
-                  // number field from the tree (issue #36) -- if one of
-                  // them still had focus, Flutter has to send focus
-                  // *somewhere* when its element is disposed, and left
-                  // to its own traversal heuristics it jumped back to
-                  // whichever field had focus before that (Amount or
-                  // Title), which then auto-scrolled the form back up to
-                  // show it. Unfocusing first (rather than letting focus
-                  // land on the just-tapped SegmentedButton itself, or
-                  // relying on Flutter's fallback) means no field is
-                  // focused when the rebuild happens, so there's nothing
-                  // to scroll to.
-                  FocusScope.of(context).unfocus();
-                  _m.splitMode = selection.first;
-                },
-              ),
-              const SizedBox(height: 4),
-              for (final p in widget.group.participants) _paidForRow(p),
-              // Hidden for a settlement -- a settlement is a one-off,
-              // not representative of the group's normal expenses (issue
-              // #29 section 7).
-              if (!_m.isSettlement)
-                CheckboxListTile(
-                  value: _m.saveDefaultSplit,
-                  onChanged: (v) =>
-                      _m.saveDefaultSplit = v ?? false,
-                  title: Text(context.l10n.expenseSaveDefaultSplit),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              Padding(
-                padding: const EdgeInsets.only(top: 4, bottom: 8),
-                child: Text(
-                  _paidForFooterText(),
-                  style: (_hasAttemptedSave && _splitValidationError() != null)
-                      ? TextStyle(color: Theme.of(context).colorScheme.error)
-                      : Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _m.notesController,
-                decoration: InputDecoration(labelText: context.l10n.expenseNotesLabel),
-                maxLines: 3,
-                maxLength: 5000, // matches Spliit's EXPENSE_NOTES_MAX
-              ),
-              ReceiptAttachmentsField(
-                  controller: _receipts, onAdd: _addReceipt, keepsUnsent: !widget.isEditing),
-              if (_saveError != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: ErrorMessage(_saveError!, diagnostics: _saveErrorDiagnostics),
-                ),
-              FilledButton(
-                onPressed: _saving ? null : _save,
-                child: Text(_saving ? context.l10n.expenseSavingButton : context.l10n.expenseSaveButton),
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  /// The currency, amounts, payer and split, as they were before #256:
+  /// steps 3-5 put them on cards.
+  List<Widget> _amountsAndSplit(BuildContext context) {
+    return [
+      // The paid-in currency first, then what was paid in it.
+      if (_m.hasGroupCurrencyCode) ..._currencySection(context),
+      if (_m.converting && !_m.isSettlement)
+        _calculatedAmount(
+          context,
+          label: context.l10n.expenseAmountLabel,
+          amount: _m.amount,
+          symbol: widget.group.currency,
+          decimalDigits: _m.digits,
+        )
+      else
+        TextFormField(
+          controller: _m.amountController,
+          decoration: InputDecoration(
+              labelText: context.l10n.expenseAmountLabel,
+              prefixText: widget.group.currency,
+              helperText: _m.converting ? null : _scanHint(_scanFill?.amountHint)),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          validator: (v) => _m.isPositiveAmount(v, _m.digits) ? null : context.l10n.expenseInvalidAmount,
+        ),
+      const SizedBox(height: 12),
+      DropdownButtonFormField<String>(
+        initialValue: _m.paidBy,
+        decoration: InputDecoration(labelText: context.l10n.expensePaidByLabel),
+        items: widget.group.participants
+            .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name)))
+            .toList(),
+        onChanged: (v) => _m.paidBy = v,
+        validator: (v) => v == null ? context.l10n.commonRequired : null,
+      ),
+      const SizedBox(height: 24),
+      Row(
+        children: [
+          Text(context.l10n.expensePaidForHeading, style: Theme.of(context).textTheme.titleMedium),
+          const Spacer(),
+          // Always offers the opposite of the current state --
+          // issue #29 section 2 (spliit-ios: "with everyone
+          // already in the split, 'select all' has nothing left
+          // to do").
+          TextButton(
+            onPressed: _m.toggleSelectAll,
+            child: Text(_m.allIncluded
+                ? context.l10n.expenseSelectNone
+                : context.l10n.expenseSelectAll),
+          ),
+        ],
+      ),
+      SegmentedButton<SplitMode>(
+        segments: [
+          ButtonSegment(
+              value: SplitMode.evenly, label: Text(context.l10n.expenseSplitEvenly)),
+          ButtonSegment(
+              value: SplitMode.byShares, label: Text(context.l10n.expenseSplitShares)),
+          ButtonSegment(
+              value: SplitMode.byPercentage,
+              label: Text(context.l10n.expenseSplitPercent)),
+          ButtonSegment(
+              value: SplitMode.byAmount, label: Text(context.l10n.expenseSplitAmount)),
+        ],
+        selected: {_m.splitMode},
+        // The selected segment is already highlighted -- with 4
+        // segments crammed into the row, the extra check icon
+        // pushed a label like "Percent" onto 3 lines (issue #32).
+        showSelectedIcon: false,
+        onSelectionChanged: (selection) {
+          // Switching to Evenly removes every per-participant
+          // number field from the tree (issue #36) -- if one of
+          // them still had focus, Flutter has to send focus
+          // *somewhere* when its element is disposed, and left
+          // to its own traversal heuristics it jumped back to
+          // whichever field had focus before that (Amount or
+          // Title), which then auto-scrolled the form back up to
+          // show it. Unfocusing first (rather than letting focus
+          // land on the just-tapped SegmentedButton itself, or
+          // relying on Flutter's fallback) means no field is
+          // focused when the rebuild happens, so there's nothing
+          // to scroll to.
+          FocusScope.of(context).unfocus();
+          _m.splitMode = selection.first;
+        },
+      ),
+      const SizedBox(height: 4),
+      for (final p in widget.group.participants) _paidForRow(p),
+      // Hidden for a settlement -- a settlement is a one-off,
+      // not representative of the group's normal expenses (issue
+      // #29 section 7).
+      if (!_m.isSettlement)
+        CheckboxListTile(
+          value: _m.saveDefaultSplit,
+          onChanged: (v) =>
+              _m.saveDefaultSplit = v ?? false,
+          title: Text(context.l10n.expenseSaveDefaultSplit),
+          controlAffinity: ListTileControlAffinity.leading,
+          contentPadding: EdgeInsets.zero,
+        ),
+      Padding(
+        key: _paidForFooterKey,
+        padding: const EdgeInsets.only(top: 4, bottom: 8),
+        child: Text(
+          _paidForFooterText(),
+          style: (_hasAttemptedSave && _splitValidationError() != null)
+              ? TextStyle(color: Theme.of(context).colorScheme.error)
+              : Theme.of(context).textTheme.bodySmall,
+        ),
+      ),
+    ];
   }
 
   Future<void> _pickDate() async {
@@ -1051,6 +1141,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }) {
     final l10n = context.l10n;
     return InputDecorator(
+      key: _calculatedKey,
       decoration: InputDecoration(
         labelText: label,
         helperText: l10n.expenseAmountCalculated,
@@ -1117,7 +1208,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _saveErrorDiagnostics = null;
     });
     // Each refusal below says why on screen; the haptic says to look.
-    if (!_formKey.currentState!.validate()) return _refuse();
+    final invalid = _formKey.currentState!.validateGranularly();
+    if (invalid.isNotEmpty) return _refuse(invalid);
     final amounts = _m.amountsToSave();
     if (amounts == null) return _refuse();
     final paidFor = _m.paidFor();
@@ -1128,10 +1220,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     // online-only: each new photo is uploaded or removed first, as before.
     if (_receipts.busy) {
       setState(() => _saveError = context.l10n.expenseReceiptsWaitBeforeSave);
+      _scrollToTop();
       return _refuse();
     }
     if (widget.isEditing && _receipts.hasFailed) {
       setState(() => _saveError = context.l10n.expenseReceiptsUploadOrRemove);
+      _scrollToTop();
       return _refuse();
     }
 
@@ -1157,10 +1251,43 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         _saveError = errorMessageFor(context, error, unexpected: context.l10n.expenseEditSaveFailed);
         _saveErrorDiagnostics = error.diagnostics;
       });
+      _scrollToTop();
     }
   }
 
-  void _refuse() => unawaited(Haptics.refused());
+  /// Says no, and scrolls to the first thing that's wrong (#259): one of
+  /// the [invalid] fields, the split, or a calculated amount, whichever is
+  /// highest.
+  void _refuse([Set<FormFieldState<Object?>> invalid = const {}]) {
+    unawaited(Haptics.refused());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final problems = [
+        for (final field in invalid) field.context,
+        if ((_m.splitProblem(), _paidForFooterKey.currentContext) case (_?, final footer?)) footer,
+        if ((_m.convertedAmountInvalid, _calculatedKey.currentContext) case (true, final amount?)) amount,
+      ];
+      BuildContext? first;
+      double? top;
+      for (final problem in problems) {
+        final box = problem.findRenderObject();
+        if (box is! RenderBox || !box.attached) continue;
+        final y = box.localToGlobal(Offset.zero).dy;
+        if (top == null || y < top) (first, top) = (problem, y);
+      }
+      if (first != null) {
+        unawaited(Scrollable.ensureVisible(first,
+            alignment: 0.2, duration: const Duration(milliseconds: 300), curve: Curves.easeOut));
+      }
+    });
+  }
+
+  /// Up to why the save failed, at the top of the list (#259).
+  void _scrollToTop() => WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scroll.hasClients) {
+          unawaited(_scroll.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut));
+        }
+      });
 
   /// Only takes effect after a save actually *succeeds* -- a split
   /// remembered from a save the server rejected would wrongly go on
@@ -1201,7 +1328,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       paidBy: _m.paidBy!,
       paidFor: paidFor,
       splitMode: _m.splitMode,
-      category: _m.category,
+      category: _m.categoryToSave,
       notes: _m.notesController.text.trim(),
       date: _m.date,
       isSettlement: _m.isSettlement,
@@ -1259,7 +1386,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       paidBy: _m.paidBy!,
       paidFor: paidFor,
       splitMode: _m.splitMode,
-      category: _m.category,
+      category: _m.categoryToSave,
       notes: _m.notesController.text.trim(),
       date: _m.date,
       isSettlement: _m.isSettlement,

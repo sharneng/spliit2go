@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
@@ -53,8 +54,8 @@ void main() {
   }
 
   Future<void> openPicker(WidgetTester tester, String currentLabel) async {
-    await tester.ensureVisible(find.widgetWithText(InputDecorator, currentLabel));
-    await tester.tap(find.widgetWithText(InputDecorator, currentLabel));
+    await tester.ensureVisible(find.widgetWithText(GroupedRow, currentLabel));
+    await tester.tap(find.widgetWithText(GroupedRow, currentLabel));
     await tester.pumpAndSettle();
   }
 
@@ -66,8 +67,8 @@ void main() {
   testWidgets('French: field, headings and names are translated', (tester) async {
     await pumpForm(tester, const Locale('fr'));
     // The selected category (id 0) shows as the translated General.
-    expect(find.widgetWithText(InputDecorator, 'Général'), findsOneWidget);
-    expect(find.widgetWithText(InputDecorator, 'General'), findsNothing);
+    expect(find.widgetWithText(GroupedRow, 'Général'), findsOneWidget);
+    expect(find.widgetWithText(GroupedRow, 'General'), findsNothing);
 
     await openPicker(tester, 'Général');
     expect(find.text('Non classé'), findsOneWidget); // Uncategorized heading
@@ -94,7 +95,7 @@ void main() {
 
     await tester.tap(find.text('Épicerie'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(InputDecorator, 'Épicerie'), findsOneWidget);
+    expect(find.widgetWithText(GroupedRow, 'Épicerie'), findsOneWidget);
   });
 
   testWidgets('French: the English name still matches', (tester) async {
@@ -126,12 +127,12 @@ void main() {
 
     await tester.tap(find.text('Mystery'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(InputDecorator, 'Mystery'), findsOneWidget);
+    expect(find.widgetWithText(GroupedRow, 'Mystery'), findsOneWidget);
   });
 
   testWidgets('Simplified Chinese: names, headings and search', (tester) async {
     await pumpForm(tester, const Locale('zh'));
-    expect(find.widgetWithText(InputDecorator, '通用'), findsOneWidget);
+    expect(find.widgetWithText(GroupedRow, '通用'), findsOneWidget);
 
     await openPicker(tester, '通用');
     expect(find.text('饮食'), findsOneWidget);
