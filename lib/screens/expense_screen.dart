@@ -1,5 +1,4 @@
 import 'dart:async' show unawaited;
-import 'dart:math' show ln10, log;
 
 import 'package:flutter/foundation.dart' show TargetPlatform, Uint8List, defaultTargetPlatform, visibleForTesting;
 import 'package:flutter/material.dart';
@@ -9,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
 import '../services/exchange_rates.dart';
+import 'expense_form/expense_form_model.dart';
 import '../models/category.dart';
 import '../models/currency.dart';
 import '../models/expense.dart';
@@ -18,12 +18,10 @@ import '../l10n/category_names.dart';
 import '../l10n/context_l10n.dart';
 import '../services/active_user.dart';
 import '../services/category_store.dart';
-import '../services/expense_shares.dart';
 import '../sync/outbox.dart';
 import '../utils/date_format.dart';
 import '../utils/money.dart';
 import '../widgets/money.dart';
-import '../utils/decimal_input.dart';
 import '../widgets/currency_picker.dart';
 import '../widgets/category_icon.dart';
 import '../widgets/error_message.dart';
@@ -155,13 +153,14 @@ class ExpenseScreen extends StatefulWidget {
 
 class _ExpenseScreenState extends State<ExpenseScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _amountController = TextEditingController();
-  final _notesController = TextEditingController();
-  /// "Amount paid", in the paid-in currency (#252).
-  final _originalAmountController = TextEditingController();
-  final _rateController = TextEditingController();
-  String? _paidBy;
+
+  /// What's typed and picked, and what it works out to (#258).
+  late final _m = ExpenseFormModel(
+    group: widget.group,
+    existing: widget.existingExpense,
+    draft: widget.initialDraft,
+    initialPaidBy: widget.initialPaidBy,
+  );
   bool _saving = false;
 
   /// The receipts in this form (#123).
@@ -181,13 +180,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// section 6): a fresh form shouldn't greet the user with red text
   /// before they've done anything.
   bool _hasAttemptedSave = false;
-
-  DateTime _date = DateTime.now();
-
-  /// Whether the date or category was picked (or filled from a receipt),
-  /// so a scan leaves it alone (#125).
-  bool _dateChosen = false;
-  bool _categoryChosen = false;
 
   _Scan _scan = _Scan.idle;
   String? _scanDiagnostics;
@@ -214,188 +206,53 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// The language the last scan found missing, for its message.
   ReceiptScript? _missingScript;
 
-  bool _isSettlement = false;
-  bool _saveDefaultSplittingOptions = false;
-  RecurrenceRule _recurrenceRule = RecurrenceRule.none;
-  /// The currency the expense was paid in (#252): the group's unless
-  /// another is picked, which only a group with an ISO code can do.
-  late String? _paidIn = widget.group.currencyCode;
-
-  /// The last rate this form filled in by itself, so a rate typed over
-  /// it is never overwritten by a lookup.
-  String? _autoFilledRate;
-
-  /// The rate saved with the expense being edited: the record, never
-  /// looked up again by itself.
-  String? _savedRate;
-  double? _savedRateToShow;
-
   _RateState _rateState = _RateState.idle;
   ExchangeRate? _foundRate;
 
   /// Which lookup is current: an answer to an older one is ignored.
   int _rateLookups = 0;
 
-  /// Counts what's typed in the rate field, so "Use the published rate"
-  /// replaces only the rate it was asked to, not one typed while it was
-  /// on its way.
-  int _rateEdits = 0;
-
-  /// The edited expense's own amounts (#255 review): spliit-web lets its
-  /// total differ a little from the amount paid times the rate, so they
-  /// stay as saved until the conversion itself is changed.
-  ({int amount, int originalAmount})? _savedConversion;
-
-  /// The conversion is the edited expense's, untouched: same currency,
-  /// rate, settlement flag and the amount it was worked out from.
-  bool get _conversionUnchanged {
-    final (saved, existing) = (_savedConversion, widget.existingExpense);
-    if (saved == null || existing == null || _savedRate == null) return false;
-    return _paidIn == existing.originalCurrency &&
-        _isSettlement == existing.isSettlement &&
-        _rateController.text.trim() == _savedRate &&
-        (_isSettlement ? _typedAmount == saved.amount : _originalAmount == saved.originalAmount);
-  }
-
-  /// The calculated amount (or amount to transfer) can't be saved, e.g.
-  /// it rounds to zero.
-  String? _convertedAmountError;
-
-  /// The group currency's decimal places (#251): every amount on this
-  /// form is stored in its smallest unit.
-  int get _digits => widget.group.decimalDigits;
-
-  /// Paid in another currency than the group's (#252): "Amount paid" and
-  /// "Exchange rate" show, and one amount is calculated from the other.
-  bool get _converting =>
-      _hasGroupCurrencyCode && _paidIn != null && _paidIn != widget.group.currencyCode;
-
-  Currency get _paidInCurrency => currencyByCode(_paidIn);
-
-  /// The paid-in currency's decimal places.
-  int get _originalDigits => _paidInCurrency.decimalDigits;
-
-  /// The paid-in currency's symbol, or its code when it has none.
-  String get _paidInSymbol =>
-      _paidInCurrency.symbol.isEmpty ? (_paidIn ?? '') : _paidInCurrency.symbol;
-
-  /// The rate typed or filled in, if it's a number above zero.
-  double? get _rate {
-    final rate = _parseDecimal(_rateController.text.trim());
-    return rate != null && rate > 0 ? rate : null;
-  }
-
-  /// The amount as typed, in the group currency's smallest unit.
-  int? get _typedAmount => switch (_parseDecimal(_amountController.text.trim())) {
-        final amount? => toMinorUnits(amount, _digits),
-        null => null,
-      };
-
-  /// "Amount paid", in the paid-in currency's smallest unit.
-  int? get _originalAmount => switch (_parseDecimal(_originalAmountController.text.trim())) {
-        final amount? => toMinorUnits(amount, _originalDigits),
-        null => null,
-      };
-
-  /// The expense's amount in the group's currency: calculated from the
-  /// amount paid during a conversion, so the rate always explains it;
-  /// typed otherwise, and for a settlement, whose amount settled is fixed.
-  int? get _amountMinor {
-    if (!_converting || _isSettlement) return _typedAmount;
-    if (_conversionUnchanged) return _savedConversion!.amount;
-    final (original, rate) = (_originalAmount, _rate);
-    if (original == null || rate == null) return null;
-    return convertToGroupAmount(
-        originalAmount: original, rate: rate, originalDecimalDigits: _originalDigits, decimalDigits: _digits);
-  }
-
-  /// A settlement in another currency (web's direction): what to transfer
-  /// in it to settle the amount.
-  int? get _transferAmount {
-    if (_conversionUnchanged) return _savedConversion!.originalAmount;
-    final (amount, rate) = (_typedAmount, _rate);
-    if (amount == null || rate == null) return null;
-    return convertToOriginalAmount(
-        amount: amount, rate: rate, decimalDigits: _digits, originalDecimalDigits: _originalDigits);
-  }
-
-  /// Whether [text] is an amount of at least one smallest unit once
-  /// rounded to [decimalDigits] (#254 review): 0.1 yen rounds to 0, which
-  /// would save a zero amount, and as an original amount an infinite rate.
-  bool _isPositiveAmount(String? text, int decimalDigits) {
-    final parsed = _parseDecimal(text ?? '');
-    return parsed != null && toMinorUnits(parsed, decimalDigits) > 0;
-  }
-
-  bool get _hasGroupCurrencyCode =>
-      widget.group.currencyCode != null && widget.group.currencyCode!.isNotEmpty;
-
   // The server's list as last read, or Spliit's seeded one until this
   // device has read it: offline, the picker still has every category
   // (#132).
   List<Category> _categories = spliitSeedCategories;
-  int _category = 0;
 
-  /// The fetched [Category] for [_category], or null if it isn't in
+  /// The fetched [Category] for the form's category, or null if it isn't in
   /// [_categories] (yet, or ever). Its display name is translated at
   /// presentation time via [localizedCategoryLabel]; the model's own
   /// English `name`/`grouping` stay untouched, since the icon lookup keys
   /// on them.
   Category? get _knownCategory {
     for (final c in _categories) {
-      if (c.id == _category) return c;
+      if (c.id == _m.category) return c;
     }
     return null;
   }
 
   /// The currently-selected category, falling back to a synthesized
-  /// placeholder if [_category] isn't (yet, or ever) in [_categories] --
+  /// placeholder if the form's category isn't (yet, or ever) in [_categories] --
   /// keeps the picker's "current selection" display never crashing on a
   /// category id this device hasn't fetched a name for.
   Category get _selectedCategory => _categories.firstWhere(
-        (c) => c.id == _category,
-        orElse: () => Category(id: _category, name: 'Category $_category', grouping: 'Other'),
+        (c) => c.id == _m.category,
+        orElse: () => Category(id: _m.category, name: 'Category $_m.category', grouping: 'Other'),
       );
-
-  SplitMode _splitMode = SplitMode.evenly;
-  late final Map<String, bool> _includedInSplit = {
-    for (final p in widget.group.participants) p.id: true,
-  };
-  // Per-participant text controllers for the non-evenly modes -- shares
-  // (any positive integer), percentage (0-100, must sum to 100), or
-  // amount (dollars, must sum to the total). Kept for every participant
-  // regardless of _includedInSplit so toggling inclusion doesn't lose
-  // what was typed.
-  late final Map<String, TextEditingController> _splitControllers = {
-    // Every field starts at the literal text "1" -- not a computed even
-    // split, not blank -- matching spliit-ios's own default (issue #29
-    // section 5). Overwritten by _prefillFrom for edit/draft mode, or by
-    // _applyDefaultSplit for a brand-new expense with a remembered split.
-    for (final p in widget.group.participants) p.id: TextEditingController(text: '1'),
-  };
 
   @override
   void initState() {
     super.initState();
+    // Every change to the form shows: the amounts, previews and footer
+    // are worked out from it.
+    _m.addListener(_changed);
     // A conversion opened without a rate gets one (#252); a saved rate is
     // the record and isn't looked up again.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _converting) unawaited(_lookUpRate());
+      if (mounted && _m.converting) unawaited(_lookUpRate());
     });
-    final existing = widget.existingExpense;
-    final draft = widget.initialDraft;
-    if (existing != null) {
-      _prefillFrom(existing);
-    } else if (draft != null) {
-      // Pre-fills the same way edit mode does -- draft mode only differs
-      // in _save() (new id, normal add path), not in what's shown.
-      _prefillFrom(draft);
-    } else {
-      _paidBy = resolveDefaultPaidBy(
-        activeUserId: widget.initialPaidBy,
-        participants: widget.group.participants,
-      );
-      // Only for a plain brand-new expense -- not for edit (_prefillFrom
+    // The model pre-fills an edit or a draft the same way: a draft only
+    // differs in _save() (new id, normal add path), not in what's shown.
+    if (widget.existingExpense == null && widget.initialDraft == null) {
+      // Only for a plain brand-new expense -- not for edit (the model
       // above already set the real split) and not for a draft like
       // balances_screen's "mark as paid" (its settlement split is the
       // whole point of that flow and shouldn't be overridden by a
@@ -467,15 +324,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   void _undoScanFill() {
     final filled = _scanFilled;
     if (filled == null) return;
-    if (filled.title != null && _titleController.text == filled.title) _titleController.text = '';
+    if (filled.title != null && _m.titleController.text == filled.title) _m.titleController.text = '';
     if (filled.amountField case final field? when field.text == filled.amount) field.text = '';
-    if (filled.date case (final date, final before)? when _date == date) {
-      _date = before;
-      _dateChosen = false;
+    if (filled.date case (final date, final before)? when _m.date == date) {
+      _m.setDate(before, chosen: false);
     }
-    if (filled.category case (final id, final before)? when _category == id) {
-      _category = before;
-      _categoryChosen = false;
+    if (filled.category case (final id, final before)? when _m.category == id) {
+      _m.setCategory(before, chosen: false);
     }
     _scanFilled = null;
   }
@@ -503,98 +358,16 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// "everyone, evenly" and switches over once the read completes).
   Future<void> _loadDefaultSplit() async {
     final split = await widget.db.defaultSplitFor(widget.group.id);
-    if (!mounted || split == null || !split.appliesTo(widget.group.participants)) return;
-    setState(() {
-      _splitMode = split.splitMode;
-      final shares = split.shares;
-      if (shares == null) return; // "everyone" (or Amount) -- defaults already reflect that.
-      for (final p in widget.group.participants) {
-        final value = shares[p.id];
-        _includedInSplit[p.id] = value != null;
-        if (value == null) continue;
-        _splitControllers[p.id]!.text = switch (split.splitMode) {
-          // Inverse of the x100 done in _buildPaidFor -- same conversion
-          // _prefillFrom uses for an edited expense's Shares/Percentage
-          // values (issue #34: both are x100-scaled on the wire, to
-          // allow decimal precision -- see _buildPaidFor's doc comment).
-          SplitMode.byShares || SplitMode.byPercentage => _trimTrailingZeros(value / 100),
-          _ => value.toString(),
-        };
-      }
-    });
+    if (!mounted || split == null) return;
+    _m.applyDefaultSplit(split);
   }
 
-  /// Fills every control from [e] -- edit mode's starting point. Runs
-  /// once, in [initState]; this screen doesn't re-sync with a changing
-  /// [existingExpense] afterwards.
-  void _prefillFrom(Expense e) {
-    _titleController.text = e.title;
-    _amountController.text = minorUnitsText(e.amountCents, _digits);
-    _notesController.text = e.notes;
-    _paidBy = e.paidBy;
-    _category = e.category;
-    _date = e.date;
-    _isSettlement = e.isSettlement;
-    _recurrenceRule = e.recurrenceRule;
-    _splitMode = e.splitMode;
-
-    for (final p in widget.group.participants) {
-      _includedInSplit[p.id] = false;
-    }
-    for (final share in e.paidFor) {
-      _includedInSplit[share.participantId] = true;
-      final controller = _splitControllers[share.participantId];
-      if (controller == null) continue;
-      controller.text = switch (e.splitMode) {
-        SplitMode.byAmount => minorUnitsText(share.shares, _digits),
-        // Shares/Percentage are both x100 on the wire (issue #34) --
-        // inverse of the x100 done in _buildPaidFor, formatted back down
-        // to at most 2 decimal places with no trailing zeros so "150"
-        // redisplays as "1.5", not "1.50" or "150".
-        SplitMode.byShares || SplitMode.byPercentage => _trimTrailingZeros(share.shares / 100),
-        // Evenly's per-participant "shares" is just an equal weight with
-        // no meaningful decimal value to carry over -- and, per
-        // spliit-web's own expense-form.tsx, it's stored on the wire as
-        // the literal integer 100 for every participant, not 1. Taking
-        // that raw value here (issue #34 follow-up) meant switching this
-        // *editing* expense from Evenly to Shares/Percentage showed "100"
-        // in every field instead of the "1" a brand-new expense starts
-        // with. Evenly's stored value isn't shown while still in Evenly
-        // mode, so there's nothing to prefill -- leave the controller at
-        // its constructor default ('1') instead.
-        SplitMode.evenly => '1',
-      };
-    }
-
-    // Only originalCurrency says "converted": the server keeps the old
-    // amount and rate of a conversion that was removed (#252).
-    if (e.originalCurrency != null && _hasGroupCurrencyCode) {
-      _paidIn = e.originalCurrency;
-      if (e.originalAmountCents case final original?) {
-        _originalAmountController.text = minorUnitsText(original, _originalDigits);
-        // Not for a draft: it's a new expense, worked out afresh.
-        if (identical(e, widget.existingExpense)) {
-          _savedConversion = (amount: e.amountCents, originalAmount: original);
-        }
-      }
-      // Shown in the locale's own decimals, once it's known.
-      _savedRateToShow = e.conversionRate;
-    }
-
-    // No pre-population needed here for a category id this device
-    // hasn't fetched a name for yet -- [_selectedCategory] synthesizes a
-    // placeholder display on demand rather than requiring one to be
-    // seeded into [_categories] up front.
-  }
+  void _changed() => setState(() {});
 
   @override
   void dispose() {
-    for (final c in _splitControllers.values) {
-      c.dispose();
-    }
-    _notesController.dispose();
-    _originalAmountController.dispose();
-    _rateController.dispose();
+    _m.removeListener(_changed);
+    _m.dispose();
     _receipts.dispose();
     super.dispose();
   }
@@ -684,41 +457,38 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       // The form as it is now, not as it was when the scan started: the
       // user may have typed meanwhile. During a conversion the total is
       // what was paid, in the currency it was paid in (#252).
-      final paidIn = _converting && !_isSettlement;
-      final amountField = paidIn ? _originalAmountController : _amountController;
+      final paidIn = _m.converting && !_m.isSettlement;
+      final amountField = paidIn ? _m.originalAmountController : _m.amountController;
       final fill = receiptFill(
         scan,
         ReceiptFormState(
-          titleEmpty: _titleController.text.trim().isEmpty,
+          titleEmpty: _m.titleController.text.trim().isEmpty,
           amountEmpty: amountField.text.trim().isEmpty,
-          dateChosen: _dateChosen,
-          categoryChosen: _categoryChosen,
-          currencyCode: paidIn ? _paidIn : widget.group.currencyCode,
-          currencySymbol: paidIn ? _paidInSymbol : widget.group.currency,
+          dateChosen: _m.dateChosen,
+          categoryChosen: _m.categoryChosen,
+          currencyCode: paidIn ? _m.paidIn : widget.group.currencyCode,
+          currencySymbol: paidIn ? _m.paidInSymbol : widget.group.currency,
         ),
       );
-      final dateBefore = _date;
+      final dateBefore = _m.date;
       setState(() {
         final filled = _ScanFilled();
-        if (fill.title case final title?) _titleController.text = filled.title = title;
+        if (fill.title case final title?) _m.titleController.text = filled.title = title;
         if (fill.amountCents case final cents?) {
           // A receipt total is read in hundredths whatever the currency.
-          amountField.text = filled.amount = (cents / 100).toStringAsFixed(paidIn ? _originalDigits : _digits);
+          amountField.text = filled.amount = (cents / 100).toStringAsFixed(paidIn ? _m.originalDigits : _m.digits);
           filled.amountField = amountField;
         }
         if (fill.date case final date?) {
-          filled.date = (date, _date);
-          _date = date;
-          _dateChosen = true;
+          filled.date = (date, _m.date);
+          _m.setDate(date);
         }
         if (fill.categoryId case final id?) {
-          filled.category = (id, _category);
-          _category = id;
-          _categoryChosen = true;
+          filled.category = (id, _m.category);
+          _m.setCategory(id);
         }
         _scanFilled = filled;
         _scanFill = fill;
-        _convertedAmountError = null;
         _scan = scan.isEmpty
             ? _Scan.nothing
             : fill.filledAny
@@ -726,7 +496,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 : _Scan.hintsOnly;
       });
       // The receipt's day has its own rate (#252).
-      if (_date != dateBefore) unawaited(_lookUpRate());
+      if (_m.date != dateBefore) unawaited(_lookUpRate());
     } on ReceiptTextModelMissing catch (e) {
       // Removed, or Play services' data was cleared, since the form
       // opened: the picker offers it for download again.
@@ -821,58 +591,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     if (discard == true && mounted) Navigator.of(context).pop();
   }
 
-  List<Participant> get _includedParticipants =>
-      widget.group.participants.where((p) => _includedInSplit[p.id] ?? false).toList();
-
-  bool get _allIncluded =>
-      widget.group.participants.every((p) => _includedInSplit[p.id] ?? false);
-
-  /// Flips every participant's included flag to the opposite of
-  /// [_allIncluded] -- "Select all"/"Select none" always offers the
-  /// complement of the current state (issue #29 section 2), and leaves
-  /// typed values untouched so re-including someone brings their number
-  /// back rather than resetting it.
-  void _toggleSelectAll() {
-    setState(() {
-      final target = !_allIncluded;
-      for (final p in widget.group.participants) {
-        _includedInSplit[p.id] = target;
-      }
-    });
-  }
-
-  /// [parseFlexibleDecimal] with this locale's decimal separator, which
-  /// decides only "1,234" (#238).
-  double? _parseDecimal(String input) =>
-      parseFlexibleDecimal(input,
-          decimalSeparator: _decimalSeparator, currencies: [widget.group.currency]);
-
-  /// Kept from the last build's locale, so parsing after an await (Save)
-  /// doesn't need the context.
-  String _decimalSeparator = '.';
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _decimalSeparator =
+    _m.decimalSeparator =
         NumberFormat.decimalPattern(Localizations.localeOf(context).toString()).symbols.DECIMAL_SEP;
-    if (_savedRateToShow case final rate?) {
-      _rateController.text = _savedRate = _rateText(rate);
-      _savedRateToShow = null;
-    }
-  }
-
-  /// [rate] as the rate field shows it: plain decimals, never an exponent,
-  /// in the locale's separator, no trailing zeros.
-  String _rateText(double rate) {
-    // 15 significant digits, all a double holds, so a saved rate shows
-    // as it was saved: 14 places after the first digit.
-    final exponent = rate <= 0 ? 0 : (log(rate) / ln10).floor();
-    var text = rate.toStringAsFixed((14 - exponent).clamp(0, 20));
-    if (text.contains('.')) {
-      text = text.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
-    }
-    return text.replaceAll('.', _decimalSeparator);
   }
 
   /// Asks for the rate of the paid-in currency on the expense's day,
@@ -881,19 +604,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// for [force] ("Use the published rate").
   Future<void> _lookUpRate({bool force = false}) async {
     final lookup = ++_rateLookups;
-    final edits = _rateEdits;
-    final from = _paidIn, to = widget.group.currencyCode;
-    if (!_converting || from == null || to == null) {
+    final edits = _m.rateEdits;
+    final from = _m.paidIn, to = widget.group.currencyCode;
+    if (!_m.converting || from == null || to == null) {
       setState(() => _rateState = _RateState.idle);
       return;
     }
-    final text = _rateController.text.trim();
-    if (!force && text.isNotEmpty && text != _autoFilledRate) return;
+    if (!_m.wantsRate(force: force)) return;
     setState(() => _rateState = _RateState.loading);
     _RateState state;
     ExchangeRate? found;
     try {
-      found = await ExchangeRates.of(widget.db).rate(_date, from, to, force: force);
+      found = await ExchangeRates.of(widget.db).rate(_m.date, from, to, force: force);
       state = _RateState.found;
     } on NoPublishedRate {
       state = _RateState.noRate;
@@ -908,25 +630,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     setState(() {
       _rateState = state;
       _foundRate = found;
-      final current = _rateController.text.trim();
-      // Anything typed since the request wins, even a rate that happens
-      // to match the one filled in before (#255 review); an empty field
-      // has nothing to lose.
-      if (found != null &&
-          (current.isEmpty || (edits == _rateEdits && (force || current == _autoFilledRate)))) {
-        _rateController.text = _autoFilledRate = _rateText(found.rate);
-        _savedRate = null;
-      }
     });
+    if (found != null) _m.fillRate(found.rate, force: force, editsAtRequest: edits);
   }
 
   /// Where the rate in the field comes from, under it.
   String _rateStatus(BuildContext context) {
     final l10n = context.l10n;
-    final text = _rateController.text.trim();
-    if (text.isNotEmpty && text != _autoFilledRate) {
-      return text == _savedRate ? l10n.expenseRateSaved : l10n.expenseRateTyped;
-    }
+    if (_m.rateIsOwn) return _m.rateIsSaved ? l10n.expenseRateSaved : l10n.expenseRateTyped;
     final found = _foundRate;
     return switch (_rateState) {
       _RateState.idle || _RateState.loading => l10n.expenseRateLoading,
@@ -934,11 +645,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _RateState.unavailable => l10n.expenseRateUnavailable,
       _RateState.found when found != null => () {
           final quote = l10n.expenseRateQuote(
-              _paidIn ?? '', widget.group.currencyCode ?? '', _rateText(found.rate));
+              _m.paidIn ?? '', widget.group.currencyCode ?? '', _m.rateText(found.rate));
           final day = formatDate(found.publishedOn, locale: context.appLocale);
           if (found.offline) return l10n.expenseRateOffline(day, quote);
           // Rates are published on working days: a Sunday's is Friday's.
-          return dayKey(found.publishedOn) == dayKey(_date) ? quote : l10n.expenseRateOnDay(quote, day);
+          return dayKey(found.publishedOn) == dayKey(_m.date) ? quote : l10n.expenseRateOnDay(quote, day);
         }(),
       _RateState.found => l10n.expenseRateLoading,
     };
@@ -947,9 +658,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// "Use the published rate", only where it would change something: a
   /// typed or saved rate, a lookup that failed, or an offline one.
   bool get _canRefreshRate {
-    final text = _rateController.text.trim();
     if (_rateState == _RateState.loading) return false;
-    if (text.isNotEmpty && text != _autoFilledRate) return true;
+    if (_m.rateIsOwn) return true;
     return switch (_rateState) {
       _RateState.noRate || _RateState.unavailable => true,
       _RateState.found => _foundRate?.offline ?? false,
@@ -957,150 +667,21 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     };
   }
 
-  /// The typed value for [p] in the current non-evenly split mode, or
-  /// null if it isn't currently a number -- every non-evenly mode takes
-  /// a decimal now (issue #34), matching [_buildPaidFor]'s own parsing
-  /// so the live footer/preview never disagree with what Save would
-  /// actually do.
-  double? _typedValue(Participant p) =>
-      _parseDecimal(_splitControllers[p.id]!.text.trim());
-
-  /// Rounded basis points (percentage x 100) for [p]'s typed value --
-  /// the exact integer [_buildPaidFor] sends on the wire, and the same
-  /// thing spliit-web's own expenseFormSchema sums to validate a
-  /// BY_PERCENTAGE split (must total 10000). Validating in basis points
-  /// rather than summing raw decimals avoids floating-point drift (e.g.
-  /// three 33.33...s never quite summing to exactly 100.0).
-  int? _percentageBasisPoints(Participant p) {
-    final value = _typedValue(p);
-    return value == null ? null : (value * 100).round();
-  }
-
-  /// Formats a decimal to at most 2 places with no trailing zeros (or
-  /// trailing decimal point) -- e.g. 1.5 stays "1.5", 2.0 becomes "2",
-  /// 33.3 stays "33.3". Used to redisplay a Shares/Percentage wire value
-  /// (issue #34: both are x100-scaled to allow decimal precision -- see
-  /// [_buildPaidFor]) and in the footer's "still to allocate" hint.
-  String _trimTrailingZeros(double value) {
-    var text = value.toStringAsFixed(2);
-    if (text.contains('.')) {
-      text = text.replaceFirst(RegExp(r'0+$'), '');
-      text = text.replaceFirst(RegExp(r'\.$'), '');
-    }
-    return text;
-  }
-
-  /// How much of the total is still unaccounted for, in the field's own
-  /// unit (percentage points, or dollars) -- null for Evenly/Shares,
-  /// which have no "must sum to X" concept (issue #29 section 6 step 2).
-  /// Positive means "still to allocate", negative means "over".
-  double? _unallocated() {
-    if (_splitMode == SplitMode.byPercentage) {
-      var totalBasisPoints = 0;
-      for (final p in _includedParticipants) {
-        final bp = _percentageBasisPoints(p);
-        if (bp == null) return null;
-        totalBasisPoints += bp;
-      }
-      return (10000 - totalBasisPoints) / 100;
-    }
-    if (_splitMode == SplitMode.byAmount) {
-      final amountMinor = _amountMinor;
-      if (amountMinor == null) return null;
-      final amount = fromMinorUnits(amountMinor, _digits);
-      var total = 0.0;
-      for (final p in _includedParticipants) {
-        final v = _typedValue(p);
-        if (v == null) return null;
-        total += v;
-      }
-      return amount - total;
-    }
-    return null;
-  }
-
-  /// Ported from spliit-ios's `ExpenseFormDraft.showsShareAmounts` --
-  /// issue #29 section 4. Amount mode never shows a computed preview
-  /// (the typed field already *is* the amount); Percent only once the
-  /// typed percentages land exactly on 100.
-  bool get _showsLivePreview {
-    if (_isSettlement || _splitMode == SplitMode.byAmount) return false;
-    if (_includedParticipants.isEmpty) return false;
-    if (_splitMode == SplitMode.evenly) return true;
-    for (final p in _includedParticipants) {
-      final v = _typedValue(p);
-      if (v == null || v <= 0) return false;
-    }
-    return _splitMode == SplitMode.byPercentage ? _unallocated() == 0 : true;
-  }
-
-  /// The live per-participant amounts, computed with the same
-  /// apportionment [shareCentsFor] uses at Save time, but from whatever
-  /// is currently typed rather than a saved [Expense]. Null when
-  /// [_showsLivePreview] is false or the amount field isn't parseable yet.
-  Map<String, int>? _livePreviewAmounts() {
-    if (!_showsLivePreview) return null;
-    final amountCents = _amountMinor;
-    if (amountCents == null) return null;
-    final paidFor = _splitMode == SplitMode.evenly
-        ? _includedParticipants
-            .map((p) => ExpenseShare(participantId: p.id, shares: 1))
-            .toList()
-        : _includedParticipants
-            .map((p) => ExpenseShare(
-                participantId: p.id, shares: (_typedValue(p)! * 100).round()))
-            .toList();
-    return shareCentsFor(amountCents: amountCents, splitMode: _splitMode, paidFor: paidFor);
-  }
-
-  /// Pure validation -- no setState, no side effects -- callable from
-  /// both the live footer (guarded by [_hasAttemptedSave], issue #29
-  /// section 6 step 1) and [_buildPaidFor] at Save time, so the two can
-  /// never disagree about what counts as a blocking problem.
-  String? _splitValidationError() {
-    final included = _includedParticipants;
-    if (included.isEmpty) return context.l10n.expenseSelectAtLeastOne;
-    if (_splitMode == SplitMode.evenly) return null;
-
-    if (_splitMode == SplitMode.byShares) {
-      for (final p in included) {
-        final value = _typedValue(p);
-        if (value == null || value <= 0) {
-          return context.l10n.expenseEnterShares(p.name);
-        }
-      }
-      return null;
-    }
-
-    if (_splitMode == SplitMode.byPercentage) {
-      var totalBasisPoints = 0;
-      for (final p in included) {
-        final bp = _percentageBasisPoints(p);
-        if (bp == null || bp < 0) return context.l10n.expenseEnterPercentage(p.name);
-        totalBasisPoints += bp;
-      }
-      if (totalBasisPoints != 10000) {
-        return context.l10n
-            .expensePercentageMismatch(_trimTrailingZeros(totalBasisPoints / 100));
-      }
-      return null;
-    }
-
-    // byAmount
-    final amountCents = _amountMinor ?? 0;
-    var totalCents = 0;
-    for (final p in included) {
-      final value = _parseDecimal(_splitControllers[p.id]!.text.trim());
-      if (value == null || value < 0) return context.l10n.expenseEnterAmount(p.name);
-      totalCents += toMinorUnits(value, _digits);
-    }
-    if (totalCents != amountCents) {
-      final diff = formatMoney((amountCents - totalCents).abs(), widget.group.currency,
-          decimalDigits: _digits, locale: context.appLocale);
-      return context.l10n.expenseAmountMismatch(diff);
-    }
-    return null;
-  }
+  /// What's wrong with the split, in words, if anything.
+  String? _splitValidationError() => switch (_m.splitProblem()) {
+        null => null,
+        NoOneIncluded() => context.l10n.expenseSelectAtLeastOne,
+        InvalidValue(:final participant) => switch (_m.splitMode) {
+            SplitMode.byShares => context.l10n.expenseEnterShares(participant.name),
+            SplitMode.byPercentage => context.l10n.expenseEnterPercentage(participant.name),
+            _ => context.l10n.expenseEnterAmount(participant.name),
+          },
+        PercentagesDontAddUp(:final totalBasisPoints) =>
+          context.l10n.expensePercentageMismatch(trimTrailingZeros(totalBasisPoints / 100)),
+        AmountsDontAddUp(:final difference) => context.l10n.expenseAmountMismatch(formatMoney(
+            difference.abs(), widget.group.currency,
+            decimalDigits: _m.digits, locale: context.appLocale)),
+      };
 
   /// The "Paid for" section's single footer line, in the priority order
   /// from issue #29 section 6: an attempted-save blocking error first,
@@ -1111,24 +692,24 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final error = _splitValidationError();
       if (error != null) return error;
     }
-    final unallocated = _unallocated();
+    final unallocated = _m.unallocated();
     if (unallocated != null && unallocated != 0) {
       final over = unallocated < 0;
       final magnitude = unallocated.abs();
-      if (_splitMode == SplitMode.byPercentage) {
-        final formatted = _trimTrailingZeros(magnitude);
+      if (_m.splitMode == SplitMode.byPercentage) {
+        final formatted = trimTrailingZeros(magnitude);
         return over
             ? context.l10n.expensePercentOver(formatted)
             : context.l10n.expensePercentRemaining(formatted);
       }
       final formattedAmount =
-          formatMoney(toMinorUnits(magnitude, _digits), widget.group.currency,
-              decimalDigits: _digits, locale: context.appLocale);
+          formatMoney(toMinorUnits(magnitude, _m.digits), widget.group.currency,
+              decimalDigits: _m.digits, locale: context.appLocale);
       return over
           ? context.l10n.expenseAmountOver(formattedAmount)
           : context.l10n.expenseAmountRemaining(formattedAmount);
     }
-    return switch (_splitMode) {
+    return switch (_m.splitMode) {
       SplitMode.evenly => context.l10n.expenseHintEvenly,
       SplitMode.byShares => context.l10n.expenseHintShares,
       SplitMode.byPercentage => context.l10n.expenseHintPercentage,
@@ -1165,30 +746,29 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             children: [
               if (_offersScan) _scanSection(context),
               TextFormField(
-                controller: _titleController,
+                controller: _m.titleController,
                 decoration: InputDecoration(
                     labelText: context.l10n.expenseTitleLabel, helperText: _scanHint(_scanFill?.titleHint)),
                 validator: (v) => (v == null || v.isEmpty) ? context.l10n.commonRequired : null,
               ),
               const SizedBox(height: 12),
-              if (_converting && !_isSettlement)
+              if (_m.converting && !_m.isSettlement)
                 _calculatedAmount(
                   context,
                   label: context.l10n.expenseAmountLabel,
-                  amount: _amountMinor,
+                  amount: _m.amount,
                   symbol: widget.group.currency,
-                  decimalDigits: _digits,
+                  decimalDigits: _m.digits,
                 )
               else
                 TextFormField(
-                  controller: _amountController,
+                  controller: _m.amountController,
                   decoration: InputDecoration(
                       labelText: context.l10n.expenseAmountLabel,
                       prefixText: widget.group.currency,
-                      helperText: _converting ? null : _scanHint(_scanFill?.amountHint)),
+                      helperText: _m.converting ? null : _scanHint(_scanFill?.amountHint)),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  onChanged: (_) => setState(() {}), // amount feeds the by-amount hint below
-                  validator: (v) => _isPositiveAmount(v, _digits) ? null : context.l10n.expenseInvalidAmount,
+                  validator: (v) => _m.isPositiveAmount(v, _m.digits) ? null : context.l10n.expenseInvalidAmount,
                 ),
               const SizedBox(height: 12),
               InkWell(
@@ -1196,12 +776,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 child: InputDecorator(
                   decoration: InputDecoration(
                       labelText: context.l10n.expenseDateLabel, helperText: _scanHint(_scanFill?.dateHint)),
-                  child: Text(formatDate(_date, locale: context.appLocale)),
+                  child: Text(formatDate(_m.date, locale: context.appLocale)),
                 ),
               ),
               const SizedBox(height: 12),
               // Next to the amount and its day, as in spliit-ios (#252).
-              if (_hasGroupCurrencyCode) ..._currencySection(context),
+              if (_m.hasGroupCurrencyCode) ..._currencySection(context),
               InkWell(
                 onTap: _pickCategory,
                 child: InputDecorator(
@@ -1218,32 +798,32 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       CategoryIconGlyph(category: _selectedCategory, size: 24),
                       const SizedBox(width: 8),
                       Text(localizedCategoryLabel(
-                          context, _category, _knownCategory)),
+                          context, _m.category, _knownCategory)),
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: _paidBy,
+                initialValue: _m.paidBy,
                 decoration: InputDecoration(labelText: context.l10n.expensePaidByLabel),
                 items: widget.group.participants
                     .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name)))
                     .toList(),
-                onChanged: (v) => setState(() => _paidBy = v),
+                onChanged: (v) => _m.paidBy = v,
                 validator: (v) => v == null ? context.l10n.commonRequired : null,
               ),
               const SizedBox(height: 12),
               CheckboxListTile(
-                value: _isSettlement,
-                onChanged: (v) => setState(() => _isSettlement = v ?? false),
+                value: _m.isSettlement,
+                onChanged: (v) => _m.isSettlement = v ?? false,
                 title: Text(context.l10n.expenseIsSettlement),
                 controlAffinity: ListTileControlAffinity.leading,
                 contentPadding: EdgeInsets.zero,
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<RecurrenceRule>(
-                initialValue: _recurrenceRule,
+                initialValue: _m.recurrenceRule,
                 decoration: InputDecoration(labelText: context.l10n.expenseRepeatLabel),
                 items: [
                   DropdownMenuItem(
@@ -1256,7 +836,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       value: RecurrenceRule.monthly,
                       child: Text(context.l10n.expenseRepeatMonthly)),
                 ],
-                onChanged: (v) => setState(() => _recurrenceRule = v ?? RecurrenceRule.none),
+                onChanged: (v) => _m.recurrenceRule = v ?? RecurrenceRule.none,
               ),
               const SizedBox(height: 24),
               Row(
@@ -1268,8 +848,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   // already in the split, 'select all' has nothing left
                   // to do").
                   TextButton(
-                    onPressed: _toggleSelectAll,
-                    child: Text(_allIncluded
+                    onPressed: _m.toggleSelectAll,
+                    child: Text(_m.allIncluded
                         ? context.l10n.expenseSelectNone
                         : context.l10n.expenseSelectAll),
                   ),
@@ -1287,7 +867,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   ButtonSegment(
                       value: SplitMode.byAmount, label: Text(context.l10n.expenseSplitAmount)),
                 ],
-                selected: {_splitMode},
+                selected: {_m.splitMode},
                 // The selected segment is already highlighted -- with 4
                 // segments crammed into the row, the extra check icon
                 // pushed a label like "Percent" onto 3 lines (issue #32).
@@ -1306,7 +886,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   // focused when the rebuild happens, so there's nothing
                   // to scroll to.
                   FocusScope.of(context).unfocus();
-                  setState(() => _splitMode = selection.first);
+                  _m.splitMode = selection.first;
                 },
               ),
               const SizedBox(height: 4),
@@ -1314,11 +894,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               // Hidden for a settlement -- a settlement is a one-off,
               // not representative of the group's normal expenses (issue
               // #29 section 7).
-              if (!_isSettlement)
+              if (!_m.isSettlement)
                 CheckboxListTile(
-                  value: _saveDefaultSplittingOptions,
+                  value: _m.saveDefaultSplit,
                   onChanged: (v) =>
-                      setState(() => _saveDefaultSplittingOptions = v ?? false),
+                      _m.saveDefaultSplit = v ?? false,
                   title: Text(context.l10n.expenseSaveDefaultSplit),
                   controlAffinity: ListTileControlAffinity.leading,
                   contentPadding: EdgeInsets.zero,
@@ -1334,7 +914,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ),
               const SizedBox(height: 12),
               TextFormField(
-                controller: _notesController,
+                controller: _m.notesController,
                 decoration: InputDecoration(labelText: context.l10n.expenseNotesLabel),
                 maxLines: 3,
                 maxLength: 5000, // matches Spliit's EXPENSE_NOTES_MAX
@@ -1360,15 +940,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _date,
+      initialDate: _m.date,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
     if (picked != null) {
-      setState(() {
-        _date = picked;
-        _dateChosen = true;
-      });
+      _m.setDate(picked);
       // The new day's rate, into a field that isn't the user's.
       unawaited(_lookUpRate());
     }
@@ -1382,13 +959,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     final picked = await showModalBottomSheet<Category>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _CategoryPicker(categories: _categories, selectedId: _category),
+      builder: (_) => _CategoryPicker(categories: _categories, selectedId: _m.category),
     );
     if (picked != null) {
-      setState(() {
-        _category = picked.id;
-        _categoryChosen = true;
-      });
+      _m.setCategory(picked.id);
     }
   }
 
@@ -1399,23 +973,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     final picked = await pickCurrency(
       context,
       currencies: supportedCurrencies,
-      selectedCode: _paidIn ?? '',
+      selectedCode: _m.paidIn ?? '',
     );
-    if (picked == null || picked.code == _paidIn) return;
-    // Back to the group's own currency, the calculated total is kept as
-    // the amount (spliit-ios).
-    final converted = _converting && !_isSettlement ? _amountMinor : null;
-    setState(() {
-      _paidIn = picked.code;
-      // A rate belongs to a pair of currencies: it can't come along.
-      _rateController.text = '';
-      _autoFilledRate = _savedRate = null;
-      _foundRate = null;
-      _convertedAmountError = null;
-      if (!_converting && converted != null) {
-        _amountController.text = minorUnitsText(converted, _digits);
-      }
-    });
+    if (picked == null || !_m.choosePaidIn(picked.code)) return;
+    setState(() => _foundRate = null);
     unawaited(_lookUpRate());
   }
 
@@ -1430,45 +991,41 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         onTap: _pickPaidIn,
         child: InputDecorator(
           decoration: InputDecoration(labelText: l10n.expensePaidIn),
-          child: Text(_paidInCurrency.toString()),
+          child: Text(_m.paidInCurrency.toString()),
         ),
       ),
       const SizedBox(height: 12),
-      if (_converting) ...[
-        if (_isSettlement)
+      if (_m.converting) ...[
+        if (_m.isSettlement)
           _calculatedAmount(
             context,
             label: l10n.expenseAmountToTransfer,
-            amount: _transferAmount,
-            symbol: _paidInSymbol,
-            decimalDigits: _originalDigits,
+            amount: _m.transferAmount,
+            symbol: _m.paidInSymbol,
+            decimalDigits: _m.originalDigits,
           )
         else
           TextFormField(
-            controller: _originalAmountController,
+            controller: _m.originalAmountController,
             decoration: InputDecoration(
                 labelText: l10n.expenseAmountPaid,
-                prefixText: _paidInSymbol,
+                prefixText: _m.paidInSymbol,
                 helperText: _scanHint(_scanFill?.amountHint)),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (_) => setState(() => _convertedAmountError = null),
             validator: (v) =>
-                _isPositiveAmount(v, _originalDigits) ? null : l10n.expenseInvalidAmount,
+                _m.isPositiveAmount(v, _m.originalDigits) ? null : l10n.expenseInvalidAmount,
           ),
         const SizedBox(height: 12),
         TextFormField(
-          controller: _rateController,
+          controller: _m.rateController,
           decoration: InputDecoration(
             labelText: l10n.expenseExchangeRate,
             helperText: _rateStatus(context),
             helperMaxLines: 3,
           ),
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          onChanged: (_) => setState(() {
-            _rateEdits++;
-            _convertedAmountError = null;
-          }),
-          validator: (_) => _rate == null ? l10n.expenseInvalidRate : null,
+          onChanged: (_) => _m.rateTyped(),
+          validator: (_) => _m.rate == null ? l10n.expenseInvalidRate : null,
         ),
         if (_canRefreshRate)
           Align(
@@ -1497,7 +1054,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       decoration: InputDecoration(
         labelText: label,
         helperText: l10n.expenseAmountCalculated,
-        errorText: _convertedAmountError,
+        errorText: _m.convertedAmountInvalid ? l10n.expenseInvalidAmount : null,
       ),
       child: amount == null
           ? Text('—', semanticsLabel: l10n.expenseAmountNotYetKnown)
@@ -1506,43 +1063,42 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   Widget _paidForRow(Participant p) {
-    final included = _includedInSplit[p.id] ?? false;
-    final preview = included ? (_livePreviewAmounts()?[p.id]) : null;
+    final included = _m.isIncluded(p.id);
+    final preview = included ? (_m.livePreviewAmounts()?[p.id]) : null;
     return Row(
       children: [
         Expanded(
           child: CheckboxListTile(
             value: included,
-            onChanged: (v) => setState(() => _includedInSplit[p.id] = v ?? false),
+            onChanged: (v) => _m.setIncluded(p.id, v ?? false),
             title: Text(p.name),
             // The live per-participant amount preview (issue #29 section 3/4) -- absent for
             // Amount (the typed field already *is* the amount) and for
-            // anything that doesn't yet satisfy [_showsLivePreview].
+            // anything that doesn't yet satisfy [ExpenseFormModel.showsLivePreview].
             subtitle:
                 preview != null
                     ? Money(
                         formatMoney(preview, widget.group.currency,
-                            decimalDigits: _digits, locale: context.appLocale),
+                            decimalDigits: _m.digits, locale: context.appLocale),
                         size: MoneySize.support)
                     : null,
             controlAffinity: ListTileControlAffinity.leading,
             contentPadding: EdgeInsets.zero,
           ),
         ),
-        if (included && _splitMode != SplitMode.evenly)
+        if (included && _m.splitMode != SplitMode.evenly)
           SizedBox(
             width: 90,
             child: TextFormField(
-              controller: _splitControllers[p.id],
+              controller: _m.splitControllers[p.id],
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               textAlign: TextAlign.right,
-              // Recomputes the live preview/footer on every keystroke
-              // (issue #29 section 6) instead of only validating at Save.
-              onChanged: (_) => setState(() {}),
+              // The model recomputes the live preview/footer on every
+              // keystroke (issue #29 section 6), not only at Save.
               decoration: InputDecoration(
                 isDense: true,
-                prefixText: _splitMode == SplitMode.byAmount ? widget.group.currency : null,
-                suffixText: switch (_splitMode) {
+                prefixText: _m.splitMode == SplitMode.byAmount ? widget.group.currency : null,
+                suffixText: switch (_m.splitMode) {
                   SplitMode.byShares => 'shares',
                   SplitMode.byPercentage => '%',
                   _ => null,
@@ -1554,77 +1110,17 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
-  /// Builds the paidFor list for the current split mode, or returns null
-  /// if [_splitValidationError] finds a problem -- the footer (via
-  /// [_paidForFooterText]) is what actually surfaces that message, gated
-  /// on [_hasAttemptedSave], so there's no separate error field to keep
-  /// in sync here.
-  /// Evenly needs no per-participant input at all -- every included
-  /// participant just gets an equal weight.
-  ///
-  /// [SplitMode.byShares] and [SplitMode.byPercentage] both take a
-  /// decimal now (issue #34) and both send [ExpenseShare.shares] as the
-  /// typed value x100, rounded -- e.g. "1.5" shares -> wire 150, "33.3"%
-  /// -> wire 3330. This isn't just an internal convenience: it's the
-  /// exact transform spliit-web's own expenseFormSchema applies to every
-  /// non-BY_AMOUNT split before submitting (confirmed against
-  /// src/lib/schemas.ts and expense-form.tsx upstream) -- the same x100
-  /// scaling this app already used for Percentage (see
-  /// github.com/sharneng/spliit2go/issues/18 and issue #20) turns out to
-  /// apply to Shares too, and is what makes decimal shares/percentages
-  /// representable on the wire at all (`shares` is stored as an
-  /// integer). [_prefillFrom]/[_loadDefaultSplit] divide back by 100 to
-  /// redisplay an existing value. For [SplitMode.byPercentage]
-  /// specifically, the basis points across all included participants
-  /// must sum to exactly 10000 -- see [_percentageBasisPoints].
-  List<ExpenseShare>? _buildPaidFor(int amountCents) {
-    if (_splitValidationError() != null) return null;
-
-    final included = _includedParticipants;
-    return switch (_splitMode) {
-      SplitMode.evenly =>
-        included.map((p) => ExpenseShare(participantId: p.id, shares: 1)).toList(),
-      SplitMode.byShares || SplitMode.byPercentage => included
-          .map((p) => ExpenseShare(
-              participantId: p.id, shares: (_typedValue(p)! * 100).round()))
-          .toList(),
-      SplitMode.byAmount => included
-          .map((p) => ExpenseShare(
-              participantId: p.id,
-              shares: toMinorUnits(_parseDecimal(_splitControllers[p.id]!.text.trim())!, _digits)))
-          .toList(),
-    };
-  }
-
   Future<void> _save() async {
     setState(() {
       _hasAttemptedSave = true;
       _saveError = null;
       _saveErrorDiagnostics = null;
-      _convertedAmountError = null;
     });
     // Each refusal below says why on screen; the haptic says to look.
     if (!_formKey.currentState!.validate()) return _refuse();
-
-    // A conversion's amounts are in each currency's own smallest unit
-    // (#251), related by the rate (#252): the amount is calculated from
-    // the amount paid, or for a settlement the amount to transfer from
-    // the amount settled. Either can round to nothing.
-    int? originalAmountCents;
-    String? originalCurrency;
-    double? conversionRate;
-    if (_converting) {
-      originalCurrency = _paidIn;
-      conversionRate = _rate;
-      originalAmountCents = _isSettlement ? _transferAmount : _originalAmount;
-      if ((originalAmountCents ?? 0) <= 0 || (_amountMinor ?? 0) <= 0) {
-        setState(() => _convertedAmountError = context.l10n.expenseInvalidAmount);
-        return _refuse();
-      }
-    }
-
-    final amountCents = _amountMinor!;
-    final paidFor = _buildPaidFor(amountCents);
+    final amounts = _m.amountsToSave();
+    if (amounts == null) return _refuse();
+    final paidFor = _m.paidFor();
     if (paidFor == null) return _refuse();
 
     // A new expense keeps photos that didn't upload, and syncs with them
@@ -1646,21 +1142,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     // stuck on "Saving…".
     try {
       if (widget.isEditing) {
-        await _saveEdit(
-          amountCents: amountCents,
-          paidFor: paidFor,
-          originalAmountCents: originalAmountCents,
-          originalCurrency: originalCurrency,
-          conversionRate: conversionRate,
-        );
+        await _saveEdit(amounts, paidFor);
       } else {
-        await _saveNew(
-          amountCents: amountCents,
-          paidFor: paidFor,
-          originalAmountCents: originalAmountCents,
-          originalCurrency: originalCurrency,
-          conversionRate: conversionRate,
-        );
+        await _saveNew(amounts, paidFor);
       }
     } catch (e, st) {
       final error = ErrorReporter.instance.report(e, st,
@@ -1689,12 +1173,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// Retrying the save would add the expense a second time, and the split
   /// can be saved as the default with the next expense.
   Future<void> _rememberDefaultSplitIfRequested(List<ExpenseShare> paidFor) async {
-    if (!_saveDefaultSplittingOptions || _isSettlement) return;
+    if (!_m.saveDefaultSplit || _m.isSettlement) return;
     try {
       await widget.db.setDefaultSplit(
         widget.group.id,
         DefaultSplit.remembering(
-          splitMode: _splitMode,
+          splitMode: _m.splitMode,
           paidFor: paidFor,
           allParticipants: widget.group.participants,
         ),
@@ -1708,29 +1192,23 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
   }
 
-  Future<void> _saveNew({
-    required int amountCents,
-    required List<ExpenseShare> paidFor,
-    int? originalAmountCents,
-    String? originalCurrency,
-    double? conversionRate,
-  }) async {
+  Future<void> _saveNew(ExpenseAmounts amounts, List<ExpenseShare> paidFor) async {
     final expense = Expense(
       id: const Uuid().v4(),
       groupId: widget.group.id,
-      title: _titleController.text.trim(),
-      amountCents: amountCents,
-      paidBy: _paidBy!,
+      title: _m.titleController.text.trim(),
+      amountCents: amounts.amount,
+      paidBy: _m.paidBy!,
       paidFor: paidFor,
-      splitMode: _splitMode,
-      category: _category,
-      notes: _notesController.text.trim(),
-      date: _date,
-      isSettlement: _isSettlement,
-      recurrenceRule: _recurrenceRule,
-      originalAmountCents: originalAmountCents,
-      originalCurrency: originalCurrency,
-      conversionRate: conversionRate,
+      splitMode: _m.splitMode,
+      category: _m.category,
+      notes: _m.notesController.text.trim(),
+      date: _m.date,
+      isSettlement: _m.isSettlement,
+      recurrenceRule: _m.recurrenceRule,
+      originalAmountCents: amounts.originalAmount,
+      originalCurrency: amounts.originalCurrency,
+      conversionRate: amounts.conversionRate,
       pending: true,
       createdAt: DateTime.now(),
       documents: _receipts.documents,
@@ -1772,33 +1250,27 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// failure (most commonly: offline), stays on the form with an error
   /// rather than silently queuing anything, since there's no queueing
   /// path for edits.
-  Future<void> _saveEdit({
-    required int amountCents,
-    required List<ExpenseShare> paidFor,
-    int? originalAmountCents,
-    String? originalCurrency,
-    double? conversionRate,
-  }) async {
+  Future<void> _saveEdit(ExpenseAmounts amounts, List<ExpenseShare> paidFor) async {
     await widget.client.updateExpense(
       groupId: widget.group.id,
       expenseId: widget.existingExpense!.id,
-      title: _titleController.text.trim(),
-      amountCents: amountCents,
-      paidBy: _paidBy!,
+      title: _m.titleController.text.trim(),
+      amountCents: amounts.amount,
+      paidBy: _m.paidBy!,
       paidFor: paidFor,
-      splitMode: _splitMode,
-      category: _category,
-      notes: _notesController.text.trim(),
-      date: _date,
-      isSettlement: _isSettlement,
-      recurrenceRule: _recurrenceRule,
-      saveDefaultSplittingOptions: _saveDefaultSplittingOptions,
+      splitMode: _m.splitMode,
+      category: _m.category,
+      notes: _m.notesController.text.trim(),
+      date: _m.date,
+      isSettlement: _m.isSettlement,
+      recurrenceRule: _m.recurrenceRule,
+      saveDefaultSplittingOptions: _m.saveDefaultSplit,
       // The ones still attached, plus uploads: Spliit deletes any not
       // sent back (#128), and keeps the ids it's sent.
       documents: _receipts.documents,
-      originalAmountCents: originalAmountCents,
-      originalCurrency: originalCurrency,
-      conversionRate: conversionRate,
+      originalAmountCents: amounts.originalAmount,
+      originalCurrency: amounts.originalCurrency,
+      conversionRate: amounts.conversionRate,
       participantId: await _activityParticipant(),
     );
     // A refresh fetched before this edit mustn't write the old copy
