@@ -12,6 +12,7 @@ import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
+import 'package:spliit2go/screens/expense_form/currency_card.dart';
 import 'package:spliit2go/screens/expense_screen.dart';
 import 'package:spliit2go/services/receipt_cache.dart';
 import 'package:spliit2go/services/receipt_photo.dart';
@@ -168,7 +169,7 @@ void main() {
   Future<void> fillAndSave(WidgetTester tester, {bool fill = true}) async {
     if (fill) {
       await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Coffee');
-      await tester.enterText(find.widgetWithText(TextFormField, 'Amount'), '18.60');
+      await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '18.60');
     }
     final save = find.byTooltip('Save');
     await tester.ensureVisible(save);

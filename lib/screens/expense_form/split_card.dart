@@ -195,7 +195,7 @@ class SplitCard extends StatelessWidget {
         border: shape,
         enabledBorder: shape,
         focusedBorder: shape.copyWith(borderSide: BorderSide(color: colors.primary, width: 1.5)),
-        prefixText: _m.splitMode == SplitMode.byAmount ? _m.group.currency : null,
+        prefixText: _m.splitMode == SplitMode.byAmount ? _m.splitSymbol : null,
         suffixText: _m.splitMode == SplitMode.byPercentage ? '%' : null,
       ),
     );
@@ -219,8 +219,8 @@ class SplitCard extends StatelessWidget {
       PercentagesDontAddUp(:final totalBasisPoints) =>
         l10n.expensePercentageMismatch(trimTrailingZeros(totalBasisPoints / 100)),
       AmountsDontAddUp(:final difference) => l10n.expenseAmountMismatch(formatMoney(
-          difference.abs(), _m.group.currency,
-          decimalDigits: _m.digits, locale: context.appLocale)),
+          difference.abs(), _m.splitSymbol,
+          decimalDigits: _m.splitDigits, locale: context.appLocale)),
     };
   }
 
@@ -236,8 +236,8 @@ class SplitCard extends StatelessWidget {
         final formatted = trimTrailingZeros(magnitude);
         return over ? l10n.expensePercentOver(formatted) : l10n.expensePercentRemaining(formatted);
       }
-      final formattedAmount = formatMoney(toMinorUnits(magnitude, _m.digits), _m.group.currency,
-          decimalDigits: _m.digits, locale: context.appLocale);
+      final formattedAmount = formatMoney(toMinorUnits(magnitude, _m.splitDigits), _m.splitSymbol,
+          decimalDigits: _m.splitDigits, locale: context.appLocale);
       return over ? l10n.expenseAmountOver(formattedAmount) : l10n.expenseAmountRemaining(formattedAmount);
     }
     return switch (_m.splitMode) {

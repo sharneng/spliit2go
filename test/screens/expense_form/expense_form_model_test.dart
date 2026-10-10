@@ -120,7 +120,9 @@ void main() {
     });
 
     test('an expense\'s amount is worked out from the amount paid at the rate', () {
-      final m = model(euros)..choosePaidIn('JPY');
+      final m = model(euros)..choosePaidIn('JPY')
+        // Written as #252 typed it: 1 yen in euros (#261 shows EUR/JPY).
+        ..rateBase = 'JPY';
       expect(m.converting, isTrue);
       expect((m.originalDigits, m.paidInSymbol), (0, '¥'));
       m.originalAmountController.text = '1000';
@@ -137,6 +139,8 @@ void main() {
         ..isSettlement = true
         ..amountController.text = '6.10'
         ..choosePaidIn('JPY')
+        // Written as #252 typed it: 1 yen in euros (#261 shows EUR/JPY).
+        ..rateBase = 'JPY'
         ..rateController.text = '0.0061';
       expect((m.amount, m.transferAmount), (610, 1000));
     });
@@ -144,6 +148,8 @@ void main() {
     test('a conversion that rounds to nothing can\'t be saved, until an amount changes', () {
       final m = model(euros)
         ..choosePaidIn('JPY')
+        // Written as #252 typed it: 1 yen in euros (#261 shows EUR/JPY).
+        ..rateBase = 'JPY'
         ..originalAmountController.text = '1'
         ..rateController.text = '0.001';
       expect(m.amountsToSave(), isNull);
@@ -158,6 +164,8 @@ void main() {
     test('back to the group\'s currency keeps the total and drops the rate', () {
       final m = model(euros)
         ..choosePaidIn('JPY')
+        // Written as #252 typed it: 1 yen in euros (#261 shows EUR/JPY).
+        ..rateBase = 'JPY'
         ..originalAmountController.text = '1000'
         ..rateController.text = '0.0061';
       expect(m.choosePaidIn('JPY'), isFalse);
@@ -167,7 +175,9 @@ void main() {
     });
 
     test('a published rate fills an empty or auto-filled field, never a typed one', () {
-      final m = model(euros)..choosePaidIn('JPY');
+      final m = model(euros)..choosePaidIn('JPY')
+        // Written as #252 typed it: 1 yen in euros (#261 shows EUR/JPY).
+        ..rateBase = 'JPY';
       expect(m.wantsRate(), isTrue);
       m.fillRate(0.0061, force: false, editsAtRequest: m.rateEdits);
       expect((m.rateController.text, m.rateIsOwn), ('0.0061', false));
@@ -186,7 +196,9 @@ void main() {
     });
 
     test('a rate typed while a lookup is on its way wins, whatever it is (#255 review)', () {
-      final m = model(euros)..choosePaidIn('JPY');
+      final m = model(euros)..choosePaidIn('JPY')
+        // Written as #252 typed it: 1 yen in euros (#261 shows EUR/JPY).
+        ..rateBase = 'JPY';
       m.fillRate(0.0061, force: false, editsAtRequest: m.rateEdits);
       final asked = m.rateEdits;
       m.rateTyped();
@@ -201,12 +213,14 @@ void main() {
       expect(m.rateController.text, '0.0062');
     });
 
-    test('a rate shows with no exponent and in the locale\'s separator', () {
+    test('a rate shows in 6 significant figures, no exponent, in the locale\'s separator (#261)', () {
       final m = model(euros);
-      expect(m.rateText(0.00609756097560976), '0.00609756097560976');
-      expect(m.rateText(163.934), '163.934');
+      expect(m.rateNumberText(0.00609756097560976), '0.00609756');
+      expect(m.rateNumberText(163.934426), '163.934');
+      expect(m.rateNumberText(176.84), '176.84');
+      expect(m.rateNumberText(12345678), '12345678');
       m.decimalSeparator = ',';
-      expect(m.rateText(0.0061), '0,0061');
+      expect(m.rateNumberText(0.0061), '0,0061');
     });
   });
 
@@ -222,14 +236,14 @@ void main() {
     );
 
     test('shows the saved rate, once the separator is known', () {
-      final m = model(euros, existing: saved);
+      final m = model(euros, existing: saved)..rateBase = 'JPY';
       expect(m.rateController.text, '');
       m.decimalSeparator = '.';
       expect((m.rateController.text, m.rateIsSaved, m.wantsRate()), ('0.0061', true, false));
     });
 
     test('keeps the saved total while its inputs read as saved', () {
-      final m = model(euros, existing: saved)..decimalSeparator = '.';
+      final m = model(euros, existing: saved)..rateBase = 'JPY'..decimalSeparator = '.';
       expect(m.conversionUnchanged, isTrue);
       expect(m.amount, 615);
       expect(m.splitProblem(), isNull);
@@ -256,6 +270,7 @@ void main() {
       final m = model(euros,
           existing: expense(
               amount: 610, settlement: true, originalAmount: 1001, originalCurrency: 'JPY', rate: 0.0061))
+        ..rateBase = 'JPY'
         ..decimalSeparator = '.';
       expect((m.amount, m.transferAmount), (610, 1001));
       m.amountController.text = '6.11';
@@ -265,6 +280,120 @@ void main() {
     test('a removed conversion\'s leftovers don\'t count without its currency', () {
       final m = model(euros, existing: expense(originalAmount: 1000, rate: 0.0061))..decimalSeparator = '.';
       expect((m.converting, m.rateController.text), (false, ''));
+    });
+  });
+
+  group('the rate, the more valuable currency first (#261)', () {
+    test('by the ranking: EUR/JPY into a euro group, and into a yen group', () {
+      final m = model(euros)..choosePaidIn('JPY');
+      expect((m.ratePair, m.rateBaseCode), ('EUR/JPY', 'EUR'));
+      m.fillRate(1 / 176.84, force: false, editsAtRequest: m.rateEdits);
+      expect(m.rateController.text, '176.84');
+      m.amountController.text = '';
+      m.originalAmountController.text = '1000';
+      expect(m.amount, 565);
+
+      final y = model(yen)..choosePaidIn('EUR');
+      expect(y.ratePair, 'EUR/JPY');
+      y.fillRate(176.84, force: false, editsAtRequest: y.rateEdits);
+      expect((y.rateController.text, y.rate), ('176.84', 176.84));
+    });
+
+    test('a currency the ranking doesn\'t know goes second', () {
+      final m = model(euros)
+        ..ranking = const {'EUR': 1}
+        ..choosePaidIn('JPY');
+      expect(m.ratePair, 'EUR/JPY');
+    });
+
+    test('a swap flips the number; swapped back untouched, it\'s as it was', () {
+      final m = model(euros)..choosePaidIn('JPY');
+      m.rateTyped();
+      m.rateController.text = '177';
+      m.swapRatePair();
+      expect((m.ratePair, m.rateBaseCode, m.rateController.text), ('JPY/EUR', 'JPY', '0.00564972'));
+      expect(m.rate, 0.00564972);
+      m.swapRatePair();
+      expect((m.ratePair, m.rateController.text), ('EUR/JPY', '177'));
+    });
+
+    test('a published rate is shown afresh from its value either way round', () {
+      final m = model(euros)..choosePaidIn('JPY');
+      m.fillRate(0.00565, force: false, editsAtRequest: m.rateEdits);
+      expect(m.rateController.text, '176.991');
+      m.swapRatePair();
+      expect((m.rateController.text, m.rateIsOwn), ('0.00565', false));
+      expect(m.rate, 0.00565);
+    });
+
+    test('the device\'s choice for the pair wins over the ranking, until another currency', () {
+      final m = model(euros)
+        ..choosePaidIn('JPY')
+        ..rateBase = 'JPY';
+      expect(m.ratePair, 'JPY/EUR');
+      m.choosePaidIn('USD');
+      expect(m.ratePair, 'EUR/USD');
+    });
+
+    test('a saved rate is sent back as stored while untouched (acceptance case 3)', () {
+      final m = model(euros, existing: expense(amount: 565, originalAmount: 1000, originalCurrency: 'JPY', rate: 0.00565))
+        ..decimalSeparator = '.';
+      expect((m.ratePair, m.rateController.text, m.rateIsSaved), ('EUR/JPY', '176.991', true));
+      expect(m.rate, 0.00565);
+      m.titleController.text = 'Ramen and gyoza';
+      expect(m.amountsToSave()!.conversionRate, 0.00565);
+      // Swapped there and back, it's still the saved rate.
+      m.swapRatePair();
+      expect((m.rateController.text, m.rate), ('0.00565', 0.00565));
+      m.swapRatePair();
+      expect(m.rate, 0.00565);
+      // Typed over, it's worked out from what's shown.
+      m.rateTyped();
+      m.rateController.text = '177';
+      expect(m.rate, 1 / 177);
+    });
+  });
+
+  group('a converted expense split by amount, in the paid-in currency (#261)', () {
+    final saved = Expense(
+      id: 'e1',
+      groupId: 'g',
+      title: 'Wine',
+      amountCents: 1001,
+      paidBy: 'alex',
+      paidFor: const [ExpenseShare(participantId: 'alex', shares: 500), ExpenseShare(participantId: 'bea', shares: 501)],
+      splitMode: SplitMode.byAmount,
+      category: 8,
+      date: DateTime.utc(2026, 10, 1),
+      originalAmountCents: 566,
+      originalCurrency: 'EUR',
+      conversionRate: 176.84,
+    );
+
+    test('shows each amount in euros, and a title-only edit keeps the yen (acceptance case 2)', () {
+      final m = model(yen, existing: saved)..decimalSeparator = '.';
+      expect((m.splitTotal, m.splitDigits, m.splitSymbol), (566, 2, '€'));
+      expect([m.splitControllers['alex']!.text, m.splitControllers['bea']!.text], ['2.83', '2.83']);
+      expect(m.splitProblem(), isNull);
+      m.titleController.text = 'Red wine';
+      expect(m.paidFor()!.map((s) => s.shares), [500, 501]);
+    });
+
+    test('changed, the yen are shared out in proportion and add up', () {
+      final m = model(yen, existing: saved)..decimalSeparator = '.';
+      m.splitControllers['alex']!.text = '1.66';
+      m.splitControllers['bea']!.text = '4';
+      expect(m.splitProblem(), isNull);
+      final shares = m.paidFor()!.map((s) => s.shares).toList();
+      expect(shares, [294, 707]);
+      expect(shares.fold(0, (a, b) => a + b), m.amount);
+    });
+
+    test('they must add up to the amount paid, said in euros', () {
+      final m = model(yen, existing: saved)..decimalSeparator = '.';
+      m.splitControllers['bea']!.text = '2.80';
+      expect(m.unallocated(), closeTo(0.03, 1e-9));
+      expect(m.splitProblem(), isA<AmountsDontAddUp>().having((p) => p.difference, 'difference', 3));
     });
   });
 
@@ -355,17 +484,19 @@ void main() {
       expect(m.paidFor()!.map((s) => s.shares), [600, 400]);
     });
 
-    test('a converted expense\'s amounts add up to the calculated total', () {
+    test('a converted expense\'s amounts are in yen; the calculated total is shared out (#261)', () {
       final m = model(euros)
         ..choosePaidIn('JPY')
+        // Written as #252 typed it: 1 yen in euros (#261 shows EUR/JPY).
+        ..rateBase = 'JPY'
         ..originalAmountController.text = '1000'
         ..rateController.text = '0.0061'
         ..splitMode = SplitMode.byAmount;
       m.splitControllers['cy']!.text = '0';
-      m.splitControllers['alex']!.text = '3.10';
-      m.splitControllers['bea']!.text = '3';
+      m.splitControllers['alex']!.text = '500';
+      m.splitControllers['bea']!.text = '500';
       expect(m.splitProblem(), isNull);
-      expect(m.paidFor()!.map((s) => s.shares), [310, 300]);
+      expect(m.paidFor()!.map((s) => s.shares), [305, 305]);
     });
 
     test('a settlement shows no live preview', () {
@@ -472,6 +603,7 @@ void main() {
       expect(m.hasChanges, isFalse);
 
       final edit = model(euros, existing: expense(originalAmount: 1000, originalCurrency: 'JPY', rate: 0.0061))
+        ..rateBase = 'JPY'
         ..decimalSeparator = '.';
       expect((edit.rateController.text, edit.hasChanges), ('0.0061', false));
       edit.rateTyped();
@@ -480,7 +612,9 @@ void main() {
     });
 
     test('a published rate filled in isn\'t the user\'s change; picking the currency is', () {
-      final m = model(euros)..choosePaidIn('JPY');
+      final m = model(euros)..choosePaidIn('JPY')
+        // Written as #252 typed it: 1 yen in euros (#261 shows EUR/JPY).
+        ..rateBase = 'JPY';
       expect(m.hasChanges, isTrue);
       m.markUnchanged();
       m.fillRate(0.0061, force: false, editsAtRequest: m.rateEdits);

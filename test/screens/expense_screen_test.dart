@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
@@ -15,6 +16,7 @@ import 'package:spliit2go/models/default_split.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/expense_form/split_card.dart';
+import 'package:spliit2go/screens/expense_form/currency_card.dart';
 import 'package:spliit2go/screens/expense_screen.dart';
 import 'package:spliit2go/services/active_user.dart';
 import 'package:spliit2go/services/exchange_rates.dart';
@@ -25,6 +27,9 @@ import '../support/error_log.dart';
 import '../support/haptics.dart';
 
 void main() {
+  // The rate's order is remembered per pair (#261).
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   const group = Group(
     id: 'g1',
     name: 'Banff Trip',
@@ -79,7 +84,7 @@ void main() {
 
   Future<void> fillCommonFields(WidgetTester tester, {required String amount}) async {
     await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Groceries');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Amount'), amount);
+    await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), amount);
   }
 
   // Taps the named segment of the "Paid for" section's SegmentedButton
@@ -739,17 +744,17 @@ void main() {
     ],
   );
 
-  // #252: "Paid in" picks the currency; "Amount paid" is in it.
+  // #252: "Paid in" picks the currency; the amount is in it (#261).
   Future<void> paidIn(WidgetTester tester, String amount, String currencySearch, String currency) async {
-    await tester.ensureVisible(find.widgetWithText(InputDecorator, 'Paid in'));
-    await tester.tap(find.widgetWithText(InputDecorator, 'Paid in'));
+    await tester.ensureVisible(find.widgetWithText(GroupedRow, 'Paid in'));
+    await tester.tap(find.widgetWithText(GroupedRow, 'Paid in'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Search currency...'), currencySearch);
     await tester.pumpAndSettle();
     await tester.tap(find.text(currency));
     await tester.pumpAndSettle();
     if (amount.isNotEmpty) {
-      await tester.enterText(find.widgetWithText(TextFormField, 'Amount paid'), amount);
+      await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), amount);
       await tester.pumpAndSettle();
     }
   }
@@ -760,7 +765,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Finder rateField() => find.widgetWithText(TextFormField, 'Exchange rate');
+  Finder rateField() => find.byKey(CurrencyCard.rateFieldKey);
   String rateText(WidgetTester tester) => tester.widget<TextFormField>(rateField()).controller!.text;
 
   Future<Expense> save(WidgetTester tester, AppDatabase db) async {
@@ -817,10 +822,11 @@ void main() {
         conversionRate: 1000 / 6.10,
       ),
     );
-    // The amount is worked out from the euros paid at the saved rate.
+    // The amount is worked out from the euros paid at the saved rate; each
+    // person's is in euros, the saved yen shared out (#261).
     expect(find.text('¥1,000'), findsOneWidget);
-    expect(find.text('600'), findsOneWidget);
-    expect(find.text('400'), findsOneWidget);
+    expect(find.text('3.66'), findsOneWidget);
+    expect(find.text('2.44'), findsOneWidget);
     expect(find.text('6.10'), findsOneWidget);
   });
 
@@ -830,19 +836,20 @@ void main() {
     await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Groceries');
     await paidIn(tester, '1000', 'Yen', 'Japanese Yen (JPY)');
 
-    // Filled in, and the total worked out from it, read-only.
-    expect(rateText(tester), '0.0061');
+    // Filled in, the euro first (#261), and the total worked out from it.
+    expect(rateText(tester), '163.934');
     // Published on another day than the expense's, which it says.
-    expect(find.text('JPY 1 = EUR 0.0061 — the rate on Oct 1, 2026.'), findsOneWidget);
+    expect(find.text('EUR/JPY 163.934 is the published rate on Oct 1, 2026.'), findsOneWidget);
+    expect(find.widgetWithText(GroupedRow, 'In Euro'), findsOneWidget);
     expect(find.text('€6.10'), findsOneWidget);
-    expect(find.widgetWithText(TextFormField, 'Amount'), findsNothing);
 
     // What spliit-web stores for €6.10 paid as ¥1,000.
     final saved = await save(tester, db);
     expect(saved.amountCents, 610);
     expect(saved.originalAmountCents, 1000);
     expect(saved.originalCurrency, 'JPY');
-    expect(saved.conversionRate, 0.0061);
+    // Worked out from the number shown, EUR/JPY 163.934 (#261).
+    expect(saved.conversionRate, 1 / 163.934);
     // amount = round(originalAmount × rate × 10^2 / 10^0)
     expect((saved.originalAmountCents! * saved.conversionRate! * 100).round(), saved.amountCents);
   });
@@ -856,12 +863,14 @@ void main() {
     await paidIn(tester, '1000', 'Yen', 'Japanese Yen (JPY)');
     expect(find.text('Getting the exchange rate…'), findsOneWidget);
 
-    // Typed before the published rate arrives: it stays.
-    await tester.enterText(rateField(), '0.006');
+    // Typed before the published rate arrives: it stays, with the
+    // published one quoted under it (#261).
+    await tester.enterText(rateField(), '166.667');
     answer.complete(_FakeRates.published(0.0061));
     await tester.pumpAndSettle();
-    expect(rateText(tester), '0.006');
-    expect(find.text('Using the rate you entered.'), findsOneWidget);
+    expect(rateText(tester), '166.667');
+    expect(find.text('EUR/JPY 163.934 is the published rate on Oct 1, 2026. Using the rate you entered.'),
+        findsOneWidget);
     expect(find.text('€6.00'), findsOneWidget);
 
     // Nor does another day's rate replace it.
@@ -871,12 +880,12 @@ void main() {
     await tester.tap(find.text('15'));
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
-    expect(rateText(tester), '0.006');
+    expect(rateText(tester), '166.667');
 
     await tester.ensureVisible(find.text('Use the published rate'));
     await tester.tap(find.text('Use the published rate'));
     await tester.pumpAndSettle();
-    expect(rateText(tester), '0.0062');
+    expect(rateText(tester), '161.29');
     expect(rates.forced, 1);
     expect(find.text('Use the published rate'), findsNothing);
     expect((await save(tester, db)).amountCents, 620);
@@ -887,8 +896,8 @@ void main() {
         rates: (db) => _FakeRates(db,
             answer: (_, __, ___) async => _FakeRates.published(0.0061, offline: true, on: DateTime.utc(2026, 9, 30))));
     await paidIn(tester, '1000', 'Yen', 'Japanese Yen (JPY)');
-    expect(find.textContaining('Offline: rate from'), findsOneWidget);
-    expect(find.textContaining('JPY 1 = EUR 0.0061'), findsOneWidget);
+    expect(find.text('Offline: EUR/JPY 163.934 is the last published rate saved, from Sep 30, 2026.'),
+        findsOneWidget);
     expect(find.text('Use the published rate'), findsOneWidget);
   });
 
@@ -903,11 +912,11 @@ void main() {
     expect(find.text('Enter a rate greater than zero'), findsOneWidget);
     expect(await db.pendingExpenses(), isEmpty);
 
-    await tester.enterText(rateField(), '0,0061'); // either separator
+    await tester.enterText(rateField(), '163,9344'); // either separator ("163,934" is thousands, #238)
     expect((await save(tester, db)).amountCents, 610);
   });
 
-  testWidgets('editing a conversion keeps its saved rate, never looked up again (#252)',
+  testWidgets('editing a conversion keeps its saved rate; the published one is only quoted (#252, #261)',
       (tester) async {
     late _FakeRates rates;
     Map<String, dynamic>? sent;
@@ -933,13 +942,64 @@ void main() {
         conversionRate: 0.00609756097560976,
       ),
     );
-    expect(rates.lookups, 0);
-    expect(rateText(tester), '0.00609756097560976');
-    expect(find.text('Using the rate saved with this expense.'), findsOneWidget);
+    expect(rates.lookups, 1);
+    expect(rateText(tester), '164');
+    expect(
+        find.text('EUR/JPY 163.934 is the published rate on Oct 1, 2026. Using the rate saved with this expense.'),
+        findsOneWidget);
     expect(find.text('Use the published rate'), findsOneWidget);
     await tapSave(tester);
     expect((sent!['conversionRate'], sent!['amount'], sent!['originalAmount'], sent!['originalCurrency']),
         (0.00609756097560976, 610, 1000, 'JPY'));
+  });
+
+  testWidgets('a saved rate shows the euro first and is sent back as stored (#261, acceptance case 3)',
+      (tester) async {
+    Map<String, dynamic>? sent;
+    await pumpGroup(
+      tester,
+      euroGroup,
+      server: MockClient((req) async {
+        if (!req.url.path.endsWith('groups.expenses.update')) throw http.ClientException('offline');
+        sent = (jsonDecode(req.body) as Map)['0']['json']['expenseFormValues'] as Map<String, dynamic>;
+        return http.Response('[{"result":{"data":{"json":{"expenseId":"e5"}}}}]', 200);
+      }),
+      editing: Expense(
+        id: 'e5',
+        groupId: 'g4',
+        title: 'Ramen',
+        amountCents: 565,
+        paidBy: 'alex',
+        paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
+        date: DateTime.utc(2026, 10, 1),
+        originalAmountCents: 1000,
+        originalCurrency: 'JPY',
+        conversionRate: 0.00565,
+      ),
+    );
+    expect((find.text('EUR/JPY').evaluate().length, rateText(tester)), (1, '176.991'));
+    await tester.enterText(find.widgetWithText(TextFormField, 'Ramen'), 'Ramen and gyoza');
+    await tapSave(tester);
+    expect((sent!['conversionRate'], sent!['amount']), (0.00565, 565));
+  });
+
+  testWidgets('a tap on the pair swaps it, remembered for the pair on this device (#261)', (tester) async {
+    await pumpGroup(tester, euroGroup);
+    await paidIn(tester, '1000', 'Yen', 'Japanese Yen (JPY)');
+    expect(rateText(tester), '163.934');
+    await tester.ensureVisible(find.text('EUR/JPY'));
+    await tester.tap(find.text('EUR/JPY'));
+    await tester.pumpAndSettle();
+    expect((find.text('JPY/EUR').evaluate().length, rateText(tester)), (1, '0.0061'));
+    expect(find.text('JPY/EUR 0.0061 is the published rate on Oct 1, 2026.'), findsOneWidget);
+    expect(find.text('€6.10'), findsOneWidget);
+    expect((await SharedPreferences.getInstance()).getString('rate_base.EUR/JPY'), 'JPY');
+
+    // The next yen expense in a euro group starts that way round.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpGroup(tester, euroGroup);
+    await paidIn(tester, '', 'Yen', 'Japanese Yen (JPY)');
+    expect((find.text('JPY/EUR').evaluate().length, rateText(tester)), (1, '0.0061'));
   });
 
   testWidgets('editing a web expense keeps its total until its conversion changes (#255 review)',
@@ -974,10 +1034,10 @@ void main() {
     expect(find.text('€6.15'), findsOneWidget);
 
     // Changing the amount paid works it out again; back, it's as saved.
-    await tester.enterText(find.widgetWithText(TextFormField, 'Amount paid'), '2000');
+    await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '2000');
     await tester.pump();
     expect(find.text('€12.20'), findsOneWidget);
-    await tester.enterText(find.widgetWithText(TextFormField, 'Amount paid'), '1000');
+    await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '1000');
     await tester.pump();
     expect(find.text('€6.15'), findsOneWidget);
 
@@ -991,7 +1051,7 @@ void main() {
     late _FakeRates rates;
     await pumpGroup(tester, euroGroup, rates: (db) => rates = _FakeRates(db));
     await paidIn(tester, '1000', 'Yen', 'Japanese Yen (JPY)');
-    await tester.enterText(rateField(), '0.006');
+    await tester.enterText(rateField(), '166.667');
     await tester.pump();
 
     final answer = Completer<ExchangeRate>();
@@ -999,10 +1059,10 @@ void main() {
     await tester.ensureVisible(find.text('Use the published rate'));
     await tester.tap(find.text('Use the published rate'));
     await tester.pump();
-    await tester.enterText(rateField(), '0.007');
+    await tester.enterText(rateField(), '142.857');
     answer.complete(_FakeRates.published(0.0062));
     await tester.pumpAndSettle();
-    expect(rateText(tester), '0.007');
+    expect(rateText(tester), '142.857');
     expect(find.text('€7.00'), findsOneWidget);
 
     // Even typed back to the rate filled in before, it's the user's.
@@ -1010,10 +1070,10 @@ void main() {
     rates.answer = (_, __, ___) => again.future;
     await tester.tap(find.text('Use the published rate'));
     await tester.pump();
-    await tester.enterText(rateField(), '0.0061');
+    await tester.enterText(rateField(), '163.934');
     again.complete(_FakeRates.published(0.0063));
     await tester.pumpAndSettle();
-    expect(rateText(tester), '0.0061');
+    expect(rateText(tester), '163.934');
   });
 
   testWidgets('back to the group currency keeps the total and drops the conversion (#252)',
@@ -1023,7 +1083,7 @@ void main() {
     await paidIn(tester, '1000', 'Yen', 'Japanese Yen (JPY)');
     await paidIn(tester, '', 'Euro', 'Euro (EUR)');
     expect(find.text('Exchange rate'), findsNothing);
-    expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Amount')).controller!.text, '6.10');
+    expect(tester.widget<TextFormField>(find.byKey(CurrencyCard.amountFieldKey)).controller!.text, '6.10');
     final saved = await save(tester, db);
     expect((saved.amountCents, saved.originalCurrency, saved.conversionRate), (610, null, null));
   });
@@ -1036,12 +1096,12 @@ void main() {
     await tester.pumpAndSettle();
     await paidIn(tester, '', 'Yen', 'Japanese Yen (JPY)');
     // The amount settled stays typed; what to send is in yen.
-    expect(find.widgetWithText(TextFormField, 'Amount paid'), findsNothing);
-    expect(find.widgetWithText(InputDecorator, 'Amount to transfer'), findsOneWidget);
+    expect(tester.widget<TextFormField>(find.byKey(CurrencyCard.amountFieldKey)).controller!.text, '6.10');
+    expect(find.widgetWithText(GroupedRow, 'Amount to transfer'), findsOneWidget);
     expect(find.text('¥1,000'), findsOneWidget);
     final saved = await save(tester, db);
     expect((saved.amountCents, saved.originalAmountCents, saved.originalCurrency, saved.conversionRate),
-        (610, 1000, 'JPY', 0.0061));
+        (610, 1000, 'JPY', 1 / 163.934));
   });
 
   testWidgets('a yen group rejects an amount under one yen (#254)', (tester) async {
@@ -1061,14 +1121,15 @@ void main() {
     expect(find.text('Enter a valid amount'), findsOneWidget);
     expect(await db.pendingExpenses(), isEmpty);
 
-    // A whole yen is fine -- but at 0.001 it's less than a cent.
-    await tester.enterText(find.widgetWithText(TextFormField, 'Amount paid'), '1');
-    await tester.enterText(rateField(), '0.001');
+    // A whole yen is fine -- but at EUR/JPY 1000 it's less than a cent.
+    await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '1');
+    await tester.enterText(rateField(), '1000');
     await tapSave(tester);
-    expect(find.text('Enter a valid amount'), findsOneWidget);
+    expect(find.text("The amount in the group's currency rounds to nothing. Change the amount or the rate."),
+        findsOneWidget);
     expect(await db.pendingExpenses(), isEmpty);
 
-    await tester.enterText(find.widgetWithText(TextFormField, 'Amount paid'), '100');
+    await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '100');
     final saved = await save(tester, db);
     expect((saved.originalAmountCents, saved.amountCents), (100, 10));
   });

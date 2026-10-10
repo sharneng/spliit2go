@@ -20,8 +20,6 @@ import '../services/active_user.dart';
 import '../services/category_store.dart';
 import '../sync/outbox.dart';
 import '../utils/date_format.dart';
-import '../utils/money.dart';
-import '../widgets/money.dart';
 import '../widgets/currency_picker.dart';
 import '../widgets/category_icon.dart';
 import '../widgets/error_message.dart';
@@ -40,6 +38,7 @@ import '../widgets/app_menu.dart';
 import '../widgets/bottom_inset.dart';
 import '../widgets/grouped_section.dart';
 import '../widgets/top_bar_buttons.dart';
+import 'expense_form/currency_card.dart';
 import 'expense_form/receipt_scan_card.dart';
 import 'expense_form/split_card.dart';
 import '../widgets/expense_list.dart' show participantColors;
@@ -260,9 +259,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     // are worked out from it.
     _m.addListener(_changed);
     // A conversion opened without a rate gets one (#252); a saved rate is
-    // the record and isn't looked up again.
+    // the record and stays, with the published one quoted under it (#261).
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _m.converting) unawaited(_lookUpRate());
+      if (!mounted || !_m.converting) return;
+      unawaited(_loadRateOrder());
+      unawaited(_lookUpRate());
     });
     // The model pre-fills an edit or a draft the same way: a draft only
     // differs in _save() (new id, normal add path), not in what's shown.
@@ -595,10 +596,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         NumberFormat.decimalPattern(Localizations.localeOf(context).toString()).symbols.DECIMAL_SEP;
   }
 
-  /// Asks for the rate of the paid-in currency on the expense's day,
-  /// unless the field holds a rate of the user's or the saved one. The
-  /// rate is filled in only into an empty or auto-filled field, or always
-  /// for [force] ("Use the published rate").
+  /// Asks for the rate of the paid-in currency on the expense's day. It's
+  /// filled in only into an empty or auto-filled field, or always for
+  /// [force] ("Use the published rate"); otherwise the footer quotes it.
   Future<void> _lookUpRate({bool force = false}) async {
     final lookup = ++_rateLookups;
     final edits = _m.rateEdits;
@@ -607,7 +607,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       setState(() => _rateState = _RateState.idle);
       return;
     }
-    if (!_m.wantsRate(force: force)) return;
+    // Looked up even for a rate of the user's: the footer quotes the
+    // published one (#261), which fillRate puts only where it may.
     setState(() => _rateState = _RateState.loading);
     _RateState state;
     ExchangeRate? found;
@@ -634,35 +635,66 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// Where the rate in the field comes from, under it.
   String _rateStatus(BuildContext context) {
     final l10n = context.l10n;
-    if (_m.rateIsOwn) return _m.rateIsSaved ? l10n.expenseRateSaved : l10n.expenseRateTyped;
+    final own = _m.rateIsSaved ? l10n.expenseRateSaved : l10n.expenseRateTyped;
     final found = _foundRate;
-    return switch (_rateState) {
-      _RateState.idle || _RateState.loading => l10n.expenseRateLoading,
+    final status = switch (_rateState) {
+      _RateState.found when found != null => () {
+          final day = formatDate(found.publishedOn, locale: context.appLocale);
+          final published = found.offline
+              ? l10n.expenseRatePublishedOffline(_m.ratePair, _m.shownRateText(found.rate), day)
+              : l10n.expenseRatePublished(_m.ratePair, _m.shownRateText(found.rate), day);
+          // The footer is for reference (#261): it says when the field is
+          // another rate.
+          return _m.rateIsOwn && !_m.showsRate(found.rate) ? '$published $own' : published;
+        }(),
+      _ when _m.rateIsOwn => own,
       _RateState.noRate => l10n.expenseRateNone,
       _RateState.unavailable => l10n.expenseRateUnavailable,
-      _RateState.found when found != null => () {
-          final quote = l10n.expenseRateQuote(
-              _m.paidIn ?? '', widget.group.currencyCode ?? '', _m.rateText(found.rate));
-          final day = formatDate(found.publishedOn, locale: context.appLocale);
-          if (found.offline) return l10n.expenseRateOffline(day, quote);
-          // Rates are published on working days: a Sunday's is Friday's.
-          return dayKey(found.publishedOn) == dayKey(_m.date) ? quote : l10n.expenseRateOnDay(quote, day);
-        }(),
-      _RateState.found => l10n.expenseRateLoading,
+      _ => l10n.expenseRateLoading,
     };
+    return status;
   }
 
-  /// "Use the published rate", only where it would change something: a
-  /// typed or saved rate, a lookup that failed, or an offline one.
-  bool get _canRefreshRate {
-    if (_rateState == _RateState.loading) return false;
-    if (_m.rateIsOwn) return true;
-    return switch (_rateState) {
-      _RateState.noRate || _RateState.unavailable => true,
-      _RateState.found => _foundRate?.offline ?? false,
-      _ => false,
-    };
+  /// "Use the published rate": when the field isn't it, or to try again.
+  bool get _canRefreshRate => switch (_rateState) {
+        _RateState.loading || _RateState.idle => false,
+        _RateState.found => switch (_foundRate) {
+            final found? => found.offline || !_m.showsRate(found.rate),
+            null => false,
+          },
+        _RateState.noRate || _RateState.unavailable => true,
+      };
+
+  /// A tap on the pair (#261): the other currency first, remembered on
+  /// this device for the pair.
+  void _swapRate() {
+    _m.swapRatePair();
+    final (paidIn, own, first) = (_m.paidIn, widget.group.currencyCode, _m.rateBaseCode);
+    if (paidIn == null || own == null || first == null) return;
+    unawaited(_settings.setRateBase(paidIn, own, first).catchError((Object e, StackTrace st) {
+      ErrorReporter.instance.report(e, st, operation: 'Saving the exchange rate order');
+    }));
   }
+
+  /// Which currency of the pair the rate is written with first (#261):
+  /// the one this device swapped to, otherwise the more valuable by the
+  /// newest saved rates.
+  Future<void> _loadRateOrder() async {
+    final (paidIn, own) = (_m.paidIn, widget.group.currencyCode);
+    if (!_m.converting || paidIn == null || own == null) return;
+    final ranking = await ExchangeRates.of(widget.db).ranking();
+    String? base;
+    try {
+      base = await _settings.rateBase(paidIn, own);
+    } catch (e, st) {
+      ErrorReporter.instance.report(e, st, operation: 'Reading the exchange rate order');
+    }
+    if (!mounted || _m.paidIn != paidIn) return;
+    _m
+      ..ranking = ranking
+      ..rateBase = base;
+  }
+
 
   /// What's wrong with the split, in words, if anything.
   @override
@@ -878,15 +910,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     ),
                     _repeatRow(context),
                   ]),
-                  Theme(
-                    data: pageTheme,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, GroupedSection.spacing),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: _amounts(context),
-                      ),
-                    ),
+                  CurrencyCard(
+                    model: _m,
+                    onPickPaidIn: _pickPaidIn,
+                    onSwapRate: _swapRate,
+                    rateStatus: _m.converting ? _rateStatus(context) : null,
+                    onUsePublishedRate: _canRefreshRate ? () => _lookUpRate(force: true) : null,
+                    amountHint: _scanHint(_scanFill?.amountHint),
+                    calculatedKey: _calculatedKey,
                   ),
                   _paidByCard(context),
                   SplitCard(model: _m, showErrors: _hasAttemptedSave, footerKey: _paidForFooterKey),
@@ -912,33 +943,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         ),
       ),
     );
-  }
-
-  /// The currency and amounts, as they were before #256: step 4 puts
-  /// them on a card.
-  List<Widget> _amounts(BuildContext context) {
-    return [
-      // The paid-in currency first, then what was paid in it.
-      if (_m.hasGroupCurrencyCode) ..._currencySection(context),
-      if (_m.converting && !_m.isSettlement)
-        _calculatedAmount(
-          context,
-          label: context.l10n.expenseAmountLabel,
-          amount: _m.amount,
-          symbol: widget.group.currency,
-          decimalDigits: _m.digits,
-        )
-      else
-        TextFormField(
-          controller: _m.amountController,
-          decoration: InputDecoration(
-              labelText: context.l10n.expenseAmountLabel,
-              prefixText: widget.group.currency,
-              helperText: _m.converting ? null : _scanHint(_scanFill?.amountHint)),
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          validator: (v) => _m.isPositiveAmount(v, _m.digits) ? null : context.l10n.expenseInvalidAmount,
-        ),
-    ];
   }
 
   Future<void> _pickDate() async {
@@ -984,90 +988,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
     if (picked == null || !_m.choosePaidIn(picked.code)) return;
     setState(() => _foundRate = null);
+    unawaited(_loadRateOrder());
     unawaited(_lookUpRate());
-  }
-
-  /// "Paid in", and during a conversion "Amount paid" and "Exchange
-  /// rate" with where the rate comes from (#252, after spliit-ios). For a
-  /// settlement, web's direction: the amount settled is fixed, and
-  /// "Amount to transfer" is calculated in the paid-in currency.
-  List<Widget> _currencySection(BuildContext context) {
-    final l10n = context.l10n;
-    return [
-      InkWell(
-        onTap: _pickPaidIn,
-        child: InputDecorator(
-          decoration: InputDecoration(labelText: l10n.expensePaidIn),
-          child: Text(_m.paidInCurrency.toString()),
-        ),
-      ),
-      const SizedBox(height: 12),
-      if (_m.converting) ...[
-        if (_m.isSettlement)
-          _calculatedAmount(
-            context,
-            label: l10n.expenseAmountToTransfer,
-            amount: _m.transferAmount,
-            symbol: _m.paidInSymbol,
-            decimalDigits: _m.originalDigits,
-          )
-        else
-          TextFormField(
-            controller: _m.originalAmountController,
-            decoration: InputDecoration(
-                labelText: l10n.expenseAmountPaid,
-                prefixText: _m.paidInSymbol,
-                helperText: _scanHint(_scanFill?.amountHint)),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            validator: (v) =>
-                _m.isPositiveAmount(v, _m.originalDigits) ? null : l10n.expenseInvalidAmount,
-          ),
-        const SizedBox(height: 12),
-        TextFormField(
-          controller: _m.rateController,
-          decoration: InputDecoration(
-            labelText: l10n.expenseExchangeRate,
-            helperText: _rateStatus(context),
-            helperMaxLines: 3,
-          ),
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          onChanged: (_) => _m.rateTyped(),
-          validator: (_) => _m.rate == null ? l10n.expenseInvalidRate : null,
-        ),
-        if (_canRefreshRate)
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: TextButton(
-              onPressed: () => _lookUpRate(force: true),
-              child: Text(l10n.expenseUsePublishedRate),
-            ),
-          ),
-        const SizedBox(height: 12),
-      ],
-    ];
-  }
-
-  /// An amount the form works out rather than takes (#252): the total of
-  /// a conversion, or a settlement's amount to transfer.
-  Widget _calculatedAmount(
-    BuildContext context, {
-    required String label,
-    required int? amount,
-    required String symbol,
-    required int decimalDigits,
-  }) {
-    final l10n = context.l10n;
-    return InputDecorator(
-      key: _calculatedKey,
-      decoration: InputDecoration(
-        labelText: label,
-        helperText: l10n.expenseAmountCalculated,
-        errorText: _m.convertedAmountInvalid ? l10n.expenseInvalidAmount : null,
-      ),
-      child: amount == null
-          ? Text('—', semanticsLabel: l10n.expenseAmountNotYetKnown)
-          : Money(formatMoney(amount, symbol, decimalDigits: decimalDigits, locale: context.appLocale)),
-    );
   }
 
   Future<void> _save() async {

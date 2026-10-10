@@ -110,6 +110,22 @@ class SettingsService {
     }
   }
 
+  /// Which of [a] and [b] an exchange rate between them is written
+  /// with first, once swapped on this device (#261), or null when it
+  /// never was: then the more valuable one goes first.
+  Future<String?> rateBase(String a, String b) async =>
+      (await SharedPreferences.getInstance()).getString(_rateBaseKey(a, b));
+
+  Future<void> setRateBase(String a, String b, String first) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setString(_rateBaseKey(a, b), first)) {
+      throw StateError('Could not save the exchange rate order');
+    }
+  }
+
+  /// The same for both orders of the pair.
+  static String _rateBaseKey(String a, String b) => 'rate_base.${([a, b]..sort()).join('/')}';
+
   Future<ThemeMode> themeMode() async {
     final value =
         (await SharedPreferences.getInstance()).getString(_keyThemeMode);

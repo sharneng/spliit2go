@@ -9,6 +9,7 @@ import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/expense_form/split_card.dart';
+import 'package:spliit2go/screens/expense_form/currency_card.dart';
 import 'package:spliit2go/screens/expense_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
@@ -79,7 +80,7 @@ void main() {
     expect(find.descendant(of: paidByRow(), matching: find.text('Cid')), findsOneWidget);
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Lunch');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Amount'), '30');
+    await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '30');
     await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
     expect(db.rowToExpense((await db.pendingExpenses()).single).paidBy, 'cid');
@@ -102,7 +103,7 @@ void main() {
     expect(find.text('Select all'), findsOneWidget);
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Lunch');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Amount'), '30');
+    await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '30');
     await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
     expect(db.rowToExpense((await db.pendingExpenses()).single).paidFor.map((s) => s.participantId), ['alex', 'bea']);
@@ -110,7 +111,7 @@ void main() {
 
   testWidgets('the amount goes under the value, and in large text the value under the name', (tester) async {
     await open(tester);
-    await tester.enterText(find.widgetWithText(TextFormField, 'Amount'), '30');
+    await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '30');
     await mode(tester, 'Shares');
     final amount = find.descendant(of: person('Alex'), matching: find.text('\$10.00'));
     expect(tester.getTopLeft(amount).dy, greaterThan(tester.getBottomLeft(splitField('Alex')).dy - 1));
@@ -132,7 +133,7 @@ void main() {
   testWidgets('an empty or 0 value isn\'t included, its name dimmed, and saves without them', (tester) async {
     final db = await open(tester);
     await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Lunch');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Amount'), '30');
+    await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '30');
     // Unchecked in Evenly: no share when switching.
     await tester.ensureVisible(person('Cid'));
     await tester.tap(person('Cid'));
@@ -161,7 +162,7 @@ void main() {
   testWidgets('a split that doesn\'t add up says so in red under the card', (tester) async {
     await open(tester);
     await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Lunch');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Amount'), '30');
+    await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '30');
     await mode(tester, 'Amount');
     await tester.enterText(splitField('Alex'), '20');
     await tester.pumpAndSettle();

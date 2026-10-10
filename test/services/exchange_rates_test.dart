@@ -292,4 +292,22 @@ void main() {
     expect(back.perEuro, day.perEuro);
     expect(back.publishedOnExceptions, day.publishedOnExceptions);
   });
+
+  test('the ranking is the newest saved table over the shipped one (#261)', () async {
+    final shipped = await service().ranking();
+    expect((shipped['EUR'], shipped['JPY']! > 100, shipped['BGN']), (1, true, 1.95583));
+
+    RateDay day(String key, Map<String, double> perEuro) => RateDay(
+        day: key,
+        source: RateSource.averaged,
+        perEuro: perEuro,
+        publishedOn: '2026-10-01',
+        fetchedAt: now);
+    await db.saveRateDay(day('2026-10-02', const {'JPY': 150, 'USD': 1.1}).toRow());
+    await db.saveRateDay(day('2026-10-01', const {'JPY': 999}).toRow());
+    final ranking = await service().ranking();
+    expect((ranking['JPY'], ranking['USD'], ranking['EUR']), (150, 1.1, 1));
+    // What the newest table lacks, the shipped one has.
+    expect(ranking['BGN'], 1.95583);
+  });
 }
