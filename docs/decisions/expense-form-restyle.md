@@ -102,8 +102,8 @@ Paid in another currency, the currency card follows the order of the conversion:
 
 Kenneth, 2026-10-09: a checkbox only means something for an even split. In every other mode, 0 is the same as not included.
 
-- **Evenly:** a checkbox per person, and the amount it comes to beside each included one. **Select all / Select none** in the caption.
-- **Shares, Percent, Amount:** no checkboxes. Each row has the person's value. An empty or 0 value means not included, and that row's name is dimmed. Shares and Percent also show the amount each comes to. No Select all / none: there's nothing to select.
+- **Evenly:** no checkboxes either (Kenneth, 2026-10-10, on a device: they were ugly next to the dimming). A tap on a person includes them or leaves them out, and someone left out is dimmed as in the other modes. To a screen reader, each row is still checked or not. The amount it comes to is beside each included one. **Select all / Select none** in the caption.
+- **Shares, Percent, Amount:** no checkboxes. Each row has the person's value. An empty or 0 value means not included, and that row's name is dimmed. Shares and Percent also show the amount each comes to, under the value as spliit-ios does, so the name keeps the row's width. From 130% text size, the value and amount go under the name. No Select all / none: there's nothing to select.
 - **Switching modes keeps who's included:**
   - from Evenly, included people get 1 share, an equal percentage, or an equal amount (largest-remainder rounding), and the others get empty;
   - back to Evenly, anyone with a value above 0 is checked.
@@ -113,9 +113,11 @@ Kenneth, 2026-10-09: a checkbox only means something for an even split. In every
  ┌───────────────────────────────────┐
  │ [ Evenly | Shares | Percent | Amount ]
  │───────────────────────────────────│
- │ (A) Alice (you)      [ 2 ]  $13.33│
- │ (B) Bob              [ 1 ]   $6.67│
- │ (C) Carol            [   ]        │   dimmed: not included
+ │ (A) Alice (you)            [ 2 ]  │
+ │                           $13.33  │
+ │ (B) Bob                    [ 1 ]  │
+ │                            $6.67  │
+ │ (C) Carol                  [   ]  │   dimmed: not included
  └───────────────────────────────────┘
    3 shares.
 ```
@@ -268,6 +270,7 @@ Kenneth, 2026-10-09: don't make everyone pay for accessibility. The split contro
 | 2026-10-10 | Replaced, after trying it and a capsule switch on a device: a plain left-aligned title, and a button beside ✓ whose icon is the kind it switches to. A settlement hides Scan receipt, which can't read one |
 | 2026-10-09 | A settlement's category is hidden. A settlement created here is saved with Payment. Editing never changes the category, whether it was already a settlement or is switched to one |
 | 2026-10-09 | Settlements can have several recipients, amounts only |
+| 2026-10-10 | Paid for has no checkboxes in any mode: in Evenly a tap includes or leaves out, and the left-out are dimmed. A row's amount goes under its value, and at large text the value under the name |
 | 2026-10-09 | A settlement's amount is the sum of its "To" amounts, converted to the group's currency. A converted expense split by amount takes per-person amounts in the paid-in currency too |
 | 2026-10-09 | "Mark as paid" in another currency keeps the balance as the amount until a "To" amount is typed, then works like any typed amount (Ezra's review) |
 | 2026-10-09 | Saved amounts, shares and rate stay as saved until an input they come from changes (extends #255; Ezra's review) |

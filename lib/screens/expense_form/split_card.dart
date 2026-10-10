@@ -12,10 +12,10 @@ import '../../widgets/participant_sheet.dart';
 import 'expense_form_model.dart';
 
 /// "Paid for" (#260): the split mode, then each participant by their
-/// monogram. Only Evenly has checkboxes, and Select all / none; in Shares,
-/// Percent and Amount each has a value, and an empty or 0 one isn't
-/// included, its name dimmed. Under the card, the remainder, or once a save
-/// was tried, what's wrong.
+/// monogram, dimmed when they aren't included. In Evenly a tap includes or
+/// leaves them out, with Select all / none; in Shares, Percent and Amount
+/// each has a value, and an empty or 0 one isn't included. Under the card,
+/// the remainder, or once a save was tried, what's wrong.
 class SplitCard extends StatelessWidget {
   const SplitCard({
     super.key,
@@ -33,8 +33,10 @@ class SplitCard extends StatelessWidget {
   /// On the footer, for a refused save to scroll to.
   final Key? footerKey;
 
-  /// Past the checkbox and the monogram, where an even split's names start.
-  static const double _checkboxIndent = 16 + 24 + 12 + 24 + 16;
+  /// From this text size on, a value goes under the name rather than
+  /// beside it, which would squeeze the name to a word a line (#266
+  /// review), as spliit-ios does at accessibility sizes.
+  static const double _stackingTextScale = 1.3;
 
   ExpenseFormModel get _m => model;
 
@@ -71,10 +73,8 @@ class SplitCard extends StatelessWidget {
               // around them, at its edge.
               Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 for (final (i, p) in _m.group.participants.indexed) ...[
-                  if (i > 0) GroupedDivider(indent: evenly ? _checkboxIndent : ChoiceRow.monogramIndent),
-                  evenly
-                      ? _checkboxRow(context, p, colors[p.id]!, preview?[p.id])
-                      : _valueRow(context, p, colors[p.id]!, preview?[p.id]),
+                  if (i > 0) const GroupedDivider(indent: ChoiceRow.monogramIndent),
+                  _row(context, p, colors[p.id]!, preview?[p.id]),
                 ],
               ]),
               // A settlement is a one-off, not the group's usual split
@@ -128,55 +128,55 @@ class SplitCard extends StatelessWidget {
     );
   }
 
-  /// An even split's row: checked or not, and what it comes to.
-  Widget _checkboxRow(BuildContext context, Participant p, Color color, int? preview) {
+  /// A person: dimmed when not included, and beside the name (or under
+  /// it, in large text) their value with what it comes to under that.
+  /// In Evenly the row is a checkbox: a tap includes or leaves them out,
+  /// and it says checked or not to a screen reader.
+  Widget _row(BuildContext context, Participant p, Color color, int? preview) {
+    final theme = Theme.of(context);
+    final evenly = _m.splitMode == SplitMode.evenly;
     final included = _m.isIncluded(p.id);
-    return Semantics(
-      checked: included,
-      child: GroupedRow(
-        leading: Row(mainAxisSize: MainAxisSize.min, children: [
-          SizedBox.square(
-            dimension: 24,
-            child: ExcludeSemantics(
-              child: Checkbox(
-                value: included,
-                onChanged: (v) => _m.setIncluded(p.id, v ?? false),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Monogram(name: p.name, color: color, radius: 12),
-        ]),
-        title: Text(participantName(context, p, _m.activeUserId)),
-        trailing: preview == null ? null : _amount(context, preview),
-        onTap: () => _m.setIncluded(p.id, !included),
+    final value = evenly
+        ? (preview == null ? null : _amount(context, preview))
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              SizedBox(width: 96, child: _valueField(context, p)),
+              // Amount's value is the amount itself.
+              if (preview != null && _m.splitMode != SplitMode.byAmount)
+                Padding(padding: const EdgeInsets.only(top: 2, right: 10), child: _amount(context, preview)),
+            ],
+          );
+    final stacks = !evenly && MediaQuery.textScalerOf(context).scale(10) / 10 >= _stackingTextScale;
+    final name = Text(participantName(context, p, _m.activeUserId),
+        style: theme.textTheme.bodyLarge
+            ?.copyWith(color: included ? null : theme.colorScheme.onSurface.withValues(alpha: 0.4)));
+    final monogram = Opacity(opacity: included ? 1 : 0.4, child: Monogram(name: p.name, color: color, radius: 12));
+    // Not a ListTile, which caps what's beside the name at one line's
+    // height: here the amount goes under the value.
+    final row = InkWell(
+      onTap: evenly ? () => _m.setIncluded(p.id, !included) : null,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: GroupedRow.oneLineMinHeight),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: stacks
+              ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [monogram, const SizedBox(width: 16), Expanded(child: name)]),
+                  const SizedBox(height: 6),
+                  Padding(padding: const EdgeInsetsDirectional.only(start: 40), child: value),
+                ])
+              : Row(children: [
+                  monogram,
+                  const SizedBox(width: 16),
+                  Expanded(child: name),
+                  if (value != null) ...[const SizedBox(width: 12), value],
+                ]),
+        ),
       ),
     );
-  }
-
-  /// Shares, Percent or Amount: the person's value, and for Shares and
-  /// Percent what it comes to. Not included, the name is dimmed.
-  Widget _valueRow(BuildContext context, Participant p, Color color, int? preview) {
-    final theme = Theme.of(context);
-    final included = _m.isIncluded(p.id);
-    return GroupedRow(
-      leading: Opacity(opacity: included ? 1 : 0.4, child: Monogram(name: p.name, color: color, radius: 12)),
-      title: Text(participantName(context, p, _m.activeUserId),
-          style: included ? null : TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.4))),
-      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        SizedBox(width: 80, child: _valueField(context, p)),
-        if (_m.splitMode != SplitMode.byAmount)
-          SizedBox(
-            width: 76,
-            child: Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: preview == null ? null : _amount(context, preview),
-            ),
-          ),
-      ]),
-    );
+    return evenly ? Semantics(checked: included, child: row) : row;
   }
 
   Widget _valueField(BuildContext context, Participant p) {

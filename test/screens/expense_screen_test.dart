@@ -38,11 +38,14 @@ void main() {
 
   /// [name]'s row in "Paid for" (#260).
   Finder person(String name) =>
-      find.descendant(of: find.byType(SplitCard), matching: find.widgetWithText(GroupedRow, name));
+      find.descendant(of: find.byType(SplitCard), matching: find.widgetWithText(InkWell, name));
 
   /// Whether [name] is checked in an even split.
-  bool checked(WidgetTester tester, String name) =>
-      tester.widget<Checkbox>(find.descendant(of: person(name), matching: find.byType(Checkbox))).value!;
+  bool checked(WidgetTester tester, String name) => tester
+      .widget<Semantics>(find.ancestor(
+          of: person(name), matching: find.byWidgetPredicate((w) => w is Semantics && w.properties.checked != null)))
+      .properties
+      .checked!;
 
   /// Who "Paid by" shows.
   Finder paidBy(String name) => find.descendant(

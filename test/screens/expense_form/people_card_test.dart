@@ -52,7 +52,7 @@ void main() {
 
   Finder paidByRow() => find.widgetWithText(GroupedRow, 'Paid by');
   Finder person(String name) =>
-      find.descendant(of: find.byType(SplitCard), matching: find.widgetWithText(GroupedRow, name));
+      find.descendant(of: find.byType(SplitCard), matching: find.widgetWithText(InkWell, name));
   Finder splitField(String name) => find.descendant(of: person(name), matching: find.byType(TextFormField));
 
   Future<void> mode(WidgetTester tester, String label) async {
@@ -85,13 +85,46 @@ void main() {
     expect(db.rowToExpense((await db.pendingExpenses()).single).paidBy, 'cid');
   });
 
-  testWidgets('only Evenly has checkboxes and Select all / none', (tester) async {
-    await open(tester);
-    expect(find.descendant(of: find.byType(SplitCard), matching: find.byType(Checkbox)), findsNWidgets(3));
-    expect(find.text('Select none'), findsOneWidget);
-
-    await mode(tester, 'Shares');
+  testWidgets('in Evenly a tap on a person leaves them out, dimmed; only Evenly has Select all / none',
+      (tester) async {
+    final db = await open(tester);
     expect(find.descendant(of: find.byType(SplitCard), matching: find.byType(Checkbox)), findsNothing);
+    expect(find.text('Select none'), findsOneWidget);
+    Color? nameColor() => tester.widget<Text>(find.descendant(of: person('Cid'), matching: find.text('Cid'))).style?.color;
+    final color = nameColor();
+    expect(tester.getSemantics(person('Cid')), isSemantics(hasCheckedState: true, isChecked: true));
+
+    await tester.ensureVisible(person('Cid'));
+    await tester.tap(find.text('Cid'));
+    await tester.pumpAndSettle();
+    expect(nameColor(), isNot(color));
+    expect(tester.getSemantics(person('Cid')), isSemantics(hasCheckedState: true, isChecked: false));
+    expect(find.text('Select all'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Lunch');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Amount'), '30');
+    await tester.tap(find.byTooltip('Save'));
+    await tester.pumpAndSettle();
+    expect(db.rowToExpense((await db.pendingExpenses()).single).paidFor.map((s) => s.participantId), ['alex', 'bea']);
+  });
+
+  testWidgets('the amount goes under the value, and in large text the value under the name', (tester) async {
+    await open(tester);
+    await tester.enterText(find.widgetWithText(TextFormField, 'Amount'), '30');
+    await mode(tester, 'Shares');
+    final amount = find.descendant(of: person('Alex'), matching: find.text('\$10.00'));
+    expect(tester.getTopLeft(amount).dy, greaterThan(tester.getBottomLeft(splitField('Alex')).dy - 1));
+    expect(tester.getTopLeft(splitField('Alex')).dy, lessThan(tester.getBottomLeft(find.text('Alex')).dy));
+
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(splitField('Alex')).dy, greaterThan(tester.getBottomLeft(find.text('Alex')).dy));
+  });
+
+  testWidgets('Shares has no Select all / none', (tester) async {
+    await open(tester);
+    await mode(tester, 'Shares');
     expect(find.text('Select none'), findsNothing);
     expect(find.text('Select all'), findsNothing);
   });
@@ -109,14 +142,14 @@ void main() {
 
     Color? nameColor(String name) =>
         tester.widget<Text>(find.descendant(of: person(name), matching: find.text(name))).style?.color;
-    expect(nameColor('Alex'), isNull);
-    expect(nameColor('Cid'), isNotNull);
+    final dimmed = nameColor('Cid');
+    expect(nameColor('Alex'), isNot(dimmed));
 
     await tester.enterText(splitField('Alex'), '0');
     await tester.enterText(splitField('Cid'), '2');
     await tester.pumpAndSettle();
-    expect(nameColor('Alex'), isNotNull);
-    expect(nameColor('Cid'), isNull);
+    expect(nameColor('Alex'), dimmed);
+    expect(nameColor('Cid'), isNot(dimmed));
 
     await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
