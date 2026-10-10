@@ -1,6 +1,6 @@
 # spliit2go: restyling the add/edit expense screen
 
-Written 2026-10-09. **Status: agreed with Kenneth; being built** ([#256](https://github.com/sharneng/spliit2go/issues/256)). Step 1 ([#258](https://github.com/sharneng/spliit2go/issues/258)) is done: the form's state and arithmetic are in `ExpenseFormModel` (`lib/screens/expense_form/expense_form_model.dart`), with no visual change. Step 2 ([#259](https://github.com/sharneng/spliit2go/issues/259)) is built: ✕/✓, the title menu, and the scan, "what it was for", notes and receipts cards (`ReceiptScanCard`, `ReceiptsCard`); the title menu is waiting on Kenneth's try on a device (open question 1). The last part of the UI Polished milestone, after currency conversion ([#251](https://github.com/sharneng/spliit2go/issues/251), [#252](https://github.com/sharneng/spliit2go/issues/252)). The form still predates the rest of the app's look: a single column of Material fields with a Save button at the bottom.
+Written 2026-10-09. **Status: agreed with Kenneth; being built** ([#256](https://github.com/sharneng/spliit2go/issues/256)). Step 1 ([#258](https://github.com/sharneng/spliit2go/issues/258)) is done: the form's state and arithmetic are in `ExpenseFormModel` (`lib/screens/expense_form/expense_form_model.dart`), with no visual change. Step 2 ([#259](https://github.com/sharneng/spliit2go/issues/259)) is built: ✕, the kind button and ✓, and the scan, "what it was for", notes and receipts cards (`ReceiptScanCard`, `ReceiptsCard`). The last part of the UI Polished milestone, after currency conversion ([#251](https://github.com/sharneng/spliit2go/issues/251), [#252](https://github.com/sharneng/spliit2go/issues/252)). The form still predates the rest of the app's look: a single column of Material fields with a Save button at the bottom.
 
 ## Goals (Kenneth)
 
@@ -25,7 +25,8 @@ Written 2026-10-09. **Status: agreed with Kenneth; being built** ([#256](https:/
 ## Top bar
 
 - **✕ on the left closes** (Kenneth, 2026-10-09). Adding or editing an expense is a task you finish or abandon, not a screen you navigate through. If anything was changed, it asks "Discard changes?" first. Today it only asks when there's an unsent receipt.
-- **The title is the Expense/Settlement switch** (Kenneth, 2026-10-09). The title is what changes when you switch, so the switch is the title: "New expense ▾" opens a menu with **Expense** and **Settlement**. The same on an edit: "Edit expense ▾", "Edit settlement ▾". "Mark as paid" opens it as "New settlement". A screen reader hears it as a button: "New expense, kind: expense, double tap to change".
+- **The title says what's being added or edited,** left-aligned as on the app's other screens: "New expense", "New settlement", "Edit expense", "Edit settlement". "Mark as paid" opens as "New settlement".
+- **A button beside ✓ switches between Expense and Settlement in one tap** (Kenneth, 2026-10-10, on a device). Its icon is the kind it switches to: the payment icon on an expense ("Switch to settlement"), the receipt icon on a settlement ("Switch to expense"). It shares ✓'s capsule. Tried first and dropped: a title menu ("New expense ▾", whose arrow is easy to miss) and a capsule switch in the title's place (which costs the title, so New vs Edit is lost).
 - **✓ on the right saves.** It's the same `TopBarButtons` circle and saving spinner as group settings. The Save button at the bottom goes.
 - **When a save is refused:**
   - a field that doesn't validate keeps its error inline, under its row, and the list scrolls to the first one;
@@ -38,7 +39,7 @@ Rows are `GroupedRow`s with a label and a value, or borderless fields on the car
 ### Expense
 
 ```
- (✕)        New expense ▾            (✓)
+ (✕)  New expense                (⇄ ✓)
  ┌───────────────────────────────────┐
  │ ⎙  Scan receipt              文 EN │   new expenses only
  └───────────────────────────────────┘
@@ -122,7 +123,7 @@ Kenneth, 2026-10-09: a checkbox only means something for an even split. In every
 ### Settlement
 
 ```
- (✕)       New settlement ▾          (✓)
+ (✕)  New settlement             (⇄ ✓)
  ┌───────────────────────────────────┐
  │ Settlement                        │   filled in if the title was empty
  │───────────────────────────────────│
@@ -241,7 +242,7 @@ Kenneth, 2026-10-09: `JPY 1 = EUR 0.0056547` doesn't read naturally. A rate read
 
 | Card on screen | Inputs | Built by |
 |---|---|---|
-| Top bar | ✕, the Expense/Settlement title menu, ✓ | **The screen itself** |
+| Top bar | ✕, the title, the Expense/Settlement button, ✓ | **The screen itself** |
 | Scan receipt (new expenses) | Scan button, receipt language; status in the footer | **`ReceiptScanCard`**: the scan's state machine moves out of the screen |
 | What it was for | Title, Category (expenses), Date, Repeat | **The screen itself:** simple inputs, a few lines each. The category picker screen stays where it is |
 | Currency | Paid in, the amount (expense), the rate and its swap, the converted amount; rate status and "Use the published rate" in the footer | **`CurrencyCard`**: the rate lookup, its states, the currency ranking, the swap and the status text move out of the screen |
@@ -264,6 +265,7 @@ Kenneth, 2026-10-09: don't make everyone pay for accessibility. The split contro
 |---|---|
 | 2026-10-09 | ✕ closes, ✓ saves, in the top bar |
 | 2026-10-09 | The screen title is the Expense/Settlement switch, as a menu |
+| 2026-10-10 | Replaced, after trying it and a capsule switch on a device: a plain left-aligned title, and a button beside ✓ whose icon is the kind it switches to. A settlement hides Scan receipt, which can't read one |
 | 2026-10-09 | A settlement's category is hidden. A settlement created here is saved with Payment. Editing never changes the category, whether it was already a settlement or is switched to one |
 | 2026-10-09 | Settlements can have several recipients, amounts only |
 | 2026-10-09 | A settlement's amount is the sum of its "To" amounts, converted to the group's currency. A converted expense split by amount takes per-person amounts in the paid-in currency too |
@@ -278,4 +280,4 @@ Kenneth, 2026-10-09: don't make everyone pay for accessibility. The split contro
 
 ## Open questions
 
-1. **The title menu** (Kenneth, 2026-10-09: decide once it's prototyped). "New expense ▾" as the bar's title, opening a two-item menu, each item with its icon (receipt, payment) and a ✓ on the current one, as in App settings' choices. The alternative is a small capsule switch in the title's place. Build the menu first and try both on a device.
+1. ~~The title menu~~ Decided 2026-10-10: a button beside ✓ (see "Top bar").

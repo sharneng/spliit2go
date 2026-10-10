@@ -457,6 +457,18 @@ void main() {
     await closeTree(tester);
   });
 
+  testWidgets('not offered for a settlement, which it can\'t read (#259)', (tester) async {
+    await openForm(tester, newDb(), _FakeScanner());
+    expect(find.text('Scan receipt'), findsOneWidget);
+    await tester.tap(find.byTooltip('Switch to settlement'));
+    await tester.pumpAndSettle();
+    expect(find.text('Scan receipt'), findsNothing);
+    await tester.tap(find.byTooltip('Switch to expense'));
+    await tester.pumpAndSettle();
+    expect(find.text('Scan receipt'), findsOneWidget);
+    await closeTree(tester);
+  });
+
   testWidgets('not offered when editing, or where receipts aren\'t read', (tester) async {
     final db = newDb();
     final unsupported = _FakeScanner()..isSupported = false;

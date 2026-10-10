@@ -723,58 +723,22 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
-  /// The title, which is the Expense/Settlement switch (#259): "New
-  /// expense ▾" opens a menu of the two.
-  Widget _kindMenu(BuildContext context) {
-    final l10n = context.l10n;
-    final colors = Theme.of(context).colorScheme;
-    final title = switch ((widget.isEditing, _m.isSettlement)) {
-      (false, false) => l10n.expenseAddTitle,
-      (false, true) => l10n.expenseAddSettlementTitle,
-      (true, false) => l10n.expenseEditTitle,
-      (true, true) => l10n.expenseEditSettlementTitle,
-    };
-    PopupMenuItem<bool> item(bool settlement, IconData icon, String label) {
-      final current = settlement == _m.isSettlement;
-      return PopupMenuItem<bool>(
-        value: settlement,
-        height: 40,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        // Each kind's icon, and a check on the current one, as App
-        // settings' choices.
-        child: Semantics(
-          checked: current,
-          inMutuallyExclusiveGroup: true,
-          child: Row(children: [
-            Icon(icon),
-            const SizedBox(width: 14),
-            Expanded(child: Text(label)),
-            if (current) ...[const SizedBox(width: 14), Icon(Icons.check, color: colors.primary)],
-          ]),
-        ),
-      );
-    }
+  /// The title says what's being added or edited (#259).
+  String _title(BuildContext context) => switch ((widget.isEditing, _m.isSettlement)) {
+        (false, false) => context.l10n.expenseAddTitle,
+        (false, true) => context.l10n.expenseAddSettlementTitle,
+        (true, false) => context.l10n.expenseEditTitle,
+        (true, true) => context.l10n.expenseEditSettlementTitle,
+      };
 
-    return PopupMenuButton<bool>(
-      tooltip: l10n.expenseKindTooltip,
-      position: PopupMenuPosition.under,
-      onSelected: (settlement) => _m.isSettlement = settlement,
-      itemBuilder: (_) => [
-        item(false, Icons.receipt_long_outlined, l10n.expenseKindExpense),
-        item(true, Icons.payments_outlined, l10n.expenseKindSettlement),
-      ],
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(child: Text(title, overflow: TextOverflow.ellipsis)),
-            const Icon(Icons.arrow_drop_down),
-          ],
-        ),
-      ),
-    );
-  }
+  /// One tap switches between an expense and a settlement (#259, Kenneth
+  /// on a device: a title menu's arrow is easy to miss, and a capsule
+  /// switch costs the title). The icon is the kind it switches to.
+  Widget _kindButton(BuildContext context) => IconButton(
+        icon: Icon(_m.isSettlement ? Icons.receipt_long_outlined : Icons.payments_outlined),
+        tooltip: _m.isSettlement ? context.l10n.expenseSwitchToExpense : context.l10n.expenseSwitchToSettlement,
+        onPressed: _saving ? null : () => _m.isSettlement = !_m.isSettlement,
+      );
 
   /// A field on a card, which draws no box of its own.
   Widget _cell(Widget field) => Padding(
@@ -828,9 +792,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         // of a change a frame later.
         leading: CloseButton(
             onPressed: () => _hasChanges ? _confirmLeave() : Navigator.of(context).maybePop()),
-        title: _kindMenu(context),
+        title: Text(_title(context)),
+        centerTitle: false,
         actions: [
           TopBarButtons(children: [
+            _kindButton(context),
             _saving
                 ? const SizedBox.square(
                     dimension: TopBarButtons.size,
@@ -853,7 +819,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       body: Theme(
         // Fields sit on the cards, so they draw no box of their own.
         data: pageTheme.copyWith(
-          inputDecorationTheme: const InputDecorationTheme(
+          inputDecorationTheme: InputDecorationTheme(
+            // A placeholder in the rows' dimmed color, as their values.
+            hintStyle: TextStyle(color: SpliitColors.of(context).secondaryContent),
             border: InputBorder.none,
             enabledBorder: InputBorder.none,
             focusedBorder: InputBorder.none,
@@ -878,7 +846,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                       child: ErrorMessage(_saveError!, diagnostics: _saveErrorDiagnostics),
                     ),
-                  if (_offersScan) _scanSection(context),
+                  // The scanner reads expenses, not settlements.
+                  if (_offersScan && !_m.isSettlement) _scanSection(context),
                   GroupedSection(children: [
                     _cell(TextFormField(
                       controller: _m.titleController,

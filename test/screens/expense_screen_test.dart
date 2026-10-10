@@ -1028,9 +1028,7 @@ void main() {
       (tester) async {
     final db = await pumpGroup(tester, euroGroup);
     await fillCommonFields(tester, amount: '6.10');
-    await tester.tap(find.byTooltip('Expense or settlement'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Settlement'));
+    await tester.tap(find.byTooltip('Switch to settlement'));
     await tester.pumpAndSettle();
     await paidIn(tester, '', 'Yen', 'Japanese Yen (JPY)');
     // The amount settled stays typed; what to send is in yen.

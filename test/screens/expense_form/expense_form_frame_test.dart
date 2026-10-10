@@ -72,9 +72,7 @@ void main() {
   }
 
   Future<void> pickKind(WidgetTester tester, String kind) async {
-    await tester.tap(find.byTooltip('Expense or settlement'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(kind));
+    await tester.tap(find.byTooltip('Switch to ${kind.toLowerCase()}'));
     await tester.pumpAndSettle();
   }
 
@@ -115,21 +113,19 @@ void main() {
     });
   });
 
-  group('the title is the Expense/Settlement switch', () {
+  group('one tap switches between an expense and a settlement', () {
     testWidgets('a new settlement hides the category and saves as a Payment', (tester) async {
       final (db, popped) = await open(tester);
       expect(find.text('New expense'), findsOneWidget);
       expect(find.widgetWithText(GroupedRow, 'Category'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Expense or settlement'));
-      await tester.pumpAndSettle();
-      // Both kinds, the current one checked.
-      expect(tester.getSemantics(find.text('Expense').last),
-          isSemantics(isChecked: true, isInMutuallyExclusiveGroup: true));
-      await tester.tap(find.text('Settlement'));
-      await tester.pumpAndSettle();
+      // The button shows the kind it switches to.
+      expect(find.widgetWithIcon(IconButton, Icons.payments_outlined), findsOneWidget);
+      await pickKind(tester, 'Settlement');
 
       expect(find.text('New settlement'), findsOneWidget);
+      expect(find.byTooltip('Switch to expense'), findsOneWidget);
+      expect(find.widgetWithIcon(IconButton, Icons.receipt_long_outlined), findsOneWidget);
       expect(find.widgetWithText(GroupedRow, 'Category'), findsNothing);
       await tester.enterText(title(), 'Bea paid Alex');
       await tester.enterText(find.widgetWithText(TextFormField, 'Amount'), '30');
