@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:spliit2go/widgets/segmented_pill.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
@@ -57,7 +58,7 @@ void main() {
   Finder splitField(String name) => find.descendant(of: person(name), matching: find.byType(TextFormField));
 
   Future<void> mode(WidgetTester tester, String label) async {
-    final segment = find.descendant(of: find.byType(SegmentedButton<SplitMode>), matching: find.text(label));
+    final segment = find.descendant(of: find.byType(SegmentedPill<SplitMode>), matching: find.text(label));
     await tester.ensureVisible(segment);
     await tester.tap(segment);
     await tester.pumpAndSettle();

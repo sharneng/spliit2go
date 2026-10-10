@@ -1,7 +1,7 @@
 import 'dart:math' show ln10, log;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart' show TextEditingController;
+import 'package:flutter/widgets.dart' show FocusNode, TextEditingController;
 
 import '../../models/currency.dart';
 import '../../models/default_split.dart';
@@ -66,6 +66,11 @@ class ExpenseFormModel extends ChangeNotifier {
   /// "Amount paid", in the paid-in currency (#252).
   final originalAmountController = TextEditingController();
   final rateController = TextEditingController();
+
+  /// The Amount row's field, which a tap anywhere on the row focuses: its
+  /// text is only as wide as what's typed. One for either amount, as only
+  /// one shows at a time.
+  final amountFocus = FocusNode();
 
   // Per-participant values for the non-evenly modes -- shares (any
   // positive number), percentage (0-100, must sum to 100), or amount
@@ -1013,6 +1018,7 @@ class ExpenseFormModel extends ChangeNotifier {
       ...splitControllers.values]) {
       c.dispose();
     }
+    amountFocus.dispose();
     super.dispose();
   }
 }

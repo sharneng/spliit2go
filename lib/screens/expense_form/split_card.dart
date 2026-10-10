@@ -10,7 +10,9 @@ import '../../widgets/group_monogram.dart';
 import '../../widgets/grouped_section.dart';
 import '../../widgets/money.dart';
 import '../../widgets/participant_sheet.dart';
+import '../../widgets/segmented_pill.dart';
 import 'expense_form_model.dart';
+import 'form_text.dart';
 
 /// "Paid for" (#260): the split mode, then each participant by their
 /// monogram, dimmed when they aren't included. In Evenly a tap includes or
@@ -73,6 +75,14 @@ class SplitCard extends StatelessWidget {
             captionTrailing: evenly
                 ? TextButton(
                     onPressed: _m.toggleSelectAll,
+                    // The caption's height, not a button's 48: otherwise
+                    // the caption grows, and the gap above the card with
+                    // it, only in Evenly (Kenneth, 2026-10-10).
+                    style: TextButton.styleFrom(
+                      minimumSize: Size.zero,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                     child: Text(_m.allIncluded ? l10n.expenseSelectNone : l10n.expenseSelectAll),
                   )
                 : null,
@@ -119,29 +129,29 @@ class SplitCard extends StatelessWidget {
     );
   }
 
+  /// The split mode, as spliit-ios's (Kenneth, 2026-10-10), at the old
+  /// control's height.
   Widget _modes(BuildContext context) {
     final l10n = context.l10n;
-    return SegmentedButton<SplitMode>(
-      segments: [
-        ButtonSegment(value: SplitMode.evenly, label: Text(l10n.expenseSplitEvenly)),
-        ButtonSegment(value: SplitMode.byShares, label: Text(l10n.expenseSplitShares)),
-        ButtonSegment(value: SplitMode.byPercentage, label: Text(l10n.expenseSplitPercent)),
-        ButtonSegment(value: SplitMode.byAmount, label: Text(l10n.expenseSplitAmount)),
-      ],
-      selected: {_m.splitMode},
-      // The selected segment is already highlighted -- with 4 segments
-      // crammed into the row, the extra check icon pushed a label like
-      // "Percent" onto 3 lines (issue #32).
-      showSelectedIcon: false,
-      onSelectionChanged: (selection) {
+    return SegmentedPill<SplitMode>(
+      segments: {
+        SplitMode.evenly: l10n.expenseSplitEvenly,
+        SplitMode.byShares: l10n.expenseSplitShares,
+        SplitMode.byPercentage: l10n.expenseSplitPercent,
+        SplitMode.byAmount: l10n.expenseSplitAmount,
+      },
+      selected: _m.splitMode,
+      onChanged: (mode) {
         // A focused value field that this removes or refills would hand
         // its focus back up the form, which then scrolls to it (issue
         // #36): unfocus first.
         FocusScope.of(context).unfocus();
-        _m.splitMode = selection.first;
+        _m.splitMode = mode;
       },
     );
   }
+
+
 
   /// A person: dimmed when not included, and beside the name (or under
   /// it, in large text) their value with what it comes to under that.
@@ -221,7 +231,7 @@ class SplitCard extends StatelessWidget {
   List<Widget> _totals(BuildContext context) {
     final l10n = context.l10n;
     Widget row(String label, int? amount, String symbol, int digits) => GroupedRow(
-          title: Text(label),
+          title: formLabel(context, label),
           trailing: amount == null
               ? Text('—', semanticsLabel: l10n.expenseAmountNotYetKnown)
               : Money(formatMoney(amount, symbol, decimalDigits: digits, locale: context.appLocale)),
