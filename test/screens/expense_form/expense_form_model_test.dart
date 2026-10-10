@@ -694,6 +694,39 @@ void main() {
       expect(shares.fold(0, (a, b) => a + b), 2441);
     });
 
+    test('To amounts moved between people are worked out afresh, though the sum is the same (#271 review)', () {
+      final m = model(euros,
+          existing: expense(
+              amount: 615,
+              settlement: true,
+              mode: SplitMode.byAmount,
+              paidFor: const [ExpenseShare(participantId: 'alex', shares: 300), ExpenseShare(participantId: 'bea', shares: 315)],
+              originalAmount: 1000,
+              originalCurrency: 'JPY',
+              rate: 0.0061))
+        ..rateBase = 'JPY'
+        ..decimalSeparator = '.';
+      expect(m.amount, 615);
+      m.splitControllers['alex']!.text = '400';
+      m.splitControllers['bea']!.text = '600';
+      expect(m.amountsToSave()!.amount, 610);
+      expect(m.paidFor()!.map((s) => s.shares), [244, 366]);
+    });
+
+    test('a corrected To amount clears "rounds to nothing" (#271 review)', () {
+      final m = model(euros)
+        ..setSettlement(true, title: 'Settlement')
+        ..choosePaidIn('JPY')
+        ..rateBase = 'JPY'
+        ..rateController.text = '0.001';
+      m.splitControllers['alex']!.text = '1';
+      expect(m.amountsToSave(), isNull);
+      expect(m.convertedAmountInvalid, isTrue);
+      m.splitControllers['alex']!.text = '1000';
+      expect(m.convertedAmountInvalid, isFalse);
+      expect(m.amountsToSave()!.amount, 100);
+    });
+
     test('a recipient\'s amount must be at least a smallest unit; someone must have one', () {
       final m = model(euros)..setSettlement(true, title: 'Settlement');
       expect(m.splitProblem(), isA<NoOneIncluded>());

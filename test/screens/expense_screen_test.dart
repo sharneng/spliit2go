@@ -1130,6 +1130,37 @@ void main() {
     expect(saved.paidFor.map((s) => (s.participantId, s.shares)), [('bea', 610)]);
   });
 
+  testWidgets('a settlement that converts to nothing scrolls to where it says so (#271 review)', (tester) async {
+    // A phone's height, so the To card can be scrolled out of sight.
+    tester.view
+      ..physicalSize = const Size(400, 480)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final db = await pumpGroup(tester, euroGroup);
+    await tester.tap(find.byTooltip('Switch to settlement'));
+    await tester.pumpAndSettle();
+    await paidIn(tester, '', 'Yen', 'Japanese Yen (JPY)');
+    await tester.enterText(rateField(), '1000'); // EUR/JPY: a yen is a tenth of a cent
+    await tester.ensureVisible(find.byKey(SplitCard.valueKey('alex')));
+    await tester.enterText(find.byKey(SplitCard.valueKey('alex')), '1');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -2000));
+    await tester.pumpAndSettle();
+    expect(find.byKey(SplitCard.valueKey('alex')).hitTestable(), findsNothing);
+
+    await tapSave(tester);
+    const error = "The amount in the group's currency rounds to nothing. Change the amount or the rate.";
+    expect(find.text(error).hitTestable(), findsOneWidget);
+    expect(await db.pendingExpenses(), isEmpty);
+
+    // Corrected, it saves.
+    await tester.enterText(find.byKey(SplitCard.valueKey('alex')), '1000');
+    await tester.pump();
+    expect(find.text(error), findsNothing);
+    expect((await save(tester, db)).amountCents, 100);
+  });
+
   testWidgets('a yen group rejects an amount under one yen (#254)', (tester) async {
     final db = await pumpGroup(tester, yenGroup);
     await fillCommonFields(tester, amount: '0.4');

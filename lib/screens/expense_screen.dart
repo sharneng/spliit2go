@@ -1063,7 +1063,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       if (!mounted) return;
       final problems = [
         for (final field in invalid) field.context,
-        if ((_m.splitProblem(), _paidForFooterKey.currentContext) case (_?, final footer?)) footer,
+        if ((_m.splitProblem() != null || (_m.isSettlement && _m.convertedAmountInvalid),
+            _paidForFooterKey.currentContext) case (true, final footer?))
+          footer,
         if ((_m.convertedAmountInvalid, _calculatedKey.currentContext) case (true, final amount?)) amount,
       ];
       BuildContext? first;

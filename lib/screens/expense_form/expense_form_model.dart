@@ -41,6 +41,12 @@ class ExpenseFormModel extends ChangeNotifier {
       c.addListener(_amountsChanged);
     }
     rateController.addListener(_refillBalance);
+    // A settlement's To amounts make its amount (#262 review).
+    for (final c in splitControllers.values) {
+      c.addListener(() {
+        if (_isSettlement) _convertedAmountInvalid = false;
+      });
+    }
     markUnchanged();
   }
 
@@ -600,7 +606,9 @@ class ExpenseFormModel extends ChangeNotifier {
     return _paidIn == existing.originalCurrency &&
         _isSettlement == existing.isSettlement &&
         rateIsSaved &&
-        originalAmount == saved.originalAmount;
+        // A settlement's amount paid is its To amounts: moved between
+        // people, the sum can stay while the inputs changed (#262 review).
+        (_isSettlement ? listEquals(_splitState(), _savedSplit) : originalAmount == saved.originalAmount);
   }
 
   /// The amount in the group's currency: calculated from the amount paid

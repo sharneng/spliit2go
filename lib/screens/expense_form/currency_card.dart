@@ -57,7 +57,8 @@ class CurrencyCard extends StatelessWidget {
     final secondary = theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant);
     final footer = [
       if (amountHint case final hint?) Text(hint, style: secondary),
-      if (_m.convertedAmountInvalid)
+      // A settlement's says so on its To card.
+      if (_m.convertedAmountInvalid && !_m.isSettlement)
         Text(l10n.expenseConvertedAmountInvalid,
             style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
       if (converting && rateStatus != null) Text(rateStatus!, style: secondary),

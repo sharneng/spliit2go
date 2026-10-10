@@ -56,7 +56,10 @@ class SplitCard extends StatelessWidget {
     final evenly = _m.splitMode == SplitMode.evenly;
     final colors = participantColors(_m.group.participants, _m.activeUserId);
     final preview = _m.livePreviewAmounts();
-    final error = showErrors ? _error(context) : null;
+    // A settlement's amount is this card's: when it converts to nothing,
+    // it says so here, where a refused save scrolls (#262 review).
+    final error = (showErrors ? _error(context) : null) ??
+        (_m.isSettlement && _m.convertedAmountInvalid ? l10n.expenseConvertedAmountInvalid : null);
     final settlement = _m.isSettlement;
     return Padding(
       padding: const EdgeInsets.fromLTRB(GroupedSection.inset, 0, GroupedSection.inset, GroupedSection.spacing),
