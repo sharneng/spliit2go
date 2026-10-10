@@ -365,7 +365,6 @@
   "appSettingsExchangeRatesFailed": "无法更新汇率。",
   "expensePaidIn": "支付币种",
   "expenseExchangeRate": "汇率",
-  "expenseAmountToTransfer": "转账金额",
   "expenseAmountNotYetKnown": "尚未知道",
   "expenseRateLoading": "正在获取汇率…",
   "expenseRateTyped": "正在使用您输入的汇率。",
@@ -378,5 +377,15 @@
   "expenseInCurrency": "折合{currency}",
   "expenseSwapRate": "交换两种货币",
   "expenseConvertedAmountInvalid": "按群组货币计算的金额四舍五入后为零。请修改金额或汇率。",
+  "expenseFromLabel": "付款人",
+  "expenseToHeading": "收款人",
+  "expenseSettlementTotal": "合计",
+  "expenseSettlementDefaultTitle": "结算",
+  "expenseSettlementSentence": "{from}支付了{recipients}。",
+  "expenseSettlementRecipient": "{name}{amount}",
+  "expenseListTwo": "{first}和{second}",
+  "expenseListSeparator": "、",
+  "expenseSettlementHint": "请输入每个人收到的金额。",
+  "expenseSettlementNoRecipient": "请至少为一个人输入金额",
   "expenseInvalidRate": "请输入大于零的汇率"
 }

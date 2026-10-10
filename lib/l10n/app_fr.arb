@@ -365,7 +365,6 @@
   "appSettingsExchangeRatesFailed": "Impossible de mettre à jour les taux de change.",
   "expensePaidIn": "Payé en",
   "expenseExchangeRate": "Taux de change",
-  "expenseAmountToTransfer": "Montant à transférer",
   "expenseAmountNotYetKnown": "Pas encore connu",
   "expenseRateLoading": "Récupération du taux de change…",
   "expenseRateTyped": "Taux que vous avez saisi.",
@@ -378,5 +377,15 @@
   "expenseInCurrency": "En {currency}",
   "expenseSwapRate": "Inverser les devises",
   "expenseConvertedAmountInvalid": "Le montant dans la devise du groupe s'arrondit à zéro. Modifiez le montant ou le taux.",
+  "expenseFromLabel": "De",
+  "expenseToHeading": "À",
+  "expenseSettlementTotal": "Total",
+  "expenseSettlementDefaultTitle": "Remboursement",
+  "expenseSettlementSentence": "{from} a payé {recipients}.",
+  "expenseSettlementRecipient": "{amount} à {name}",
+  "expenseListTwo": "{first} et {second}",
+  "expenseListSeparator": ", ",
+  "expenseSettlementHint": "Saisissez ce que chaque personne a reçu.",
+  "expenseSettlementNoRecipient": "Saisissez un montant pour au moins une personne",
   "expenseInvalidRate": "Saisissez un taux supérieur à zéro"
 }

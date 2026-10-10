@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/context_l10n.dart';
+import '../../models/currency.dart';
 import '../../models/expense.dart';
 import '../../models/group.dart';
 import '../../utils/money.dart';
@@ -16,6 +17,11 @@ import 'expense_form_model.dart';
 /// leaves them out, with Select all / none; in Shares, Percent and Amount
 /// each has a value, and an empty or 0 one isn't included. Under the card,
 /// the remainder, or once a save was tried, what's wrong.
+///
+/// A settlement's "To" (#262) is the Amount rows alone, in the paid-in
+/// currency: no modes and no default split, then their Total and, when
+/// converting, what that is in the group's currency. Under it, what was
+/// paid as a sentence.
 class SplitCard extends StatelessWidget {
   const SplitCard({
     super.key,
@@ -40,6 +46,9 @@ class SplitCard extends StatelessWidget {
 
   ExpenseFormModel get _m => model;
 
+  /// A person's value field: their shares, percent or amount.
+  static Key valueKey(String participantId) => ValueKey('splitCard.value.$participantId');
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -48,13 +57,14 @@ class SplitCard extends StatelessWidget {
     final colors = participantColors(_m.group.participants, _m.activeUserId);
     final preview = _m.livePreviewAmounts();
     final error = showErrors ? _error(context) : null;
+    final settlement = _m.isSettlement;
     return Padding(
       padding: const EdgeInsets.fromLTRB(GroupedSection.inset, 0, GroupedSection.inset, GroupedSection.spacing),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           GroupedSection(
-            caption: l10n.expensePaidForHeading,
+            caption: settlement ? l10n.expenseToHeading : l10n.expensePaidForHeading,
             // Always offers the opposite of the current state (issue #29
             // section 2); only an even split selects anyone.
             captionTrailing: evenly
@@ -65,10 +75,11 @@ class SplitCard extends StatelessWidget {
                 : null,
             margin: EdgeInsets.zero,
             children: [
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: _modes(context),
-              ),
+              if (!settlement)
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: _modes(context),
+                ),
               // The people's lines start at their names; the card's own,
               // around them, at its edge.
               Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -77,9 +88,10 @@ class SplitCard extends StatelessWidget {
                   _row(context, p, colors[p.id]!, preview?[p.id]),
                 ],
               ]),
+              if (settlement) ..._totals(context),
               // A settlement is a one-off, not the group's usual split
               // (issue #29 section 7).
-              if (!_m.isSettlement)
+              if (!settlement)
                 GroupedRow(
                   title: Text(l10n.expenseSaveDefaultSplit),
                   trailing: Switch.adaptive(
@@ -183,6 +195,7 @@ class SplitCard extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final shape = OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none);
     return TextFormField(
+      key: valueKey(p.id),
       controller: _m.splitControllers[p.id],
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       textAlign: TextAlign.right,
@@ -201,6 +214,45 @@ class SplitCard extends StatelessWidget {
     );
   }
 
+  /// A settlement's Total, in the paid-in currency, and converted.
+  List<Widget> _totals(BuildContext context) {
+    final l10n = context.l10n;
+    Widget row(String label, int? amount, String symbol, int digits) => GroupedRow(
+          title: Text(label),
+          trailing: amount == null
+              ? Text('—', semanticsLabel: l10n.expenseAmountNotYetKnown)
+              : Money(formatMoney(amount, symbol, decimalDigits: digits, locale: context.appLocale)),
+        );
+    return [
+      const GroupedDivider(),
+      row(l10n.expenseSettlementTotal, _m.settlementTotal, _m.splitSymbol, _m.splitDigits),
+      if (_m.converting)
+        row(l10n.expenseInCurrency(currencyByCode(_m.group.currencyCode).name), _m.amount, _m.group.currency,
+            _m.digits),
+    ];
+  }
+
+  /// "Bob paid Alice ¥8,000 and Carol ¥4,000." (#262), once there's
+  /// someone with an amount.
+  String? _sentence(BuildContext context) {
+    final l10n = context.l10n;
+    final from = _m.group.participants.where((p) => p.id == _m.paidBy).firstOrNull;
+    final recipients = [
+      for (final p in _m.includedParticipants)
+        if (_m.typedValue(p) case final value? when value > 0)
+          l10n.expenseSettlementRecipient(
+              p.name,
+              formatMoney(toMinorUnits(value, _m.splitDigits), _m.splitSymbol,
+                  decimalDigits: _m.splitDigits, locale: context.appLocale)),
+    ];
+    if (from == null || recipients.isEmpty) return null;
+    final list = recipients.length == 1
+        ? recipients.single
+        : l10n.expenseListTwo(
+            recipients.sublist(0, recipients.length - 1).join(l10n.expenseListSeparator), recipients.last);
+    return l10n.expenseSettlementSentence(from.name, list);
+  }
+
   Widget _amount(BuildContext context, int amount) => Money(
       formatMoney(amount, _m.group.currency, decimalDigits: _m.digits, locale: context.appLocale),
       size: MoneySize.support);
@@ -210,6 +262,7 @@ class SplitCard extends StatelessWidget {
     final l10n = context.l10n;
     return switch (_m.splitProblem()) {
       null => null,
+      NoOneIncluded() when _m.isSettlement => l10n.expenseSettlementNoRecipient,
       NoOneIncluded() => l10n.expenseSelectAtLeastOne,
       InvalidValue(:final participant) => switch (_m.splitMode) {
           SplitMode.byShares => l10n.expenseEnterShares(participant.name),
@@ -228,6 +281,7 @@ class SplitCard extends StatelessWidget {
   /// mode's explanation (issue #29 section 6).
   String _hint(BuildContext context) {
     final l10n = context.l10n;
+    if (_m.isSettlement) return _sentence(context) ?? l10n.expenseSettlementHint;
     final unallocated = _m.unallocated();
     if (unallocated != null && unallocated != 0) {
       final over = unallocated < 0;

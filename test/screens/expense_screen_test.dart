@@ -1109,20 +1109,25 @@ void main() {
     expect((saved.amountCents, saved.originalCurrency, saved.conversionRate), (610, null, null));
   });
 
-  testWidgets('a settlement in another currency works out the amount to transfer (#252)',
-      (tester) async {
+  testWidgets('a settlement in another currency: its To amounts in it, converted (#262)', (tester) async {
     final db = await pumpGroup(tester, euroGroup);
-    await fillCommonFields(tester, amount: '6.10');
     await tester.tap(find.byTooltip('Switch to settlement'));
     await tester.pumpAndSettle();
     await paidIn(tester, '', 'Yen', 'Japanese Yen (JPY)');
-    // The amount settled stays typed; what to send is in yen.
-    expect(tester.widget<TextFormField>(find.byKey(CurrencyCard.amountFieldKey)).controller!.text, '6.10');
-    expect(find.widgetWithText(GroupedRow, 'Amount to transfer'), findsOneWidget);
+    expect(find.byKey(CurrencyCard.amountFieldKey), findsNothing);
+    expect(find.text('From'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(SplitCard.valueKey('bea')));
+    await tester.enterText(find.byKey(SplitCard.valueKey('bea')), '1000');
+    await tester.pumpAndSettle();
+    // Total in yen, and in euros; what was paid in words.
+    expect(find.widgetWithText(GroupedRow, 'Total'), findsOneWidget);
     expect(find.text('¥1,000'), findsOneWidget);
+    expect(find.text('€6.10'), findsOneWidget);
+    expect(find.text('Alex paid Bea ¥1,000.'), findsOneWidget);
     final saved = await save(tester, db);
-    expect((saved.amountCents, saved.originalAmountCents, saved.originalCurrency, saved.conversionRate),
-        (610, 1000, 'JPY', 1 / 163.934));
+    expect((saved.title, saved.amountCents, saved.originalAmountCents, saved.originalCurrency),
+        ('Settlement', 610, 1000, 'JPY'));
+    expect(saved.paidFor.map((s) => (s.participantId, s.shares)), [('bea', 610)]);
   });
 
   testWidgets('a yen group rejects an amount under one yen (#254)', (tester) async {

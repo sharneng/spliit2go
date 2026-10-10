@@ -728,7 +728,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   Widget _kindButton(BuildContext context) => IconButton(
         icon: Icon(_m.isSettlement ? Icons.receipt_long_outlined : Icons.payments_outlined),
         tooltip: _m.isSettlement ? context.l10n.expenseSwitchToExpense : context.l10n.expenseSwitchToSettlement,
-        onPressed: _saving ? null : () => _m.isSettlement = !_m.isSettlement,
+        onPressed: _saving
+            ? null
+            : () => _m.setSettlement(!_m.isSettlement, title: context.l10n.expenseSettlementDefaultTitle),
       );
 
   /// "Paid by" (#260): the payer by their monogram, opening the
@@ -737,9 +739,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     final l10n = context.l10n;
     final participants = widget.group.participants;
     final payer = participants.where((p) => p.id == _m.paidBy).firstOrNull;
+    // A settlement's is "From" (#262).
+    final label = _m.isSettlement ? l10n.expenseFromLabel : l10n.expensePaidByLabel;
     return GroupedSection(children: [
       GroupedRow(
-        title: Text(l10n.expensePaidByLabel),
+        title: Text(label),
         trailing: payer == null
             ? null
             : Row(mainAxisSize: MainAxisSize.min, children: [
@@ -753,7 +757,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         onTap: () async {
           _dropFocus();
           final picked = await showParticipantSheet(context,
-              title: l10n.expensePaidByLabel,
+              title: label,
               participants: participants,
               checkedId: _m.paidBy,
               activeUserId: widget.activeUserId);
@@ -1003,6 +1007,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     // Each refusal below says why on screen; the haptic says to look.
     final invalid = _formKey.currentState!.validateGranularly();
     if (invalid.isNotEmpty) return _refuse(invalid);
+    // The split first: a settlement's amount is its To amounts' sum.
+    if (_m.splitProblem() != null) return _refuse();
     final amounts = _m.amountsToSave();
     if (amounts == null) return _refuse();
     final paidFor = _m.paidFor();
@@ -1120,7 +1126,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       amountCents: amounts.amount,
       paidBy: _m.paidBy!,
       paidFor: paidFor,
-      splitMode: _m.splitMode,
+      splitMode: _m.splitModeToSave,
       category: _m.categoryToSave,
       notes: _m.notesController.text.trim(),
       date: _m.date,
@@ -1178,7 +1184,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       amountCents: amounts.amount,
       paidBy: _m.paidBy!,
       paidFor: paidFor,
-      splitMode: _m.splitMode,
+      splitMode: _m.splitModeToSave,
       category: _m.categoryToSave,
       notes: _m.notesController.text.trim(),
       date: _m.date,

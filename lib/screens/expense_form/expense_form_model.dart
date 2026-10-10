@@ -40,6 +40,7 @@ class ExpenseFormModel extends ChangeNotifier {
     for (final c in [amountController, originalAmountController, rateController]) {
       c.addListener(_amountsChanged);
     }
+    rateController.addListener(_refillBalance);
     markUnchanged();
   }
 
@@ -99,10 +100,110 @@ class ExpenseFormModel extends ChangeNotifier {
 
   bool _isSettlement = false;
   bool get isSettlement => _isSettlement;
-  set isSettlement(bool value) => _set(() {
-        _isSettlement = value;
-        _convertedAmountInvalid = false;
-      });
+
+  /// "Settlement", as filled into an empty title, to clear it again on
+  /// switching back if it's untouched (#262).
+  String? _autoTitle;
+
+  /// The other kind's split while switched away from it (#262): back to
+  /// an expense, its split comes back as it was, and so do a
+  /// settlement's To amounts.
+  _Split? _otherSplit;
+
+  /// Switches between an expense and a settlement (#262). A settlement's
+  /// "To" is the Amount rows, its amount their sum; an expense gets its
+  /// split back. [title] fills an empty title.
+  void setSettlement(bool value, {required String title}) {
+    if (value == _isSettlement) return;
+    _filling = true;
+    final recipients = value ? null : includedParticipants;
+    final total = value ? null : (converting ? originalAmount : amount);
+    final other = _otherSplit;
+    _otherSplit = _currentSplit();
+    _isSettlement = value;
+    _convertedAmountInvalid = false;
+    if (other != null) {
+      _restore(other);
+    } else if (value) {
+      // To: no one yet.
+      _splitMode = SplitMode.byAmount;
+      for (final p in group.participants) {
+        _included[p.id] = false;
+        splitControllers[p.id]!.text = '';
+      }
+    } else {
+      // An edited settlement's first expense: even, between its
+      // recipients, for what they were paid.
+      _splitMode = SplitMode.evenly;
+      for (final p in group.participants) {
+        _included[p.id] = recipients!.isEmpty || recipients.contains(p);
+      }
+      if (total != null && total > 0) {
+        (converting ? originalAmountController : amountController).text =
+            _localized(minorUnitsText(total, converting ? originalDigits : digits));
+      }
+    }
+    if (value && titleController.text.trim().isEmpty) {
+      titleController.text = _autoTitle = title;
+    } else if (!value && _autoTitle != null && titleController.text == _autoTitle) {
+      titleController.text = '';
+    }
+    if (!value) _autoTitle = null;
+    _filling = false;
+    notifyListeners();
+  }
+
+  _Split _currentSplit() => (
+        mode: _splitMode,
+        included: Map.of(_included),
+        values: {for (final MapEntry(:key, :value) in splitControllers.entries) key: value.text},
+      );
+
+  void _restore(_Split split) {
+    _splitMode = split.mode;
+    _included.addAll(split.included);
+    for (final MapEntry(:key, :value) in split.values.entries) {
+      splitControllers[key]!.text = value;
+    }
+  }
+
+  /// "Mark as paid" (#262): the balance it settles, in the group's
+  /// currency, and to whom. It's saved exactly as long as the To amounts
+  /// are the form's own: the recipient's is the balance (converted, in
+  /// another currency) and no one else has one.
+  ({int amount, String to})? _balance;
+
+  /// The recipient's To amount as the form last filled it in.
+  String? _balanceText;
+
+  bool get _balanceKept {
+    final balance = _balance;
+    if (balance == null || !_isSettlement) return false;
+    return group.participants.every((p) =>
+        p.id == balance.to ? splitControllers[p.id]!.text == _balanceText : !isIncluded(p.id));
+  }
+
+  /// In another currency, the balance's To amount is the balance
+  /// converted, filled in again when the currency or the rate changes.
+  void _refillBalance() {
+    if (!_balanceKept) return;
+    final (balance, rate) = (_balance!, this.rate);
+    final text = !converting
+        ? minorUnitsText(balance.amount, digits)
+        : rate == null
+            ? ''
+            : minorUnitsText(
+                convertToOriginalAmount(
+                    amount: balance.amount, rate: rate, decimalDigits: digits, originalDecimalDigits: originalDigits),
+                originalDigits);
+    final shown = _localized(text);
+    if (shown == _balanceText) return;
+    _balanceText = shown;
+    final filling = _filling;
+    _filling = true;
+    splitControllers[balance.to]!.text = shown;
+    _filling = filling;
+  }
 
   bool _saveDefaultSplit = false;
   bool get saveDefaultSplit => _saveDefaultSplit;
@@ -310,6 +411,7 @@ class ExpenseFormModel extends ChangeNotifier {
     _paidInFirst = _rankedPaidInFirst;
     rateController.text = '';
     if (!converting && converted != null) amountController.text = minorUnitsText(converted, digits);
+    _refillBalance();
     notifyListeners();
     return true;
   }
@@ -462,11 +564,28 @@ class ExpenseFormModel extends ChangeNotifier {
         null => null,
       };
 
-  /// "Amount paid", in the paid-in currency's smallest unit.
-  int? get originalAmount => switch (parseDecimal(originalAmountController.text.trim())) {
-        final amount? => toMinorUnits(amount, originalDigits),
-        null => null,
-      };
+  /// The amount paid, in the paid-in currency's smallest unit: typed for
+  /// an expense, the To amounts' sum for a settlement (#262).
+  int? get originalAmount => _isSettlement
+      ? _toTotal
+      : switch (parseDecimal(originalAmountController.text.trim())) {
+          final amount? => toMinorUnits(amount, originalDigits),
+          null => null,
+        };
+
+  /// What a settlement's To amounts add up to, in the paid-in currency.
+  int? get _toTotal {
+    var total = 0;
+    for (final p in includedParticipants) {
+      final value = typedValue(p);
+      if (value == null || value < 0) return null;
+      total += toMinorUnits(value, splitDigits);
+    }
+    return total;
+  }
+
+  /// A settlement's total, as the To card shows it under the amounts.
+  int? get settlementTotal => _isSettlement ? _toTotal : null;
 
   /// The edited expense's own amounts (#255 review): spliit-web lets its
   /// total differ a little from the amount paid times the rate, so they
@@ -481,29 +600,21 @@ class ExpenseFormModel extends ChangeNotifier {
     return _paidIn == existing.originalCurrency &&
         _isSettlement == existing.isSettlement &&
         rateIsSaved &&
-        (_isSettlement ? typedAmount == saved.amount : originalAmount == saved.originalAmount);
+        originalAmount == saved.originalAmount;
   }
 
-  /// The expense's amount in the group's currency: calculated from the
-  /// amount paid during a conversion, so the rate always explains it;
-  /// typed otherwise, and for a settlement, whose amount settled is fixed.
+  /// The amount in the group's currency: calculated from the amount paid
+  /// during a conversion, so the rate always explains it; typed
+  /// otherwise. A settlement's is its To amounts' sum (#262), or while
+  /// "Mark as paid" fills them in, the balance it settles.
   int? get amount {
-    if (!converting || _isSettlement) return typedAmount;
+    if (_balanceKept) return _balance!.amount;
+    if (!converting) return _isSettlement ? _toTotal : typedAmount;
     if (conversionUnchanged) return _savedConversion!.amount;
     final (original, rate) = (originalAmount, this.rate);
     if (original == null || rate == null) return null;
     return convertToGroupAmount(
         originalAmount: original, rate: rate, originalDecimalDigits: originalDigits, decimalDigits: digits);
-  }
-
-  /// A settlement in another currency (web's direction): what to transfer
-  /// in it to settle the amount.
-  int? get transferAmount {
-    if (conversionUnchanged) return _savedConversion!.originalAmount;
-    final (amount, rate) = (typedAmount, this.rate);
-    if (amount == null || rate == null) return null;
-    return convertToOriginalAmount(
-        amount: amount, rate: rate, decimalDigits: digits, originalDecimalDigits: originalDigits);
   }
 
   // ---------------------------------------------------------------------
@@ -587,6 +698,8 @@ class ExpenseFormModel extends ChangeNotifier {
   /// section 6 step 2). Positive means "still to allocate", negative
   /// means "over".
   double? unallocated() {
+    // A settlement's amounts make its total: nothing to allocate.
+    if (_isSettlement) return null;
     if (_splitMode == SplitMode.byPercentage) {
       var totalBasisPoints = 0;
       for (final p in includedParticipants) {
@@ -665,6 +778,13 @@ class ExpenseFormModel extends ChangeNotifier {
           totalBasisPoints += bp;
         }
         return totalBasisPoints == 10000 ? null : PercentagesDontAddUp(totalBasisPoints);
+      // Each recipient's amount is at least one smallest unit (#262).
+      case SplitMode.byAmount when _isSettlement:
+        for (final p in included) {
+          final value = typedValue(p);
+          if (value == null || toMinorUnits(value, splitDigits) <= 0) return InvalidValue(p);
+        }
+        return null;
       case SplitMode.byAmount:
         final amountMinor = splitTotal ?? 0;
         var total = 0;
@@ -693,6 +813,10 @@ class ExpenseFormModel extends ChangeNotifier {
   /// back by 100 to redisplay an existing value.
   List<ExpenseShare>? paidFor() {
     if (splitProblem() != null) return null;
+    // The balance settled, exactly: converting it there and back could
+    // leave a unit owed (#262, acceptance case 1).
+    if (_balanceKept) return [ExpenseShare(participantId: _balance!.to, shares: _balance!.amount)];
+    if (_keepsSavedSplit) return existing!.paidFor;
     final included = includedParticipants;
     return switch (_splitMode) {
       SplitMode.evenly => [for (final p in included) ExpenseShare(participantId: p.id, shares: 1)],
@@ -702,10 +826,6 @@ class ExpenseFormModel extends ChangeNotifier {
       SplitMode.byAmount when !_splitsPaidIn => [
           for (final p in included) ExpenseShare(participantId: p.id, shares: toMinorUnits(typedValue(p)!, digits)),
         ],
-      // What's saved stays saved while its inputs read as they did (#261,
-      // acceptance case 2): converting back and forth can tie or swap who
-      // has the odd unit.
-      SplitMode.byAmount when conversionUnchanged && listEquals(_splitState(), _savedSplit) => existing!.paidFor,
       SplitMode.byAmount => switch (amount) {
           // Typed in the paid-in currency (#261): the converted amount is
           // shared out in proportion, adding up to it exactly.
@@ -725,18 +845,37 @@ class ExpenseFormModel extends ChangeNotifier {
     };
   }
 
-  /// An expense paid in another currency and split by amount has each
-  /// person's amount in that currency (#261), adding up to the amount
-  /// paid. A settlement's are still the group's until #262.
-  bool get _splitsPaidIn => converting && !_isSettlement;
+  /// What's saved stays saved while its inputs read as they did (#261,
+  /// acceptance case 2): converting back and forth can tie or swap who
+  /// has the odd unit, and a settlement's mode, even before #262, stays.
+  bool get _keepsSavedSplit {
+    final existing = this.existing;
+    return existing != null &&
+        _splitMode == SplitMode.byAmount &&
+        _isSettlement == existing.isSettlement &&
+        _paidIn == _savedPaidIn &&
+        (!converting || conversionUnchanged) &&
+        listEquals(_splitState(), _savedSplit);
+  }
 
-  /// What the amounts of a split by amount add up to, and its currency.
-  int? get splitTotal => _splitsPaidIn ? originalAmount : amount;
+  /// The split mode to save: an untouched edit's own.
+  SplitMode get splitModeToSave => _keepsSavedSplit ? existing!.splitMode : _splitMode;
+
+  /// Amounts are typed in the paid-in currency (#261, #262): an expense
+  /// split by amount's, adding up to the amount paid, and a settlement's
+  /// To amounts, making it.
+  bool get _splitsPaidIn => converting;
+
+  /// What the amounts of an expense split by amount add up to, and the
+  /// currency they're in.
+  int? get splitTotal => _isSettlement ? null : (_splitsPaidIn ? originalAmount : amount);
   int get splitDigits => _splitsPaidIn ? originalDigits : digits;
   String get splitSymbol => _splitsPaidIn ? paidInSymbol : group.currency;
 
-  /// The split as the form opened an edit, to tell if it's untouched.
+  /// The split and currency as the form opened an edit, to tell if it's
+  /// untouched.
   List<Object?>? _savedSplit;
+  String? _savedPaidIn;
   List<Object?> _splitState() => [
         _splitMode,
         for (final p in group.participants) ...[_included[p.id], splitControllers[p.id]!.text],
@@ -753,8 +892,13 @@ class ExpenseFormModel extends ChangeNotifier {
   /// from the amount settled. Either can round to nothing. Call once the
   /// fields have validated.
   ExpenseAmounts? amountsToSave() {
-    if (!converting) return ExpenseAmounts(amount: amount!);
-    final original = _isSettlement ? transferAmount : originalAmount;
+    if (!converting) {
+      return switch (amount) {
+        final amount? => ExpenseAmounts(amount: amount),
+        null => null,
+      };
+    }
+    final original = originalAmount;
     final total = amount;
     if (original == null || original <= 0 || total == null || total <= 0) {
       _set(() => _convertedAmountInvalid = true);
@@ -776,25 +920,35 @@ class ExpenseFormModel extends ChangeNotifier {
     _date = e.date;
     _isSettlement = e.isSettlement;
     _recurrenceRule = e.recurrenceRule;
-    _splitMode = e.splitMode;
+    // A settlement's To is amounts (#262), whatever it was saved as.
+    _splitMode = e.isSettlement ? SplitMode.byAmount : e.splitMode;
 
     // Whoever isn't in it has no value: not included (#260).
     for (final p in group.participants) {
       _included[p.id] = false;
     }
-    // A converted expense split by amount shows each person's amount in
-    // the paid-in currency (#261): the amount paid, shared out in
-    // proportion to the saved shares, adding up to it exactly.
-    final converted = e.originalCurrency != null && hasGroupCurrencyCode && !e.isSettlement;
-    final paidInShares = converted && e.splitMode == SplitMode.byAmount && e.originalAmountCents != null
-        ? shareCentsFor(amountCents: e.originalAmountCents!, splitMode: SplitMode.byShares, paidFor: e.paidFor)
+    // A settlement saved another way (Mark as paid's even split, or the
+    // web's) shows what each was paid.
+    final shares = e.isSettlement && e.splitMode != SplitMode.byAmount
+        ? [
+            for (final MapEntry(:key, :value)
+                in shareCentsFor(amountCents: e.amountCents, splitMode: e.splitMode, paidFor: e.paidFor).entries)
+              ExpenseShare(participantId: key, shares: value),
+          ]
+        : e.paidFor;
+    // Converted, each amount is in the paid-in currency (#261, #262): the
+    // amount paid, shared out in proportion to the saved shares, adding up
+    // to it exactly.
+    final converted = e.originalCurrency != null && hasGroupCurrencyCode;
+    final paidInShares = converted && _splitMode == SplitMode.byAmount && e.originalAmountCents != null
+        ? shareCentsFor(amountCents: e.originalAmountCents!, splitMode: SplitMode.byShares, paidFor: shares)
         : null;
     final shareDigits = paidInShares == null ? digits : currencyByCode(e.originalCurrency).decimalDigits;
-    for (final share in e.paidFor) {
+    for (final share in shares) {
       _included[share.participantId] = true;
       final controller = splitControllers[share.participantId];
       if (controller == null) continue;
-      controller.text = switch (e.splitMode) {
+      controller.text = switch (_splitMode) {
         SplitMode.byAmount => minorUnitsText(paidInShares?[share.participantId] ?? share.shares, shareDigits),
         // Shares/Percentage are both x100 on the wire (issue #34) --
         // inverse of the x100 done in [paidFor], formatted back down to
@@ -821,7 +975,17 @@ class ExpenseFormModel extends ChangeNotifier {
       // Shown in the locale's own decimals, once [decimalSeparator] is set.
       _savedRateToShow = e.conversionRate;
     }
-    if (identical(e, existing)) _savedSplit = _splitState();
+    if (identical(e, existing)) {
+      _savedSplit = _splitState();
+      _savedPaidIn = _paidIn;
+    } else if (e.isSettlement && shares.length == 1) {
+      // Mark as paid's draft (#262): one recipient, the balance.
+      final to = shares.single.participantId;
+      if (splitControllers[to] case final controller?) {
+        _balance = (amount: e.amountCents, to: to);
+        _balanceText = controller.text;
+      }
+    }
   }
 
   @override
@@ -833,6 +997,9 @@ class ExpenseFormModel extends ChangeNotifier {
     super.dispose();
   }
 }
+
+/// A split as it stands: kept for the other kind while switched away.
+typedef _Split = ({SplitMode mode, Map<String, bool> included, Map<String, String> values});
 
 /// What [ExpenseFormModel.amountsToSave] found to save.
 @immutable
