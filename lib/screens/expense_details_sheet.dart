@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' show NumberFormat;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -33,6 +32,7 @@ import '../widgets/expense_list.dart' show participantColors;
 import '../widgets/group_monogram.dart';
 import '../widgets/top_bar_buttons.dart';
 import '../theme.dart';
+import '../widgets/confirm_dialog.dart';
 
 /// What tapping an expense does, from both the expense list and the
 /// Activity tab (issue #90): a bottom sheet showing the expense's details,
@@ -539,39 +539,12 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   /// Asks before deleting: it's for everyone in the group and can't be
   /// undone. Adaptive, like leaving a group (GroupListScreen).
   Future<bool> _confirmDelete(String title) async {
-    final confirmed = await showAdaptiveDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        final l10n = dialogContext.l10n;
-        final platform = Theme.of(dialogContext).platform;
-        final cupertino = platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
-        return AlertDialog.adaptive(
-          title: Text(l10n.expenseDeleteConfirmTitle),
-          content: Text(l10n.expenseDeleteConfirmBody(title)),
-          actions: cupertino
-              ? [
-                  CupertinoDialogAction(
-                      onPressed: () => Navigator.pop(dialogContext, false),
-                      child: Text(l10n.commonCancel)),
-                  CupertinoDialogAction(
-                      isDestructiveAction: true,
-                      onPressed: () => Navigator.pop(dialogContext, true),
-                      child: Text(l10n.commonDelete)),
-                ]
-              : [
-                  TextButton(
-                      onPressed: () => Navigator.pop(dialogContext, false),
-                      child: Text(l10n.commonCancel)),
-                  TextButton(
-                      onPressed: () => Navigator.pop(dialogContext, true),
-                      style: TextButton.styleFrom(
-                          foregroundColor: Theme.of(dialogContext).colorScheme.error),
-                      child: Text(l10n.commonDelete)),
-                ],
-        );
-      },
-    );
-    return confirmed ?? false;
+    final l10n = context.l10n;
+    return showConfirmDialog(context,
+        title: l10n.expenseDeleteConfirmTitle,
+        message: [l10n.expenseDeleteConfirmBody(title)],
+        action: l10n.commonDelete,
+        destructive: true);
   }
 
   Future<void> _retry() async {
@@ -584,22 +557,12 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   /// removed from this phone, which has their only copy, so it asks.
   Future<void> _retryWithoutReceipts() async {
     final l10n = context.l10n;
-    final confirmed = await showAdaptiveDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog.adaptive(
-        title: Text(l10n.expenseDetailsSyncWithoutReceiptsTitle),
-        content: Text(l10n.expenseDetailsSyncWithoutReceiptsBody),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false), child: Text(l10n.commonCancel)),
-          TextButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              style: TextButton.styleFrom(foregroundColor: Theme.of(dialogContext).colorScheme.error),
-              child: Text(l10n.expenseDetailsSyncWithoutReceipts)),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
+    final confirmed = await showConfirmDialog(context,
+        title: l10n.expenseDetailsSyncWithoutReceiptsTitle,
+        message: [l10n.expenseDetailsSyncWithoutReceiptsBody],
+        action: l10n.expenseDetailsSyncWithoutReceipts,
+        destructive: true);
+    if (!confirmed || !mounted) return;
     setState(() => _busy = true);
     await widget.db.retrySyncFailure(widget.expenseId, withoutReceipts: true);
     if (mounted) _close(const _Changed());

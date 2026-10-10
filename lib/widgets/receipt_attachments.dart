@@ -14,6 +14,7 @@ import '../services/receipt_photo.dart';
 import 'error_message.dart';
 import 'grouped_section.dart';
 import 'receipts.dart';
+import 'confirm_dialog.dart';
 
 enum ReceiptUpload { uploading, uploaded, failed }
 
@@ -429,23 +430,13 @@ class _AddTile extends StatelessWidget {
 Future<void> showReceiptAccessOff(BuildContext context, ReceiptSource source,
     {Future<bool> Function()? openSettings}) async {
   final l10n = context.l10n;
-  final settings = await showAdaptiveDialog<bool>(
-    context: context,
-    builder: (dialogContext) => AlertDialog.adaptive(
-      title: Text(source == ReceiptSource.camera ? l10n.expenseReceiptCameraAccessOff : l10n.expenseReceiptPhotoAccessOff),
-      content: openSettings == null ? null : Text(l10n.expenseReceiptAccessRestart),
-      actions: [
-        if (openSettings == null)
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(l10n.expenseReceiptAccessOk))
-        else ...[
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(l10n.commonCancel)),
-          TextButton(
-              onPressed: () => Navigator.pop(dialogContext, true), child: Text(l10n.expenseReceiptAccessSettings)),
-        ],
-      ],
-    ),
-  );
-  if (settings == true) await openSettings?.call();
+  final settings = await showConfirmDialog(context,
+      title: source == ReceiptSource.camera ? l10n.expenseReceiptCameraAccessOff : l10n.expenseReceiptPhotoAccessOff,
+      message: [if (openSettings != null) l10n.expenseReceiptAccessRestart],
+      action: openSettings == null ? null : l10n.expenseReceiptAccessSettings,
+      // Only telling, without Settings to offer: a lone OK.
+      cancel: openSettings == null ? l10n.expenseReceiptAccessOk : null);
+  if (settings) await openSettings?.call();
 }
 
 /// This app's page in the iPhone's Settings; false if it didn't open.

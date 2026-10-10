@@ -121,7 +121,7 @@
   "expenseCategoryLabel": "Catégorie",
   "expensePaidByLabel": "Payé par",
   "expenseRepeatLabel": "Répétition",
-  "expenseRepeatNone": "Ne se répète pas",
+  "expenseRepeatNone": "Jamais",
   "expenseRepeatDaily": "Quotidienne",
   "expenseRepeatWeekly": "Hebdomadaire",
   "expenseRepeatMonthly": "Mensuelle",

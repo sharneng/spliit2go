@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -16,6 +15,7 @@ import '../widgets/error_message.dart';
 import 'about_screen.dart';
 import '../widgets/grouped_section.dart';
 import '../widgets/bottom_inset.dart';
+import '../widgets/confirm_dialog.dart';
 
 /// App-wide preferences, separate from an individual group's settings.
 class AppSettingsScreen extends StatelessWidget {
@@ -230,15 +230,12 @@ class _ReceiptStorageTileState extends State<_ReceiptStorageTile> {
 
   Future<void> _clear() async {
     final l10n = context.l10n;
-    final confirmed = await showAdaptiveDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog.adaptive(
-        title: Text(l10n.appSettingsReceiptsClearTitle),
-        content: Text(l10n.appSettingsReceiptsClearBody),
-        actions: _confirmActions(dialogContext),
-      ),
-    );
-    if (confirmed != true || !mounted) return;
+    final confirmed = await showConfirmDialog(context,
+        title: l10n.appSettingsReceiptsClearTitle,
+        message: [l10n.appSettingsReceiptsClearBody],
+        action: l10n.appSettingsReceiptsClear,
+        destructive: true);
+    if (!confirmed || !mounted) return;
     setState(() => _clearing = true);
     final downloads = ReceiptDownloader.of(widget.receipts.db);
     try {
@@ -261,30 +258,6 @@ class _ReceiptStorageTileState extends State<_ReceiptStorageTile> {
       if (mounted) setState(() => _clearing = false);
       await _measure();
     }
-  }
-
-  /// Cancel and a destructive Clear, as the group list's Remove asks.
-  List<Widget> _confirmActions(BuildContext dialogContext) {
-    final l10n = dialogContext.l10n;
-    final platform = Theme.of(dialogContext).platform;
-    if (platform == TargetPlatform.iOS || platform == TargetPlatform.macOS) {
-      return [
-        CupertinoDialogAction(
-            onPressed: () => Navigator.pop(dialogContext, false), child: Text(l10n.commonCancel)),
-        CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(l10n.appSettingsReceiptsClear)),
-      ];
-    }
-    return [
-      TextButton(
-          onPressed: () => Navigator.pop(dialogContext, false), child: Text(l10n.commonCancel)),
-      TextButton(
-          onPressed: () => Navigator.pop(dialogContext, true),
-          style: TextButton.styleFrom(foregroundColor: Theme.of(dialogContext).colorScheme.error),
-          child: Text(l10n.appSettingsReceiptsClear)),
-    ];
   }
 
   @override

@@ -4,6 +4,7 @@ import '../l10n/context_l10n.dart';
 import '../services/error_reporting.dart';
 import '../services/receipt_scanner.dart';
 import 'error_message.dart';
+import 'confirm_dialog.dart';
 
 /// The receipt language picker beside Scan receipt (#153): the user says
 /// what's printed on the receipt, and the app reads it with that model;
@@ -127,21 +128,12 @@ class _ReceiptLanguageSheetState extends State<_ReceiptLanguageSheet> {
   Future<void> _remove(ReceiptScript script) async {
     final l10n = context.l10n;
     final name = receiptScriptName(context, script);
-    final confirmed = await showAdaptiveDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog.adaptive(
-        title: Text(l10n.receiptLanguageRemoveTitle(name)),
-        content: Text(l10n.receiptLanguageRemoveBody(name)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(l10n.commonCancel)),
-          TextButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              style: TextButton.styleFrom(foregroundColor: Theme.of(dialogContext).colorScheme.error),
-              child: Text(l10n.receiptLanguageRemove)),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
+    final confirmed = await showConfirmDialog(context,
+        title: l10n.receiptLanguageRemoveTitle(name),
+        message: [l10n.receiptLanguageRemoveBody(name)],
+        action: l10n.receiptLanguageRemove,
+        destructive: true);
+    if (!confirmed || !mounted) return;
     setState(() => _message = null);
     try {
       await widget.scanner.removeScript(script);
