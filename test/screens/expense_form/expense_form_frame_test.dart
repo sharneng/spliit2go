@@ -160,6 +160,35 @@ void main() {
     });
   });
 
+  group('a picker takes the focus from a text field, so closing it doesn\'t scroll back (#267)', () {
+    Future<void> check(WidgetTester tester, String row, Future<void> Function() pick) async {
+      await open(tester);
+      await tester.tap(title());
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<TextFormField>(), isNotNull);
+      final r = find.widgetWithText(GroupedRow, row);
+      await tester.ensureVisible(r);
+      await tester.pumpAndSettle();
+      await tester.tap(r);
+      await tester.pumpAndSettle();
+      await pick();
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<EditableText>(), isNull);
+    }
+
+    testWidgets('Paid by', (tester) => check(tester, 'Paid by', () => tester.tap(find.text('Bea').last)));
+    testWidgets('Repeat', (tester) => check(tester, 'Repeat', () => tester.tap(find.text('Weekly').last)));
+    testWidgets('Date', (tester) => check(tester, 'Date', () => tester.tap(find.text('OK'))));
+  });
+
+  testWidgets('Notes come last, 12 lines before they scroll (#268)', (tester) async {
+    await open(tester);
+    final notes = find.widgetWithText(GroupedSection, 'Notes');
+    expect(tester.getTopLeft(notes).dy, greaterThan(tester.getTopLeft(find.widgetWithText(GroupedSection, 'Receipts')).dy));
+    final field = tester.widget<TextField>(find.descendant(of: notes, matching: find.byType(TextField)));
+    expect(field.maxLines, 12);
+  });
+
   testWidgets('a refused save scrolls up to the first field that needs fixing', (tester) async {
     final haptics = recordHaptics(tester);
     await open(tester);
