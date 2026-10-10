@@ -1,7 +1,6 @@
 import 'dart:async' show unawaited;
 
 import 'package:flutter/foundation.dart' show TargetPlatform, Uint8List, defaultTargetPlatform, visibleForTesting;
-import 'package:flutter/cupertino.dart' show CupertinoDialogAction;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' show NumberFormat;
 import 'package:uuid/uuid.dart';
@@ -24,6 +23,7 @@ import '../sync/outbox.dart';
 import '../utils/date_format.dart';
 import '../widgets/currency_picker.dart';
 import '../widgets/category_icon.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/error_message.dart';
 import '../services/error_reporting.dart';
 import '../services/receipt_cache.dart';
@@ -571,45 +571,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   /// Closing with changes asks first (#259); photos added here, which
   /// nothing else keeps, are named (#123).
-  /// Cancel and [action], popping false or true: an iPhone's own alert
-  /// buttons there (#272: Material's are a size smaller), as the group
-  /// list's Remove asks.
-  List<Widget> _confirmActions(BuildContext dialogContext, String action, {required bool destructive}) {
-    final cancel = dialogContext.l10n.commonCancel;
-    if (_cupertino(dialogContext)) {
-      return [
-        // Semibold, as UIKit draws an alert's Cancel.
-        CupertinoDialogAction(
-            isDefaultAction: true, onPressed: () => Navigator.pop(dialogContext, false), child: Text(cancel)),
-        CupertinoDialogAction(
-            isDestructiveAction: destructive,
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(action)),
-      ];
-    }
-    return [
-      TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(cancel)),
-      TextButton(
-          onPressed: () => Navigator.pop(dialogContext, true),
-          style: destructive ? TextButton.styleFrom(foregroundColor: Theme.of(dialogContext).colorScheme.error) : null,
-          child: Text(action)),
-    ];
-  }
-
-  static bool _cupertino(BuildContext context) =>
-      const {TargetPlatform.iOS, TargetPlatform.macOS}.contains(Theme.of(context).platform);
-
   Future<void> _confirmLeave() async {
     final l10n = context.l10n;
-    final discard = await showAdaptiveDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog.adaptive(
-        title: Text(l10n.expenseDiscardChangesTitle),
-        content: _receipts.hasNew ? Text(l10n.expenseReceiptsDiscardBody) : null,
-        actions: _confirmActions(dialogContext, l10n.expenseReceiptsDiscard, destructive: true),
-      ),
-    );
-    if (discard == true && mounted) Navigator.of(context).pop();
+    final discard = await showConfirmDialog(context,
+        title: l10n.expenseDiscardChangesTitle,
+        message: [if (_receipts.hasNew) l10n.expenseReceiptsDiscardBody],
+        action: l10n.expenseReceiptsDiscard,
+        destructive: true);
+    if (discard && mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -777,48 +746,24 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     final asks = converts || (widget.existingExpense == null && (_m.hasChangesBeyondKind || _receipts.hasNew));
     if (asks) {
       _dropFocus();
-      final change = await showAdaptiveDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog.adaptive(
-          title: Text(switch ((converts, toSettlement)) {
-            (true, true) => l10n.expenseConvertToSettlementTitle,
-            (true, false) => l10n.expenseConvertToExpenseTitle,
-            (false, true) => l10n.expenseChangeToSettlementTitle,
-            (false, false) => l10n.expenseChangeToExpenseTitle,
-          }),
-          // Kenneth (#272): a few sentences read better left-aligned, as
-          // iOS 26 sets them, and each with a small gap above; not
-          // justified, which gaps the words on a dialog's short lines.
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final paragraph in [
-                if (converts)
-                  toSettlement ? l10n.expenseConvertExistingToSettlement : l10n.expenseConvertExistingToExpense,
-                toSettlement ? l10n.expenseSettlementMeaning : l10n.expenseExpenseMeaning,
-                if (converts) l10n.expenseConversionSavedOnSave,
-              ])
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(paragraph,
-                      textAlign: TextAlign.start,
-                      style: TextStyle(
-                          // An iPhone alert's message is 15pt since iOS 26;
-                          // Android's own dialogs keep Material's size.
-                          fontSize: _cupertino(dialogContext) ? 15 : null,
-                          // Kenneth: grey is too hard to read this much in;
-                          // the systems' own dialogs say less.
-                          color: Theme.of(dialogContext).colorScheme.onSurface)),
-                ),
-            ],
-          ),
-          // Converting a saved one is rare, and red so it stays so.
-          actions: _confirmActions(dialogContext, converts ? l10n.expenseKindConvert : l10n.expenseKindChange,
-              destructive: converts),
-        ),
+      final change = await showConfirmDialog(
+        context,
+        title: switch ((converts, toSettlement)) {
+          (true, true) => l10n.expenseConvertToSettlementTitle,
+          (true, false) => l10n.expenseConvertToExpenseTitle,
+          (false, true) => l10n.expenseChangeToSettlementTitle,
+          (false, false) => l10n.expenseChangeToExpenseTitle,
+        },
+        message: [
+          if (converts) toSettlement ? l10n.expenseConvertExistingToSettlement : l10n.expenseConvertExistingToExpense,
+          toSettlement ? l10n.expenseSettlementMeaning : l10n.expenseExpenseMeaning,
+          if (converts) l10n.expenseConversionSavedOnSave,
+        ],
+        action: converts ? l10n.expenseKindConvert : l10n.expenseKindChange,
+        // Converting a saved one is rare, and red so it stays so.
+        destructive: converts,
       );
-      if (change != true || !mounted) return;
+      if (!change || !mounted) return;
     }
     _m.setSettlement(toSettlement, title: l10n.expenseSettlementDefaultTitle);
   }

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 
@@ -36,6 +35,7 @@ import '../widgets/caption_icon.dart';
 import '../app_name.dart';
 import '../widgets/app_menu.dart';
 import '../widgets/top_bar_buttons.dart';
+import '../widgets/confirm_dialog.dart';
 
 /// Registered as a `MaterialApp.navigatorObservers` entry (main.dart) so
 /// [_GroupListScreenState] can hear about routes pushed *on top of* it by
@@ -316,43 +316,12 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
         diagnostics: error.diagnostics);
   }
 
-  Future<bool> _confirmRemove(GroupRow row) async =>
-      await showAdaptiveDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog.adaptive(
-          title: Text(context.l10n.groupListRemove),
-          content: Text(context.l10n.groupListLeaveBody(row.name)),
-          actions: _removeDialogActions(context),
-        ),
-      ) ??
-      false;
+  Future<bool> _confirmRemove(GroupRow row) => showConfirmDialog(context,
+      title: context.l10n.groupListRemove,
+      message: [context.l10n.groupListLeaveBody(row.name)],
+      action: context.l10n.groupListRemove,
+      destructive: true);
 
-  List<Widget> _removeDialogActions(BuildContext dialogContext) {
-    final platform = Theme.of(dialogContext).platform;
-    final cupertino =
-        platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
-    if (cupertino) {
-      return [
-        CupertinoDialogAction(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(dialogContext.l10n.commonCancel)),
-        CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(dialogContext.l10n.groupListRemove)),
-      ];
-    }
-    return [
-      TextButton(
-          onPressed: () => Navigator.pop(dialogContext, false),
-          child: Text(dialogContext.l10n.commonCancel)),
-      TextButton(
-          onPressed: () => Navigator.pop(dialogContext, true),
-          style: TextButton.styleFrom(
-              foregroundColor: Theme.of(dialogContext).colorScheme.error),
-          child: Text(dialogContext.l10n.groupListRemove)),
-    ];
-  }
 
   Future<void> _performGroupAction(GroupRow row, String action) async {
     if (!mounted) return;
