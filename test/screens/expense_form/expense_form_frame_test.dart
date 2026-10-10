@@ -8,6 +8,7 @@ import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
+import 'package:spliit2go/screens/expense_form/currency_card.dart';
 import 'package:spliit2go/screens/expense_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
@@ -128,7 +129,7 @@ void main() {
       expect(find.widgetWithIcon(IconButton, Icons.receipt_long_outlined), findsOneWidget);
       expect(find.widgetWithText(GroupedRow, 'Category'), findsNothing);
       await tester.enterText(title(), 'Bea paid Alex');
-      await tester.enterText(find.widgetWithText(TextFormField, 'Amount'), '30');
+      await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '30');
       await tester.tap(find.byTooltip('Save'));
       await tester.pumpAndSettle();
 

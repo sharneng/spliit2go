@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../db/app_database.dart';
+import '../models/currency_ranking.dart';
 import 'error_reporting.dart';
 
 /// Where a day of rates comes from (#252): the ECB's own table, or
@@ -282,6 +283,22 @@ class ExchangeRates {
         _inFlight.remove(key);
       }
     }();
+  }
+
+  /// Units of each currency per 1 EUR, for writing a pair's rate the
+  /// more valuable currency first (#261): the newest saved table, so the
+  /// order follows the currencies as they move, over the one that ships
+  /// with the app, which covers what no saved table has.
+  Future<Map<String, double>> ranking() async {
+    RateDay? newest;
+    for (final row in await db.allRateDays()) {
+      final day = RateDay.fromRow(row);
+      if (newest == null || day.day.compareTo(newest.day) > 0 ||
+          (day.day == newest.day && day.currencyCount > newest.currencyCount)) {
+        newest = day;
+      }
+    }
+    return {...shippedUnitsPerEuro, ...?newest?.perEuro, 'EUR': 1};
   }
 
   /// Today uses the undated request: a dated one for today can be cached

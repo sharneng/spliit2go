@@ -971,52 +971,52 @@
   "appSettingsExchangeRatesOffline": "Couldn't reach the exchange rate service.",
   "appSettingsExchangeRatesFailed": "Couldn't update exchange rates.",
   "expensePaidIn": "Paid in",
-  "expenseAmountPaid": "Amount paid",
   "expenseExchangeRate": "Exchange rate",
   "expenseAmountToTransfer": "Amount to transfer",
-  "expenseAmountCalculated": "Calculated at this exchange rate.",
   "expenseAmountNotYetKnown": "Not yet known",
-  "expenseRateQuote": "{from} 1 = {to} {rate}",
-  "@expenseRateQuote": {
-    "placeholders": {
-      "from": {
-        "type": "String"
-      },
-      "to": {
-        "type": "String"
-      },
-      "rate": {
-        "type": "String"
-      }
-    }
-  },
-  "expenseRateOnDay": "{quote} — the rate on {date}.",
-  "@expenseRateOnDay": {
-    "placeholders": {
-      "quote": {
-        "type": "String"
-      },
-      "date": {
-        "type": "String"
-      }
-    }
-  },
-  "expenseRateOffline": "Offline: rate from {date}. {quote}",
-  "@expenseRateOffline": {
-    "placeholders": {
-      "date": {
-        "type": "String"
-      },
-      "quote": {
-        "type": "String"
-      }
-    }
-  },
   "expenseRateLoading": "Getting the exchange rate…",
   "expenseRateTyped": "Using the rate you entered.",
   "expenseRateSaved": "Using the rate saved with this expense.",
   "expenseRateNone": "No published rate for this pair. Enter the rate yourself.",
   "expenseRateUnavailable": "Couldn't reach the rates service. Enter the rate yourself.",
   "expenseUsePublishedRate": "Use the published rate",
+  "expenseRatePublished": "{pair} {rate} is the published rate on {date}.",
+  "@expenseRatePublished": {
+    "placeholders": {
+      "pair": {
+        "type": "String"
+      },
+      "rate": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseRatePublishedOffline": "Offline: {pair} {rate} is the last published rate saved, from {date}.",
+  "@expenseRatePublishedOffline": {
+    "placeholders": {
+      "pair": {
+        "type": "String"
+      },
+      "rate": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseInCurrency": "In {currency}",
+  "@expenseInCurrency": {
+    "placeholders": {
+      "currency": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseSwapRate": "Swap the currencies",
+  "expenseConvertedAmountInvalid": "The amount in the group's currency rounds to nothing. Change the amount or the rate.",
   "expenseInvalidRate": "Enter a rate greater than zero"
 }

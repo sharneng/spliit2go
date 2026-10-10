@@ -16,6 +16,7 @@ import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
+import 'package:spliit2go/screens/expense_form/currency_card.dart';
 import 'package:spliit2go/screens/expense_screen.dart';
 import 'package:spliit2go/services/receipt_cache.dart';
 import 'package:spliit2go/services/receipt_photo.dart';
@@ -201,6 +202,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  String amountText(WidgetTester tester) =>
+      tester.widget<TextFormField>(find.byKey(CurrencyCard.amountFieldKey)).controller!.text;
+
   String field(WidgetTester tester, String label) =>
       tester.widget<TextFormField>(find.widgetWithText(TextFormField, label)).controller!.text;
 
@@ -225,7 +229,7 @@ void main() {
 
     expect(scanner.read, [Uint8List.fromList([7, 7, 7])]);
     expect(field(tester, 'Title'), 'Café Du Coin');
-    expect(field(tester, 'Amount'), '15.95');
+    expect(amountText(tester), '15.95');
     expect(find.text(formatDate(DateTime(yesterday.year, yesterday.month, yesterday.day), locale: const Locale('en'))),
         findsOneWidget);
     expect(find.text('Dining Out'), findsOneWidget);
@@ -249,12 +253,12 @@ void main() {
     await tester.pump();
     expect(find.text('Reading the receipt…'), findsOneWidget);
     await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Lunch');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Amount'), '20');
+    await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '20');
     scanner.hold!.complete();
     await tester.pumpAndSettle();
 
     expect(field(tester, 'Title'), 'Lunch');
-    expect(field(tester, 'Amount'), '20');
+    expect(amountText(tester), '20');
     expect(find.text('Receipt: Café Du Coin'), findsOneWidget);
     expect(find.text('Receipt: 15,95'), findsOneWidget);
     // The fields the user didn't touch are still filled in.
@@ -287,7 +291,7 @@ void main() {
     await scan(tester);
 
     expect(field(tester, 'Title'), 'The Corner Pub');
-    expect(field(tester, 'Amount'), isEmpty);
+    expect(amountText(tester), isEmpty);
     expect(find.text('Receipt: \$ 19.62'), findsOneWidget);
     await closeTree(tester);
   });
