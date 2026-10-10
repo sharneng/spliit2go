@@ -72,13 +72,13 @@ Rows are `GroupedRow`s with a label and a value, or borderless fields on the car
  │ Save as default split        ( ○) │
  └───────────────────────────────────┘
    Split evenly between 2.             red when it doesn't add up
-   Notes
- ┌───────────────────────────────────┐
- │ Anything worth remembering?       │
- └───────────────────────────────────┘
    Receipts
  ┌───────────────────────────────────┐
  │ ＋ Add photo                       │
+ └───────────────────────────────────┘
+   Notes                               last: it can be long (#268)
+ ┌───────────────────────────────────┐
+ │ Anything worth remembering?       │   up to 12 lines, then scrolls
  └───────────────────────────────────┘
 ```
 
@@ -152,7 +152,7 @@ Kenneth, 2026-10-09: a checkbox only means something for an even split. In every
  │ In euros                  €67.86  │   only when converting
  └───────────────────────────────────┘
    Bob paid Alice ¥8,000 and Carol ¥4,000.
-   Notes …   Receipts …
+   Receipts …   Notes …
 ```
 
 ### What a settlement changes
@@ -250,8 +250,8 @@ Kenneth, 2026-10-09: `JPY 1 = EUR 0.0056547` doesn't read naturally. A rate read
 | Currency | Paid in, the amount (expense), the rate and its swap, the converted amount; rate status and "Use the published rate" in the footer | **`CurrencyCard`**: the rate lookup, its states, the currency ranking, the swap and the status text move out of the screen |
 | Paid by / From | One participant | **A row in the screen** opening **`showParticipantSheet`**, reused for both. The sheet's rows (`ChoiceRow`) are also "Who are you?"'s |
 | Paid for / To | Split control, participant rows with their values, Select all/none (Evenly), Save as default split, a settlement's totals; remainder or sentence in the footer | **`SplitCard`**: one widget for both, settlement mode being "amounts only, with totals". It reads who's included from `ExpenseFormModel` (in Evenly the checks, otherwise a value other than 0), so a settlement mode is the Amount rows without the mode control and default split |
-| Notes | Notes | **The screen itself** |
 | Receipts | Photos | **`ReceiptsCard`**: the existing `ReceiptAttachmentsField` (`lib/widgets/receipt_attachments.dart`), restyled as a card |
+| Notes | Notes, last on the form, up to 12 lines before it scrolls inside itself | **The screen itself** |
 
 - **State and arithmetic** move from the widget's `State` into a plain `ExpenseFormModel` (a `ChangeNotifier`): what's typed, the derived amounts, conversion, shares and validation. The cards read and write it, and it can be unit-tested without building widgets. The screen keeps the top bar, saving, the outbox and navigation.
 - **Files:** the new widgets go in `lib/screens/expense_form/`, since only this screen uses them. The participant sheet goes in `lib/widgets/`, next to `active_user_sheet.dart`, whose rows it shares.
@@ -270,6 +270,7 @@ Kenneth, 2026-10-09: don't make everyone pay for accessibility. The split contro
 | 2026-10-10 | Replaced, after trying it and a capsule switch on a device: a plain left-aligned title, and a button beside ✓ whose icon is the kind it switches to. A settlement hides Scan receipt, which can't read one |
 | 2026-10-09 | A settlement's category is hidden. A settlement created here is saved with Payment. Editing never changes the category, whether it was already a settlement or is switched to one |
 | 2026-10-09 | Settlements can have several recipients, amounts only |
+| 2026-10-10 | Notes go last, after Receipts, and grow to 12 lines before scrolling: notes can be long, receipts hardly change height (Kenneth, #268). A row that opens a picker takes the focus from a text field, so closing the picker doesn't scroll back to it (#267) |
 | 2026-10-10 | Paid for has no checkboxes in any mode: in Evenly a tap includes or leaves out, and the left-out are dimmed. A row's amount goes under its value, and at large text the value under the name |
 | 2026-10-09 | A settlement's amount is the sum of its "To" amounts, converted to the group's currency. A converted expense split by amount takes per-person amounts in the paid-in currency too |
 | 2026-10-09 | "Mark as paid" in another currency keeps the balance as the amount until a "To" amount is typed, then works like any typed amount (Ezra's review) |

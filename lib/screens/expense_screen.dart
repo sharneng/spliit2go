@@ -307,6 +307,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// The receipt language picker (#153). Picking another language after a
   /// scan reads that scan's photo again.
   Future<void> _pickReceiptLanguage() async {
+    _dropFocus();
     final picked = await showReceiptLanguagePicker(
       context,
       scanner: widget.receiptScanner,
@@ -426,6 +427,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// document camera (#155). The photo joins the receipts like any other,
   /// and is read as soon as it's prepared, while it uploads.
   Future<void> _scanReceipt() async {
+    _dropFocus();
     try {
       final scanner = widget.receiptScanner;
       ReceiptSource? asked;
@@ -715,6 +717,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 Flexible(child: _value(context, participantName(context, payer, widget.activeUserId))),
               ]),
         onTap: () async {
+          _dropFocus();
           final picked = await showParticipantSheet(context,
               title: l10n.expensePaidByLabel,
               participants: participants,
@@ -743,10 +746,16 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         RecurrenceRule.monthly => context.l10n.expenseRepeatMonthly,
       };
 
+  /// Before a row opens a picker (#267): a text field that kept its focus
+  /// would get it back when the picker closes, and the form would scroll
+  /// back up to it.
+  void _dropFocus() => FocusManager.instance.primaryFocus?.unfocus();
+
   /// "Repeat", whose value opens a menu of the choices.
   Widget _repeatRow(BuildContext context) => PopupMenuButton<int>(
         tooltip: context.l10n.expenseRepeatLabel,
         position: PopupMenuPosition.under,
+        onOpened: _dropFocus,
         onSelected: (i) => _m.recurrenceRule = RecurrenceRule.values[i],
         itemBuilder: (context) => [
           for (final (i, rule) in RecurrenceRule.values.indexed)
@@ -881,6 +890,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   ),
                   _paidByCard(context),
                   SplitCard(model: _m, showErrors: _hasAttemptedSave, footerKey: _paidForFooterKey),
+                  ReceiptsCard(controller: _receipts, onAdd: _addReceipt, keepsUnsent: !widget.isEditing),
+                  // Last: receipts hardly change height, notes can be long
+                  // (#268). Past 12 lines they scroll inside the field.
                   GroupedSection(
                     caption: l10n.expenseNotesLabel,
                     children: [
@@ -888,12 +900,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                         controller: _m.notesController,
                         decoration: InputDecoration(hintText: l10n.expenseNotesHint),
                         minLines: 1,
-                        maxLines: 6,
+                        maxLines: 12,
                         maxLength: 5000, // matches Spliit's EXPENSE_NOTES_MAX
                       )),
                     ],
                   ),
-                  ReceiptsCard(controller: _receipts, onAdd: _addReceipt, keepsUnsent: !widget.isEditing),
                 ],
               ),
             ),
@@ -931,6 +942,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   Future<void> _pickDate() async {
+    _dropFocus();
     final picked = await showDatePicker(
       context: context,
       initialDate: _m.date,
@@ -949,6 +961,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// laid out) and filterable by a type-ahead search field, rather than
   /// one long flat dropdown of 40+ categories.
   Future<void> _pickCategory() async {
+    _dropFocus();
     final picked = await showModalBottomSheet<Category>(
       context: context,
       isScrollControlled: true,
@@ -963,6 +976,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// Custom option: a conversion needs an ISO code on both sides, so the
   /// row only shows in a group that has one.
   Future<void> _pickPaidIn() async {
+    _dropFocus();
     final picked = await pickCurrency(
       context,
       currencies: supportedCurrencies,
