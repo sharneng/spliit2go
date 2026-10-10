@@ -1,6 +1,6 @@
 # spliit2go: restyling the add/edit expense screen
 
-Written 2026-10-09. **Status: agreed with Kenneth; being built** ([#256](https://github.com/sharneng/spliit2go/issues/256)). Step 1 ([#258](https://github.com/sharneng/spliit2go/issues/258)) is done: the form's state and arithmetic are in `ExpenseFormModel` (`lib/screens/expense_form/expense_form_model.dart`), with no visual change. Step 2 ([#259](https://github.com/sharneng/spliit2go/issues/259)) is built: ✕, the kind button and ✓, and the scan, "what it was for", notes and receipts cards (`ReceiptScanCard`, `ReceiptsCard`). The last part of the UI Polished milestone, after currency conversion ([#251](https://github.com/sharneng/spliit2go/issues/251), [#252](https://github.com/sharneng/spliit2go/issues/252)). The form still predates the rest of the app's look: a single column of Material fields with a Save button at the bottom.
+Written 2026-10-09. **Status: agreed with Kenneth; being built** ([#256](https://github.com/sharneng/spliit2go/issues/256)). Step 1 ([#258](https://github.com/sharneng/spliit2go/issues/258)) is done: the form's state and arithmetic are in `ExpenseFormModel` (`lib/screens/expense_form/expense_form_model.dart`), with no visual change. Step 2 ([#259](https://github.com/sharneng/spliit2go/issues/259)) is built: ✕, the kind button and ✓, and the scan, "what it was for", notes and receipts cards (`ReceiptScanCard`, `ReceiptsCard`). Step 3 ([#260](https://github.com/sharneng/spliit2go/issues/260)) is built: Paid by as a row with the participant sheet (`lib/widgets/participant_sheet.dart`, whose rows "Who are you?" shares), and Paid for as `SplitCard` (`lib/screens/expense_form/split_card.dart`). The last part of the UI Polished milestone, after currency conversion ([#251](https://github.com/sharneng/spliit2go/issues/251), [#252](https://github.com/sharneng/spliit2go/issues/252)). The form still predates the rest of the app's look: a single column of Material fields with a Save button at the bottom.
 
 ## Goals (Kenneth)
 
@@ -102,8 +102,8 @@ Paid in another currency, the currency card follows the order of the conversion:
 
 Kenneth, 2026-10-09: a checkbox only means something for an even split. In every other mode, 0 is the same as not included.
 
-- **Evenly:** a checkbox per person, and the amount it comes to beside each included one. **Select all / Select none** in the caption.
-- **Shares, Percent, Amount:** no checkboxes. Each row has the person's value. An empty or 0 value means not included, and that row's name is dimmed. Shares and Percent also show the amount each comes to. No Select all / none: there's nothing to select.
+- **Evenly:** no checkboxes either (Kenneth, 2026-10-10, on a device: they were ugly next to the dimming). A tap on a person includes them or leaves them out, and someone left out is dimmed as in the other modes. To a screen reader, each row is still checked or not. The amount it comes to is beside each included one. **Select all / Select none** in the caption.
+- **Shares, Percent, Amount:** no checkboxes. Each row has the person's value. An empty or 0 value means not included, and that row's name is dimmed. Shares and Percent also show the amount each comes to, under the value as spliit-ios does, so the name keeps the row's width. From 130% text size, the value and amount go under the name. No Select all / none: there's nothing to select.
 - **Switching modes keeps who's included:**
   - from Evenly, included people get 1 share, an equal percentage, or an equal amount (largest-remainder rounding), and the others get empty;
   - back to Evenly, anyone with a value above 0 is checked.
@@ -113,9 +113,11 @@ Kenneth, 2026-10-09: a checkbox only means something for an even split. In every
  ┌───────────────────────────────────┐
  │ [ Evenly | Shares | Percent | Amount ]
  │───────────────────────────────────│
- │ (A) Alice (you)      [ 2 ]  $13.33│
- │ (B) Bob              [ 1 ]   $6.67│
- │ (C) Carol            [   ]        │   dimmed: not included
+ │ (A) Alice (you)            [ 2 ]  │
+ │                           $13.33  │
+ │ (B) Bob                    [ 1 ]  │
+ │                            $6.67  │
+ │ (C) Carol                  [   ]  │   dimmed: not included
  └───────────────────────────────────┘
    3 shares.
 ```
@@ -246,8 +248,8 @@ Kenneth, 2026-10-09: `JPY 1 = EUR 0.0056547` doesn't read naturally. A rate read
 | Scan receipt (new expenses) | Scan button, receipt language; status in the footer | **`ReceiptScanCard`**: the scan's state machine moves out of the screen |
 | What it was for | Title, Category (expenses), Date, Repeat | **The screen itself:** simple inputs, a few lines each. The category picker screen stays where it is |
 | Currency | Paid in, the amount (expense), the rate and its swap, the converted amount; rate status and "Use the published rate" in the footer | **`CurrencyCard`**: the rate lookup, its states, the currency ranking, the swap and the status text move out of the screen |
-| Paid by / From | One participant | **`ParticipantRow`** plus the participant sheet, reused for both |
-| Paid for / To | Split control, participant rows with their values, Select all/none (Evenly), Save as default split, a settlement's totals; remainder or sentence in the footer | **`SplitCard`**: one widget for both, settlement mode being "amounts only, with totals" |
+| Paid by / From | One participant | **A row in the screen** opening **`showParticipantSheet`**, reused for both. The sheet's rows (`ChoiceRow`) are also "Who are you?"'s |
+| Paid for / To | Split control, participant rows with their values, Select all/none (Evenly), Save as default split, a settlement's totals; remainder or sentence in the footer | **`SplitCard`**: one widget for both, settlement mode being "amounts only, with totals". It reads who's included from `ExpenseFormModel` (in Evenly the checks, otherwise a value other than 0), so a settlement mode is the Amount rows without the mode control and default split |
 | Notes | Notes | **The screen itself** |
 | Receipts | Photos | **`ReceiptsCard`**: the existing `ReceiptAttachmentsField` (`lib/widgets/receipt_attachments.dart`), restyled as a card |
 
@@ -268,6 +270,7 @@ Kenneth, 2026-10-09: don't make everyone pay for accessibility. The split contro
 | 2026-10-10 | Replaced, after trying it and a capsule switch on a device: a plain left-aligned title, and a button beside ✓ whose icon is the kind it switches to. A settlement hides Scan receipt, which can't read one |
 | 2026-10-09 | A settlement's category is hidden. A settlement created here is saved with Payment. Editing never changes the category, whether it was already a settlement or is switched to one |
 | 2026-10-09 | Settlements can have several recipients, amounts only |
+| 2026-10-10 | Paid for has no checkboxes in any mode: in Evenly a tap includes or leaves out, and the left-out are dimmed. A row's amount goes under its value, and at large text the value under the name |
 | 2026-10-09 | A settlement's amount is the sum of its "To" amounts, converted to the group's currency. A converted expense split by amount takes per-person amounts in the paid-in currency too |
 | 2026-10-09 | "Mark as paid" in another currency keeps the balance as the amount until a "To" amount is typed, then works like any typed amount (Ezra's review) |
 | 2026-10-09 | Saved amounts, shares and rate stay as saved until an input they come from changes (extends #255; Ezra's review) |

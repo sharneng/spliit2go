@@ -104,6 +104,7 @@ Future<bool> showExpenseDetails(
             outbox: outbox,
             group: group,
             existingExpense: fresh,
+            activeUserId: activeUserId,
           ),
         ),
       );

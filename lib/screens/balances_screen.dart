@@ -117,6 +117,7 @@ class _BalancesScreenState extends State<BalancesScreen> {
           outbox: widget.outbox,
           group: widget.group,
           initialDraft: draft,
+          activeUserId: widget.activeUserId,
         ),
       ),
     );

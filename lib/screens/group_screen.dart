@@ -568,7 +568,7 @@ class _GroupScreenState extends State<GroupScreen> {
           db: widget.db,
           outbox: widget.outbox,
           group: _group!,
-          initialPaidBy: _activeUserId,
+          activeUserId: _activeUserId,
         ),
       ),
     );

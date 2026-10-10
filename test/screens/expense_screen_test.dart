@@ -14,6 +14,7 @@ import 'package:spliit2go/models/category.dart';
 import 'package:spliit2go/models/default_split.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
+import 'package:spliit2go/screens/expense_form/split_card.dart';
 import 'package:spliit2go/screens/expense_screen.dart';
 import 'package:spliit2go/services/active_user.dart';
 import 'package:spliit2go/services/exchange_rates.dart';
@@ -35,7 +36,22 @@ void main() {
     ],
   );
 
-  Future<void> pumpScreen(WidgetTester tester, AppDatabase db, {String? initialPaidBy}) async {
+  /// [name]'s row in "Paid for" (#260).
+  Finder person(String name) =>
+      find.descendant(of: find.byType(SplitCard), matching: find.widgetWithText(InkWell, name));
+
+  /// Whether [name] is checked in an even split.
+  bool checked(WidgetTester tester, String name) => tester
+      .widget<Semantics>(find.ancestor(
+          of: person(name), matching: find.byWidgetPredicate((w) => w is Semantics && w.properties.checked != null)))
+      .properties
+      .checked!;
+
+  /// Who "Paid by" shows.
+  Finder paidBy(String name) => find.descendant(
+      of: find.widgetWithText(GroupedRow, 'Paid by'), matching: find.text(name));
+
+  Future<void> pumpScreen(WidgetTester tester, AppDatabase db, {String? activeUserId}) async {
     final client = SpliitClient(
       baseUrl: 'https://example.test',
       httpClient: MockClient((req) async => throw http.ClientException('offline')),
@@ -55,7 +71,7 @@ void main() {
         db: db,
         outbox: outbox,
         group: group,
-        initialPaidBy: initialPaidBy,
+        activeUserId: activeUserId,
       ),
     ));
     await tester.pumpAndSettle();
@@ -107,8 +123,8 @@ void main() {
     await pumpScreen(tester, db);
 
     await fillCommonFields(tester, amount: '90');
-    await tester.ensureVisible(find.widgetWithText(CheckboxListTile, 'Cid'));
-    await tester.tap(find.widgetWithText(CheckboxListTile, 'Cid'));
+    await tester.ensureVisible(person('Cid'));
+    await tester.tap(person('Cid'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
@@ -150,8 +166,8 @@ void main() {
     await fillCommonFields(tester, amount: '12,50');
 
     // Two included participants, each paying half of the total.
-    await tester.ensureVisible(find.widgetWithText(CheckboxListTile, 'Cid'));
-    await tester.tap(find.widgetWithText(CheckboxListTile, 'Cid'));
+    await tester.ensureVisible(person('Cid'));
+    await tester.tap(person('Cid'));
     await tester.pumpAndSettle();
     await selectSplitMode(tester, 'Amount');
     final fields = find.byType(TextFormField);
@@ -274,11 +290,9 @@ void main() {
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
-    await pumpScreen(tester, db, initialPaidBy: 'bea');
+    await pumpScreen(tester, db, activeUserId: 'bea');
 
-    final dropdown =
-        tester.widget<DropdownButtonFormField<String>>(find.byType(DropdownButtonFormField<String>));
-    expect(dropdown.initialValue, 'bea');
+    expect(paidBy('Bea (you)'), findsOneWidget);
   });
 
   testWidgets('falls back to the first participant when there\'s no saved active user',
@@ -287,9 +301,7 @@ void main() {
     addTearDown(db.close);
     await pumpScreen(tester, db);
 
-    final dropdown =
-        tester.widget<DropdownButtonFormField<String>>(find.byType(DropdownButtonFormField<String>));
-    expect(dropdown.initialValue, 'alex');
+    expect(paidBy('Alex'), findsOneWidget);
   });
 
   // The mock server's category list used by the picker tests below --
@@ -481,25 +493,17 @@ void main() {
       expect(find.text('Groceries'), findsOneWidget);
       expect(find.text('90.00'), findsOneWidget);
       expect(find.text('weekly shop'), findsOneWidget);
-      final paidByDropdown = tester
-          .widget<DropdownButtonFormField<String>>(find.byType(DropdownButtonFormField<String>));
-      expect(paidByDropdown.initialValue, 'bea');
+      expect(paidBy('Bea'), findsOneWidget);
       // 'cid' wasn't in the existing expense's paidFor -- should come up
       // unchecked, not defaulted to included the way a brand-new add does.
-      final cidTile =
-          tester.widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, 'Cid'));
-      expect(cidTile.value, isFalse);
+      expect(checked(tester, 'Cid'), isFalse);
       // issue #35: alex/bea WERE in the existing expense's paidFor --
       // should come up checked, not just Cid (excluded) coming up
       // unchecked. This is the ExpenseScreen-level half of the
       // regression; spliit_client_test.dart covers the SpliitClient
       // parsing bug that actually caused it.
-      final alexTile =
-          tester.widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, 'Alex'));
-      expect(alexTile.value, isTrue, reason: 'Alex was in paidFor');
-      final beaTile =
-          tester.widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, 'Bea'));
-      expect(beaTile.value, isTrue, reason: 'Bea was in paidFor');
+      expect(checked(tester, 'Alex'), isTrue, reason: 'Alex was in paidFor');
+      expect(checked(tester, 'Bea'), isTrue, reason: 'Bea was in paidFor');
     });
 
     // Regression test for issue #18's edit-mode side: a byPercentage
@@ -1109,16 +1113,16 @@ void main() {
       await tester.tap(find.widgetWithText(TextButton, 'Select none'));
       await tester.pumpAndSettle();
 
-      expect(tester.widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, 'Alex')).value,
+      expect(checked(tester, 'Alex'),
           isFalse);
-      expect(tester.widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, 'Cid')).value,
+      expect(checked(tester, 'Cid'),
           isFalse);
       expect(find.widgetWithText(TextButton, 'Select all'), findsOneWidget);
 
       await tester.tap(find.widgetWithText(TextButton, 'Select all'));
       await tester.pumpAndSettle();
 
-      expect(tester.widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, 'Alex')).value,
+      expect(checked(tester, 'Alex'),
           isTrue);
       expect(find.widgetWithText(TextButton, 'Select none'), findsOneWidget);
     });
@@ -1146,10 +1150,11 @@ void main() {
       await selectSplitMode(tester, 'Percent');
 
       final splitFields = find.byType(TextFormField);
-      await tester.enterText(splitFields.at(2), '50');
+      // Switching filled in 33.34 / 33.33 / 33.33 (#260).
+      await tester.enterText(splitFields.at(2), '20');
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('still to allocate'), findsOneWidget);
+      expect(find.textContaining('13.34% still to allocate'), findsOneWidget);
       // Nothing was submitted yet -- this is the live hint, not the
       // Save-attempt blocking error.
       expect(find.textContaining('currently'), findsNothing);
@@ -1169,8 +1174,8 @@ void main() {
       await tester.enterText(splitFields.at(3), '1'); // bea
       await tester.enterText(splitFields.at(4), '1'); // cid
 
-      await tester.ensureVisible(find.widgetWithText(CheckboxListTile, 'Save as default split'));
-      await tester.tap(find.widgetWithText(CheckboxListTile, 'Save as default split'));
+      await tester.ensureVisible(find.widgetWithText(GroupedRow, 'Save as default split'));
+      await tester.tap(find.widgetWithText(GroupedRow, 'Save as default split'));
       await tester.tap(find.byTooltip('Save'));
       await tester.pumpAndSettle();
 
@@ -1282,8 +1287,9 @@ void main() {
     await tester.enterText(splitFields.at(2), '33.3');
     await tester.pumpAndSettle();
 
-    // 100 - (33.3 + 1 + 1, the other two rows' unchanged "1" default) = 64.7
-    expect(find.textContaining('64.7% still to allocate'), findsOneWidget);
+    // 100 - (33.3 + 33.33 + 33.33, what switching filled in for the
+    // other two, #260) = 0.04
+    expect(find.textContaining('0.04% still to allocate'), findsOneWidget);
   });
 
   // issue #36: switching to Evenly removes every per-participant number
@@ -1498,7 +1504,7 @@ void main() {
     }
 
     Future<void> checkDefaultAndSave(WidgetTester tester) async {
-      final checkbox = find.widgetWithText(CheckboxListTile, 'Save as default split');
+      final checkbox = find.widgetWithText(GroupedRow, 'Save as default split');
       await tester.ensureVisible(checkbox);
       await tester.tap(checkbox);
       final save = find.byTooltip('Save');

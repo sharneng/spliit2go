@@ -25,16 +25,16 @@ class ExpenseFormModel extends ChangeNotifier {
     required this.group,
     this.existing,
     Expense? draft,
-    String? initialPaidBy,
+    this.activeUserId,
   }) {
     if ((existing ?? draft) case final e?) {
       _prefillFrom(e);
     } else {
-      paidBy = resolveDefaultPaidBy(activeUserId: initialPaidBy, participants: group.participants);
+      paidBy = resolveDefaultPaidBy(activeUserId: activeUserId, participants: group.participants);
     }
     for (final c in [titleController, amountController, notesController, originalAmountController, rateController,
       ...splitControllers.values]) {
-      c.addListener(notifyListeners);
+      c.addListener(_typed);
     }
     for (final c in [amountController, originalAmountController, rateController]) {
       c.addListener(_amountsChanged);
@@ -47,6 +47,10 @@ class ExpenseFormModel extends ChangeNotifier {
   /// The expense being edited, if any.
   final Expense? existing;
 
+  /// Who's using the app in this group: a new expense's payer, and
+  /// "(you)" in the form.
+  final String? activeUserId;
+
   final titleController = TextEditingController();
   final amountController = TextEditingController();
   final notesController = TextEditingController();
@@ -57,15 +61,11 @@ class ExpenseFormModel extends ChangeNotifier {
 
   // Per-participant values for the non-evenly modes -- shares (any
   // positive number), percentage (0-100, must sum to 100), or amount
-  // (must sum to the total). Kept for every participant regardless of
-  // [isIncluded] so toggling inclusion doesn't lose what was typed.
-  //
-  // Every field starts at the literal text "1" -- not a computed even
-  // split, not blank -- matching spliit-ios's own default (issue #29
-  // section 5). Overwritten by [_prefillFrom] for edit/draft mode, or by
-  // [applyDefaultSplit] for a brand-new expense with a remembered split.
+  // (must sum to the total). Empty or 0 is "not included" (#260): only
+  // Evenly has checkboxes. Filled in by switching modes ([splitMode]),
+  // [_prefillFrom] or [applyDefaultSplit].
   late final Map<String, TextEditingController> splitControllers = {
-    for (final p in group.participants) p.id: TextEditingController(text: '1'),
+    for (final p in group.participants) p.id: TextEditingController(),
   };
 
   late final Map<String, bool> _included = {for (final p in group.participants) p.id: true};
@@ -113,7 +113,51 @@ class ExpenseFormModel extends ChangeNotifier {
 
   SplitMode _splitMode = SplitMode.evenly;
   SplitMode get splitMode => _splitMode;
-  set splitMode(SplitMode value) => _set(() => _splitMode = value);
+
+  /// Switching modes keeps who's included (#260): in Shares, Percent or
+  /// Amount they get equal values, 1 share, equal percentages or equal
+  /// amounts, the remainder to the first, and everyone else nothing; back
+  /// in Evenly, anyone with a value above 0 is checked. With no total yet,
+  /// Amount's values are empty, and Evenly keeps who was checked before.
+  set splitMode(SplitMode value) {
+    if (value == _splitMode) return;
+    final included = includedParticipants;
+    if (_splitMode != SplitMode.evenly && included.isNotEmpty) {
+      for (final p in group.participants) {
+        _included[p.id] = included.contains(p);
+      }
+    }
+    _splitMode = value;
+    if (value != SplitMode.evenly) {
+      _filling = true;
+      final total = switch (value) {
+        SplitMode.byPercentage => 10000,
+        SplitMode.byAmount => amount,
+        _ => null,
+      };
+      final equal = total == null || included.isEmpty
+          ? null
+          : shareCentsFor(
+              amountCents: total,
+              splitMode: SplitMode.evenly,
+              paidFor: [for (final p in included) ExpenseShare(participantId: p.id, shares: 1)]);
+      for (final p in group.participants) {
+        final part = equal?[p.id];
+        splitControllers[p.id]!.text = !included.contains(p)
+            ? ''
+            : switch (value) {
+                SplitMode.byShares => '1',
+                SplitMode.byPercentage => _localized(trimTrailingZeros(part! / 100)),
+                _ => part == null ? '' : _localized(minorUnitsText(part, digits)),
+              };
+      }
+      _filling = false;
+    }
+    notifyListeners();
+  }
+
+  /// [text] with the locale's decimal separator.
+  String _localized(String text) => text.replaceFirst('.', _decimalSeparator);
 
   /// The category saved (#259): a settlement made here is a Payment,
   /// whatever was picked before it was switched to one. An edit keeps its
@@ -137,7 +181,10 @@ class ExpenseFormModel extends ChangeNotifier {
         notesController.text,
         if (converting) ...[originalAmountController.text, rateIsOwn ? rateController.text : null],
         _paidIn,
-        for (final p in group.participants) ...[splitControllers[p.id]!.text, _included[p.id]],
+        // Only what the mode uses: Evenly's checks, or the others' values.
+        // Switching away and back leaves the hidden ones filled in (#266).
+        for (final p in group.participants)
+          _splitMode == SplitMode.evenly ? _included[p.id] : splitControllers[p.id]!.text,
         _paidBy,
         _date,
         _category,
@@ -161,6 +208,14 @@ class ExpenseFormModel extends ChangeNotifier {
   bool get convertedAmountInvalid => _convertedAmountInvalid;
 
   void _amountsChanged() => _convertedAmountInvalid = false;
+
+  /// Filling in several fields at once, which tells listeners once at the
+  /// end rather than for each.
+  bool _filling = false;
+
+  void _typed() {
+    if (!_filling) notifyListeners();
+  }
 
   void _set(VoidCallback change) {
     change();
@@ -357,7 +412,16 @@ class ExpenseFormModel extends ChangeNotifier {
   // ---------------------------------------------------------------------
   // Paid for.
 
-  bool isIncluded(String participantId) => _included[participantId] ?? false;
+  /// In Evenly, whether they're checked; in the other modes, whether
+  /// they have a value other than 0 (#260). A value that isn't a number
+  /// counts, so the split says what's wrong with it.
+  bool isIncluded(String participantId) {
+    if (_splitMode == SplitMode.evenly) return _included[participantId] ?? false;
+    final text = splitControllers[participantId]?.text.trim() ?? '';
+    return text.isNotEmpty && parseDecimal(text) != 0;
+  }
+
+  /// Checks or unchecks [participantId], in Evenly.
   void setIncluded(String participantId, bool included) => _set(() => _included[participantId] = included);
 
   List<Participant> get includedParticipants => group.participants.where((p) => isIncluded(p.id)).toList();
@@ -389,13 +453,14 @@ class ExpenseFormModel extends ChangeNotifier {
       for (final p in group.participants) {
         final value = shares[p.id];
         _included[p.id] = value != null;
-        if (value == null) continue;
-        splitControllers[p.id]!.text = switch (split.splitMode) {
-          // Inverse of the x100 done in [paidFor] -- issue #34: both are
-          // x100-scaled on the wire, to allow decimal precision.
-          SplitMode.byShares || SplitMode.byPercentage => trimTrailingZeros(value / 100),
-          _ => value.toString(),
-        };
+        splitControllers[p.id]!.text = value == null
+            ? ''
+            : switch (split.splitMode) {
+                // Inverse of the x100 done in [paidFor] -- issue #34: both
+                // are x100-scaled on the wire, to allow decimal precision.
+                SplitMode.byShares || SplitMode.byPercentage => _localized(trimTrailingZeros(value / 100)),
+                _ => value.toString(),
+              };
       }
     }
     if (unchanged) markUnchanged();
@@ -579,6 +644,7 @@ class ExpenseFormModel extends ChangeNotifier {
     _recurrenceRule = e.recurrenceRule;
     _splitMode = e.splitMode;
 
+    // Whoever isn't in it has no value: not included (#260).
     for (final p in group.participants) {
       _included[p.id] = false;
     }
