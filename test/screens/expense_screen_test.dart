@@ -18,6 +18,7 @@ import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/expense_form/split_card.dart';
 import 'package:spliit2go/screens/expense_form/currency_card.dart';
 import 'package:spliit2go/screens/expense_screen.dart';
+import 'package:spliit2go/services/settings_service.dart';
 import 'package:spliit2go/services/active_user.dart';
 import 'package:spliit2go/services/exchange_rates.dart';
 import 'package:spliit2go/sync/outbox.dart';
@@ -698,7 +699,10 @@ void main() {
   // #251: Spliit stores each currency in its own smallest unit -- whole
   // yen, cents of a euro -- as spliit-web's amountAsMinorUnits does.
   Future<AppDatabase> pumpGroup(WidgetTester tester, Group group,
-      {Expense? editing, _FakeRates Function(AppDatabase db)? rates, MockClient? server}) async {
+      {Expense? editing,
+      _FakeRates Function(AppDatabase db)? rates,
+      MockClient? server,
+      SettingsService? settings}) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     ExchangeRates.use(rates?.call(db) ?? _FakeRates(db));
@@ -717,6 +721,7 @@ void main() {
         outbox: Outbox(db, client, groupId: group.id),
         group: group,
         existingExpense: editing,
+        settings: settings,
       ),
     ));
     await tester.pumpAndSettle();
@@ -1000,6 +1005,22 @@ void main() {
     await pumpGroup(tester, euroGroup);
     await paidIn(tester, '', 'Yen', 'Japanese Yen (JPY)');
     expect((find.text('JPY/EUR').evaluate().length, rateText(tester)), (1, '0.0061'));
+  });
+
+  testWidgets('a swap made while the saved order is being read stays (#270 review)', (tester) async {
+    final read = Completer<String?>();
+    final settings = _SlowRateBase(read.future);
+    await pumpGroup(tester, euroGroup, settings: settings);
+    await paidIn(tester, '1000', 'Yen', 'Japanese Yen (JPY)');
+    await tester.ensureVisible(find.text('EUR/JPY'));
+    await tester.tap(find.text('EUR/JPY'));
+    await tester.pumpAndSettle();
+    expect(find.text('JPY/EUR'), findsOneWidget);
+
+    read.complete(null);
+    await tester.pumpAndSettle();
+    expect((find.text('JPY/EUR').evaluate().length, rateText(tester)), (1, '0.0061'));
+    expect(settings.saved, 'JPY');
   });
 
   testWidgets('editing a web expense keeps its total until its conversion changes (#255 review)',
@@ -1670,4 +1691,18 @@ class _FakeRates extends ExchangeRates {
     if (force) forced++;
     return answer(date, from, to);
   }
+}
+
+/// Reads a pair's order only when [read] completes (#270 review).
+class _SlowRateBase extends SettingsService {
+  _SlowRateBase(this.read);
+
+  final Future<String?> read;
+  String? saved;
+
+  @override
+  Future<String?> rateBase(String a, String b) => read;
+
+  @override
+  Future<void> setRateBase(String a, String b, String first) async => saved = first;
 }

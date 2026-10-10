@@ -668,6 +668,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// A tap on the pair (#261): the other currency first, remembered on
   /// this device for the pair.
   void _swapRate() {
+    _rateSwaps++;
     _m.swapRatePair();
     final (paidIn, own, first) = (_m.paidIn, widget.group.currencyCode, _m.rateBaseCode);
     if (paidIn == null || own == null || first == null) return;
@@ -680,7 +681,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// the one this device swapped to, otherwise the more valuable by the
   /// newest saved rates.
   Future<void> _loadRateOrder() async {
-    final (paidIn, own) = (_m.paidIn, widget.group.currencyCode);
+    final (paidIn, own, swaps) = (_m.paidIn, widget.group.currencyCode, _rateSwaps);
     if (!_m.converting || paidIn == null || own == null) return;
     final ranking = await ExchangeRates.of(widget.db).ranking();
     String? base;
@@ -690,13 +691,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       ErrorReporter.instance.report(e, st, operation: 'Reading the exchange rate order');
     }
     if (!mounted || _m.paidIn != paidIn) return;
-    _m
-      ..ranking = ranking
-      ..rateBase = base;
+    _m.ranking = ranking;
+    // A swap made while this was being read is newer (#270 review).
+    if (_rateSwaps == swaps) _m.rateBase = base;
   }
 
+  /// Taps on the pair, so a saved order read since doesn't undo one.
+  int _rateSwaps = 0;
 
-  /// What's wrong with the split, in words, if anything.
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(

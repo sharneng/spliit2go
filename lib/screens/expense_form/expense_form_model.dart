@@ -7,8 +7,8 @@ import '../../models/currency.dart';
 import '../../models/default_split.dart';
 import '../../models/expense.dart';
 import '../../models/group.dart';
-import '../../services/active_user.dart';
 import '../../models/currency_ranking.dart';
+import '../../services/active_user.dart';
 import '../../services/expense_shares.dart';
 import '../../utils/decimal_input.dart';
 import '../../utils/money.dart';
@@ -300,8 +300,7 @@ class ExpenseFormModel extends ChangeNotifier {
   /// Picks the paid-in currency. A rate belongs to a pair of currencies,
   /// so it can't come along; back to the group's own currency, the
   /// calculated total is kept as the amount (spliit-ios). Returns whether
-  /// anything changed, so the screen knows to look the rate up, and the
-  /// order this device writes the new pair in.
+  /// anything changed, so the screen knows to look the rate up.
   bool choosePaidIn(String code) {
     if (code == _paidIn) return false;
     final converted = converting && !_isSettlement ? amount : null;
