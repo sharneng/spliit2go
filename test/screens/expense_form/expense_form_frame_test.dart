@@ -31,7 +31,7 @@ void main() {
 
   /// Opens the form over a page, as the group screen does; returns what
   /// it was closed with.
-  Future<(AppDatabase, List<bool?>)> open(WidgetTester tester, {Expense? editing}) async {
+  Future<(AppDatabase, List<bool?>)> open(WidgetTester tester, {Expense? editing, Expense? draft}) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     await db.cacheGroup(banff);
@@ -54,6 +54,7 @@ void main() {
                 outbox: Outbox(db, client, groupId: 'g1'),
                 group: banff,
                 existingExpense: editing,
+                initialDraft: draft,
               ),
             ))),
             child: const Text('open'),
@@ -73,8 +74,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> pickKind(WidgetTester tester, String kind) async {
-    await tester.tap(find.byTooltip('Switch to ${kind.toLowerCase()}'));
+  // An edit leaving its saved kind converts it (#272); otherwise it switches.
+  Future<void> pickKind(WidgetTester tester, String kind, {String verb = 'Switch'}) async {
+    await tester.tap(find.byTooltip('$verb to ${kind.toLowerCase()}'));
     await tester.pumpAndSettle();
   }
 
@@ -158,10 +160,94 @@ void main() {
           ));
       expect(find.text('Edit settlement'), findsOneWidget);
       expect(find.widgetWithText(GroupedRow, 'Category'), findsNothing);
-      await pickKind(tester, 'Expense');
+      await pickKind(tester, 'Expense', verb: 'Convert');
+      await tester.tap(find.text('Convert'));
+      await tester.pumpAndSettle();
       expect(find.text('Edit expense'), findsOneWidget);
       // The category it had all along: see the model's categoryToSave.
       expect(find.widgetWithText(GroupedRow, 'Category'), findsOneWidget);
+    });
+  });
+
+  group('changing the kind asks first, when it would surprise (#272)', () {
+    final saved = Expense(
+      id: 'e1',
+      groupId: 'g1',
+      title: 'Groceries',
+      amountCents: 3000,
+      paidBy: 'bea',
+      paidFor: const [ExpenseShare(participantId: 'alex', shares: 100)],
+      splitMode: SplitMode.evenly,
+      category: 8,
+      date: DateTime.utc(2026, 10, 1),
+    );
+
+    testWidgets('a fresh form switches straight away, back and forth', (tester) async {
+      await open(tester);
+      await pickKind(tester, 'Settlement');
+      expect(find.text('New settlement'), findsOneWidget);
+      await pickKind(tester, 'Expense');
+      expect(find.text('New expense'), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
+    });
+
+    testWidgets('a changed new form asks; Cancel keeps the kind', (tester) async {
+      await open(tester);
+      await tester.enterText(title(), 'Groceries');
+      await pickKind(tester, 'Settlement');
+      expect(find.text('Change to a settlement?'), findsOneWidget);
+      expect(
+          find.text('A settlement records money paid back. Its amount is what each person received, '
+              'and it has no category.'),
+          findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.text('New expense'), findsOneWidget);
+
+      await pickKind(tester, 'Settlement');
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+      expect(find.text('New settlement'), findsOneWidget);
+      // Back asks too: the title is still the user's.
+      await pickKind(tester, 'Expense');
+      expect(find.text('Change to an expense?'), findsOneWidget);
+    });
+
+    testWidgets('an edit asks only when leaving its saved kind, and says so', (tester) async {
+      await open(tester, editing: saved);
+      await pickKind(tester, 'Settlement', verb: 'Convert');
+      for (final paragraph in [
+        'Are you sure you want to convert this existing expense to a settlement?',
+        'A settlement records money paid back. Its amount is what each person received, and it has no category.',
+        'The conversion is saved only when you tap Save (✓).',
+      ]) {
+        expect(find.text(paragraph), findsOneWidget);
+      }
+      await tester.tap(find.text('Convert'));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit settlement'), findsOneWidget);
+
+      // Back to what's saved: no question.
+      await pickKind(tester, 'Expense');
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('Edit expense'), findsOneWidget);
+    });
+
+    testWidgets('Mark as paid has no kind button', (tester) async {
+      await open(tester,
+          draft: Expense(
+            id: '',
+            groupId: 'g1',
+            title: 'Bea paid Alex',
+            amountCents: 3000,
+            paidBy: 'bea',
+            paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
+            date: DateTime.utc(2026, 10, 1),
+            isSettlement: true,
+          ));
+      expect(find.text('New settlement'), findsOneWidget);
+      expect(find.byTooltip('Switch to expense'), findsNothing);
+      expect(find.byTooltip('Save'), findsOneWidget);
     });
   });
 

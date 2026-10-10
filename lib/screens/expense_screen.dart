@@ -1,6 +1,7 @@
 import 'dart:async' show unawaited;
 
 import 'package:flutter/foundation.dart' show TargetPlatform, Uint8List, defaultTargetPlatform, visibleForTesting;
+import 'package:flutter/cupertino.dart' show CupertinoDialogAction;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' show NumberFormat;
 import 'package:uuid/uuid.dart';
@@ -569,6 +570,34 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   /// Closing with changes asks first (#259); photos added here, which
   /// nothing else keeps, are named (#123).
+  /// Cancel and [action], popping false or true: an iPhone's own alert
+  /// buttons there (#272: Material's are a size smaller), as the group
+  /// list's Remove asks.
+  List<Widget> _confirmActions(BuildContext dialogContext, String action, {required bool destructive}) {
+    final cancel = dialogContext.l10n.commonCancel;
+    if (_cupertino(dialogContext)) {
+      return [
+        // Semibold, as UIKit draws an alert's Cancel.
+        CupertinoDialogAction(
+            isDefaultAction: true, onPressed: () => Navigator.pop(dialogContext, false), child: Text(cancel)),
+        CupertinoDialogAction(
+            isDestructiveAction: destructive,
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(action)),
+      ];
+    }
+    return [
+      TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(cancel)),
+      TextButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          style: destructive ? TextButton.styleFrom(foregroundColor: Theme.of(dialogContext).colorScheme.error) : null,
+          child: Text(action)),
+    ];
+  }
+
+  static bool _cupertino(BuildContext context) =>
+      const {TargetPlatform.iOS, TargetPlatform.macOS}.contains(Theme.of(context).platform);
+
   Future<void> _confirmLeave() async {
     final l10n = context.l10n;
     final discard = await showAdaptiveDialog<bool>(
@@ -576,14 +605,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       builder: (dialogContext) => AlertDialog.adaptive(
         title: Text(l10n.expenseDiscardChangesTitle),
         content: _receipts.hasNew ? Text(l10n.expenseReceiptsDiscardBody) : null,
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false), child: Text(l10n.commonCancel)),
-          TextButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              style: TextButton.styleFrom(foregroundColor: Theme.of(dialogContext).colorScheme.error),
-              child: Text(l10n.expenseReceiptsDiscard)),
-        ],
+        actions: _confirmActions(dialogContext, l10n.expenseReceiptsDiscard, destructive: true),
       ),
     );
     if (discard == true && mounted) Navigator.of(context).pop();
@@ -725,13 +747,80 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// One tap switches between an expense and a settlement (#259, Kenneth
   /// on a device: a title menu's arrow is easy to miss, and a capsule
   /// switch costs the title). The icon is the kind it switches to.
-  Widget _kindButton(BuildContext context) => IconButton(
-        icon: Icon(_m.isSettlement ? Icons.receipt_long_outlined : Icons.payments_outlined),
-        tooltip: _m.isSettlement ? context.l10n.expenseSwitchToExpense : context.l10n.expenseSwitchToSettlement,
-        onPressed: _saving
-            ? null
-            : () => _m.setSettlement(!_m.isSettlement, title: context.l10n.expenseSettlementDefaultTitle),
+  Widget _kindButton(BuildContext context) {
+    final l10n = context.l10n;
+    final toSettlement = !_m.isSettlement;
+    return IconButton(
+      icon: Icon(_m.isSettlement ? Icons.receipt_long_outlined : Icons.payments_outlined),
+      tooltip: _converts(toSettlement)
+          ? (toSettlement ? l10n.expenseConvertToSettlement : l10n.expenseConvertToExpense)
+          : (toSettlement ? l10n.expenseSwitchToSettlement : l10n.expenseSwitchToExpense),
+      onPressed: _saving ? null : _switchKind,
+    );
+  }
+
+  /// Whether switching to [toSettlement] converts a saved expense or
+  /// settlement into the other kind (#272): rare, so it's said as such.
+  /// A new one, or an edit going back to its saved kind, just switches.
+  bool _converts(bool toSettlement) => switch (widget.existingExpense) {
+        final existing? => toSettlement != existing.isSettlement,
+        null => false,
+      };
+
+  /// Asks first (#272): an edit, when it's switching away from its saved
+  /// kind; a new one, when anything but the kind has been changed.
+  Future<void> _switchKind() async {
+    final l10n = context.l10n;
+    final toSettlement = !_m.isSettlement;
+    final converts = _converts(toSettlement);
+    final asks = converts || (widget.existingExpense == null && (_m.hasChangesBeyondKind || _receipts.hasNew));
+    if (asks) {
+      _dropFocus();
+      final change = await showAdaptiveDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog.adaptive(
+          title: Text(switch ((converts, toSettlement)) {
+            (true, true) => l10n.expenseConvertToSettlementTitle,
+            (true, false) => l10n.expenseConvertToExpenseTitle,
+            (false, true) => l10n.expenseChangeToSettlementTitle,
+            (false, false) => l10n.expenseChangeToExpenseTitle,
+          }),
+          // Kenneth (#272): a few sentences read better left-aligned, as
+          // iOS 26 sets them, and each with a small gap above; not
+          // justified, which gaps the words on a dialog's short lines.
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final paragraph in [
+                if (converts)
+                  toSettlement ? l10n.expenseConvertExistingToSettlement : l10n.expenseConvertExistingToExpense,
+                toSettlement ? l10n.expenseSettlementMeaning : l10n.expenseExpenseMeaning,
+                if (converts) l10n.expenseConversionSavedOnSave,
+              ])
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(paragraph,
+                      textAlign: TextAlign.start,
+                      style: TextStyle(
+                          // An iPhone alert's message is 15pt since iOS 26;
+                          // Android's own dialogs keep Material's size.
+                          fontSize: _cupertino(dialogContext) ? 15 : null,
+                          // Kenneth: grey is too hard to read this much in;
+                          // the systems' own dialogs say less.
+                          color: Theme.of(dialogContext).colorScheme.onSurface)),
+                ),
+            ],
+          ),
+          // Converting a saved one is rare, and red so it stays so.
+          actions: _confirmActions(dialogContext, converts ? l10n.expenseKindConvert : l10n.expenseKindChange,
+              destructive: converts),
+        ),
       );
+      if (change != true || !mounted) return;
+    }
+    _m.setSettlement(toSettlement, title: l10n.expenseSettlementDefaultTitle);
+  }
 
   /// "Paid by" (#260): the payer by their monogram, opening the
   /// participant sheet.
@@ -829,7 +918,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         centerTitle: false,
         actions: [
           TopBarButtons(children: [
-            _kindButton(context),
+            // Mark as paid's is a settlement by definition (#272).
+            if (widget.initialDraft == null) _kindButton(context),
             _saving
                 ? const SizedBox.square(
                     dimension: TopBarButtons.size,
