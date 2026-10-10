@@ -6,6 +6,7 @@ import 'expense_list.dart' show participantColors;
 import 'bottom_inset.dart';
 import 'group_monogram.dart';
 import 'grouped_section.dart';
+import 'participant_sheet.dart';
 
 /// An answer to "Who are you?": a participant's id, or
 /// [nobodyParticipantId]; and whether that participant's name becomes the
@@ -61,9 +62,6 @@ class _ActiveUserPickerState extends State<ActiveUserPicker> {
   /// group doesn't change who you are in the next.
   late bool _rememberName = widget.defaultName == null;
 
-  /// Past the monogram: 16 + 24 + ListTile's 16 gap, where the names start.
-  static const _nameIndent = 56.0;
-
   void _pick(String id) => Navigator.of(context)
       .pop(ActiveUserChoice(id, rememberName: id != nobodyParticipantId && _rememberName));
 
@@ -84,15 +82,10 @@ class _ActiveUserPickerState extends State<ActiveUserPicker> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(GroupedSection.inset, 0, GroupedSection.inset, 16),
-              child: Text(l10n.groupScreenActiveUserDialogTitle,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleMedium?.copyWith(fontSize: 17, fontWeight: FontWeight.w600)),
-            ),
+            SheetTitle(l10n.groupScreenActiveUserDialogTitle),
             GroupedSection(
               footer: l10n.activeUserPrivacyNote,
-              dividerIndent: _nameIndent,
+              dividerIndent: ChoiceRow.monogramIndent,
               children: [
                 for (final p in widget.participants)
                   _option(p.id, p.name,
@@ -128,20 +121,11 @@ class _ActiveUserPickerState extends State<ActiveUserPicker> {
     );
   }
 
-  Widget _option(String id, String label, {Widget? leading, TextStyle? style}) {
-    final checked = widget.checkedId == id;
-    // Which one is the current choice, for a screen reader too: the check
-    // mark itself is only drawn (#227 review).
-    return Semantics(
-      checked: checked,
-      inMutuallyExclusiveGroup: true,
-      child: GroupedRow(
+  Widget _option(String id, String label, {Widget? leading, TextStyle? style}) => ChoiceRow(
         leading: leading,
-        // Wraps at large text sizes rather than overflowing (#87 review).
-        title: Text(label, style: style),
-        trailing: checked ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary) : null,
+        label: label,
+        style: style,
+        checked: widget.checkedId == id,
         onTap: () => _pick(id),
-      ),
-    );
-  }
+      );
 }

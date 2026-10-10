@@ -41,6 +41,10 @@ import '../widgets/bottom_inset.dart';
 import '../widgets/grouped_section.dart';
 import '../widgets/top_bar_buttons.dart';
 import 'expense_form/receipt_scan_card.dart';
+import 'expense_form/split_card.dart';
+import '../widgets/expense_list.dart' show participantColors;
+import '../widgets/group_monogram.dart';
+import '../widgets/participant_sheet.dart';
 
 /// Adds -- or, given [existingExpense], edits -- an expense. An expense
 /// with [Expense.isSettlement] set is a settlement/"paid back"
@@ -91,11 +95,11 @@ class ExpenseScreen extends StatefulWidget {
   final Outbox outbox;
   final Group group;
   /// This device's saved "active user" (see SettingsService), if any --
-  /// used to default "Paid by" via [resolveDefaultPaidBy]. Passed in
-  /// rather than loaded here so this screen doesn't need
-  /// SharedPreferences of its own to test. Ignored when [existingExpense]
-  /// is set -- edit mode prefills "Paid by" from the expense itself.
-  final String? initialPaidBy;
+  /// a new expense's "Paid by" via [resolveDefaultPaidBy] (an edit's
+  /// comes from the expense itself), and "(you)" and the emerald
+  /// monogram in the form (#260). Passed in rather than loaded here so
+  /// this screen doesn't need SharedPreferences of its own to test.
+  final String? activeUserId;
 
   /// When set, this screen edits [existingExpense] in place instead of
   /// creating a new one -- see the class doc comment for edit mode's
@@ -140,7 +144,7 @@ class ExpenseScreen extends StatefulWidget {
     required this.db,
     required this.outbox,
     required this.group,
-    this.initialPaidBy,
+    this.activeUserId,
     this.existingExpense,
     this.initialDraft,
     this.receiptPicker = const ImagePickerReceiptPhotoPicker(),
@@ -170,7 +174,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     group: widget.group,
     existing: widget.existingExpense,
     draft: widget.initialDraft,
-    initialPaidBy: widget.initialPaidBy,
+    activeUserId: widget.activeUserId,
   );
   bool _saving = false;
 
@@ -659,55 +663,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   /// What's wrong with the split, in words, if anything.
-  String? _splitValidationError() => switch (_m.splitProblem()) {
-        null => null,
-        NoOneIncluded() => context.l10n.expenseSelectAtLeastOne,
-        InvalidValue(:final participant) => switch (_m.splitMode) {
-            SplitMode.byShares => context.l10n.expenseEnterShares(participant.name),
-            SplitMode.byPercentage => context.l10n.expenseEnterPercentage(participant.name),
-            _ => context.l10n.expenseEnterAmount(participant.name),
-          },
-        PercentagesDontAddUp(:final totalBasisPoints) =>
-          context.l10n.expensePercentageMismatch(trimTrailingZeros(totalBasisPoints / 100)),
-        AmountsDontAddUp(:final difference) => context.l10n.expenseAmountMismatch(formatMoney(
-            difference.abs(), widget.group.currency,
-            decimalDigits: _m.digits, locale: context.appLocale)),
-      };
-
-  /// The "Paid for" section's single footer line, in the priority order
-  /// from issue #29 section 6: an attempted-save blocking error first,
-  /// then a running "still to allocate"/"over" hint for Percent/Amount,
-  /// then the mode's static explanation.
-  String _paidForFooterText() {
-    if (_hasAttemptedSave) {
-      final error = _splitValidationError();
-      if (error != null) return error;
-    }
-    final unallocated = _m.unallocated();
-    if (unallocated != null && unallocated != 0) {
-      final over = unallocated < 0;
-      final magnitude = unallocated.abs();
-      if (_m.splitMode == SplitMode.byPercentage) {
-        final formatted = trimTrailingZeros(magnitude);
-        return over
-            ? context.l10n.expensePercentOver(formatted)
-            : context.l10n.expensePercentRemaining(formatted);
-      }
-      final formattedAmount =
-          formatMoney(toMinorUnits(magnitude, _m.digits), widget.group.currency,
-              decimalDigits: _m.digits, locale: context.appLocale);
-      return over
-          ? context.l10n.expenseAmountOver(formattedAmount)
-          : context.l10n.expenseAmountRemaining(formattedAmount);
-    }
-    return switch (_m.splitMode) {
-      SplitMode.evenly => context.l10n.expenseHintEvenly,
-      SplitMode.byShares => context.l10n.expenseHintShares,
-      SplitMode.byPercentage => context.l10n.expenseHintPercentage,
-      SplitMode.byAmount => context.l10n.expenseHintAmount,
-    };
-  }
-
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -739,6 +694,37 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         tooltip: _m.isSettlement ? context.l10n.expenseSwitchToExpense : context.l10n.expenseSwitchToSettlement,
         onPressed: _saving ? null : () => _m.isSettlement = !_m.isSettlement,
       );
+
+  /// "Paid by" (#260): the payer by their monogram, opening the
+  /// participant sheet.
+  Widget _paidByCard(BuildContext context) {
+    final l10n = context.l10n;
+    final participants = widget.group.participants;
+    final payer = participants.where((p) => p.id == _m.paidBy).firstOrNull;
+    return GroupedSection(children: [
+      GroupedRow(
+        title: Text(l10n.expensePaidByLabel),
+        trailing: payer == null
+            ? null
+            : Row(mainAxisSize: MainAxisSize.min, children: [
+                Monogram(
+                    name: payer.name,
+                    color: participantColors(participants, widget.activeUserId)[payer.id]!,
+                    radius: 12),
+                const SizedBox(width: 8),
+                Flexible(child: _value(context, participantName(context, payer, widget.activeUserId))),
+              ]),
+        onTap: () async {
+          final picked = await showParticipantSheet(context,
+              title: l10n.expensePaidByLabel,
+              participants: participants,
+              checkedId: _m.paidBy,
+              activeUserId: widget.activeUserId);
+          if (picked != null) _m.paidBy = picked;
+        },
+      ),
+    ]);
+  }
 
   /// A field on a card, which draws no box of its own.
   Widget _cell(Widget field) => Padding(
@@ -889,10 +875,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, GroupedSection.spacing),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: _amountsAndSplit(context),
+                        children: _amounts(context),
                       ),
                     ),
                   ),
+                  _paidByCard(context),
+                  SplitCard(model: _m, showErrors: _hasAttemptedSave, footerKey: _paidForFooterKey),
                   GroupedSection(
                     caption: l10n.expenseNotesLabel,
                     children: [
@@ -915,9 +903,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
-  /// The currency, amounts, payer and split, as they were before #256:
-  /// steps 3-5 put them on cards.
-  List<Widget> _amountsAndSplit(BuildContext context) {
+  /// The currency and amounts, as they were before #256: step 4 puts
+  /// them on a card.
+  List<Widget> _amounts(BuildContext context) {
     return [
       // The paid-in currency first, then what was paid in it.
       if (_m.hasGroupCurrencyCode) ..._currencySection(context),
@@ -939,91 +927,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           validator: (v) => _m.isPositiveAmount(v, _m.digits) ? null : context.l10n.expenseInvalidAmount,
         ),
-      const SizedBox(height: 12),
-      DropdownButtonFormField<String>(
-        initialValue: _m.paidBy,
-        decoration: InputDecoration(labelText: context.l10n.expensePaidByLabel),
-        items: widget.group.participants
-            .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name)))
-            .toList(),
-        onChanged: (v) => _m.paidBy = v,
-        validator: (v) => v == null ? context.l10n.commonRequired : null,
-      ),
-      const SizedBox(height: 24),
-      Row(
-        children: [
-          Text(context.l10n.expensePaidForHeading, style: Theme.of(context).textTheme.titleMedium),
-          const Spacer(),
-          // Always offers the opposite of the current state --
-          // issue #29 section 2 (spliit-ios: "with everyone
-          // already in the split, 'select all' has nothing left
-          // to do").
-          TextButton(
-            onPressed: _m.toggleSelectAll,
-            child: Text(_m.allIncluded
-                ? context.l10n.expenseSelectNone
-                : context.l10n.expenseSelectAll),
-          ),
-        ],
-      ),
-      SegmentedButton<SplitMode>(
-        segments: [
-          ButtonSegment(
-              value: SplitMode.evenly, label: Text(context.l10n.expenseSplitEvenly)),
-          ButtonSegment(
-              value: SplitMode.byShares, label: Text(context.l10n.expenseSplitShares)),
-          ButtonSegment(
-              value: SplitMode.byPercentage,
-              label: Text(context.l10n.expenseSplitPercent)),
-          ButtonSegment(
-              value: SplitMode.byAmount, label: Text(context.l10n.expenseSplitAmount)),
-        ],
-        selected: {_m.splitMode},
-        // The selected segment is already highlighted -- with 4
-        // segments crammed into the row, the extra check icon
-        // pushed a label like "Percent" onto 3 lines (issue #32).
-        showSelectedIcon: false,
-        onSelectionChanged: (selection) {
-          // Switching to Evenly removes every per-participant
-          // number field from the tree (issue #36) -- if one of
-          // them still had focus, Flutter has to send focus
-          // *somewhere* when its element is disposed, and left
-          // to its own traversal heuristics it jumped back to
-          // whichever field had focus before that (Amount or
-          // Title), which then auto-scrolled the form back up to
-          // show it. Unfocusing first (rather than letting focus
-          // land on the just-tapped SegmentedButton itself, or
-          // relying on Flutter's fallback) means no field is
-          // focused when the rebuild happens, so there's nothing
-          // to scroll to.
-          FocusScope.of(context).unfocus();
-          _m.splitMode = selection.first;
-        },
-      ),
-      const SizedBox(height: 4),
-      for (final p in widget.group.participants) _paidForRow(p),
-      // Hidden for a settlement -- a settlement is a one-off,
-      // not representative of the group's normal expenses (issue
-      // #29 section 7).
-      if (!_m.isSettlement)
-        CheckboxListTile(
-          value: _m.saveDefaultSplit,
-          onChanged: (v) =>
-              _m.saveDefaultSplit = v ?? false,
-          title: Text(context.l10n.expenseSaveDefaultSplit),
-          controlAffinity: ListTileControlAffinity.leading,
-          contentPadding: EdgeInsets.zero,
-        ),
-      Padding(
-        key: _paidForFooterKey,
-        padding: const EdgeInsets.only(top: 4, bottom: 8),
-        child: Text(
-          _paidForFooterText(),
-          style: (_hasAttemptedSave && _splitValidationError() != null)
-              ? TextStyle(color: Theme.of(context).colorScheme.error)
-              : Theme.of(context).textTheme.bodySmall,
-        ),
-      ),
     ];
   }
 
@@ -1150,54 +1053,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       child: amount == null
           ? Text('—', semanticsLabel: l10n.expenseAmountNotYetKnown)
           : Money(formatMoney(amount, symbol, decimalDigits: decimalDigits, locale: context.appLocale)),
-    );
-  }
-
-  Widget _paidForRow(Participant p) {
-    final included = _m.isIncluded(p.id);
-    final preview = included ? (_m.livePreviewAmounts()?[p.id]) : null;
-    return Row(
-      children: [
-        Expanded(
-          child: CheckboxListTile(
-            value: included,
-            onChanged: (v) => _m.setIncluded(p.id, v ?? false),
-            title: Text(p.name),
-            // The live per-participant amount preview (issue #29 section 3/4) -- absent for
-            // Amount (the typed field already *is* the amount) and for
-            // anything that doesn't yet satisfy [ExpenseFormModel.showsLivePreview].
-            subtitle:
-                preview != null
-                    ? Money(
-                        formatMoney(preview, widget.group.currency,
-                            decimalDigits: _m.digits, locale: context.appLocale),
-                        size: MoneySize.support)
-                    : null,
-            controlAffinity: ListTileControlAffinity.leading,
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        if (included && _m.splitMode != SplitMode.evenly)
-          SizedBox(
-            width: 90,
-            child: TextFormField(
-              controller: _m.splitControllers[p.id],
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              textAlign: TextAlign.right,
-              // The model recomputes the live preview/footer on every
-              // keystroke (issue #29 section 6), not only at Save.
-              decoration: InputDecoration(
-                isDense: true,
-                prefixText: _m.splitMode == SplitMode.byAmount ? widget.group.currency : null,
-                suffixText: switch (_m.splitMode) {
-                  SplitMode.byShares => 'shares',
-                  SplitMode.byPercentage => '%',
-                  _ => null,
-                },
-              ),
-            ),
-          ),
-      ],
     );
   }
 

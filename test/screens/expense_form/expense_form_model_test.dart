@@ -16,7 +16,7 @@ void main() {
   const custom = Group(id: 'g', name: 'Camp', currency: 'pts', participants: people);
 
   ExpenseFormModel model(Group group, {Expense? existing, Expense? draft, String? paidBy}) {
-    final m = ExpenseFormModel(group: group, existing: existing, draft: draft, initialPaidBy: paidBy);
+    final m = ExpenseFormModel(group: group, existing: existing, draft: draft, activeUserId: paidBy);
     addTearDown(m.dispose);
     return m;
   }
@@ -277,7 +277,8 @@ void main() {
           ]));
       expect(shares.includedParticipants.map((p) => p.id), ['alex', 'cy']);
       expect((shares.splitControllers['alex']!.text, shares.splitControllers['cy']!.text), ('1.5', '1'));
-      expect(shares.splitControllers['bea']!.text, '1');
+      // Not in it: no value, so not included (#260).
+      expect(shares.splitControllers['bea']!.text, '');
 
       final amounts = model(yen,
           existing: expense(mode: SplitMode.byAmount, paidFor: const [
@@ -310,13 +311,13 @@ void main() {
       expect(m.allIncluded, isTrue);
     });
 
-    test('shares: decimals x100, and a missing one names who', () {
+    test('shares: decimals x100, and one that isn\'t a number names who', () {
       final m = model(euros)
         ..amountController.text = '10'
-        ..splitMode = SplitMode.byShares
-        ..setIncluded('cy', false);
+        ..splitMode = SplitMode.byShares;
+      m.splitControllers['cy']!.text = '';
       m.splitControllers['alex']!.text = '1.5';
-      m.splitControllers['bea']!.text = '';
+      m.splitControllers['bea']!.text = 'x';
       expect((m.splitProblem() as InvalidValue).participant.id, 'bea');
       expect(m.showsLivePreview, isFalse);
       m.splitControllers['bea']!.text = '0.5';
@@ -343,8 +344,8 @@ void main() {
     test('amount: must add up to the total, in the group\'s digits', () {
       final m = model(yen)
         ..amountController.text = '1000'
-        ..splitMode = SplitMode.byAmount
-        ..setIncluded('cy', false);
+        ..splitMode = SplitMode.byAmount;
+      m.splitControllers['cy']!.text = '';
       m.splitControllers['alex']!.text = '600';
       m.splitControllers['bea']!.text = '300';
       expect((m.splitProblem() as AmountsDontAddUp).difference, 100);
@@ -359,8 +360,8 @@ void main() {
         ..choosePaidIn('JPY')
         ..originalAmountController.text = '1000'
         ..rateController.text = '0.0061'
-        ..splitMode = SplitMode.byAmount
-        ..setIncluded('cy', false);
+        ..splitMode = SplitMode.byAmount;
+      m.splitControllers['cy']!.text = '0';
       m.splitControllers['alex']!.text = '3.10';
       m.splitControllers['bea']!.text = '3';
       expect(m.splitProblem(), isNull);
@@ -372,6 +373,67 @@ void main() {
         ..amountController.text = '10'
         ..isSettlement = true;
       expect(m.livePreviewAmounts(), isNull);
+    });
+  });
+
+  group('switching modes keeps who\'s included (#260)', () {
+    List<String> values(ExpenseFormModel m) => [for (final p in people) m.splitControllers[p.id]!.text];
+
+    test('from Evenly: 1 share, equal percentages, equal amounts; the rest empty', () {
+      final m = model(euros)
+        ..amountController.text = '10'
+        ..setIncluded('bea', false);
+      m.splitMode = SplitMode.byShares;
+      expect(values(m), ['1', '', '1']);
+      expect(m.includedParticipants.map((p) => p.id), ['alex', 'cy']);
+      m.splitMode = SplitMode.evenly;
+      m.setIncluded('bea', true);
+      m.splitMode = SplitMode.byPercentage;
+      // The basis point left over goes to the first.
+      expect(values(m), ['33.34', '33.33', '33.33']);
+      expect(m.splitProblem(), isNull);
+      m.splitMode = SplitMode.evenly;
+      m.splitMode = SplitMode.byAmount;
+      expect(values(m), ['3.34', '3.33', '3.33']);
+      expect(m.splitProblem(), isNull);
+    });
+
+    test('in the locale\'s separator', () {
+      final m = model(euros)
+        ..decimalSeparator = ','
+        ..amountController.text = '10'
+        ..splitMode = SplitMode.byAmount;
+      expect(values(m), ['3,34', '3,33', '3,33']);
+      expect(m.splitProblem(), isNull);
+    });
+
+    test('Amount with no total yet is empty, and back in Evenly the checks stay', () {
+      final m = model(euros)
+        ..setIncluded('cy', false)
+        ..splitMode = SplitMode.byAmount;
+      expect(values(m), ['', '', '']);
+      m.splitMode = SplitMode.evenly;
+      expect(m.includedParticipants.map((p) => p.id), ['alex', 'bea']);
+    });
+
+    test('back to Evenly, anyone above 0 is checked', () {
+      final m = model(euros)..splitMode = SplitMode.byShares;
+      m.splitControllers['alex']!.text = '0';
+      m.splitControllers['bea']!.text = '';
+      m.splitControllers['cy']!.text = '2';
+      expect(m.includedParticipants.map((p) => p.id), ['cy']);
+      m.splitMode = SplitMode.evenly;
+      expect(m.includedParticipants.map((p) => p.id), ['cy']);
+      m.splitMode = SplitMode.byShares;
+      expect(values(m), ['', '', '1']);
+    });
+
+    test('tells listeners once', () {
+      final m = model(euros)..amountController.text = '10';
+      var notified = 0;
+      m.addListener(() => notified++);
+      m.splitMode = SplitMode.byAmount;
+      expect(notified, 1);
     });
   });
 
