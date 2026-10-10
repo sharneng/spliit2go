@@ -121,6 +121,7 @@ class ExpenseFormModel extends ChangeNotifier {
   /// split back. [title] fills an empty title.
   void setSettlement(bool value, {required String title}) {
     if (value == _isSettlement) return;
+    final clean = !hasChangesBeyondKind;
     _filling = true;
     final recipients = value ? null : includedParticipants;
     final total = value ? null : (converting ? originalAmount : amount);
@@ -156,8 +157,18 @@ class ExpenseFormModel extends ChangeNotifier {
     }
     if (!value) _autoTitle = null;
     _filling = false;
+    _cleanAfterSwitch = clean ? _state() : null;
     notifyListeners();
   }
+
+  /// The form right after a kind switch made with nothing else changed.
+  List<Object?>? _cleanAfterSwitch;
+
+  /// Whether anything but the kind (and what switching it filled in)
+  /// differs from where the form started (#272): switching a fresh form
+  /// back and forth isn't worth asking about.
+  bool get hasChangesBeyondKind =>
+      hasChanges && !(_cleanAfterSwitch != null && listEquals(_cleanAfterSwitch, _state()));
 
   _Split _currentSplit() => (
         mode: _splitMode,
