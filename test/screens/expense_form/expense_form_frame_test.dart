@@ -426,6 +426,19 @@ void main() {
       expect(tester.getCenter(check('Bea')).dx, tester.getCenter(check('Alex')).dx);
     });
 
+    testWidgets('the category sheet stays on the screen with the keyboard up (#279)', (tester) async {
+      tester.view
+        ..physicalSize = const Size(400, 800)
+        ..devicePixelRatio = 1
+        ..padding = const FakeViewPadding(top: 47);
+      addTearDown(tester.view.reset);
+      await open(tester);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 336);
+      await tester.tap(find.widgetWithText(GroupedRow, 'Category'));
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(find.widgetWithText(TextField, 'Search categories')).dy, greaterThan(47));
+    });
+
     testWidgets('how much is left goes above Save as default split', (tester) async {
       await open(tester);
       await tester.ensureVisible(find.text('Percent'));
