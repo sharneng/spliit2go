@@ -193,6 +193,7 @@
   "currencyPickerNoResults": "Aucune devise trouvée",
   "currencyPickerMostCommon": "Les plus courantes",
   "currencyPickerOtherCurrencies": "Autres devises",
+  "currencyCustom": "Personnalisée",
   "appSettingsTitle": "Paramètres de l'application",
   "appSettingsTheme": "Thème",
   "appSettingsThemeLight": "Clair",

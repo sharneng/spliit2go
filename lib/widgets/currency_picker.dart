@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../l10n/context_l10n.dart';
+import '../l10n/currency_names.dart';
 import '../models/currency.dart';
 
 /// Opens Spliit's currency picker as a searchable modal bottom sheet --
@@ -72,10 +73,7 @@ class _CurrencyPickerState extends State<_CurrencyPicker> {
 
   bool _matches(Currency c) {
     if (_query.isEmpty) return true;
-    final q = _query.toLowerCase();
-    return c.name.toLowerCase().contains(q) ||
-        c.code.toLowerCase().contains(q) ||
-        c.symbol.toLowerCase().contains(q);
+    return currencyMatchesQuery(context, c, _query.toLowerCase());
   }
 
   @override
@@ -155,7 +153,7 @@ class _CurrencyPickerState extends State<_CurrencyPicker> {
             textAlign: TextAlign.center,
           ),
         ),
-        title: Text(c.code.isEmpty ? c.name : '${c.name} (${c.code})'),
+        title: Text(localizedCurrencyLabel(context, c)),
         selected: c.code == (widget.selectedCode ?? ''),
         onTap: () => Navigator.of(context).pop(c),
       );

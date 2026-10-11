@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/context_l10n.dart';
+import '../../l10n/currency_names.dart';
 import '../../models/currency.dart';
 import '../../models/expense.dart';
 import '../../models/group.dart';
@@ -304,7 +305,8 @@ class SplitCard extends StatelessWidget {
       const GroupedDivider(),
       row(l10n.expenseSettlementTotal, _m.settlementTotal, _m.splitSymbol, _m.splitDigits),
       if (_m.converting)
-        row(l10n.expenseInCurrency(currencyByCode(_m.group.currencyCode).name), _m.amount, _m.group.currency,
+        row(l10n.expenseInCurrency(
+            localizedCurrencyName(context, currencyByCode(_m.group.currencyCode), inSentence: true)), _m.amount, _m.group.currency,
             _m.digits),
     ];
   }
