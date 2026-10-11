@@ -1,8 +1,9 @@
 import 'package:flutter/services.dart';
 
 /// The commit the app was built from (#176), as the Android and iOS builds
-/// write it: the full hash, with "-dirty" when tracked files had
-/// uncommitted changes, or "?" when git couldn't tell; empty without git.
+/// write it: the full hash, with "-" and the minute of the week it was
+/// built when tracked files had uncommitted changes (e.g. "-4821"), or "?"
+/// when git couldn't tell; empty without git.
 /// It comes from the last native build, so a hot reload or restart keeps
 /// it. See docs/decisions/build-info.md.
 class BuildCommit {
@@ -12,7 +13,7 @@ class BuildCommit {
 
   bool get known => full.isNotEmpty;
 
-  /// The hash cut to 7 characters, with any suffix kept, e.g. "a1b2c3d-dirty".
+  /// The hash cut to 7 characters, with any suffix kept, e.g. "a1b2c3d-4821".
   String get short {
     final hash = RegExp('^[0-9a-f]*').stringMatch(full)!;
     return hash.length <= 7 ? full : hash.substring(0, 7) + full.substring(hash.length);

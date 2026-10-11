@@ -13,13 +13,15 @@ One string, the same on both platforms:
 | Value | Meaning | About shows |
 |---|---|---|
 | `<full hash>` | HEAD, and no uncommitted changes to tracked files | `a1b2c3d` |
-| `<full hash>-dirty` | `git diff --quiet HEAD --` exited 1 | `a1b2c3d-dirty` |
+| `<full hash>-<minute>` | `git diff --quiet HEAD --` exited 1 | `a1b2c3d-4821` |
 | `<full hash>?` | HEAD is known, but `git diff` failed with another exit code | `a1b2c3d?` |
 | empty | No git on PATH, not a git checkout, or `rev-parse` failed | `unknown` |
 
 The last two also print a build warning. A local build never fails over the commit, release builds included, so a source download still builds. A CI release job can require a known commit once there is one.
 
-Untracked files don't count as changes. A `-dirty` build isn't an exact reproduction of the named commit.
+Untracked files don't count as changes. A build with changes isn't an exact reproduction of the named commit.
+
+**The minute stamp** ([#285](https://github.com/sharneng/spliit2go/issues/285), Kenneth, 2026-10-11). A build with changes was first marked `-dirty`. In interactive mode every build on the phones is one, so `-dirty` couldn't tell them apart. It's now the minute of the week the build ran: Unix time in minutes, mod 10080 (`date +%s` / 60 % 10080). Each minute in a week gets its own number, 0–10079, so the latest of a day's builds is the one with the highest stamp, unless the week rolled over in between (Thursday 00:00 UTC, as Unix time 0 was a Thursday). It's the time of the native build, so like the hash it stays the same across hot reloads. On Android, a build with changes now misses Gradle's configuration cache, since the value changes every minute; that costs a few seconds on such builds only.
 
 ## How it's built
 
