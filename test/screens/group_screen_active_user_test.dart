@@ -14,7 +14,7 @@ import 'package:spliit2go/services/settings_service.dart';
 import 'package:spliit2go/sync/outbox.dart';
 import 'package:spliit2go/theme.dart';
 import 'package:spliit2go/widgets/active_user_sheet.dart';
-import 'package:spliit2go/widgets/expense_list.dart';
+import 'package:spliit2go/widgets/participant_colors.dart';
 import 'package:spliit2go/widgets/group_monogram.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
 

@@ -6,7 +6,7 @@ import '../../models/currency.dart';
 import '../../models/expense.dart';
 import '../../models/group.dart';
 import '../../utils/money.dart';
-import '../../widgets/expense_list.dart' show participantColors;
+import '../../widgets/participant_colors.dart';
 import '../../widgets/group_monogram.dart';
 import '../../widgets/grouped_section.dart';
 import '../../widgets/money.dart';
@@ -95,11 +95,7 @@ class SplitCard extends StatelessWidget {
           if (evenly)
             TextButton(
               onPressed: _m.toggleSelectAll,
-              style: TextButton.styleFrom(
-                minimumSize: Size.zero,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
+              style: compactTextButtonStyle(),
               child: Text(_m.allIncluded ? l10n.expenseSelectNone : l10n.expenseSelectAll),
             ),
         ]),
@@ -117,43 +113,34 @@ class SplitCard extends StatelessWidget {
       if (!settlement && hasMessage)
         Padding(key: footerKey, padding: const EdgeInsets.fromLTRB(16, 0, 16, 12), child: message),
     ]);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(GroupedSection.inset, 0, GroupedSection.inset, GroupedSection.spacing),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          GroupedSection(
-            margin: EdgeInsets.zero,
-            children: [
-              if (payer case final payer?) payer,
-              if (settlement)
-                heading
-              else
-                Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  heading,
-                  Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), child: _modes(context)),
-                ]),
-              people,
-              if (settlement) ..._totals(context),
-              // A settlement is a one-off, not the group's usual split
-              // (issue #29 section 7).
-              if (!settlement)
-                // One element: "Save as default split, switch, off".
-                MergeSemantics(child: GroupedRow(
-                  title: Text(l10n.expenseSaveDefaultSplit),
-                  trailing: Switch.adaptive(
-                    value: _m.saveDefaultSplit,
-                    onChanged: (v) => _m.saveDefaultSplit = v,
-                  ),
-                  onTap: () => _m.saveDefaultSplit = !_m.saveDefaultSplit,
-                )),
-            ],
-          ),
-          // A settlement's, only what's wrong, under it.
-          if (settlement && hasMessage)
-            Padding(key: footerKey, padding: const EdgeInsets.fromLTRB(16, 6, 16, 0), child: message),
-        ],
-      ),
+    return GroupedSection(
+      // A settlement's, only what's wrong, under it.
+      footerKey: settlement ? footerKey : null,
+      footerContent: [if (settlement && hasMessage) message],
+      children: [
+        if (payer case final payer?) payer,
+        if (settlement)
+          heading
+        else
+          Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            heading,
+            Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), child: _modes(context)),
+          ]),
+        people,
+        if (settlement) ..._totals(context),
+        // A settlement is a one-off, not the group's usual split
+        // (issue #29 section 7).
+        if (!settlement)
+          // One element: "Save as default split, switch, off".
+          MergeSemantics(child: GroupedRow(
+            title: Text(l10n.expenseSaveDefaultSplit),
+            trailing: Switch.adaptive(
+              value: _m.saveDefaultSplit,
+              onChanged: (v) => _m.saveDefaultSplit = v,
+            ),
+            onTap: () => _m.saveDefaultSplit = !_m.saveDefaultSplit,
+          )),
+      ],
     );
   }
 
@@ -265,21 +252,20 @@ class SplitCard extends StatelessWidget {
   /// A settlement's Total, in the paid-in currency, and converted.
   List<Widget> _totals(BuildContext context) {
     final l10n = context.l10n;
-    Widget row(String label, int? amount, String symbol, int digits) => GroupedRow(
-          title: formLabel(context, label),
-          trailing: amount == null
-              ? Text('—', semanticsLabel: l10n.expenseAmountNotYetKnown)
-              : Money(formatMoney(amount, symbol, decimalDigits: digits, locale: context.appLocale)),
-        );
     return [
       const GroupedDivider(),
-      row(l10n.expenseSettlementTotal, _m.settlementTotal, _m.splitSymbol, _m.splitDigits),
+      workedOutRow(context, l10n.expenseSettlementTotal, _m.settlementTotal, _m.splitSymbol, _m.splitDigits),
       if (_m.converting)
-        row(l10n.expenseInCurrency(
-            localizedCurrencyName(context, currencyByCode(_m.group.currencyCode), inSentence: true)), _m.amount, _m.group.currency,
+        workedOutRow(
+            context,
+            l10n.expenseInCurrency(
+                localizedCurrencyName(context, currencyByCode(_m.group.currencyCode), inSentence: true)),
+            _m.amount,
+            _m.group.currency,
             _m.digits),
     ];
   }
+
 
 
 

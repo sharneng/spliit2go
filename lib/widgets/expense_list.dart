@@ -16,6 +16,7 @@ import 'caption_icon.dart';
 import 'money.dart';
 import 'category_icon.dart';
 import 'grouped_section.dart';
+import 'participant_colors.dart';
 import 'bottom_inset.dart';
 
 /// Expenses in date sections (issue #88), each a grouped card under its
@@ -114,21 +115,6 @@ class ExpenseDateList extends StatelessWidget {
       ExpenseDateGroup.older => l10n.dateSectionOlder,
     }, margin: GroupedCaption.listMargin);
   }
-}
-
-/// Each participant's color in a group (#207), fixed rather than hashed
-/// so no two share one while there are colors left: the seven colors of
-/// [monogramPalette] after emerald, by name, starting over past seven.
-/// You are emerald, the app's own accent, in place of yours; the others
-/// keep theirs whoever you are, so picking someone else in "Who are
-/// you?" recolors only the two of you (#218, Kenneth).
-Map<String, Color> participantColors(List<Participant> participants, String? activeUserId) {
-  final others = monogramPalette.sublist(1);
-  final byName = participantsByName(participants);
-  return {
-    for (final (i, p) in byName.indexed)
-      p.id: p.id == activeUserId ? monogramPalette[0] : others[i % others.length],
-  };
 }
 
 /// One expense row in two lines, like a group's in the group list

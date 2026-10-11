@@ -28,7 +28,7 @@ import '../widgets/receipts.dart';
 import '../utils/haptics.dart';
 import '../widgets/grouped_section.dart';
 import '../widgets/bottom_inset.dart';
-import '../widgets/expense_list.dart' show participantColors;
+import '../widgets/participant_colors.dart';
 import '../widgets/group_monogram.dart';
 import '../widgets/top_bar_buttons.dart';
 import '../theme.dart';

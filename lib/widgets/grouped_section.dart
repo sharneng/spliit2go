@@ -16,6 +16,8 @@ class GroupedSection extends StatelessWidget {
     this.caption,
     this.captionTrailing,
     this.footer,
+    this.footerContent = const [],
+    this.footerKey,
     required this.children,
     this.dividerIndent = 16,
     this.margin = const EdgeInsets.fromLTRB(inset, 0, inset, spacing),
@@ -30,6 +32,13 @@ class GroupedSection extends StatelessWidget {
   /// Under the card, in small muted text: what the section means, or
   /// what to do in it (#187), as iOS's section footers.
   final String? footer;
+
+  /// Under the card as [footer] is, but any widgets, one under another:
+  /// a note, an error with its details (#289). After [footer], if both.
+  final List<Widget> footerContent;
+
+  /// The footer's, for a refused save to scroll to what it says.
+  final Key? footerKey;
 
   /// The rows; a line goes between each two.
   final List<Widget> children;
@@ -95,10 +104,14 @@ class GroupedSection extends StatelessWidget {
               ),
             ),
           ),
-          if (footer case final footer?)
+          if (footer != null || footerContent.isNotEmpty)
             Padding(
+              key: footerKey,
               padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-              child: Text(footer, style: footnoteStyle(context)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 2, children: [
+                if (footer case final footer?) Text(footer, style: footnoteStyle(context)),
+                ...footerContent,
+              ]),
             ),
         ],
       ),

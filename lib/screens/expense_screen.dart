@@ -45,7 +45,7 @@ import 'expense_form/receipt_scan_card.dart';
 import 'expense_form/rate_lookup.dart';
 import 'expense_form/receipt_scan_controller.dart';
 import 'expense_form/split_card.dart';
-import '../widgets/expense_list.dart' show participantColors;
+import '../widgets/participant_colors.dart';
 import '../widgets/group_monogram.dart';
 import '../widgets/participant_sheet.dart';
 

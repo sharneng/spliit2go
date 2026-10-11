@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../l10n/context_l10n.dart';
 import '../models/group.dart';
 import '../services/active_user.dart';
-import 'expense_list.dart' show participantColors;
+import 'participant_colors.dart';
 import 'bottom_inset.dart';
 import 'group_monogram.dart';
 import 'grouped_section.dart';

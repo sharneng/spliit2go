@@ -40,44 +40,34 @@ class ReceiptScanCard extends StatelessWidget {
     final theme = Theme.of(context);
     final reading = scan.reading;
     final status = _status(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(GroupedSection.inset, 0, GroupedSection.inset, GroupedSection.spacing),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          GroupedSection(
-            margin: EdgeInsets.zero,
-            children: [
-              GroupedRow(
-                leading: reading
-                    ? const SizedBox.square(dimension: 24, child: Padding(
-                        padding: EdgeInsets.all(2), child: CircularProgressIndicator(strokeWidth: 2)))
-                    : Icon(Icons.document_scanner_outlined, color: theme.colorScheme.primary),
-                title: Text(l10n.expenseScanReceipt,
-                    style: TextStyle(color: reading ? null : theme.colorScheme.primary)),
-                trailing: Tooltip(
-                  message: l10n.receiptLanguage,
-                  child: TextButton.icon(
-                    onPressed: reading ? null : onPickLanguage,
-                    icon: const Icon(Icons.translate),
-                    label: Text(receiptScriptShortName(scan.script)),
-                  ),
-                ),
-                enabled: !reading,
-                onTap: onScan,
-              ),
-            ],
+    return GroupedSection(
+      // The footer can be an error with its details.
+      footerContent: [
+        if (scan.status == ReceiptScanStatus.failed)
+          ErrorMessage(status, diagnostics: scan.diagnostics)
+        else
+          Text(status, style: GroupedSection.footnoteStyle(context)),
+      ],
+      children: [
+        GroupedRow(
+          leading: reading
+              ? const SizedBox.square(dimension: 24, child: Padding(
+                  padding: EdgeInsets.all(2), child: CircularProgressIndicator(strokeWidth: 2)))
+              : Icon(Icons.document_scanner_outlined, color: theme.colorScheme.primary),
+          title: Text(l10n.expenseScanReceipt,
+              style: TextStyle(color: reading ? null : theme.colorScheme.primary)),
+          trailing: Tooltip(
+            message: l10n.receiptLanguage,
+            child: TextButton.icon(
+              onPressed: reading ? null : onPickLanguage,
+              icon: const Icon(Icons.translate),
+              label: Text(receiptScriptShortName(scan.script)),
+            ),
           ),
-          // The section's footer, which can be an error with its details.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-            child: scan.status == ReceiptScanStatus.failed
-                ? ErrorMessage(status, diagnostics: scan.diagnostics)
-                : Text(status,
-                    style: GroupedSection.footnoteStyle(context)),
-          ),
-        ],
-      ),
+          enabled: !reading,
+          onTap: onScan,
+        ),
+      ],
     );
   }
 }

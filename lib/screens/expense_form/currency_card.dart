@@ -4,9 +4,7 @@ import '../../l10n/context_l10n.dart';
 import '../../l10n/currency_names.dart';
 import '../../models/currency.dart';
 import '../../utils/date_format.dart';
-import '../../utils/money.dart';
 import '../../widgets/grouped_section.dart';
-import '../../widgets/money.dart';
 import 'expense_form_model.dart';
 import 'form_text.dart';
 import 'inline_number_field.dart';
@@ -76,6 +74,7 @@ class CurrencyCard extends StatelessWidget {
         children: [
           GroupedSection(
             margin: EdgeInsets.zero,
+            footerContent: footer,
             children: [
               // Only an ISO code converts.
               if (_m.hasGroupCurrencyCode)
@@ -96,17 +95,12 @@ class CurrencyCard extends StatelessWidget {
               if (converting) ...[
                 _rateRow(context),
                 if (!_m.isSettlement)
-                  _workedOut(context, l10n.expenseInCurrency(
+                  workedOutRow(context, l10n.expenseInCurrency(
                       localizedCurrencyName(context, currencyByCode(_m.group.currencyCode), inSentence: true)),
-                      _m.amount, _m.group.currency, _m.digits),
+                      _m.amount, _m.group.currency, _m.digits, key: calculatedKey),
               ],
             ],
           ),
-          if (footer.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 2, children: footer),
-            ),
           // A link under the note, its text in line with the note's, and
           // only a line's height (Kenneth, 2026-10-10): a button's own
           // padding and 48pt pushed it in and the next card down.
@@ -117,12 +111,7 @@ class CurrencyCard extends StatelessWidget {
                 padding: const EdgeInsetsDirectional.only(start: 8),
                 child: TextButton(
                   onPressed: () => rates.lookUp(force: true),
-                  // Select none/all's size, on the Paid for row.
-                  style: TextButton.styleFrom(
-                    minimumSize: Size.zero,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
+                  style: compactTextButtonStyle(),
                   child: Text(l10n.expenseUsePublishedRate),
                 ),
               ),
@@ -211,16 +200,6 @@ class CurrencyCard extends StatelessWidget {
     );
   }
 
-  /// An amount the form works out rather than takes.
-  Widget _workedOut(BuildContext context, String label, int? amount, String symbol, int digits) => KeyedSubtree(
-        key: calculatedKey,
-        child: GroupedRow(
-          title: formLabel(context, label),
-          trailing: amount == null
-              ? Text('—', semanticsLabel: context.l10n.expenseAmountNotYetKnown, style: formValueStyle(context))
-              : Money(formatMoney(amount, symbol, decimalDigits: digits, locale: context.appLocale)),
-        ),
-      );
 }
 
 /// The rate's field, which owns its focus for [RetypeAssist].

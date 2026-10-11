@@ -7,6 +7,7 @@ import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/theme.dart';
 import 'package:spliit2go/widgets/expense_list.dart';
+import 'package:spliit2go/widgets/participant_colors.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
 
 // #207: an expense row in two lines -- what you lent or owe, who paid,
