@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/context_l10n.dart';
+import '../../l10n/currency_names.dart';
 import '../../models/currency.dart';
 import '../../utils/money.dart';
 import '../../widgets/grouped_section.dart';
@@ -82,7 +83,7 @@ class CurrencyCard extends StatelessWidget {
               if (_m.hasGroupCurrencyCode)
                 GroupedRow(
                   title: formLabel(context, l10n.expensePaidIn),
-                  trailing: Text(_m.paidInCurrency.name, style: formValueStyle(context)),
+                  trailing: Text(localizedCurrencyName(context, _m.paidInCurrency), style: formValueStyle(context)),
                   navigates: true,
                   onTap: onPickPaidIn,
                 ),
@@ -97,7 +98,8 @@ class CurrencyCard extends StatelessWidget {
               if (converting) ...[
                 _rateRow(context),
                 if (!_m.isSettlement)
-                  _workedOut(context, l10n.expenseInCurrency(currencyByCode(_m.group.currencyCode).name),
+                  _workedOut(context, l10n.expenseInCurrency(
+                      localizedCurrencyName(context, currencyByCode(_m.group.currencyCode), inSentence: true)),
                       _m.amount, _m.group.currency, _m.digits),
               ],
             ],

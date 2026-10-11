@@ -193,6 +193,7 @@
   "currencyPickerNoResults": "未找到币种",
   "currencyPickerMostCommon": "常用币种",
   "currencyPickerOtherCurrencies": "其他币种",
+  "currencyCustom": "自定义",
   "appSettingsTitle": "应用设置",
   "appSettingsTheme": "主题",
   "appSettingsThemeLight": "浅色",

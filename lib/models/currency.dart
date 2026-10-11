@@ -4,8 +4,8 @@ import 'dart:ui' show Locale;
 /// ([Currency.custom], empty [code]) a group can use instead of a real
 /// ISO currency -- mirrors the web app's fixed `supportedCurrencyCodes`
 /// list and `currency-data.json` (src/lib/currency.ts in
-/// spliit-app/spliit), trimmed to the `en-US` names/symbols since this
-/// app has no locale support of its own.
+/// spliit-app/spliit), with its `en-US` names and symbols. The names in
+/// other languages are in `l10n/currency_names.dart` (#278).
 ///
 /// Deliberately *not* the full ISO-4217 list: the web app's own currency
 /// widget only ever offers these 34 codes -- issue #23's currency widget

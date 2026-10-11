@@ -382,6 +382,10 @@
   "currencyPickerNoResults": "No currency found",
   "currencyPickerMostCommon": "Most common",
   "currencyPickerOtherCurrencies": "Other currencies",
+  "currencyCustom": "Custom",
+  "@currencyCustom": {
+    "description": "The currency picker's and group currency field's choice for a group that uses its own symbol instead of a known currency."
+  },
   "appSettingsTitle": "App settings",
   "appSettingsTheme": "Theme",
   "appSettingsThemeLight": "Light",

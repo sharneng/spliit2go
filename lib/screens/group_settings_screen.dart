@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
 import '../l10n/context_l10n.dart';
+import '../l10n/currency_names.dart';
 import '../models/currency.dart';
 import '../models/expense.dart';
 import '../models/group.dart';
@@ -561,7 +562,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                         Text(_selectedCurrency.flagEmoji, style: const TextStyle(fontSize: 18)),
                         const SizedBox(width: 8),
                       ],
-                      Expanded(child: Text(_selectedCurrency.toString())),
+                      Expanded(child: Text(localizedCurrencyLabel(context, _selectedCurrency))),
                       const Icon(Icons.arrow_drop_down),
                     ],
                   ),

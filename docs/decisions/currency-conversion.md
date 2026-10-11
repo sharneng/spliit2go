@@ -219,6 +219,16 @@ This is the "before I go offline" button; opening a favorite group while online 
 
 **What can't be downloaded ahead:** rates for days that haven't happened yet. Offline for a week, every expense gets the newest saved rate, labelled with its date, and you can type the rate from your card statement instead. Rates aren't changed afterwards: the rate saved on the expense is the record. Opening the expense online later offers "Use the published rate" for its own day.
 
+## Currency names in the app's language (#278)
+
+Added 2026-10-11. Names were always English: in Chinese, the picker still said "Chinese Yuan" rather than 人民币.
+
+- **Source:** spliit-web's own translated names, `src/lib/currency-data.json` @ b73d551 (`fr-FR`, `zh-CN`), which its `generateCurrencyData.ts` builds from the `currency-list` package's CLDR data. A group's currency reads the same here as on spliit.app. They're copied into `lib/l10n/currency_names.dart`, keyed by ISO code, as `category_names.dart` does for categories. A language without a map falls back to the English name.
+- **Where:** the picker's rows and its search, the group's currency field, the expense form's "Paid in" value, and the "In {currency}" rows. "Custom" is translated too (`currencyCustom`, spliit-web's `customOption`).
+- **Search** matches the translated name and the English one, so English terms keep working after switching language, plus the code and symbol.
+- **French capitals:** CLDR writes French currency names in lower case, as inside a sentence ("En euro"). Standing alone, as a row or a field's value, the first letter is raised ("Dollar des États-Unis").
+- **Not the platform's names** (Android's `Currency.getDisplayName`, iOS's `Locale.localizedString(forCurrencyCode:)`): they'd need a method channel and an async lookup at every place a name shows, they differ between Android and iOS versions, and they don't follow the app's language when it differs from the phone's.
+
 ## Considered and not done
 
 - **Caching pairs instead of days:** less precise (above), a second request for every new pair, and each request reveals which currencies you use. A whole-day table doesn't.
