@@ -14,4 +14,39 @@ void main() {
     ));
     expect(padding, const EdgeInsets.only(top: 16, bottom: 88 + 34));
   });
+
+  group('a screen\'s body ends above the system\'s bottom bar, as the group list', () {
+    Future<(Rect, double)> body(WidgetTester tester, double inset, {TargetPlatform platform = TargetPlatform.android}) async {
+      late double childInset;
+      await tester.pumpWidget(MaterialApp(
+        theme: ThemeData(platform: platform),
+        home: MediaQuery(
+          data: MediaQueryData(size: const Size(800, 600), padding: EdgeInsets.only(bottom: inset)),
+          child: AboveBottomBar(
+            child: Builder(builder: (context) {
+              childInset = MediaQuery.paddingOf(context).bottom;
+              return const SizedBox.expand(key: Key('body'));
+            }),
+          ),
+        ),
+      ));
+      return (tester.getRect(find.byKey(const Key('body'))), childInset);
+    }
+
+    testWidgets('Android\'s buttons: above them, and the body doesn\'t pad for them again', (tester) async {
+      final (rect, childInset) = await body(tester, 48);
+      expect(rect.bottom, 600 - 48);
+      expect(childInset, 0);
+    });
+
+    testWidgets('an iPhone\'s home indicator: where the group screen\'s tab bar ends', (tester) async {
+      final (rect, _) = await body(tester, 34, platform: TargetPlatform.iOS);
+      expect(rect.bottom, 600 - (34 - 14));
+    });
+
+    testWidgets('no bar (or the keyboard up): to the edge', (tester) async {
+      final (rect, _) = await body(tester, 0);
+      expect(rect.bottom, 600);
+    });
+  });
 }

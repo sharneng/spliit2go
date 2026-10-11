@@ -29,3 +29,27 @@ double bottomBarGap(BuildContext context) {
     _ => inset,
   };
 }
+
+/// A pushed screen's scrolling body, ending above the system's bottom bar
+/// as the group list does (#222), rather than scrolling behind the gesture
+/// bar or the navigation buttons to the screen's edge (Kenneth,
+/// 2026-10-11). In a [GroupedScrollClip] the end is rounded, as the list's.
+///
+/// The bottom inset is taken off [child]'s MediaQuery, so its own
+/// [withBottomInset] padding doesn't count the bar twice. With the
+/// keyboard up there's no bar to clear: the body already ends at the
+/// keyboard.
+class AboveBottomBar extends StatelessWidget {
+  const AboveBottomBar({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final gap = MediaQuery.paddingOf(context).bottom == 0 ? 0.0 : bottomBarGap(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: gap),
+      child: MediaQuery.removePadding(context: context, removeBottom: true, child: child),
+    );
+  }
+}

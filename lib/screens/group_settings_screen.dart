@@ -520,7 +520,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
           ]),
         ],
       ),
-      body: Theme(
+      body: AboveBottomBar(child: Theme(
         // Fields sit on the cards, so they draw no box of their own.
         data: Theme.of(context).copyWith(
           inputDecorationTheme: const InputDecorationTheme(
@@ -644,7 +644,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
             )),
           ],
         )),
-      ),
+      )),
     );
   }
 }

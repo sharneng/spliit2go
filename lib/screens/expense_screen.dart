@@ -896,7 +896,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           ]),
         ],
       ),
-      body: Theme(
+      body: AboveBottomBar(child: Theme(
         // Fields sit on the cards, so they draw no box of their own.
         data: pageTheme.copyWith(
           inputDecorationTheme: InputDecorationTheme(
@@ -1011,7 +1011,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ),
             ),
           ),
-        ),
+        )),
       ),
     );
   }

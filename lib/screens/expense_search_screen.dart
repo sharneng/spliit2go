@@ -12,6 +12,7 @@ import '../services/expense_search.dart';
 import '../sync/outbox.dart';
 import '../widgets/expense_list.dart';
 import 'expense_details_sheet.dart';
+import '../widgets/bottom_inset.dart';
 import '../widgets/empty_state.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -108,7 +109,7 @@ class _ExpenseSearchScreenState extends State<ExpenseSearchScreen> {
             ),
         ],
       ),
-      body: _body(context),
+      body: AboveBottomBar(child: _body(context)),
     );
   }
 
