@@ -5,7 +5,6 @@ import '../../l10n/currency_names.dart';
 import '../../models/currency.dart';
 import '../../models/expense.dart';
 import '../../models/group.dart';
-import '../../theme.dart';
 import '../../utils/money.dart';
 import '../../widgets/expense_list.dart' show participantColors;
 import '../../widgets/group_monogram.dart';
@@ -15,6 +14,7 @@ import '../../widgets/participant_sheet.dart';
 import '../../widgets/segmented_pill.dart';
 import 'expense_form_model.dart';
 import 'form_text.dart';
+import 'inline_number_field.dart';
 
 /// "Paid for" (#260): the split mode, then each participant by their
 /// monogram, dimmed when they aren't included. In Evenly a tap includes or
@@ -251,54 +251,15 @@ class SplitCard extends StatelessWidget {
   /// plain right-aligned text on the card rather than a box in the page's
   /// color, with its "%" or currency symbol right beside the digits, and
   /// the whole value's width a tap target.
-  Widget _valueField(BuildContext context, Participant p) {
-    final controller = _m.splitControllers[p.id]!;
-    final focus = _m.splitFocus[p.id]!;
-    final prefix = _m.splitMode == SplitMode.byAmount ? '${_m.splitSymbol} ' : null;
-    final suffix = _m.splitMode == SplitMode.byPercentage ? '%' : null;
-    // On an iPhone, its ⓧ after the "%".
-    return RetypeAssist(
-      focus: focus,
-      controller: controller,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: focus.requestFocus,
-        child: ListenableBuilder(
-          listenable: controller,
-          builder: (context, field) {
-            // Dimmed with the "0" hint until something's typed.
-            final style = controller.text.isEmpty
-                ? TextStyle(color: SpliitColors.of(context).secondaryContent)
-                : formValueStyle(context);
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                if (prefix != null) Text(prefix, style: style),
-                Flexible(child: field!),
-                if (suffix != null) Text(suffix, style: style),
-              ],
-            );
-          },
-          child: IntrinsicWidth(
-            child: namedField(
-              context.l10n.expenseFieldName(p.name, _modeName(context, _m.splitMode)),
-              TextFormField(
-                key: valueKey(p.id),
-                controller: controller,
-                focusNode: focus,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                textAlign: TextAlign.end,
-                decoration: InputDecoration(
-                    hint: unreadHint(context, '0'), isDense: true, contentPadding: EdgeInsets.zero),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _valueField(BuildContext context, Participant p) => InlineNumberField(
+        fieldKey: valueKey(p.id),
+        controller: _m.splitControllers[p.id]!,
+        name: context.l10n.expenseFieldName(p.name, _modeName(context, _m.splitMode)),
+        prefix: _m.splitMode == SplitMode.byAmount ? '${_m.splitSymbol} ' : null,
+        suffix: _m.splitMode == SplitMode.byPercentage ? '%' : null,
+        contentPadding: EdgeInsets.zero,
+      );
+
 
 
   /// A settlement's Total, in the paid-in currency, and converted.
@@ -340,7 +301,7 @@ class SplitCard extends StatelessWidget {
         },
       // Short or over, not just "off by" (Kenneth, 2026-10-10).
       PercentagesDontAddUp(:final totalBasisPoints) => () {
-          final by = trimTrailingZeros((10000 - totalBasisPoints).abs() / 100);
+          final by = _m.shareText((10000 - totalBasisPoints).abs() / 100);
           return totalBasisPoints < 10000 ? l10n.expensePercentageShort(by) : l10n.expensePercentageOverBy(by);
         }(),
       AmountsDontAddUp(:final difference) => () {
@@ -373,7 +334,7 @@ class SplitCard extends StatelessWidget {
       final over = unallocated < 0;
       final magnitude = unallocated.abs();
       if (_m.splitMode == SplitMode.byPercentage) {
-        final formatted = trimTrailingZeros(magnitude);
+        final formatted = _m.shareText(magnitude);
         return over ? l10n.expensePercentOver(formatted) : l10n.expensePercentRemaining(formatted);
       }
       final formattedAmount = formatMoney(toMinorUnits(magnitude, _m.splitDigits), _m.splitSymbol,

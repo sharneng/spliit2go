@@ -171,13 +171,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   final _paidForFooterKey = GlobalKey();
   final _calculatedKey = GlobalKey();
 
-  /// What's typed and picked, and what it works out to (#258).
-  late final _m = ExpenseFormModel(
-    group: widget.group,
-    existing: widget.existingExpense,
-    draft: widget.initialDraft,
-    activeUserId: widget.activeUserId,
-  );
+  /// What's typed and picked, and what it works out to (#258). Made once
+  /// the locale is known, so an edit's numbers are written in its decimal
+  /// separator from the start (#289).
+  late final ExpenseFormModel _m;
+  bool _started = false;
   bool _saving = false;
 
   /// The receipts in this form (#123).
@@ -236,9 +234,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         orElse: () => Category(id: _m.category, name: 'Category ${_m.category}', grouping: 'Other'),
       );
 
-  @override
-  void initState() {
-    super.initState();
+  /// The form's first frame: [_m] is made, and what it needs fetched.
+  void _start(String decimalSeparator) {
+    _m = ExpenseFormModel(
+      group: widget.group,
+      existing: widget.existingExpense,
+      draft: widget.initialDraft,
+      activeUserId: widget.activeUserId,
+      decimalSeparator: decimalSeparator,
+    );
     // Every change to the form shows: the amounts, previews and footer
     // are worked out from it.
     _m.addListener(_changed);
@@ -421,8 +425,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _m.decimalSeparator =
-        NumberFormat.decimalPattern(Localizations.localeOf(context).toString()).symbols.DECIMAL_SEP;
+    final separator = NumberFormat.decimalPattern(Localizations.localeOf(context).toString()).symbols.DECIMAL_SEP;
+    if (_started) {
+      _m.decimalSeparator = separator;
+    } else {
+      _started = true;
+      _start(separator);
+    }
   }
 
   @override

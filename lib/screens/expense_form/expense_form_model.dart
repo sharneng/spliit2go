@@ -1,46 +1,54 @@
-import 'dart:math' show ln10, log;
-
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart' show FocusNode, TextEditingController;
+import 'package:flutter/widgets.dart' show TextEditingController;
 
 import '../../models/currency.dart';
 import '../../models/default_split.dart';
 import '../../models/expense.dart';
 import '../../models/group.dart';
-import '../../models/currency_ranking.dart';
 import '../../services/active_user.dart';
 import '../../services/expense_shares.dart';
 import '../../utils/decimal_input.dart';
 import '../../utils/money.dart';
+import 'rate_field.dart';
 
 /// What the add/edit expense form holds and works out (#258): what's
 /// typed and picked, the amounts derived from it, the conversion, the
-/// shares and their validation. The screen builds the widgets, saves, and
-/// does the I/O (the rate lookup, the receipt scan); this holds no
-/// [BuildContext], so it's tested without building widgets.
+/// shares and their validation. The screen builds the widgets and saves;
+/// the I/O is [RateLookup]'s and [ReceiptScanController]'s (#289). This
+/// holds no [BuildContext] or focus, so it's tested without building
+/// widgets.
 ///
 /// The text fields' controllers live here, so the widgets bind to them;
-/// any change to one, or to anything set through this, notifies.
+/// any change to one, or to anything set through this, notifies. The
+/// rate's field is an [ExchangeRateField] of its own.
 class ExpenseFormModel extends ChangeNotifier {
   ExpenseFormModel({
     required this.group,
     this.existing,
     Expense? draft,
     this.activeUserId,
-  }) {
+    String decimalSeparator = '.',
+  }) : _decimalSeparator = decimalSeparator {
+    rateField = ExchangeRateField(
+      groupCode: group.currencyCode,
+      paidIn: _paidIn,
+      parse: parseDecimal,
+      decimalSeparator: decimalSeparator,
+      onChanged: notifyListeners,
+    );
     if ((existing ?? draft) case final e?) {
       _prefillFrom(e);
     } else {
       paidBy = resolveDefaultPaidBy(activeUserId: activeUserId, participants: group.participants);
     }
-    for (final c in [titleController, amountController, notesController, originalAmountController, rateController,
-      ...splitControllers.values]) {
+    for (final c in [titleController, amountController, notesController, originalAmountController,
+      rateField.controller, ...splitControllers.values]) {
       c.addListener(_typed);
     }
-    for (final c in [amountController, originalAmountController, rateController]) {
+    for (final c in [amountController, originalAmountController, rateField.controller]) {
       c.addListener(_amountsChanged);
     }
-    rateController.addListener(_refillBalance);
+    rateField.controller.addListener(_refillBalance);
     // A settlement's To amounts make its amount (#262 review).
     for (final c in splitControllers.values) {
       c.addListener(() {
@@ -65,15 +73,6 @@ class ExpenseFormModel extends ChangeNotifier {
 
   /// "Amount paid", in the paid-in currency (#252).
   final originalAmountController = TextEditingController();
-  final rateController = TextEditingController();
-
-  /// The Amount row's field, which a tap anywhere on the row focuses: its
-  /// text is only as wide as what's typed. One for either amount, as only
-  /// one shows at a time.
-  final amountFocus = FocusNode();
-
-  /// The exchange rate's field.
-  final rateFocus = FocusNode();
 
   // Per-participant values for the non-evenly modes -- shares (any
   // positive number), percentage (0-100, must sum to 100), or amount
@@ -83,10 +82,6 @@ class ExpenseFormModel extends ChangeNotifier {
   late final Map<String, TextEditingController> splitControllers = {
     for (final p in group.participants) p.id: TextEditingController(),
   };
-
-  /// Each person's value field, which a tap anywhere on their value
-  /// focuses: as the Amount row's, the text is only as wide as typed.
-  late final Map<String, FocusNode> splitFocus = {for (final p in group.participants) p.id: FocusNode()};
 
   late final Map<String, bool> _included = {for (final p in group.participants) p.id: true};
 
@@ -181,7 +176,7 @@ class ExpenseFormModel extends ChangeNotifier {
       }
       if (total != null && total > 0) {
         (converting ? originalAmountController : amountController).text =
-            _localized(minorUnitsText(total, converting ? originalDigits : digits));
+            minorText(total, converting ? originalDigits : digits);
       }
     }
     if (value && titleController.text.trim().isEmpty) {
@@ -241,15 +236,14 @@ class ExpenseFormModel extends ChangeNotifier {
   void _refillBalance() {
     if (!_balanceKept) return;
     final (balance, rate) = (_balance!, this.rate);
-    final text = !converting
-        ? minorUnitsText(balance.amount, digits)
+    final shown = !converting
+        ? minorText(balance.amount, digits)
         : rate == null
             ? ''
-            : minorUnitsText(
+            : minorText(
                 convertToOriginalAmount(
                     amount: balance.amount, rate: rate, decimalDigits: digits, originalDecimalDigits: originalDigits),
                 originalDigits);
-    final shown = _localized(text);
     if (shown == _balanceText) return;
     _balanceText = shown;
     final filling = _filling;
@@ -302,8 +296,8 @@ class ExpenseFormModel extends ChangeNotifier {
             ? ''
             : switch (value) {
                 SplitMode.byShares => '1',
-                SplitMode.byPercentage => _localized(trimTrailingZeros(part! / 100)),
-                _ => part == null ? '' : _localized(minorUnitsText(part, splitDigits)),
+                SplitMode.byPercentage => shareText(part! / 100),
+                _ => part == null ? '' : minorText(part, splitDigits),
               };
       }
       _filling = false;
@@ -316,8 +310,12 @@ class ExpenseFormModel extends ChangeNotifier {
 
   /// [value] as a field shows it (#289): [decimalDigits] places, in the
   /// locale's decimal separator. Every number the form writes into a
-  /// field goes through this or [minorText], so it reads back as written.
+  /// field goes through this, [minorText] or [shareText], so it reads
+  /// back as written.
   String amountText(double value, int decimalDigits) => _localized(value.toStringAsFixed(decimalDigits));
+
+  /// Shares or a percentage: at most 2 places, no trailing zeros.
+  String shareText(double value) => _localized(trimTrailingZeros(value));
 
   /// [minor] smallest units of a currency with [decimalDigits] places, as
   /// a field shows it.
@@ -345,7 +343,7 @@ class ExpenseFormModel extends ChangeNotifier {
         notesController.text,
         // The rate as a value: the pair's order is the device's, not the
         // expense's.
-        if (converting) ...[originalAmountController.text, rateIsOwn ? rate : null],
+        if (converting) ...[originalAmountController.text, rateField.isOwn ? rate : null],
         _paidIn,
         // Only what the mode uses: Evenly's checks, or the others' values.
         // Switching away and back leaves the hidden ones filled in (#266).
@@ -391,21 +389,15 @@ class ExpenseFormModel extends ChangeNotifier {
   // ---------------------------------------------------------------------
   // Numbers as typed.
 
-  String _decimalSeparator = '.';
+  String _decimalSeparator;
 
   /// The locale's decimal separator, which decides only "1,234" (#238)
-  /// and is how a rate is shown. Kept here, so parsing after an await
-  /// (Save) doesn't need the context. Its first setting also shows an
-  /// edited expense's saved rate, which needs it.
+  /// and is how numbers are written into fields. Given when the form is
+  /// made, so an edit's numbers show in it from the start (#289); set
+  /// again if the locale changes, for what's written from then on.
   set decimalSeparator(String separator) {
     _decimalSeparator = separator;
-    if (_savedRateToShow case final rate?) {
-      _savedRateToShow = null;
-      final unchanged = !hasChanges;
-      _savedRate = rate;
-      rateController.text = shownRateText(rate);
-      if (unchanged) markUnchanged();
-    }
+    rateField.decimalSeparator = separator;
   }
 
   /// [parseFlexibleDecimal] with this locale's decimal separator.
@@ -418,18 +410,6 @@ class ExpenseFormModel extends ChangeNotifier {
   bool isPositiveAmount(String? text, int decimalDigits) {
     final parsed = parseDecimal(text ?? '');
     return parsed != null && toMinorUnits(parsed, decimalDigits) > 0;
-  }
-
-  /// [value] to 6 significant figures, as a rate is shown (#261): plain
-  /// decimals, never an exponent, in the locale's separator, no trailing
-  /// zeros.
-  String rateNumberText(double value) {
-    final exponent = value <= 0 ? 0 : (log(value) / ln10).floor();
-    var text = value.toStringAsFixed((5 - exponent).clamp(0, 20));
-    if (text.contains('.')) {
-      text = text.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
-    }
-    return text.replaceAll('.', _decimalSeparator);
   }
 
   // ---------------------------------------------------------------------
@@ -469,156 +449,23 @@ class ExpenseFormModel extends ChangeNotifier {
     final converted = converting && !_isSettlement ? amount : null;
     _paidIn = code;
     _convertedAmountInvalid = false;
-    _autoFilledRate = _autoFilledValue = _savedRate = _swappedFrom = _baseChoice = null;
-    _paidInFirst = _rankedPaidInFirst;
-    rateController.text = '';
-    if (!converting && converted != null) amountController.text = minorUnitsText(converted, digits);
+    rateField.pairWith(code);
+    if (!converting && converted != null) amountController.text = minorText(converted, digits);
     _refillBalance();
     notifyListeners();
     return true;
   }
 
-  // The rate is shown as one number, the more valuable currency first
-  // (#261): EUR/JPY = 176.84, 1 of the first in the second. Stored, it's
-  // still 1 paid-in unit in group units.
-
-  /// Units of each currency per 1 EUR: what decides which goes first.
-  Map<String, double> _ranking = shippedUnitsPerEuro;
-
-  /// The newest saved table, over the shipped one ([ExchangeRates.ranking]).
-  set ranking(Map<String, double> unitsPerEuro) {
-    _ranking = unitsPerEuro;
-    _showInOrder();
-  }
-
-  /// The currency this device writes the pair with first, once swapped
-  /// there; null to go by the ranking.
-  String? _baseChoice;
-  set rateBase(String? code) {
-    _baseChoice = code;
-    _showInOrder();
-  }
-
-  /// Whether the paid-in currency is worth more than the group's: fewer
-  /// of it to the euro. An unknown currency goes second.
-  bool get _rankedPaidInFirst {
-    final (paidIn, own) = (_ranking[_paidIn], _ranking[group.currencyCode]);
-    return paidIn != null && (own == null || paidIn < own);
-  }
-
-  bool get _wantsPaidInFirst => _baseChoice == null ? _rankedPaidInFirst : _baseChoice == _paidIn;
-
-  /// The order the rate field is written in.
-  late bool _paidInFirst = _rankedPaidInFirst;
-
-  /// The pair, as "EUR/JPY": the first is the one that's 1.
-  String get ratePair => _paidInFirst ? '$_paidIn/${group.currencyCode}' : '${group.currencyCode}/$_paidIn';
-
-  /// The currency written first, which a swap makes the other one.
-  String? get rateBaseCode => _paidInFirst ? _paidIn : group.currencyCode;
-
-  /// A stored rate (1 paid-in unit in group units) as the field shows it,
-  /// in the pair's order.
-  String shownRateText(double stored) => rateNumberText(_paidInFirst ? stored : 1 / stored);
-
-  /// Tap on the pair (#261): the other currency first, and the number
-  /// flipped with it. The screen remembers it for the pair.
-  void swapRatePair() {
-    _baseChoice = _paidInFirst ? group.currencyCode : _paidIn;
-    _flip();
-    notifyListeners();
-  }
-
-  void _showInOrder() {
-    if (_wantsPaidInFirst != _paidInFirst) _flip();
-    notifyListeners();
-  }
-
-  /// What the last swap turned the field's text from and into: swapped
-  /// back untouched, the text comes back as it was, not rounded twice.
-  (String, String)? _swappedFrom;
-
-  void _flip() {
-    final text = rateController.text.trim();
-    final saved = rateIsSaved;
-    final auto = text.isNotEmpty && text == _autoFilledRate;
-    _paidInFirst = !_paidInFirst;
-    // A saved or published rate is shown afresh from its own value.
-    final String next;
-    if (saved) {
-      next = shownRateText(_savedRate!);
-    } else if (auto) {
-      next = shownRateText(_autoFilledValue!);
-    } else if (_swappedFrom case (final before, final after) when after == text) {
-      next = before;
-    } else {
-      final value = parseDecimal(text);
-      next = value == null || value <= 0 ? text : rateNumberText(1 / value);
-    }
-    if (_autoFilledValue case final value?) _autoFilledRate = shownRateText(value);
-    _swappedFrom = saved || auto ? null : (text, next);
-    rateController.text = next;
-  }
-
-  /// The last rate this form filled in by itself, as shown and as its
-  /// value, so a rate typed over it is never overwritten by a lookup.
-  String? _autoFilledRate;
-  double? _autoFilledValue;
-
-  /// The rate saved with the expense being edited: the record, sent back
-  /// as stored while the field shows it, never looked up again by itself.
-  double? _savedRate;
-  double? _savedRateToShow;
-
-  /// Counts what's typed in the rate field, so "Use the published rate"
-  /// replaces only the rate it was asked to, not one typed while it was
-  /// on its way.
-  int _rateEdits = 0;
-  int get rateEdits => _rateEdits;
-
-  /// The user typed in the rate field.
-  void rateTyped() => _rateEdits++;
-
-  /// The rate field holds a rate of the user's: typed, or the saved one.
-  bool get rateIsOwn {
-    final text = rateController.text.trim();
-    return text.isNotEmpty && text != _autoFilledRate;
-  }
-
-  /// That rate is the one saved with the expense being edited.
-  bool get rateIsSaved => _savedRate != null && rateController.text.trim() == shownRateText(_savedRate!);
-
-  /// Whether the field shows [published] (stored the usual way), as the
-  /// footer quotes it.
-  bool showsRate(double published) => rateController.text.trim() == shownRateText(published);
+  /// The exchange rate's field (#261): its order, swap, and where its
+  /// rate comes from.
+  late final ExchangeRateField rateField;
 
   /// Whether a lookup may fill the rate in: always for [force] ("Use the
   /// published rate"), otherwise only into an empty or auto-filled field.
-  bool wantsRate({bool force = false}) => converting && (force || !rateIsOwn);
+  bool wantsRate({bool force = false}) => converting && (force || !rateField.isOwn);
 
-  /// Fills in a published [rate] looked up when the field had had
-  /// [editsAtRequest] edits. Anything typed since the request wins, even
-  /// a rate that happens to match the one filled in before (#255
-  /// review); an empty field has nothing to lose.
-  void fillRate(double rate, {required bool force, required int editsAtRequest}) {
-    final current = rateController.text.trim();
-    if (current.isEmpty || (editsAtRequest == _rateEdits && (force || current == _autoFilledRate))) {
-      _savedRate = _swappedFrom = null;
-      _autoFilledValue = rate;
-      rateController.text = _autoFilledRate = shownRateText(rate);
-    }
-  }
-
-  /// The rate to work with and save, 1 paid-in unit in group units: the
-  /// saved one as stored while the field shows it (#261, acceptance case
-  /// 3), otherwise worked out from the number shown, if it's above zero,
-  /// so what's shown, saved and calculated agree.
-  double? get rate {
-    if (rateIsSaved) return _savedRate;
-    final shown = parseDecimal(rateController.text.trim());
-    if (shown == null || shown <= 0) return null;
-    return _paidInFirst ? shown : 1 / shown;
-  }
+  /// The conversion's rate, 1 paid-in unit in group units.
+  double? get rate => rateField.value;
 
   /// The amount as typed, in the group currency's smallest unit.
   int? get typedAmount => switch (parseDecimal(amountController.text.trim())) {
@@ -649,22 +496,27 @@ class ExpenseFormModel extends ChangeNotifier {
   /// A settlement's total, as the To card shows it under the amounts.
   int? get settlementTotal => _isSettlement ? _toTotal : null;
 
-  /// The edited expense's own amounts (#255 review): spliit-web lets its
-  /// total differ a little from the amount paid times the rate, so they
-  /// stay as saved until the conversion itself is changed.
-  ({int amount, int originalAmount})? _savedConversion;
+  /// The edited expense as the form opened it: what's saved stays saved
+  /// until its inputs change (#255 review, #261, #289). spliit-web lets a
+  /// total differ a little from the amount paid times the rate, and
+  /// converting shares back and forth can move the odd unit, so neither
+  /// is worked out afresh while what it came from reads as it did. The
+  /// saved rate is the rate field's ([ExchangeRateField.isSaved]).
+  ({int amount, int? originalAmount, String? paidIn, bool isSettlement, List<Object?> split})? _saved;
+
+  bool get _splitUnchanged => listEquals(_splitState(), _saved?.split);
 
   /// The conversion is the edited expense's, untouched: same currency,
   /// rate, settlement flag and the amount it was worked out from.
   bool get conversionUnchanged {
-    final (saved, existing) = (_savedConversion, this.existing);
-    if (saved == null || existing == null) return false;
-    return _paidIn == existing.originalCurrency &&
-        _isSettlement == existing.isSettlement &&
-        rateIsSaved &&
+    final saved = _saved;
+    if (saved == null || saved.originalAmount == null) return false;
+    return _paidIn == saved.paidIn &&
+        _isSettlement == saved.isSettlement &&
+        rateField.isSaved &&
         // A settlement's amount paid is its To amounts: moved between
         // people, the sum can stay while the inputs changed (#262 review).
-        (_isSettlement ? listEquals(_splitState(), _savedSplit) : originalAmount == saved.originalAmount);
+        (_isSettlement ? _splitUnchanged : originalAmount == saved.originalAmount);
   }
 
   /// The amount in the group's currency: calculated from the amount paid
@@ -674,7 +526,7 @@ class ExpenseFormModel extends ChangeNotifier {
   int? get amount {
     if (_balanceKept) return _balance!.amount;
     if (!converting) return _isSettlement ? _toTotal : typedAmount;
-    if (conversionUnchanged) return _savedConversion!.amount;
+    if (conversionUnchanged) return _saved!.amount;
     final (original, rate) = (originalAmount, this.rate);
     if (original == null || rate == null) return null;
     return convertToGroupAmount(
@@ -730,7 +582,7 @@ class ExpenseFormModel extends ChangeNotifier {
             : switch (split.splitMode) {
                 // Inverse of the x100 done in [paidFor] -- issue #34: both
                 // are x100-scaled on the wire, to allow decimal precision.
-                SplitMode.byShares || SplitMode.byPercentage => _localized(trimTrailingZeros(value / 100)),
+                SplitMode.byShares || SplitMode.byPercentage => shareText(value / 100),
                 _ => value.toString(),
               };
       }
@@ -915,13 +767,13 @@ class ExpenseFormModel extends ChangeNotifier {
   /// acceptance case 2): converting back and forth can tie or swap who
   /// has the odd unit, and a settlement's mode, even before #262, stays.
   bool get _keepsSavedSplit {
-    final existing = this.existing;
-    return existing != null &&
+    final saved = _saved;
+    return saved != null &&
         _splitMode == SplitMode.byAmount &&
-        _isSettlement == existing.isSettlement &&
-        _paidIn == _savedPaidIn &&
+        _isSettlement == saved.isSettlement &&
+        _paidIn == saved.paidIn &&
         (!converting || conversionUnchanged) &&
-        listEquals(_splitState(), _savedSplit);
+        _splitUnchanged;
   }
 
   /// The split mode to save: an untouched edit's own.
@@ -938,10 +790,7 @@ class ExpenseFormModel extends ChangeNotifier {
   int get splitDigits => _splitsPaidIn ? originalDigits : digits;
   String get splitSymbol => _splitsPaidIn ? paidInSymbol : group.currency;
 
-  /// The split and currency as the form opened an edit, to tell if it's
-  /// untouched.
-  List<Object?>? _savedSplit;
-  String? _savedPaidIn;
+  /// The split as it reads, to tell if it's the saved one.
   List<Object?> _splitState() => [
         _splitMode,
         for (final p in group.participants) ...[_included[p.id], splitControllers[p.id]!.text],
@@ -979,7 +828,7 @@ class ExpenseFormModel extends ChangeNotifier {
   /// Runs once; the form doesn't re-sync with a changing expense.
   void _prefillFrom(Expense e) {
     titleController.text = e.title;
-    amountController.text = minorUnitsText(e.amountCents, digits);
+    amountController.text = minorText(e.amountCents, digits);
     notesController.text = e.notes;
     _paidBy = e.paidBy;
     _category = e.category;
@@ -1015,12 +864,12 @@ class ExpenseFormModel extends ChangeNotifier {
       final controller = splitControllers[share.participantId];
       if (controller == null) continue;
       controller.text = switch (_splitMode) {
-        SplitMode.byAmount => minorUnitsText(paidInShares?[share.participantId] ?? share.shares, shareDigits),
+        SplitMode.byAmount => minorText(paidInShares?[share.participantId] ?? share.shares, shareDigits),
         // Shares/Percentage are both x100 on the wire (issue #34) --
         // inverse of the x100 done in [paidFor], formatted back down to
         // at most 2 decimal places with no trailing zeros so "150"
         // redisplays as "1.5", not "1.50" or "150".
-        SplitMode.byShares || SplitMode.byPercentage => trimTrailingZeros(share.shares / 100),
+        SplitMode.byShares || SplitMode.byPercentage => shareText(share.shares / 100),
         // Evenly's per-participant "shares" is just an equal weight,
         // stored by spliit-web as 100 for everyone, not 1 (issue #34
         // follow-up): switching an edited expense from Evenly to Shares
@@ -1033,17 +882,21 @@ class ExpenseFormModel extends ChangeNotifier {
     // amount and rate of a conversion that was removed (#252).
     if (e.originalCurrency != null && hasGroupCurrencyCode) {
       _paidIn = e.originalCurrency;
+      rateField.pairWith(_paidIn);
       if (e.originalAmountCents case final original?) {
-        originalAmountController.text = minorUnitsText(original, originalDigits);
-        // Not for a draft: it's a new expense, worked out afresh.
-        if (identical(e, existing)) _savedConversion = (amount: e.amountCents, originalAmount: original);
+        originalAmountController.text = minorText(original, originalDigits);
       }
-      // Shown in the locale's own decimals, once [decimalSeparator] is set.
-      _savedRateToShow = e.conversionRate;
+      if (e.conversionRate case final rate?) rateField.showSaved(rate);
     }
     if (identical(e, existing)) {
-      _savedSplit = _splitState();
-      _savedPaidIn = _paidIn;
+      // Not for a draft: it's a new expense, worked out afresh.
+      _saved = (
+        amount: e.amountCents,
+        originalAmount: _paidIn == null ? null : e.originalAmountCents,
+        paidIn: _paidIn,
+        isSettlement: e.isSettlement,
+        split: _splitState(),
+      );
     } else if (e.isSettlement && shares.length == 1) {
       // Mark as paid's draft (#262): one recipient, the balance.
       final to = shares.single.participantId;
@@ -1056,15 +909,11 @@ class ExpenseFormModel extends ChangeNotifier {
 
   @override
   void dispose() {
-    for (final c in [titleController, amountController, notesController, originalAmountController, rateController,
+    for (final c in [titleController, amountController, notesController, originalAmountController,
       ...splitControllers.values]) {
       c.dispose();
     }
-    amountFocus.dispose();
-    rateFocus.dispose();
-    for (final f in splitFocus.values) {
-      f.dispose();
-    }
+    rateField.dispose();
     super.dispose();
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/context_l10n.dart';
 import '../../theme.dart';
+import '../../widgets/grouped_section.dart';
 
 /// The form's rows (Kenneth, 2026-10-10): what was entered is the main
 /// content, in the primary text color; the label naming it is secondary.
@@ -14,6 +15,19 @@ Text formLabel(BuildContext context, String label) =>
 
 /// A row's value at its end, at the rows' text size.
 TextStyle? formValueStyle(BuildContext context) => Theme.of(context).textTheme.bodyLarge;
+
+/// A label, and the field it names at the row's end.
+Widget formFieldRow(BuildContext context, Widget label, Widget field) => ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: GroupedRow.oneLineMinHeight),
+      child: Padding(
+        padding: const EdgeInsetsDirectional.only(start: 16, end: 16),
+        child: Row(children: [
+          DefaultTextStyle.merge(style: Theme.of(context).textTheme.bodyLarge, child: label),
+          const SizedBox(width: 16),
+          Expanded(child: field),
+        ]),
+      ),
+    );
 
 /// A number field's name for a screen reader, where the row shows it
 /// some other way or not at all (#288): "Amount", "Cid, Shares".

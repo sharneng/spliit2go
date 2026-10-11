@@ -6,6 +6,7 @@ import '../../services/error_reporting.dart';
 import '../../services/exchange_rates.dart';
 import '../../services/settings_service.dart';
 import 'expense_form_model.dart';
+import 'rate_field.dart';
 
 /// Where the rate lookup stands (#252).
 enum RateLookupState { idle, loading, found, noRate, unavailable }
@@ -13,7 +14,7 @@ enum RateLookupState { idle, loading, found, noRate, unavailable }
 /// Looks up the published rate for [model]'s conversion (#252) and
 /// remembers which currency of the pair this device writes first (#261),
 /// apart from the screen (#289). The rate goes into the field only where
-/// [ExpenseFormModel.fillRate] lets it; otherwise the card's footer
+/// [ExchangeRateField.fill] lets it; otherwise the card's footer
 /// quotes it.
 class RateLookup extends ChangeNotifier {
   RateLookup({required this.rates, required this.settings, required this.model});
@@ -48,7 +49,7 @@ class RateLookup extends ChangeNotifier {
   /// [force] ("Use the published rate"); otherwise the footer quotes it.
   Future<void> lookUp({bool force = false}) async {
     final lookup = ++_lookups;
-    final edits = model.rateEdits;
+    final edits = model.rateField.edits;
     final from = model.paidIn, to = model.group.currencyCode;
     if (!model.converting || from == null || to == null) {
       _update(() => _state = RateLookupState.idle);
@@ -76,7 +77,7 @@ class RateLookup extends ChangeNotifier {
       _state = state;
       _found = found;
     });
-    if (found != null) model.fillRate(found.rate, force: force, editsAtRequest: edits);
+    if (found != null) model.rateField.fill(found.rate, force: force, editsAtRequest: edits);
   }
 
   /// A conversion was opened, or another currency picked: the pair's
@@ -91,7 +92,7 @@ class RateLookup extends ChangeNotifier {
   bool get canRefresh => switch (_state) {
         RateLookupState.loading || RateLookupState.idle => false,
         RateLookupState.found => switch (_found) {
-            final found? => found.offline || !model.showsRate(found.rate),
+            final found? => found.offline || !model.rateField.shows(found.rate),
             null => false,
           },
         RateLookupState.noRate || RateLookupState.unavailable => true,
@@ -101,8 +102,8 @@ class RateLookup extends ChangeNotifier {
   /// this device for the pair.
   void swap() {
     _swaps++;
-    model.swapRatePair();
-    final (paidIn, own, first) = (model.paidIn, model.group.currencyCode, model.rateBaseCode);
+    model.rateField.swap();
+    final (paidIn, own, first) = (model.paidIn, model.group.currencyCode, model.rateField.baseCode);
     if (paidIn == null || own == null || first == null) return;
     unawaited(settings.setRateBase(paidIn, own, first).catchError((Object e, StackTrace st) {
       ErrorReporter.instance.report(e, st, operation: 'Saving the exchange rate order');
@@ -123,9 +124,9 @@ class RateLookup extends ChangeNotifier {
       ErrorReporter.instance.report(e, st, operation: 'Reading the exchange rate order');
     }
     if (_disposed || model.paidIn != paidIn) return;
-    model.ranking = ranking;
+    model.rateField.ranking = ranking;
     // A swap made while this was being read is newer (#270 review).
-    if (_swaps == swaps) model.rateBase = base;
+    if (_swaps == swaps) model.rateField.base = base;
   }
 
   @override
