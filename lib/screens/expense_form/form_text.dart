@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/context_l10n.dart';
 import '../../theme.dart';
+import '../../utils/money.dart';
+import '../../widgets/grouped_section.dart';
+import '../../widgets/money.dart';
 
 /// The form's rows (Kenneth, 2026-10-10): what was entered is the main
 /// content, in the primary text color; the label naming it is secondary.
@@ -14,6 +17,39 @@ Text formLabel(BuildContext context, String label) =>
 
 /// A row's value at its end, at the rows' text size.
 TextStyle? formValueStyle(BuildContext context) => Theme.of(context).textTheme.bodyLarge;
+
+/// A label, and the field it names at the row's end.
+Widget formFieldRow(BuildContext context, Widget label, Widget field) => ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: GroupedRow.oneLineMinHeight),
+      child: Padding(
+        padding: const EdgeInsetsDirectional.only(start: 16, end: 16),
+        child: Row(children: [
+          DefaultTextStyle.merge(style: Theme.of(context).textTheme.bodyLarge, child: label),
+          const SizedBox(width: 16),
+          Expanded(child: field),
+        ]),
+      ),
+    );
+
+/// A small text button beside a label or under a note: Select all/none
+/// and "Use the published rate" (Kenneth, 2026-10-10). A button's own
+/// padding and 48pt pushed it in and the next card down.
+ButtonStyle compactTextButtonStyle() => TextButton.styleFrom(
+      minimumSize: Size.zero,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+
+/// An amount the form works out rather than takes, in the group's or the
+/// paid-in currency; "—" until it's known.
+Widget workedOutRow(BuildContext context, String label, int? amount, String symbol, int digits, {Key? key}) =>
+    GroupedRow(
+      key: key,
+      title: formLabel(context, label),
+      trailing: amount == null
+          ? Text('—', semanticsLabel: context.l10n.expenseAmountNotYetKnown, style: formValueStyle(context))
+          : Money(formatMoney(amount, symbol, decimalDigits: digits, locale: context.appLocale)),
+    );
 
 /// A number field's name for a screen reader, where the row shows it
 /// some other way or not at all (#288): "Amount", "Cid, Shares".

@@ -23,6 +23,7 @@ import '../sync/outbox.dart';
 import '../utils/date_format.dart';
 import '../widgets/currency_picker.dart';
 import '../widgets/category_icon.dart';
+import '../widgets/category_picker.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/error_message.dart';
 import '../services/error_reporting.dart';
@@ -30,7 +31,6 @@ import '../services/receipt_cache.dart';
 import '../services/receipt_fill.dart';
 import '../services/receipt_photo.dart';
 import '../services/receipt_scanner.dart';
-import '../services/receipt_text.dart';
 import '../services/settings_service.dart';
 import '../widgets/receipt_attachments.dart';
 import '../widgets/receipt_language.dart';
@@ -42,8 +42,10 @@ import '../widgets/grouped_section.dart';
 import '../widgets/top_bar_buttons.dart';
 import 'expense_form/currency_card.dart';
 import 'expense_form/receipt_scan_card.dart';
+import 'expense_form/rate_lookup.dart';
+import 'expense_form/receipt_scan_controller.dart';
 import 'expense_form/split_card.dart';
-import '../widgets/expense_list.dart' show participantColors;
+import '../widgets/participant_colors.dart';
 import '../widgets/group_monogram.dart';
 import '../widgets/participant_sheet.dart';
 
@@ -169,13 +171,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   final _paidForFooterKey = GlobalKey();
   final _calculatedKey = GlobalKey();
 
-  /// What's typed and picked, and what it works out to (#258).
-  late final _m = ExpenseFormModel(
-    group: widget.group,
-    existing: widget.existingExpense,
-    draft: widget.initialDraft,
-    activeUserId: widget.activeUserId,
-  );
+  /// What's typed and picked, and what it works out to (#258). Made once
+  /// the locale is known, so an edit's numbers are written in its decimal
+  /// separator from the start (#289).
+  late final ExpenseFormModel _m;
+  bool _started = false;
   bool _saving = false;
 
   /// The receipts in this form (#123).
@@ -196,36 +196,17 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// before they've done anything.
   bool _hasAttemptedSave = false;
 
-  _Scan _scan = _Scan.idle;
-  String? _scanDiagnostics;
+  /// Scan receipt's state (#125, #153); the screen picks the photo.
+  late final _scan = ReceiptScanController(
+    scanner: widget.receiptScanner,
+    settings: _settings,
+    groupId: widget.group.id,
+    model: _m,
+    onDateFilled: () => unawaited(_rates.lookUp()),
+  );
 
-  /// What the last scan left beside the fields it didn't fill.
-  ReceiptFill? _scanFill;
-
-  /// The receipt language (#153): the one picked in this group last, or
-  /// else the phone's language when its model is there, or else Latin.
-  ReceiptScript _receiptScript = ReceiptScript.latin;
-
-  /// The languages whose models are on the phone, as Play services last
-  /// said.
-  Set<ReceiptScript> _receiptScripts = {ReceiptScript.latin};
-
-  /// The photo the last scan read, so picking another language reads it
-  /// again rather than asking for a new one (#153).
-  PreparedReceipt? _scannedPhoto;
-
-  /// What that reading put in the form, which reading it again in another
-  /// language replaces, where the user hasn't changed it.
-  _ScanFilled? _scanFilled;
-
-  /// The language the last scan found missing, for its message.
-  ReceiptScript? _missingScript;
-
-  _RateState _rateState = _RateState.idle;
-  ExchangeRate? _foundRate;
-
-  /// Which lookup is current: an answer to an older one is ignored.
-  int _rateLookups = 0;
+  /// The published rate and the pair's order (#252, #261).
+  late final _rates = RateLookup(rates: ExchangeRates.of(widget.db), settings: _settings, model: _m);
 
   // The server's list as last read, or Spliit's seeded one until this
   // device has read it: offline, the picker still has every category
@@ -253,18 +234,22 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         orElse: () => Category(id: _m.category, name: 'Category ${_m.category}', grouping: 'Other'),
       );
 
-  @override
-  void initState() {
-    super.initState();
+  /// The form's first frame: [_m] is made, and what it needs fetched.
+  void _start(String decimalSeparator) {
+    _m = ExpenseFormModel(
+      group: widget.group,
+      existing: widget.existingExpense,
+      draft: widget.initialDraft,
+      activeUserId: widget.activeUserId,
+      decimalSeparator: decimalSeparator,
+    );
     // Every change to the form shows: the amounts, previews and footer
     // are worked out from it.
     _m.addListener(_changed);
     // A conversion opened without a rate gets one (#252); a saved rate is
     // the record and stays, with the published one quoted under it (#261).
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_m.converting) return;
-      unawaited(_loadRateOrder());
-      unawaited(_lookUpRate());
+      if (mounted && _m.converting) _rates.pairChanged();
     });
     // The model pre-fills an edit or a draft the same way: a draft only
     // differs in _save() (new id, normal add path), not in what's shown.
@@ -278,33 +263,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _loadDefaultSplit();
     }
     _loadCategories();
-    if (_offersScan) _loadReceiptLanguage();
+    _scan.addListener(_changed);
+    _rates.addListener(_changed);
+    if (_offersScan) {
+      unawaited(_scan.loadLanguage(WidgetsBinding.instance.platformDispatcher.locale.languageCode));
+    }
   }
 
   SettingsService get _settings => widget.settings ?? SettingsService();
-
-  /// Best effort: without an answer from Play services, the picker offers
-  /// Latin and asks again when it opens.
-  Future<void> _loadReceiptLanguage() async {
-    final phone = ReceiptScript.forLanguage(WidgetsBinding.instance.platformDispatcher.locale.languageCode);
-    var installed = _receiptScripts;
-    ReceiptScript? picked;
-    try {
-      installed = await widget.receiptScanner.installedScripts();
-    } catch (e, st) {
-      if (!isMissingPlugin(e)) ErrorReporter.instance.report(e, st, operation: 'Listing receipt languages');
-    }
-    try {
-      picked = ReceiptScript.values.asNameMap()[await _settings.receiptScript(widget.group.id)];
-    } catch (e, st) {
-      if (!isMissingPlugin(e)) ErrorReporter.instance.report(e, st, operation: 'Loading the receipt language');
-    }
-    if (!mounted) return;
-    setState(() {
-      _receiptScripts = installed;
-      _receiptScript = [picked, phone].nonNulls.where(installed.contains).firstOrNull ?? ReceiptScript.latin;
-    });
-  }
 
   /// The receipt language picker (#153). Picking another language after a
   /// scan reads that scan's photo again.
@@ -313,44 +279,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     final picked = await showReceiptLanguagePicker(
       context,
       scanner: widget.receiptScanner,
-      selected: _receiptScript,
-      installed: _receiptScripts,
+      selected: _scan.script,
+      installed: _scan.installed,
       onInstalledChanged: (installed) {
-        if (!mounted) return;
-        setState(() {
-          _receiptScripts = installed;
-          if (!installed.contains(_receiptScript)) _receiptScript = ReceiptScript.latin;
-        });
+        if (mounted) _scan.installedChanged(installed);
       },
     );
     if (picked == null || !mounted) return;
-    final changed = picked != _receiptScript;
-    setState(() => _receiptScript = picked);
-    try {
-      await _settings.setReceiptScript(widget.group.id, picked.name);
-    } catch (e, st) {
-      // Only the remembering failed; this form still uses it.
-      if (!isMissingPlugin(e)) ErrorReporter.instance.report(e, st, operation: 'Saving the receipt language');
-    }
-    if (changed && _scannedPhoto != null && _scan != _Scan.reading && mounted) {
-      await _readReceipt(_scannedPhoto!, again: true);
-    }
-  }
-
-  /// Takes back what the last reading filled in, where the user hasn't
-  /// changed it since, before the same photo is read in another language.
-  void _undoScanFill() {
-    final filled = _scanFilled;
-    if (filled == null) return;
-    if (filled.title != null && _m.titleController.text == filled.title) _m.titleController.text = '';
-    if (filled.amountField case final field? when field.text == filled.amount) field.text = '';
-    if (filled.date case (final date, final before)? when _m.date == date) {
-      _m.setDate(before, chosen: false);
-    }
-    if (filled.category case (final id, final before)? when _m.category == id) {
-      _m.setCategory(before, chosen: false);
-    }
-    _scanFilled = null;
+    await _scan.pickLanguage(picked);
   }
 
   /// What's on this device, then the server's list if it's read now.
@@ -359,7 +295,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     final store = CategoryStore.of(widget.db);
     Future<void> show() async {
       final cats = await store.current(widget.client);
-      if (mounted) setState(() => _categories = cats);
+      if (mounted) setState(() => _categories = _scan.categories = cats);
     }
 
     await show();
@@ -385,6 +321,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   @override
   void dispose() {
     _m.removeListener(_changed);
+    _scan.removeListener(_changed);
+    _rates.removeListener(_changed);
+    _rates.dispose();
+    _scan.dispose();
     _m.dispose();
     _receipts.dispose();
     _scroll.dispose();
@@ -451,115 +391,17 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         }
       }
       if (photo == null || !mounted) return;
-      await _receipts.add(photo, onPrepared: _readReceipt);
+      await _receipts.add(photo, onPrepared: _scan.read);
     } catch (e, st) {
       _photoFailed(e, st);
-    }
-  }
-
-  /// Reads [photo] in the picked language and fills the form. [again]:
-  /// the same photo in another language, which replaces what the last
-  /// reading filled in.
-  Future<void> _readReceipt(PreparedReceipt photo, {bool again = false}) async {
-    final script = _receiptScript;
-    setState(() {
-      if (again) _undoScanFill();
-      _scannedPhoto = photo;
-      _scanFilled = null;
-      _scan = _Scan.reading;
-      _scanFill = null;
-      _scanDiagnostics = null;
-    });
-    try {
-      final blocks = await widget.receiptScanner.recognizeText(photo.bytes, script: script);
-      final scan = readReceipt(receiptRows(blocks), categories: _categories, today: DateTime.now());
-      if (!mounted) return;
-      // The form as it is now, not as it was when the scan started: the
-      // user may have typed meanwhile. During a conversion the total is
-      // what was paid, in the currency it was paid in (#252).
-      final paidIn = _m.converting && !_m.isSettlement;
-      final amountField = paidIn ? _m.originalAmountController : _m.amountController;
-      final fill = receiptFill(
-        scan,
-        ReceiptFormState(
-          titleEmpty: _m.titleController.text.trim().isEmpty,
-          amountEmpty: amountField.text.trim().isEmpty,
-          dateChosen: _m.dateChosen,
-          categoryChosen: _m.categoryChosen,
-          currencyCode: paidIn ? _m.paidIn : widget.group.currencyCode,
-          currencySymbol: paidIn ? _m.paidInSymbol : widget.group.currency,
-        ),
-      );
-      final dateBefore = _m.date;
-      setState(() {
-        final filled = _ScanFilled();
-        if (fill.title case final title?) _m.titleController.text = filled.title = title;
-        if (fill.amountCents case final cents?) {
-          // A receipt total is read in hundredths whatever the currency.
-          amountField.text = filled.amount = (cents / 100).toStringAsFixed(paidIn ? _m.originalDigits : _m.digits);
-          filled.amountField = amountField;
-        }
-        if (fill.date case final date?) {
-          filled.date = (date, _m.date);
-          _m.setDate(date);
-        }
-        if (fill.categoryId case final id?) {
-          filled.category = (id, _m.category);
-          _m.setCategory(id);
-        }
-        _scanFilled = filled;
-        _scanFill = fill;
-        _scan = scan.isEmpty
-            ? _Scan.nothing
-            : fill.filledAny
-                ? _Scan.filled
-                : _Scan.hintsOnly;
-      });
-      // The receipt's day has its own rate (#252).
-      if (_m.date != dateBefore) unawaited(_lookUpRate());
-    } on ReceiptTextModelMissing catch (e) {
-      // Removed, or Play services' data was cleared, since the form
-      // opened: the picker offers it for download again.
-      if (!mounted) return;
-      setState(() {
-        _scan = _Scan.modelMissing;
-        _missingScript = e.script;
-        _receiptScripts = {..._receiptScripts}..remove(e.script);
-      });
-    } catch (e, st) {
-      final error = ErrorReporter.instance.report(e, st, operation: 'Reading a receipt');
-      if (mounted) {
-        setState(() {
-          _scan = _Scan.failed;
-          _scanDiagnostics = error.diagnostics;
-        });
-      }
     }
   }
 
   /// "Receipt: …" under a field, for what the scan didn't fill in.
   String? _scanHint(String? value) => value == null ? null : context.l10n.expenseScanHint(value);
 
-  Widget _scanSection(BuildContext context) {
-    final l10n = context.l10n;
-    return ReceiptScanCard(
-      status: switch (_scan) {
-        _Scan.idle => l10n.expenseScanIntro,
-        _Scan.reading => l10n.expenseScanReading,
-        _Scan.filled => l10n.expenseScanFilled,
-        _Scan.hintsOnly => '${l10n.expenseScanHintsOnly} ${l10n.expenseScanTryLanguage}',
-        _Scan.nothing => '${l10n.expenseScanNothing} ${l10n.expenseScanTryLanguage}',
-        _Scan.failed => l10n.expenseScanFailed,
-        _Scan.modelMissing => l10n.expenseScanModelMissing(receiptScriptName(context, _missingScript!)),
-      },
-      reading: _scan == _Scan.reading,
-      failed: _scan == _Scan.failed,
-      diagnostics: _scanDiagnostics,
-      language: receiptScriptShortName(_receiptScript),
-      onScan: _scanReceipt,
-      onPickLanguage: _pickReceiptLanguage,
-    );
-  }
+  Widget _scanSection(BuildContext context) =>
+      ReceiptScanCard(scan: _scan, onScan: _scanReceipt, onPickLanguage: _pickReceiptLanguage);
 
   /// Whether closing loses anything (#259): a change to the form, or to
   /// its receipts.
@@ -583,112 +425,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _m.decimalSeparator =
-        NumberFormat.decimalPattern(Localizations.localeOf(context).toString()).symbols.DECIMAL_SEP;
-  }
-
-  /// Asks for the rate of the paid-in currency on the expense's day. It's
-  /// filled in only into an empty or auto-filled field, or always for
-  /// [force] ("Use the published rate"); otherwise the footer quotes it.
-  Future<void> _lookUpRate({bool force = false}) async {
-    final lookup = ++_rateLookups;
-    final edits = _m.rateEdits;
-    final from = _m.paidIn, to = widget.group.currencyCode;
-    if (!_m.converting || from == null || to == null) {
-      setState(() => _rateState = _RateState.idle);
-      return;
+    final separator = NumberFormat.decimalPattern(Localizations.localeOf(context).toString()).symbols.DECIMAL_SEP;
+    if (_started) {
+      _m.decimalSeparator = separator;
+    } else {
+      _started = true;
+      _start(separator);
     }
-    // Looked up even for a rate of the user's: the footer quotes the
-    // published one (#261), which fillRate puts only where it may.
-    setState(() => _rateState = _RateState.loading);
-    _RateState state;
-    ExchangeRate? found;
-    try {
-      found = await ExchangeRates.of(widget.db).rate(_m.date, from, to, force: force);
-      state = _RateState.found;
-    } on NoPublishedRate {
-      state = _RateState.noRate;
-    } on RatesUnavailable {
-      state = _RateState.unavailable;
-    } catch (e, st) {
-      ErrorReporter.instance.report(e, st, operation: 'Looking up the $from to $to rate');
-      state = _RateState.unavailable;
-    }
-    // An answer to a question the form isn't asking any more.
-    if (!mounted || lookup != _rateLookups) return;
-    setState(() {
-      _rateState = state;
-      _foundRate = found;
-    });
-    if (found != null) _m.fillRate(found.rate, force: force, editsAtRequest: edits);
   }
-
-  /// Where the rate in the field comes from, under it.
-  String _rateStatus(BuildContext context) {
-    final l10n = context.l10n;
-    final own = _m.rateIsSaved ? l10n.expenseRateSaved : l10n.expenseRateTyped;
-    final found = _foundRate;
-    final status = switch (_rateState) {
-      _RateState.found when found != null => () {
-          final day = formatDate(found.publishedOn, locale: context.appLocale);
-          final published = found.offline
-              ? l10n.expenseRatePublishedOffline(_m.ratePair, _m.shownRateText(found.rate), day)
-              : l10n.expenseRatePublished(_m.ratePair, _m.shownRateText(found.rate), day);
-          // The footer is for reference (#261): it says when the field is
-          // another rate, first (Kenneth, 2026-10-10).
-          return _m.rateIsOwn && !_m.showsRate(found.rate) ? '$own $published' : published;
-        }(),
-      _ when _m.rateIsOwn => own,
-      _RateState.noRate => l10n.expenseRateNone,
-      _RateState.unavailable => l10n.expenseRateUnavailable,
-      _ => l10n.expenseRateLoading,
-    };
-    return status;
-  }
-
-  /// "Use the published rate": when the field isn't it, or to try again.
-  bool get _canRefreshRate => switch (_rateState) {
-        _RateState.loading || _RateState.idle => false,
-        _RateState.found => switch (_foundRate) {
-            final found? => found.offline || !_m.showsRate(found.rate),
-            null => false,
-          },
-        _RateState.noRate || _RateState.unavailable => true,
-      };
-
-  /// A tap on the pair (#261): the other currency first, remembered on
-  /// this device for the pair.
-  void _swapRate() {
-    _rateSwaps++;
-    _m.swapRatePair();
-    final (paidIn, own, first) = (_m.paidIn, widget.group.currencyCode, _m.rateBaseCode);
-    if (paidIn == null || own == null || first == null) return;
-    unawaited(_settings.setRateBase(paidIn, own, first).catchError((Object e, StackTrace st) {
-      ErrorReporter.instance.report(e, st, operation: 'Saving the exchange rate order');
-    }));
-  }
-
-  /// Which currency of the pair the rate is written with first (#261):
-  /// the one this device swapped to, otherwise the more valuable by the
-  /// newest saved rates.
-  Future<void> _loadRateOrder() async {
-    final (paidIn, own, swaps) = (_m.paidIn, widget.group.currencyCode, _rateSwaps);
-    if (!_m.converting || paidIn == null || own == null) return;
-    final ranking = await ExchangeRates.of(widget.db).ranking();
-    String? base;
-    try {
-      base = await _settings.rateBase(paidIn, own);
-    } catch (e, st) {
-      ErrorReporter.instance.report(e, st, operation: 'Reading the exchange rate order');
-    }
-    if (!mounted || _m.paidIn != paidIn) return;
-    _m.ranking = ranking;
-    // A swap made while this was being read is newer (#270 review).
-    if (_rateSwaps == swaps) _m.rateBase = base;
-  }
-
-  /// Taps on the pair, so a saved order read since doesn't undo one.
-  int _rateSwaps = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -939,7 +683,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     _cell(TextFormField(
                       controller: _m.titleController,
                       decoration: InputDecoration(
-                          labelText: l10n.expenseTitleLabel, helperText: _scanHint(_scanFill?.titleHint)),
+                          labelText: l10n.expenseTitleLabel, helperText: _scanHint(_scan.fill?.titleHint)),
                       validator: (v) => (v == null || v.isEmpty) ? l10n.commonRequired : null,
                     )),
                     // A settlement has no category (#259): see
@@ -947,7 +691,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     if (!_m.isSettlement)
                       GroupedRow(
                         title: formLabel(context, l10n.expenseCategoryLabel),
-                        subtitle: switch (_scanHint(switch (_scanFill?.categoryHint) {
+                        subtitle: switch (_scanHint(switch (_scan.fill?.categoryHint) {
                           final id? => localizedCategoryLabel(
                               context, id, _categories.where((c) => c.id == id).firstOrNull),
                           null => null,
@@ -967,7 +711,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       ),
                     GroupedRow(
                       title: formLabel(context, l10n.expenseDateLabel),
-                      subtitle: switch (_scanHint(_scanFill?.dateHint)) {
+                      subtitle: switch (_scanHint(_scan.fill?.dateHint)) {
                         final hint? => Text(hint),
                         null => null,
                       },
@@ -978,11 +722,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   ]),
                   CurrencyCard(
                     model: _m,
+                    rates: _rates,
                     onPickPaidIn: _pickPaidIn,
-                    onSwapRate: _swapRate,
-                    rateStatus: _m.converting ? _rateStatus(context) : null,
-                    onUsePublishedRate: _canRefreshRate ? () => _lookUpRate(force: true) : null,
-                    amountHint: _scanHint(_scanFill?.amountHint),
+                    amountHint: _scanHint(_scan.fill?.amountHint),
                     calculatedKey: _calculatedKey,
                     showErrors: _hasAttemptedSave,
                   ),
@@ -1026,7 +768,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     if (picked != null) {
       _m.setDate(picked);
       // The new day's rate, into a field that isn't the user's.
-      unawaited(_lookUpRate());
+      unawaited(_rates.lookUp());
     }
   }
 
@@ -1036,11 +778,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// one long flat dropdown of 40+ categories.
   Future<void> _pickCategory() async {
     _dropFocus();
-    final picked = await showModalBottomSheet<Category>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _CategoryPicker(categories: _categories, selectedId: _m.category),
-    );
+    final picked = await showCategoryPicker(context, categories: _categories, selectedId: _m.category);
     if (picked != null) {
       _m.setCategory(picked.id);
     }
@@ -1057,9 +795,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       selectedCode: _m.paidIn ?? '',
     );
     if (picked == null || !_m.choosePaidIn(picked.code)) return;
-    setState(() => _foundRate = null);
-    unawaited(_loadRateOrder());
-    unawaited(_lookUpRate());
+    _rates.pairChanged();
   }
 
   Future<void> _save() async {
@@ -1279,127 +1015,5 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     await _rememberDefaultSplitIfRequested(paidFor);
     unawaited(Haptics.saved());
     if (mounted) Navigator.of(context).pop(true);
-  }
-}
-
-/// Where Scan receipt is (#125). [modelMissing]: the picked language's
-/// model isn't on the phone any more (#153).
-enum _Scan { idle, reading, filled, hintsOnly, nothing, failed, modelMissing }
-
-/// Where the rate lookup stands (#252).
-enum _RateState { idle, loading, found, noRate, unavailable }
-
-/// What a reading put in the form (#153), and for the date and category
-/// what they were before, so reading the photo again can take it back.
-class _ScanFilled {
-  String? title;
-  String? amount;
-
-  /// The field [amount] went in: the amount, or "Amount paid" (#252).
-  TextEditingController? amountField;
-  (DateTime, DateTime)? date;
-  (int, int)? category;
-}
-
-/// The category picker's contents (issue #19): a search field followed by
-/// a scrollable, grouped list. Filtering narrows to categories whose name
-/// contains the query (case-insensitive); a group with no matches under
-/// the current query is hidden entirely rather than shown with an empty
-/// section.
-class _CategoryPicker extends StatefulWidget {
-  final List<Category> categories;
-  final int selectedId;
-
-  const _CategoryPicker({required this.categories, required this.selectedId});
-
-  @override
-  State<_CategoryPicker> createState() => _CategoryPickerState();
-}
-
-class _CategoryPickerState extends State<_CategoryPicker> {
-  final _searchController = TextEditingController();
-  String _query = '';
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  /// Groups [categories] by [Category.grouping], preserving the order
-  /// groupings first appear in -- the server's own list is already laid
-  /// out with each grouping's categories adjacent, so this doesn't need
-  /// to re-sort, just fold consecutive runs into sections.
-  List<MapEntry<String, List<Category>>> _grouped(List<Category> categories) {
-    final groups = <String, List<Category>>{};
-    for (final c in categories) {
-      (groups[c.grouping] ??= []).add(c);
-    }
-    return groups.entries.toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final query = _query.trim().toLowerCase();
-    final filtered = query.isEmpty
-        ? widget.categories
-        : widget.categories
-            .where((c) => categoryMatchesQuery(context.appLocale, c, query))
-            .toList();
-    final sections = _grouped(filtered);
-
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: SizedBox(
-          height: searchSheetHeight(context),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: TextField(
-                  controller: _searchController,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    labelText: context.l10n.expenseCategorySearchLabel,
-                    prefixIcon: const Icon(Icons.search),
-                  ),
-                  onChanged: (v) => setState(() => _query = v),
-                ),
-              ),
-              Expanded(
-                child: sections.isEmpty
-                    ? Center(child: Text(context.l10n.expenseNoMatchingCategories))
-                    : ListView(
-                        children: [
-                          for (final section in sections) ...[
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                              child: Text(
-                                localizedCategoryGrouping(context, section.key),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelLarge
-                                    ?.copyWith(color: Theme.of(context).colorScheme.primary),
-                              ),
-                            ),
-                            for (final c in section.value)
-                              ListTile(
-                                leading: CategoryIconGlyph(category: c, size: 28),
-                                title: Text(localizedCategoryName(context, c)),
-                                trailing: c.id == widget.selectedId
-                                    ? const Icon(Icons.check)
-                                    : null,
-                                onTap: () => Navigator.of(context).pop(c),
-                              ),
-                          ],
-                        ],
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
