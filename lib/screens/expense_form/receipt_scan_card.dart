@@ -3,41 +3,43 @@ import 'package:flutter/material.dart';
 import '../../l10n/context_l10n.dart';
 import '../../widgets/error_message.dart';
 import '../../widgets/grouped_section.dart';
+import '../../widgets/receipt_language.dart';
+import 'receipt_scan_controller.dart';
 
 /// "Scan receipt" on a new expense (#259): one row with the receipt
-/// language at its end, and what the scan did in the footer.
+/// language at its end, and what [scan] did in the footer.
 class ReceiptScanCard extends StatelessWidget {
   const ReceiptScanCard({
     super.key,
-    required this.status,
-    required this.reading,
-    required this.language,
+    required this.scan,
     required this.onScan,
     required this.onPickLanguage,
-    this.failed = false,
-    this.diagnostics,
   });
 
-  /// What the scan did, or what it will do before the first.
-  final String status;
-
-  /// A photo is being read: the row shows a spinner and takes no taps.
-  final bool reading;
-
-  /// The receipt language's short name, such as "EN".
-  final String language;
-
+  final ReceiptScanController scan;
   final VoidCallback onScan;
   final VoidCallback onPickLanguage;
 
-  /// The scan failed: [status] is an error, with its [diagnostics].
-  final bool failed;
-  final String? diagnostics;
+  /// What the scan did, or what it will do before the first.
+  String _status(BuildContext context) {
+    final l10n = context.l10n;
+    return switch (scan.status) {
+      ReceiptScanStatus.idle => l10n.expenseScanIntro,
+      ReceiptScanStatus.reading => l10n.expenseScanReading,
+      ReceiptScanStatus.filled => l10n.expenseScanFilled,
+      ReceiptScanStatus.hintsOnly => '${l10n.expenseScanHintsOnly} ${l10n.expenseScanTryLanguage}',
+      ReceiptScanStatus.nothing => '${l10n.expenseScanNothing} ${l10n.expenseScanTryLanguage}',
+      ReceiptScanStatus.failed => l10n.expenseScanFailed,
+      ReceiptScanStatus.modelMissing => l10n.expenseScanModelMissing(receiptScriptName(context, scan.missingScript!)),
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final theme = Theme.of(context);
+    final reading = scan.reading;
+    final status = _status(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(GroupedSection.inset, 0, GroupedSection.inset, GroupedSection.spacing),
       child: Column(
@@ -58,7 +60,7 @@ class ReceiptScanCard extends StatelessWidget {
                   child: TextButton.icon(
                     onPressed: reading ? null : onPickLanguage,
                     icon: const Icon(Icons.translate),
-                    label: Text(language),
+                    label: Text(receiptScriptShortName(scan.script)),
                   ),
                 ),
                 enabled: !reading,
@@ -69,8 +71,8 @@ class ReceiptScanCard extends StatelessWidget {
           // The section's footer, which can be an error with its details.
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-            child: failed
-                ? ErrorMessage(status, diagnostics: diagnostics)
+            child: scan.status == ReceiptScanStatus.failed
+                ? ErrorMessage(status, diagnostics: scan.diagnostics)
                 : Text(status,
                     style: GroupedSection.footnoteStyle(context)),
           ),

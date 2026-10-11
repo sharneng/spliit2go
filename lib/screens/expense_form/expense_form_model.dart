@@ -314,6 +314,15 @@ class ExpenseFormModel extends ChangeNotifier {
   /// [text] with the locale's decimal separator.
   String _localized(String text) => text.replaceFirst('.', _decimalSeparator);
 
+  /// [value] as a field shows it (#289): [decimalDigits] places, in the
+  /// locale's decimal separator. Every number the form writes into a
+  /// field goes through this or [minorText], so it reads back as written.
+  String amountText(double value, int decimalDigits) => _localized(value.toStringAsFixed(decimalDigits));
+
+  /// [minor] smallest units of a currency with [decimalDigits] places, as
+  /// a field shows it.
+  String minorText(int minor, int decimalDigits) => _localized(minorUnitsText(minor, decimalDigits));
+
   /// The category saved (#259): a settlement made here is a Payment,
   /// whatever was picked before it was switched to one. An edit keeps its
   /// category, hidden for a settlement, so switching there and back costs

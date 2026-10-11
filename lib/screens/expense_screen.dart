@@ -23,6 +23,7 @@ import '../sync/outbox.dart';
 import '../utils/date_format.dart';
 import '../widgets/currency_picker.dart';
 import '../widgets/category_icon.dart';
+import '../widgets/category_picker.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/error_message.dart';
 import '../services/error_reporting.dart';
@@ -30,7 +31,6 @@ import '../services/receipt_cache.dart';
 import '../services/receipt_fill.dart';
 import '../services/receipt_photo.dart';
 import '../services/receipt_scanner.dart';
-import '../services/receipt_text.dart';
 import '../services/settings_service.dart';
 import '../widgets/receipt_attachments.dart';
 import '../widgets/receipt_language.dart';
@@ -42,6 +42,7 @@ import '../widgets/grouped_section.dart';
 import '../widgets/top_bar_buttons.dart';
 import 'expense_form/currency_card.dart';
 import 'expense_form/receipt_scan_card.dart';
+import 'expense_form/receipt_scan_controller.dart';
 import 'expense_form/split_card.dart';
 import '../widgets/expense_list.dart' show participantColors;
 import '../widgets/group_monogram.dart';
@@ -196,30 +197,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// before they've done anything.
   bool _hasAttemptedSave = false;
 
-  _Scan _scan = _Scan.idle;
-  String? _scanDiagnostics;
-
-  /// What the last scan left beside the fields it didn't fill.
-  ReceiptFill? _scanFill;
-
-  /// The receipt language (#153): the one picked in this group last, or
-  /// else the phone's language when its model is there, or else Latin.
-  ReceiptScript _receiptScript = ReceiptScript.latin;
-
-  /// The languages whose models are on the phone, as Play services last
-  /// said.
-  Set<ReceiptScript> _receiptScripts = {ReceiptScript.latin};
-
-  /// The photo the last scan read, so picking another language reads it
-  /// again rather than asking for a new one (#153).
-  PreparedReceipt? _scannedPhoto;
-
-  /// What that reading put in the form, which reading it again in another
-  /// language replaces, where the user hasn't changed it.
-  _ScanFilled? _scanFilled;
-
-  /// The language the last scan found missing, for its message.
-  ReceiptScript? _missingScript;
+  /// Scan receipt's state (#125, #153); the screen picks the photo.
+  late final _scan = ReceiptScanController(
+    scanner: widget.receiptScanner,
+    settings: _settings,
+    groupId: widget.group.id,
+    model: _m,
+    onDateFilled: () => unawaited(_lookUpRate()),
+  );
 
   _RateState _rateState = _RateState.idle;
   ExchangeRate? _foundRate;
@@ -278,33 +263,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _loadDefaultSplit();
     }
     _loadCategories();
-    if (_offersScan) _loadReceiptLanguage();
+    _scan.addListener(_changed);
+    if (_offersScan) {
+      unawaited(_scan.loadLanguage(WidgetsBinding.instance.platformDispatcher.locale.languageCode));
+    }
   }
 
   SettingsService get _settings => widget.settings ?? SettingsService();
-
-  /// Best effort: without an answer from Play services, the picker offers
-  /// Latin and asks again when it opens.
-  Future<void> _loadReceiptLanguage() async {
-    final phone = ReceiptScript.forLanguage(WidgetsBinding.instance.platformDispatcher.locale.languageCode);
-    var installed = _receiptScripts;
-    ReceiptScript? picked;
-    try {
-      installed = await widget.receiptScanner.installedScripts();
-    } catch (e, st) {
-      if (!isMissingPlugin(e)) ErrorReporter.instance.report(e, st, operation: 'Listing receipt languages');
-    }
-    try {
-      picked = ReceiptScript.values.asNameMap()[await _settings.receiptScript(widget.group.id)];
-    } catch (e, st) {
-      if (!isMissingPlugin(e)) ErrorReporter.instance.report(e, st, operation: 'Loading the receipt language');
-    }
-    if (!mounted) return;
-    setState(() {
-      _receiptScripts = installed;
-      _receiptScript = [picked, phone].nonNulls.where(installed.contains).firstOrNull ?? ReceiptScript.latin;
-    });
-  }
 
   /// The receipt language picker (#153). Picking another language after a
   /// scan reads that scan's photo again.
@@ -313,44 +278,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     final picked = await showReceiptLanguagePicker(
       context,
       scanner: widget.receiptScanner,
-      selected: _receiptScript,
-      installed: _receiptScripts,
+      selected: _scan.script,
+      installed: _scan.installed,
       onInstalledChanged: (installed) {
-        if (!mounted) return;
-        setState(() {
-          _receiptScripts = installed;
-          if (!installed.contains(_receiptScript)) _receiptScript = ReceiptScript.latin;
-        });
+        if (mounted) _scan.installedChanged(installed);
       },
     );
     if (picked == null || !mounted) return;
-    final changed = picked != _receiptScript;
-    setState(() => _receiptScript = picked);
-    try {
-      await _settings.setReceiptScript(widget.group.id, picked.name);
-    } catch (e, st) {
-      // Only the remembering failed; this form still uses it.
-      if (!isMissingPlugin(e)) ErrorReporter.instance.report(e, st, operation: 'Saving the receipt language');
-    }
-    if (changed && _scannedPhoto != null && _scan != _Scan.reading && mounted) {
-      await _readReceipt(_scannedPhoto!, again: true);
-    }
-  }
-
-  /// Takes back what the last reading filled in, where the user hasn't
-  /// changed it since, before the same photo is read in another language.
-  void _undoScanFill() {
-    final filled = _scanFilled;
-    if (filled == null) return;
-    if (filled.title != null && _m.titleController.text == filled.title) _m.titleController.text = '';
-    if (filled.amountField case final field? when field.text == filled.amount) field.text = '';
-    if (filled.date case (final date, final before)? when _m.date == date) {
-      _m.setDate(before, chosen: false);
-    }
-    if (filled.category case (final id, final before)? when _m.category == id) {
-      _m.setCategory(before, chosen: false);
-    }
-    _scanFilled = null;
+    await _scan.pickLanguage(picked);
   }
 
   /// What's on this device, then the server's list if it's read now.
@@ -359,7 +294,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     final store = CategoryStore.of(widget.db);
     Future<void> show() async {
       final cats = await store.current(widget.client);
-      if (mounted) setState(() => _categories = cats);
+      if (mounted) setState(() => _categories = _scan.categories = cats);
     }
 
     await show();
@@ -385,6 +320,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   @override
   void dispose() {
     _m.removeListener(_changed);
+    _scan.removeListener(_changed);
+    _scan.dispose();
     _m.dispose();
     _receipts.dispose();
     _scroll.dispose();
@@ -451,115 +388,17 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         }
       }
       if (photo == null || !mounted) return;
-      await _receipts.add(photo, onPrepared: _readReceipt);
+      await _receipts.add(photo, onPrepared: _scan.read);
     } catch (e, st) {
       _photoFailed(e, st);
-    }
-  }
-
-  /// Reads [photo] in the picked language and fills the form. [again]:
-  /// the same photo in another language, which replaces what the last
-  /// reading filled in.
-  Future<void> _readReceipt(PreparedReceipt photo, {bool again = false}) async {
-    final script = _receiptScript;
-    setState(() {
-      if (again) _undoScanFill();
-      _scannedPhoto = photo;
-      _scanFilled = null;
-      _scan = _Scan.reading;
-      _scanFill = null;
-      _scanDiagnostics = null;
-    });
-    try {
-      final blocks = await widget.receiptScanner.recognizeText(photo.bytes, script: script);
-      final scan = readReceipt(receiptRows(blocks), categories: _categories, today: DateTime.now());
-      if (!mounted) return;
-      // The form as it is now, not as it was when the scan started: the
-      // user may have typed meanwhile. During a conversion the total is
-      // what was paid, in the currency it was paid in (#252).
-      final paidIn = _m.converting && !_m.isSettlement;
-      final amountField = paidIn ? _m.originalAmountController : _m.amountController;
-      final fill = receiptFill(
-        scan,
-        ReceiptFormState(
-          titleEmpty: _m.titleController.text.trim().isEmpty,
-          amountEmpty: amountField.text.trim().isEmpty,
-          dateChosen: _m.dateChosen,
-          categoryChosen: _m.categoryChosen,
-          currencyCode: paidIn ? _m.paidIn : widget.group.currencyCode,
-          currencySymbol: paidIn ? _m.paidInSymbol : widget.group.currency,
-        ),
-      );
-      final dateBefore = _m.date;
-      setState(() {
-        final filled = _ScanFilled();
-        if (fill.title case final title?) _m.titleController.text = filled.title = title;
-        if (fill.amountCents case final cents?) {
-          // A receipt total is read in hundredths whatever the currency.
-          amountField.text = filled.amount = (cents / 100).toStringAsFixed(paidIn ? _m.originalDigits : _m.digits);
-          filled.amountField = amountField;
-        }
-        if (fill.date case final date?) {
-          filled.date = (date, _m.date);
-          _m.setDate(date);
-        }
-        if (fill.categoryId case final id?) {
-          filled.category = (id, _m.category);
-          _m.setCategory(id);
-        }
-        _scanFilled = filled;
-        _scanFill = fill;
-        _scan = scan.isEmpty
-            ? _Scan.nothing
-            : fill.filledAny
-                ? _Scan.filled
-                : _Scan.hintsOnly;
-      });
-      // The receipt's day has its own rate (#252).
-      if (_m.date != dateBefore) unawaited(_lookUpRate());
-    } on ReceiptTextModelMissing catch (e) {
-      // Removed, or Play services' data was cleared, since the form
-      // opened: the picker offers it for download again.
-      if (!mounted) return;
-      setState(() {
-        _scan = _Scan.modelMissing;
-        _missingScript = e.script;
-        _receiptScripts = {..._receiptScripts}..remove(e.script);
-      });
-    } catch (e, st) {
-      final error = ErrorReporter.instance.report(e, st, operation: 'Reading a receipt');
-      if (mounted) {
-        setState(() {
-          _scan = _Scan.failed;
-          _scanDiagnostics = error.diagnostics;
-        });
-      }
     }
   }
 
   /// "Receipt: …" under a field, for what the scan didn't fill in.
   String? _scanHint(String? value) => value == null ? null : context.l10n.expenseScanHint(value);
 
-  Widget _scanSection(BuildContext context) {
-    final l10n = context.l10n;
-    return ReceiptScanCard(
-      status: switch (_scan) {
-        _Scan.idle => l10n.expenseScanIntro,
-        _Scan.reading => l10n.expenseScanReading,
-        _Scan.filled => l10n.expenseScanFilled,
-        _Scan.hintsOnly => '${l10n.expenseScanHintsOnly} ${l10n.expenseScanTryLanguage}',
-        _Scan.nothing => '${l10n.expenseScanNothing} ${l10n.expenseScanTryLanguage}',
-        _Scan.failed => l10n.expenseScanFailed,
-        _Scan.modelMissing => l10n.expenseScanModelMissing(receiptScriptName(context, _missingScript!)),
-      },
-      reading: _scan == _Scan.reading,
-      failed: _scan == _Scan.failed,
-      diagnostics: _scanDiagnostics,
-      language: receiptScriptShortName(_receiptScript),
-      onScan: _scanReceipt,
-      onPickLanguage: _pickReceiptLanguage,
-    );
-  }
+  Widget _scanSection(BuildContext context) =>
+      ReceiptScanCard(scan: _scan, onScan: _scanReceipt, onPickLanguage: _pickReceiptLanguage);
 
   /// Whether closing loses anything (#259): a change to the form, or to
   /// its receipts.
@@ -939,7 +778,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     _cell(TextFormField(
                       controller: _m.titleController,
                       decoration: InputDecoration(
-                          labelText: l10n.expenseTitleLabel, helperText: _scanHint(_scanFill?.titleHint)),
+                          labelText: l10n.expenseTitleLabel, helperText: _scanHint(_scan.fill?.titleHint)),
                       validator: (v) => (v == null || v.isEmpty) ? l10n.commonRequired : null,
                     )),
                     // A settlement has no category (#259): see
@@ -947,7 +786,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     if (!_m.isSettlement)
                       GroupedRow(
                         title: formLabel(context, l10n.expenseCategoryLabel),
-                        subtitle: switch (_scanHint(switch (_scanFill?.categoryHint) {
+                        subtitle: switch (_scanHint(switch (_scan.fill?.categoryHint) {
                           final id? => localizedCategoryLabel(
                               context, id, _categories.where((c) => c.id == id).firstOrNull),
                           null => null,
@@ -967,7 +806,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       ),
                     GroupedRow(
                       title: formLabel(context, l10n.expenseDateLabel),
-                      subtitle: switch (_scanHint(_scanFill?.dateHint)) {
+                      subtitle: switch (_scanHint(_scan.fill?.dateHint)) {
                         final hint? => Text(hint),
                         null => null,
                       },
@@ -982,7 +821,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     onSwapRate: _swapRate,
                     rateStatus: _m.converting ? _rateStatus(context) : null,
                     onUsePublishedRate: _canRefreshRate ? () => _lookUpRate(force: true) : null,
-                    amountHint: _scanHint(_scanFill?.amountHint),
+                    amountHint: _scanHint(_scan.fill?.amountHint),
                     calculatedKey: _calculatedKey,
                     showErrors: _hasAttemptedSave,
                   ),
@@ -1036,11 +875,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// one long flat dropdown of 40+ categories.
   Future<void> _pickCategory() async {
     _dropFocus();
-    final picked = await showModalBottomSheet<Category>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _CategoryPicker(categories: _categories, selectedId: _m.category),
-    );
+    final picked = await showCategoryPicker(context, categories: _categories, selectedId: _m.category);
     if (picked != null) {
       _m.setCategory(picked.id);
     }
@@ -1282,124 +1117,5 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 }
 
-/// Where Scan receipt is (#125). [modelMissing]: the picked language's
-/// model isn't on the phone any more (#153).
-enum _Scan { idle, reading, filled, hintsOnly, nothing, failed, modelMissing }
-
 /// Where the rate lookup stands (#252).
 enum _RateState { idle, loading, found, noRate, unavailable }
-
-/// What a reading put in the form (#153), and for the date and category
-/// what they were before, so reading the photo again can take it back.
-class _ScanFilled {
-  String? title;
-  String? amount;
-
-  /// The field [amount] went in: the amount, or "Amount paid" (#252).
-  TextEditingController? amountField;
-  (DateTime, DateTime)? date;
-  (int, int)? category;
-}
-
-/// The category picker's contents (issue #19): a search field followed by
-/// a scrollable, grouped list. Filtering narrows to categories whose name
-/// contains the query (case-insensitive); a group with no matches under
-/// the current query is hidden entirely rather than shown with an empty
-/// section.
-class _CategoryPicker extends StatefulWidget {
-  final List<Category> categories;
-  final int selectedId;
-
-  const _CategoryPicker({required this.categories, required this.selectedId});
-
-  @override
-  State<_CategoryPicker> createState() => _CategoryPickerState();
-}
-
-class _CategoryPickerState extends State<_CategoryPicker> {
-  final _searchController = TextEditingController();
-  String _query = '';
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  /// Groups [categories] by [Category.grouping], preserving the order
-  /// groupings first appear in -- the server's own list is already laid
-  /// out with each grouping's categories adjacent, so this doesn't need
-  /// to re-sort, just fold consecutive runs into sections.
-  List<MapEntry<String, List<Category>>> _grouped(List<Category> categories) {
-    final groups = <String, List<Category>>{};
-    for (final c in categories) {
-      (groups[c.grouping] ??= []).add(c);
-    }
-    return groups.entries.toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final query = _query.trim().toLowerCase();
-    final filtered = query.isEmpty
-        ? widget.categories
-        : widget.categories
-            .where((c) => categoryMatchesQuery(context.appLocale, c, query))
-            .toList();
-    final sections = _grouped(filtered);
-
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: SizedBox(
-          height: searchSheetHeight(context),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: TextField(
-                  controller: _searchController,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    labelText: context.l10n.expenseCategorySearchLabel,
-                    prefixIcon: const Icon(Icons.search),
-                  ),
-                  onChanged: (v) => setState(() => _query = v),
-                ),
-              ),
-              Expanded(
-                child: sections.isEmpty
-                    ? Center(child: Text(context.l10n.expenseNoMatchingCategories))
-                    : ListView(
-                        children: [
-                          for (final section in sections) ...[
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                              child: Text(
-                                localizedCategoryGrouping(context, section.key),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelLarge
-                                    ?.copyWith(color: Theme.of(context).colorScheme.primary),
-                              ),
-                            ),
-                            for (final c in section.value)
-                              ListTile(
-                                leading: CategoryIconGlyph(category: c, size: 28),
-                                title: Text(localizedCategoryName(context, c)),
-                                trailing: c.id == widget.selectedId
-                                    ? const Icon(Icons.check)
-                                    : null,
-                                onTap: () => Navigator.of(context).pop(c),
-                              ),
-                          ],
-                        ],
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
