@@ -42,6 +42,7 @@ import '../widgets/grouped_section.dart';
 import '../widgets/top_bar_buttons.dart';
 import 'expense_form/currency_card.dart';
 import 'expense_form/receipt_scan_card.dart';
+import 'expense_form/rate_lookup.dart';
 import 'expense_form/receipt_scan_controller.dart';
 import 'expense_form/split_card.dart';
 import '../widgets/expense_list.dart' show participantColors;
@@ -203,14 +204,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     settings: _settings,
     groupId: widget.group.id,
     model: _m,
-    onDateFilled: () => unawaited(_lookUpRate()),
+    onDateFilled: () => unawaited(_rates.lookUp()),
   );
 
-  _RateState _rateState = _RateState.idle;
-  ExchangeRate? _foundRate;
-
-  /// Which lookup is current: an answer to an older one is ignored.
-  int _rateLookups = 0;
+  /// The published rate and the pair's order (#252, #261).
+  late final _rates = RateLookup(rates: ExchangeRates.of(widget.db), settings: _settings, model: _m);
 
   // The server's list as last read, or Spliit's seeded one until this
   // device has read it: offline, the picker still has every category
@@ -247,9 +245,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     // A conversion opened without a rate gets one (#252); a saved rate is
     // the record and stays, with the published one quoted under it (#261).
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_m.converting) return;
-      unawaited(_loadRateOrder());
-      unawaited(_lookUpRate());
+      if (mounted && _m.converting) _rates.pairChanged();
     });
     // The model pre-fills an edit or a draft the same way: a draft only
     // differs in _save() (new id, normal add path), not in what's shown.
@@ -264,6 +260,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
     _loadCategories();
     _scan.addListener(_changed);
+    _rates.addListener(_changed);
     if (_offersScan) {
       unawaited(_scan.loadLanguage(WidgetsBinding.instance.platformDispatcher.locale.languageCode));
     }
@@ -321,6 +318,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   void dispose() {
     _m.removeListener(_changed);
     _scan.removeListener(_changed);
+    _rates.removeListener(_changed);
+    _rates.dispose();
     _scan.dispose();
     _m.dispose();
     _receipts.dispose();
@@ -425,109 +424,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     _m.decimalSeparator =
         NumberFormat.decimalPattern(Localizations.localeOf(context).toString()).symbols.DECIMAL_SEP;
   }
-
-  /// Asks for the rate of the paid-in currency on the expense's day. It's
-  /// filled in only into an empty or auto-filled field, or always for
-  /// [force] ("Use the published rate"); otherwise the footer quotes it.
-  Future<void> _lookUpRate({bool force = false}) async {
-    final lookup = ++_rateLookups;
-    final edits = _m.rateEdits;
-    final from = _m.paidIn, to = widget.group.currencyCode;
-    if (!_m.converting || from == null || to == null) {
-      setState(() => _rateState = _RateState.idle);
-      return;
-    }
-    // Looked up even for a rate of the user's: the footer quotes the
-    // published one (#261), which fillRate puts only where it may.
-    setState(() => _rateState = _RateState.loading);
-    _RateState state;
-    ExchangeRate? found;
-    try {
-      found = await ExchangeRates.of(widget.db).rate(_m.date, from, to, force: force);
-      state = _RateState.found;
-    } on NoPublishedRate {
-      state = _RateState.noRate;
-    } on RatesUnavailable {
-      state = _RateState.unavailable;
-    } catch (e, st) {
-      ErrorReporter.instance.report(e, st, operation: 'Looking up the $from to $to rate');
-      state = _RateState.unavailable;
-    }
-    // An answer to a question the form isn't asking any more.
-    if (!mounted || lookup != _rateLookups) return;
-    setState(() {
-      _rateState = state;
-      _foundRate = found;
-    });
-    if (found != null) _m.fillRate(found.rate, force: force, editsAtRequest: edits);
-  }
-
-  /// Where the rate in the field comes from, under it.
-  String _rateStatus(BuildContext context) {
-    final l10n = context.l10n;
-    final own = _m.rateIsSaved ? l10n.expenseRateSaved : l10n.expenseRateTyped;
-    final found = _foundRate;
-    final status = switch (_rateState) {
-      _RateState.found when found != null => () {
-          final day = formatDate(found.publishedOn, locale: context.appLocale);
-          final published = found.offline
-              ? l10n.expenseRatePublishedOffline(_m.ratePair, _m.shownRateText(found.rate), day)
-              : l10n.expenseRatePublished(_m.ratePair, _m.shownRateText(found.rate), day);
-          // The footer is for reference (#261): it says when the field is
-          // another rate, first (Kenneth, 2026-10-10).
-          return _m.rateIsOwn && !_m.showsRate(found.rate) ? '$own $published' : published;
-        }(),
-      _ when _m.rateIsOwn => own,
-      _RateState.noRate => l10n.expenseRateNone,
-      _RateState.unavailable => l10n.expenseRateUnavailable,
-      _ => l10n.expenseRateLoading,
-    };
-    return status;
-  }
-
-  /// "Use the published rate": when the field isn't it, or to try again.
-  bool get _canRefreshRate => switch (_rateState) {
-        _RateState.loading || _RateState.idle => false,
-        _RateState.found => switch (_foundRate) {
-            final found? => found.offline || !_m.showsRate(found.rate),
-            null => false,
-          },
-        _RateState.noRate || _RateState.unavailable => true,
-      };
-
-  /// A tap on the pair (#261): the other currency first, remembered on
-  /// this device for the pair.
-  void _swapRate() {
-    _rateSwaps++;
-    _m.swapRatePair();
-    final (paidIn, own, first) = (_m.paidIn, widget.group.currencyCode, _m.rateBaseCode);
-    if (paidIn == null || own == null || first == null) return;
-    unawaited(_settings.setRateBase(paidIn, own, first).catchError((Object e, StackTrace st) {
-      ErrorReporter.instance.report(e, st, operation: 'Saving the exchange rate order');
-    }));
-  }
-
-  /// Which currency of the pair the rate is written with first (#261):
-  /// the one this device swapped to, otherwise the more valuable by the
-  /// newest saved rates.
-  Future<void> _loadRateOrder() async {
-    final (paidIn, own, swaps) = (_m.paidIn, widget.group.currencyCode, _rateSwaps);
-    if (!_m.converting || paidIn == null || own == null) return;
-    final ranking = await ExchangeRates.of(widget.db).ranking();
-    String? base;
-    try {
-      base = await _settings.rateBase(paidIn, own);
-    } catch (e, st) {
-      ErrorReporter.instance.report(e, st, operation: 'Reading the exchange rate order');
-    }
-    if (!mounted || _m.paidIn != paidIn) return;
-    _m.ranking = ranking;
-    // A swap made while this was being read is newer (#270 review).
-    if (_rateSwaps == swaps) _m.rateBase = base;
-  }
-
-  /// Taps on the pair, so a saved order read since doesn't undo one.
-  int _rateSwaps = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -817,10 +713,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   ]),
                   CurrencyCard(
                     model: _m,
+                    rates: _rates,
                     onPickPaidIn: _pickPaidIn,
-                    onSwapRate: _swapRate,
-                    rateStatus: _m.converting ? _rateStatus(context) : null,
-                    onUsePublishedRate: _canRefreshRate ? () => _lookUpRate(force: true) : null,
                     amountHint: _scanHint(_scan.fill?.amountHint),
                     calculatedKey: _calculatedKey,
                     showErrors: _hasAttemptedSave,
@@ -865,7 +759,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     if (picked != null) {
       _m.setDate(picked);
       // The new day's rate, into a field that isn't the user's.
-      unawaited(_lookUpRate());
+      unawaited(_rates.lookUp());
     }
   }
 
@@ -892,9 +786,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       selectedCode: _m.paidIn ?? '',
     );
     if (picked == null || !_m.choosePaidIn(picked.code)) return;
-    setState(() => _foundRate = null);
-    unawaited(_loadRateOrder());
-    unawaited(_lookUpRate());
+    _rates.pairChanged();
   }
 
   Future<void> _save() async {
@@ -1116,6 +1008,3 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     if (mounted) Navigator.of(context).pop(true);
   }
 }
-
-/// Where the rate lookup stands (#252).
-enum _RateState { idle, loading, found, noRate, unavailable }

@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import '../../l10n/context_l10n.dart';
 import '../../l10n/currency_names.dart';
 import '../../models/currency.dart';
+import '../../utils/date_format.dart';
 import '../../utils/money.dart';
 import '../../widgets/grouped_section.dart';
 import '../../widgets/money.dart';
 import '../../theme.dart';
 import 'expense_form_model.dart';
 import 'form_text.dart';
+import 'rate_lookup.dart';
 
 /// The currency and the amount (#261), in the order of a conversion: Paid
 /// in, the amount typed in it, the rate as one number with the more
@@ -21,24 +23,19 @@ class CurrencyCard extends StatelessWidget {
   const CurrencyCard({
     super.key,
     required this.model,
+    required this.rates,
     required this.onPickPaidIn,
-    required this.onSwapRate,
-    required this.rateStatus,
-    required this.onUsePublishedRate,
     this.amountHint,
     this.calculatedKey,
     this.showErrors = false,
   });
 
   final ExpenseFormModel model;
+
+  /// The published rate, and the pair's order (#261).
+  final RateLookup rates;
+
   final VoidCallback onPickPaidIn;
-  final VoidCallback onSwapRate;
-
-  /// Where the rate comes from, or that it's being looked up.
-  final String? rateStatus;
-
-  /// Puts the published rate back; null when there's nothing to put back.
-  final VoidCallback? onUsePublishedRate;
 
   /// What a scanned receipt said the amount was, if it was filled in.
   final String? amountHint;
@@ -61,13 +58,14 @@ class CurrencyCard extends StatelessWidget {
     final theme = Theme.of(context);
     final converting = _m.converting;
     final secondary = GroupedSection.footnoteStyle(context);
+    final rateStatus = converting ? _rateStatus(context) : null;
     final footer = [
       if (amountHint case final hint?) Text(hint, style: secondary),
       // A settlement's says so on its To card.
       if (_m.convertedAmountInvalid && !_m.isSettlement)
         Text(l10n.expenseConvertedAmountInvalid,
             style: GroupedSection.footnoteStyle(context, color: theme.colorScheme.error)),
-      if (converting && rateStatus != null) Text(rateStatus!, style: secondary),
+      if (rateStatus != null) Text(rateStatus, style: secondary),
     ];
     // A settlement in a group without a currency code has nothing here.
     if (_m.isSettlement && !_m.hasGroupCurrencyCode) return const SizedBox.shrink();
@@ -112,13 +110,13 @@ class CurrencyCard extends StatelessWidget {
           // A link under the note, its text in line with the note's, and
           // only a line's height (Kenneth, 2026-10-10): a button's own
           // padding and 48pt pushed it in and the next card down.
-          if (converting && onUsePublishedRate != null)
+          if (converting && rates.canRefresh)
             Align(
               alignment: AlignmentDirectional.centerStart,
               child: Padding(
                 padding: const EdgeInsetsDirectional.only(start: 8),
                 child: TextButton(
-                  onPressed: onUsePublishedRate,
+                  onPressed: () => rates.lookUp(force: true),
                   // Select none/all's size, on the Paid for row.
                   style: TextButton.styleFrom(
                     minimumSize: Size.zero,
@@ -132,6 +130,28 @@ class CurrencyCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Where the rate in the field comes from, under it.
+  String _rateStatus(BuildContext context) {
+    final l10n = context.l10n;
+    final own = _m.rateIsSaved ? l10n.expenseRateSaved : l10n.expenseRateTyped;
+    final found = rates.found;
+    return switch (rates.state) {
+      RateLookupState.found when found != null => () {
+          final day = formatDate(found.publishedOn, locale: context.appLocale);
+          final published = found.offline
+              ? l10n.expenseRatePublishedOffline(_m.ratePair, _m.shownRateText(found.rate), day)
+              : l10n.expenseRatePublished(_m.ratePair, _m.shownRateText(found.rate), day);
+          // The footer is for reference (#261): it says when the field is
+          // another rate, first (Kenneth, 2026-10-10).
+          return _m.rateIsOwn && !_m.showsRate(found.rate) ? '$own $published' : published;
+        }(),
+      _ when _m.rateIsOwn => own,
+      RateLookupState.noRate => l10n.expenseRateNone,
+      RateLookupState.unavailable => l10n.expenseRateUnavailable,
+      _ => l10n.expenseRateLoading,
+    };
   }
 
   /// A label, and the field it names at the row's end.
@@ -227,7 +247,7 @@ class CurrencyCard extends StatelessWidget {
       Tooltip(
         message: l10n.expenseSwapRate,
         child: InkWell(
-          onTap: onSwapRate,
+          onTap: rates.swap,
           borderRadius: BorderRadius.circular(8),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
