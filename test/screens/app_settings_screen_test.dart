@@ -253,6 +253,21 @@ void main() {
     SharedPreferences.setMockInitialValues({'theme_mode': 'future-mode'});
     expect(await SettingsService().themeMode(), ThemeMode.system);
   });
+
+  testWidgets('ends above the system\'s bottom bar, padding its list for it once (#283)', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.padding = const FakeViewPadding(bottom: 48);
+    tester.view.viewPadding = const FakeViewPadding(bottom: 48);
+    addTearDown(tester.view.reset);
+    final settings = await AppSettings.load(SettingsService());
+    addTearDown(settings.dispose);
+    await tester.pumpWidget(Spliit2GoApp(settings: settings, home: const AppSettingsScreen()));
+    await tester.pumpAndSettle();
+    final list = find.byType(ListView);
+    expect(tester.getRect(list).bottom, 800 - 48);
+    expect(tester.widget<ListView>(list).padding, const EdgeInsets.symmetric(vertical: 16));
+  });
 }
 
 /// The real cache, minus deleting files (there are none in this test).

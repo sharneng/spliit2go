@@ -922,7 +922,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             controller: _scroll,
             // Scrolling puts the keyboard away, as iOS's forms do.
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: withBottomInset(context, const EdgeInsets.symmetric(vertical: 16)),
+            padding: const EdgeInsets.symmetric(vertical: 16),
             child: Form(
               key: _formKey,
               child: Column(
