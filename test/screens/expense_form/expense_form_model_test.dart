@@ -261,6 +261,29 @@ void main() {
       expect(m.amount, 620);
     });
 
+    test('another currency and back is worked out afresh: the saved rate went with the pair (#289)', () {
+      final m = model(euros, existing: saved)..rateField.base = 'JPY';
+      m
+        ..choosePaidIn('USD')
+        ..choosePaidIn('JPY')
+        ..rateField.base = 'JPY'
+        ..rateField.typed()
+        ..rateField.controller.text = '0.0061';
+      expect((m.conversionUnchanged, m.amount), (false, 610));
+      expect(m.paidFor()!.fold(0, (sum, s) => sum + s.shares), 610);
+    });
+
+    test('the saved split comes back once its amounts read as saved (#289)', () {
+      final m = model(euros, existing: saved)..rateField.base = 'JPY';
+      final bea = m.splitControllers['bea']!;
+      final shown = bea.text;
+      bea.text = '1';
+      expect(m.paidFor(), isNull);
+      bea.text = shown;
+      expect(m.paidFor(), saved.paidFor);
+      expect(m.amount, 615);
+    });
+
     test('a draft is worked out afresh', () {
       final m = model(euros, draft: saved);
       expect(m.conversionUnchanged, isFalse);
