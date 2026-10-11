@@ -65,15 +65,16 @@ void main() {
     expect(find.text('人民币 (CNY)'), findsNothing);
   });
 
-  testWidgets('Custom is found by its translated name, and by "custom" (#287 review)', (tester) async {
-    for (final (locale, query, name) in [(zh, '自定', '自定义'), (fr, 'personnalis', 'Personnalisée')]) {
+  // One test per language, so each opens its own picker (#287 review).
+  for (final (locale, query, name) in [(zh, '自定', '自定义'), (fr, 'personnalis', 'Personnalisée')]) {
+    testWidgets('$locale: Custom is found by its translated name, and by "custom" (#287 review)', (tester) async {
       await openPicker(tester, locale);
       for (final q in [query, 'custom']) {
         await search(tester, q);
-        expect(find.text(name), findsOneWidget, reason: '$locale $q');
+        expect(find.text(name), findsOneWidget, reason: q);
       }
-    }
-  });
+    });
+  }
 
   testWidgets('the picker lists currencies in the app\'s language, Custom too', (tester) async {
     await openPicker(tester, zh);
