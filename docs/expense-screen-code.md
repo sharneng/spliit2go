@@ -60,15 +60,15 @@ A key typed goes into one of the model's controllers; a tap calls one of its set
 
 Its functions, by job:
 
-- **Starting:** `_start` makes the model with the locale's decimal separator; `_loadCategories`, `_loadDefaultSplit`.
+- **Starting:** `_start` makes the model with the locale's decimal separator; `_loadCategories`; `_loadDefaultSplit` reads the group's remembered split (`db.defaultSplitFor`).
 - **Layout:** `build` → `_form`: the top bar, then, top to bottom, the scan card (`_scanSection`), the title/category/date/repeat card (`_repeatRow`), `CurrencyCard`, `SplitCard` with `_paidByRow` as its first row, `ReceiptsCard`, notes.
 - **Top bar:** `_title`; `_kindButton` and `_switchKind` switch Expense ↔ Settlement, asking first for a saved one (`_converts`); `_confirmLeave` asks before ✕ drops changes.
 - **Pickers:** `_pickDate`, `_pickCategory`, `_pickPaidIn`, `_pickReceiptLanguage`; Paid by opens `showParticipantSheet` from `_paidByRow`.
 - **Receipts:** `_addReceipt`, `_scanReceipt`, `_photoFailed`.
 - **Saving:** `_save` checks the form and the receipts, then:
-  - `_saveNew`: a new expense goes into the database as a pending row (`db.insertPending`), so it shows straight away and works offline. The group screen then has the `Outbox` send it.
+  - `_saveNew`: a new expense goes into the database as a pending row (`db.insertPending`), so it shows straight away and works offline. When the screen closes, the screen that opened it (the group screen, Balances) syncs, and the `Outbox` sends it.
   - `_saveEdit`: an edit goes to the server (`client.updateExpense`).
-  - `_refuse` shows what's wrong and scrolls to it; `_rememberDefaultSplitIfRequested` saves the default split; `_activityParticipant` credits the change to the active user.
+  - `_refuse` shows what's wrong and scrolls to it; `_rememberDefaultSplitIfRequested` saves the default split (`db.setDefaultSplit`); `_activityParticipant` credits the change to the active user.
 
 ## The model: `expense_form/expense_form_model.dart`
 
@@ -80,7 +80,7 @@ Its functions, by job:
 - **Amounts:** `amount`, `typedAmount`, `originalAmount`, `settlementTotal`; `amountsToSave()` returns an `ExpenseAmounts`.
 - **The split:**
   - `typedValue` and `percentageBasisPoints` read one person's value.
-  - `unallocated()` is the running "still to allocate"/"over", in minor units for amounts and basis points for percentages.
+  - `unallocated()` is the running "still to allocate"/"over": a `double` in currency units for Amount (a 3-cent remainder is `0.03`) and in percentage points for Percent (one basis point is `0.01`); positive is still to allocate, negative over, null for Evenly, Shares and a settlement. Inside, it sums whole minor units and basis points and converts the result, so amounts that add up give exactly 0.
   - `showsLivePreview` and `livePreviewAmounts()` give each person's amount as it's typed.
   - `splitProblem()` returns a `SplitProblem`: `NoOneIncluded`, `InvalidValue`, `PercentagesDontAddUp` or `AmountsDontAddUp`.
   - `paidFor()` is the list that's saved.
@@ -123,12 +123,12 @@ Its functions, by job:
 
 | Area | Files and what's used |
 |---|---|
-| Data and sync | `api/spliit_client.dart` (`SpliitClient.updateExpense`), `db/app_database.dart` (`AppDatabase.insertPending`), `sync/outbox.dart` (`Outbox`) |
+| Data and sync | `api/spliit_client.dart` (`SpliitClient.updateExpense`), `db/app_database.dart` (`AppDatabase`: `insertPending` for a new expense, `defaultSplitFor` and `setDefaultSplit` for the group's remembered split, `groupRow` for the active user), `sync/outbox.dart` (`Outbox`) |
 | Rates | `services/exchange_rates.dart` (`ExchangeRates.of(db)`, `ExchangeRate`, `NoPublishedRate`, `RatesUnavailable`, `ranking`), `models/currency_ranking.dart` |
 | Shares | `services/expense_shares.dart` (`shareCentsFor`): the same rounding for the live preview and what's saved |
 | Receipts | `services/receipt_scanner.dart` (`ReceiptScanner`, `ReceiptScript`), `receipt_fill.dart` (`receiptFill`), `receipt_photo.dart` (`prepareReceiptPhoto`), `receipt_text.dart`, `receipt_cache.dart` |
 | People and categories | `services/active_user.dart` (`resolveDefaultPaidBy`, `activityParticipantId`), `services/category_store.dart` (`CategoryStore`) |
-| Settings | `services/settings_service.dart`: the default split, the receipt language, each pair's order |
+| Settings | `services/settings_service.dart`: the receipt language (`receiptScript`, `setReceiptScript`) and each pair's order (`rateBase`, `setRateBase`) |
 | Models | `models/expense.dart` (`Expense`, `ExpenseShare`, `SplitMode`), `group.dart` (`Group`, `Participant`), `currency.dart` (`Currency`, `currencyByCode`), `category.dart`, `default_split.dart` |
 | Utilities | `utils/money.dart` (`formatMoney`, `toMinorUnits`, `fromMinorUnits`, `convertToGroupAmount`), `decimal_input.dart`, `date_format.dart`, `haptics.dart` |
 | Translation | `l10n/context_l10n.dart` (`context.l10n`), `category_names.dart`, `currency_names.dart` |
