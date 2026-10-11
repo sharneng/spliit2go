@@ -73,7 +73,7 @@ class _CurrencyPickerState extends State<_CurrencyPicker> {
 
   bool _matches(Currency c) {
     if (_query.isEmpty) return true;
-    return currencyMatchesQuery(Localizations.localeOf(context), c, _query.toLowerCase());
+    return currencyMatchesQuery(context, c, _query.toLowerCase());
   }
 
   @override

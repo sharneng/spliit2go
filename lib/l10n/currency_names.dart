@@ -123,11 +123,11 @@ String localizedCurrencyLabel(BuildContext context, Currency currency) {
 }
 
 /// Whether [currency] matches the picker's search [query] (already
-/// lower-cased): its translated name, its English name too (so English
-/// search terms keep working after switching language), its code or its
-/// symbol.
-bool currencyMatchesQuery(Locale locale, Currency currency, String query) =>
-    currencyNameForLocale(locale, currency).toLowerCase().contains(query) ||
+/// lower-cased): its name as shown, "Custom" translated included, its
+/// English name too (so English search terms keep working after switching
+/// language), its code or its symbol.
+bool currencyMatchesQuery(BuildContext context, Currency currency, String query) =>
+    localizedCurrencyName(context, currency).toLowerCase().contains(query) ||
     currency.name.toLowerCase().contains(query) ||
     currency.code.toLowerCase().contains(query) ||
     currency.symbol.toLowerCase().contains(query);

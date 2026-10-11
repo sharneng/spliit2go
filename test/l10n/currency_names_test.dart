@@ -34,16 +34,9 @@ void main() {
     expect(currencyNameForLocale(const Locale('de'), cny), 'Chinese Yuan');
   });
 
-  test('search matches the translated name, the English one, the code and the symbol', () {
-    for (final q in ['人民币', 'yuan', 'cny', 'cn¥']) {
-      expect(currencyMatchesQuery(zh, cny, q), isTrue, reason: q);
-    }
-    expect(currencyMatchesQuery(zh, cny, '美元'), isFalse);
-  });
-
-  testWidgets('the picker lists and searches currencies in the app\'s language, Custom too', (tester) async {
+  Future<void> openPicker(WidgetTester tester, Locale locale) async {
     await tester.pumpWidget(MaterialApp(
-      locale: zh,
+      locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Builder(
@@ -55,11 +48,36 @@ void main() {
     ));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
+  }
+
+  Future<void> search(WidgetTester tester, String query) async {
+    await tester.enterText(find.byType(TextField), query);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('search matches the translated name, the English one, the code and the symbol', (tester) async {
+    await openPicker(tester, zh);
+    for (final q in ['人民', 'Yuan', 'cny', 'CN¥']) {
+      await search(tester, q);
+      expect(find.text('人民币 (CNY)'), findsOneWidget, reason: q);
+    }
+    await search(tester, '美元');
+    expect(find.text('人民币 (CNY)'), findsNothing);
+  });
+
+  testWidgets('Custom is found by its translated name, and by "custom" (#287 review)', (tester) async {
+    for (final (locale, query, name) in [(zh, '自定', '自定义'), (fr, 'personnalis', 'Personnalisée')]) {
+      await openPicker(tester, locale);
+      for (final q in [query, 'custom']) {
+        await search(tester, q);
+        expect(find.text(name), findsOneWidget, reason: '$locale $q');
+      }
+    }
+  });
+
+  testWidgets('the picker lists currencies in the app\'s language, Custom too', (tester) async {
+    await openPicker(tester, zh);
     expect(find.text('自定义'), findsOneWidget);
     expect(find.text('人民币 (CNY)'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), '人民');
-    await tester.pumpAndSettle();
-    expect(find.text('人民币 (CNY)'), findsOneWidget);
-    expect(find.text('美元 (USD)'), findsNothing);
   });
 }
