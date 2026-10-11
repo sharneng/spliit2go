@@ -520,7 +520,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
           ]),
         ],
       ),
-      body: Theme(
+      body: AboveBottomBar(child: Theme(
         // Fields sit on the cards, so they draw no box of their own.
         data: Theme.of(context).copyWith(
           inputDecorationTheme: const InputDecorationTheme(
@@ -536,7 +536,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
         child: GroupedScrollClip(
         child: ListView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: withBottomInset(context, const EdgeInsets.symmetric(vertical: 16)),
+          padding: const EdgeInsets.symmetric(vertical: 16),
           children: [
             if (_error != null)
               // After a create whose load failed it carries the new group's
@@ -644,7 +644,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
             )),
           ],
         )),
-      ),
+      )),
     );
   }
 }

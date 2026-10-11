@@ -112,8 +112,8 @@ class _AboutScreenState extends State<AboutScreen> {
         );
     return Scaffold(
       appBar: AppBar(title: Text(l10n.aboutTitle)),
-      body: ListView(
-        padding: withBottomInset(context, const EdgeInsets.symmetric(vertical: 24)),
+      body: AboveBottomBar(child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 24),
         children: [
           Center(child: _logo(72)),
           const SizedBox(height: 12),
@@ -165,7 +165,7 @@ class _AboutScreenState extends State<AboutScreen> {
             ),
           ),
         ],
-      ),
+      )),
     );
   }
 }

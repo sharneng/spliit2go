@@ -31,9 +31,9 @@ class AppSettingsScreen extends StatelessWidget {
     final l10n = context.l10n;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.appSettingsTitle)),
-      body: GroupedScrollClip(
+      body: AboveBottomBar(child: GroupedScrollClip(
         child: ListView(
-        padding: withBottomInset(context, const EdgeInsets.symmetric(vertical: 16)),
+        padding: const EdgeInsets.symmetric(vertical: 16),
         children: [
           GroupedSection(caption: l10n.appSettingsTheme, children: [
             for (final option in [
@@ -85,7 +85,7 @@ class AppSettingsScreen extends StatelessWidget {
             ),
           ]),
         ],
-      )),
+      ))),
     );
   }
 
