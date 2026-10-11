@@ -12,7 +12,7 @@ void main() {
 
   test('short keeps 7 characters of the hash and any suffix', () {
     expect(const BuildCommit(sha).short, '2d83fa3');
-    expect(const BuildCommit('$sha-dirty').short, '2d83fa3-dirty');
+    expect(const BuildCommit('$sha-4821').short, '2d83fa3-4821');
     expect(const BuildCommit('$sha?').short, '2d83fa3?');
     expect(const BuildCommit('').known, isFalse);
     expect(const BuildCommit(sha).known, isTrue);
@@ -22,9 +22,9 @@ void main() {
     final calls = <String>[];
     messenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call.method);
-      return '$sha-dirty';
+      return '$sha-4821';
     });
-    expect((await loadBuildCommit()).full, '$sha-dirty');
+    expect((await loadBuildCommit()).full, '$sha-4821');
     expect(calls, ['gitCommit']);
   });
 

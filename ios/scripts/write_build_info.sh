@@ -1,7 +1,8 @@
 #!/bin/sh
 # Writes BuildInfo.plist into the app with the commit this build is
-# from, for About (#176): the full hash, with "-dirty" when tracked
-# files have uncommitted changes, or "?" when git couldn't tell; empty
+# from, for About (#176): the full hash, with "-" and the minute of the
+# week it was built (Unix time in minutes mod 10080) when tracked files
+# have uncommitted changes, or "?" when git couldn't tell; empty
 # without git. Run by the Runner target's "Build Info" phase on every
 # build (alwaysOutOfDate), since git state isn't an input Xcode tracks.
 # Its own file rather than a key in the processed Info.plist, which
@@ -15,7 +16,7 @@ if command -v git >/dev/null 2>&1 && SHA="$(git -C "$SRCROOT" rev-parse HEAD 2>/
   git -C "$SRCROOT" diff --quiet HEAD -- 2>/dev/null
   case $? in
     0) COMMIT="$SHA" ;;
-    1) COMMIT="$SHA-dirty" ;;
+    1) COMMIT="$SHA-$(( $(date +%s) / 60 % 10080 ))" ;;
     *) COMMIT="$SHA?" ;;
   esac
 fi

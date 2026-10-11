@@ -97,12 +97,12 @@ void main() {
     addTearDown(() =>
         tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
 
-    await pumpAbout(tester, commit: const BuildCommit('$sha-dirty'));
-    expect(find.text('Version 1.2.3 (45 · 2d83fa3-dirty)'), findsOneWidget);
+    await pumpAbout(tester, commit: const BuildCommit('$sha-4821'));
+    expect(find.text('Version 1.2.3 (45 · 2d83fa3-4821)'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Copy version and commit'));
     await tester.pump();
-    expect(copied, ['$appName 1.2.3 (45 · $sha-dirty)']);
+    expect(copied, ['$appName 1.2.3 (45 · $sha-4821)']);
     expect(find.text('Version and commit copied'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());

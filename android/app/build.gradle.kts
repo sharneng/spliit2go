@@ -23,10 +23,12 @@ val keyProperties = Properties().apply {
 val hasUploadKey = !keyProperties.isEmpty
 
 // The commit this build is from, for About (#176): the full hash, with
-// "-dirty" when tracked files have uncommitted changes, or "?" when git
+// "-" and the minute of the week it was built (Unix time in minutes mod
+// 10080) when tracked files have uncommitted changes, or "?" when git
 // couldn't tell; empty without git. A ValueSource, so git runs on every
 // build and both HEAD and the dirty state are inputs Gradle tracks (also
-// under the configuration cache). See docs/decisions/build-info.md.
+// under the configuration cache; a build with changes misses that cache,
+// as its value changes every minute). See docs/decisions/build-info.md.
 abstract class GitCommitSource : ValueSource<String, GitCommitSource.Params> {
     interface Params : ValueSourceParameters {
         val repoDir: DirectoryProperty
@@ -54,7 +56,7 @@ abstract class GitCommitSource : ValueSource<String, GitCommitSource.Params> {
         } else {
             when (git("diff", "--quiet", "HEAD", "--").first) {
                 0 -> sha
-                1 -> "$sha-dirty"
+                1 -> "$sha-${System.currentTimeMillis() / 60_000 % 10_080}"
                 else -> "$sha?"
             }
         }
