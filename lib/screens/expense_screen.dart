@@ -91,6 +91,9 @@ import '../widgets/participant_sheet.dart';
 /// on the iPhone): Scan receipt reads it on the phone, keeps the photo
 /// with the expense, and fills in only what the user hasn't; see
 /// [receiptFill]. The receipt's language is picked beside it (#153).
+///
+/// How this screen's code is laid out, its files and what each owns:
+/// docs/expense-screen-code.md.
 class ExpenseScreen extends StatefulWidget {
   final SpliitClient client;
   final AppDatabase db;

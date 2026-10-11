@@ -242,6 +242,8 @@ Kenneth, 2026-10-09: `JPY 1 = EUR 0.0056547` doesn't read naturally. A rate read
 
 ## Visual cards and code
 
+The code as built, file by file, is mapped in [expense-screen-code.md](../expense-screen-code.md).
+
 Before the restyle `expense_screen.dart` was about 1,900 lines; after #289 it's about 1,000, with the layout, the top bar and saving. Which inputs go on which card is a matter of what's read together. Which code builds them is a matter of how complex they are. The two don't have to match one to one:
 
 | Card on screen | Inputs | Built by |

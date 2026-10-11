@@ -1,6 +1,6 @@
 # Decision records
 
-Why spliit2go is built the way it is. These are point-in-time records: each says when it was written, and the code and the issue tracker win if they disagree. Current feature status is in the [top-level README](../../README.md).
+Why spliit2go is built the way it is. How the code of the most complex screen, adding and editing an expense, is laid out is in [expense-screen-code.md](../expense-screen-code.md). These are point-in-time records: each says when it was written, and the code and the issue tracker win if they disagree. Current feature status is in the [top-level README](../../README.md).
 
 | Document | Covers |
 |---|---|
