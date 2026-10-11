@@ -58,6 +58,14 @@ class GroupedSection extends StatelessWidget {
       // A step off the black page, like iOS's #1C1C1E (#211).
       : scheme.surfaceContainer;
 
+  /// A note under a card, or under a sheet's list: the theme's small
+  /// text, in the secondary text color unless [color] (an error's) is
+  /// given.
+  static TextStyle? footnoteStyle(BuildContext context, {Color? color}) {
+    final theme = Theme.of(context);
+    return theme.textTheme.bodySmall?.copyWith(color: color ?? theme.colorScheme.onSurfaceVariant);
+  }
+
   /// The page behind the cards: every screen's, from the theme.
   static Color backgroundColor(BuildContext context) =>
       Theme.of(context).scaffoldBackgroundColor;
@@ -90,11 +98,7 @@ class GroupedSection extends StatelessWidget {
           if (footer case final footer?)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-              child: Text(footer,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              child: Text(footer, style: footnoteStyle(context)),
             ),
         ],
       ),

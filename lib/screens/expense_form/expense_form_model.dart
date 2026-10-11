@@ -72,6 +72,9 @@ class ExpenseFormModel extends ChangeNotifier {
   /// one shows at a time.
   final amountFocus = FocusNode();
 
+  /// The exchange rate's field.
+  final rateFocus = FocusNode();
+
   // Per-participant values for the non-evenly modes -- shares (any
   // positive number), percentage (0-100, must sum to 100), or amount
   // (must sum to the total). Empty or 0 is "not included" (#260): only
@@ -81,11 +84,31 @@ class ExpenseFormModel extends ChangeNotifier {
     for (final p in group.participants) p.id: TextEditingController(),
   };
 
+  /// Each person's value field, which a tap anywhere on their value
+  /// focuses: as the Amount row's, the text is only as wide as typed.
+  late final Map<String, FocusNode> splitFocus = {for (final p in group.participants) p.id: FocusNode()};
+
   late final Map<String, bool> _included = {for (final p in group.participants) p.id: true};
 
   String? _paidBy;
   String? get paidBy => _paidBy;
-  set paidBy(String? id) => _set(() => _paidBy = id);
+  set paidBy(String? id) => _set(() {
+        // Picking the same From again changes nothing: an older
+        // settlement's own share stays (#281 review).
+        if (id == _paidBy) return;
+        _paidBy = id;
+        _dropPayerFromTo();
+      });
+
+  /// A settlement's From isn't one of its To (Kenneth, 2026-10-10): the
+  /// card leaves them out, so they mustn't keep an amount it can't show.
+  /// Only when someone becomes From: an older settlement saved with its
+  /// payer among the To keeps that amount, shown, until they're changed.
+  void _dropPayerFromTo() {
+    if (!_isSettlement || _paidBy == null || !splitControllers.containsKey(_paidBy)) return;
+    _included[_paidBy!] = false;
+    splitControllers[_paidBy]!.text = '';
+  }
 
   DateTime _date = DateTime.now();
   DateTime get date => _date;
@@ -121,6 +144,10 @@ class ExpenseFormModel extends ChangeNotifier {
   /// settlement's To amounts.
   _Split? _otherSplit;
 
+  /// Who paid when [_otherSplit] was set aside: a settlement's To comes
+  /// back as it was unless a To became From meanwhile.
+  String? _otherSplitPayer;
+
   /// Switches between an expense and a settlement (#262). A settlement's
   /// "To" is the Amount rows, its amount their sum; an expense gets its
   /// split back. [title] fills an empty title.
@@ -131,7 +158,9 @@ class ExpenseFormModel extends ChangeNotifier {
     final recipients = value ? null : includedParticipants;
     final total = value ? null : (converting ? originalAmount : amount);
     final other = _otherSplit;
+    final otherPayer = _otherSplitPayer;
     _otherSplit = _currentSplit();
+    _otherSplitPayer = _paidBy;
     _isSettlement = value;
     _convertedAmountInvalid = false;
     if (other != null) {
@@ -161,6 +190,8 @@ class ExpenseFormModel extends ChangeNotifier {
       titleController.text = '';
     }
     if (!value) _autoTitle = null;
+    // A fresh settlement's To is empty already.
+    if (other != null && otherPayer != _paidBy) _dropPayerFromTo();
     _filling = false;
     _cleanAfterSwitch = clean ? _state() : null;
     notifyListeners();
@@ -1019,6 +1050,10 @@ class ExpenseFormModel extends ChangeNotifier {
       c.dispose();
     }
     amountFocus.dispose();
+    rateFocus.dispose();
+    for (final f in splitFocus.values) {
+      f.dispose();
+    }
     super.dispose();
   }
 }

@@ -59,13 +59,13 @@ class CurrencyCard extends StatelessWidget {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final converting = _m.converting;
-    final secondary = theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final secondary = GroupedSection.footnoteStyle(context);
     final footer = [
       if (amountHint case final hint?) Text(hint, style: secondary),
       // A settlement's says so on its To card.
       if (_m.convertedAmountInvalid && !_m.isSettlement)
         Text(l10n.expenseConvertedAmountInvalid,
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
+            style: GroupedSection.footnoteStyle(context, color: theme.colorScheme.error)),
       if (converting && rateStatus != null) Text(rateStatus!, style: secondary),
     ];
     // A settlement in a group without a currency code has nothing here.
@@ -107,10 +107,25 @@ class CurrencyCard extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 2, children: footer),
             ),
+          // A link under the note, its text in line with the note's, and
+          // only a line's height (Kenneth, 2026-10-10): a button's own
+          // padding and 48pt pushed it in and the next card down.
           if (converting && onUsePublishedRate != null)
             Align(
               alignment: AlignmentDirectional.centerStart,
-              child: TextButton(onPressed: onUsePublishedRate, child: Text(l10n.expenseUsePublishedRate)),
+              child: Padding(
+                padding: const EdgeInsetsDirectional.only(start: 8),
+                child: TextButton(
+                  onPressed: onUsePublishedRate,
+                  // Select none/all's size, on the Paid for row.
+                  style: TextButton.styleFrom(
+                    minimumSize: Size.zero,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(l10n.expenseUsePublishedRate),
+                ),
+              ),
             ),
         ],
       ),
@@ -150,7 +165,7 @@ class CurrencyCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Text(l10n.expenseInvalidAmount,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error)),
+                  style: GroupedSection.footnoteStyle(context, color: Theme.of(context).colorScheme.error)),
             ),
         ]),
       ),
@@ -178,13 +193,17 @@ class CurrencyCard extends StatelessWidget {
                     : formValueStyle(context)),
             Flexible(
               child: IntrinsicWidth(
-                child: TextFormField(
-                  key: amountFieldKey,
+                child: RetypeAssist(
+                  focus: focus,
                   controller: controller,
-                  focusNode: focus,
-                  textAlign: TextAlign.end,
-                  decoration: const InputDecoration(hintText: '0', isDense: true),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  child: TextFormField(
+                    key: amountFieldKey,
+                    controller: controller,
+                    focusNode: focus,
+                    textAlign: TextAlign.end,
+                    decoration: const InputDecoration(hintText: '0', isDense: true),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  ),
                 ),
               ),
             ),
@@ -215,14 +234,20 @@ class CurrencyCard extends StatelessWidget {
           ),
         ),
       ),
-      TextFormField(
-        key: rateFieldKey,
+      RetypeAssist(
+        focus: _m.rateFocus,
         controller: _m.rateController,
-        textAlign: TextAlign.end,
-        decoration: InputDecoration(hintText: l10n.expenseExchangeRate),
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        onChanged: (_) => _m.rateTyped(),
-        validator: (_) => _m.rate == null ? l10n.expenseInvalidRate : null,
+        onCleared: _m.rateTyped,
+        child: TextFormField(
+          key: rateFieldKey,
+          controller: _m.rateController,
+          focusNode: _m.rateFocus,
+          textAlign: TextAlign.end,
+          decoration: InputDecoration(hintText: l10n.expenseExchangeRate),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          onChanged: (_) => _m.rateTyped(),
+          validator: (_) => _m.rate == null ? l10n.expenseInvalidRate : null,
+        ),
       ),
     );
   }

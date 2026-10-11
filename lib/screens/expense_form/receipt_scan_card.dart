@@ -72,7 +72,7 @@ class ReceiptScanCard extends StatelessWidget {
             child: failed
                 ? ErrorMessage(status, diagnostics: diagnostics)
                 : Text(status,
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                    style: GroupedSection.footnoteStyle(context)),
           ),
         ],
       ),

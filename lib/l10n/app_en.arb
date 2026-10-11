@@ -5,6 +5,7 @@
   "commonRequired": "Required",
   "commonNoExpensesYet": "No expenses yet.",
   "commonDelete": "Delete",
+  "commonClear": "Clear",
   "groupListTitle": "Your groups",
   "groupListJoinTooltip": "Join a group",
   "groupListEmpty": "No groups yet.",
@@ -197,10 +198,18 @@
       }
     }
   },
-  "expensePercentageMismatch": "Percentages must add up to 100 (currently {current})",
-  "@expensePercentageMismatch": {
+  "expensePercentageShort": "Percentages must add up to 100% ({percent}% short)",
+  "@expensePercentageShort": {
     "placeholders": {
-      "current": {
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "expensePercentageOverBy": "Percentages must add up to 100% ({percent}% over)",
+  "@expensePercentageOverBy": {
+    "placeholders": {
+      "percent": {
         "type": "String"
       }
     }
@@ -213,10 +222,18 @@
       }
     }
   },
-  "expenseAmountMismatch": "Amounts must add up to the total (off by {diff})",
-  "@expenseAmountMismatch": {
+  "expenseAmountShort": "Amounts must add up to the total ({amount} short)",
+  "@expenseAmountShort": {
     "placeholders": {
-      "diff": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "expenseAmountOverBy": "Amounts must add up to the total ({amount} over)",
+  "@expenseAmountOverBy": {
+    "placeholders": {
+      "amount": {
         "type": "String"
       }
     }
@@ -1034,28 +1051,6 @@
   "expenseToHeading": "To",
   "expenseSettlementTotal": "Total",
   "expenseSettlementDefaultTitle": "Settlement",
-  "expenseSettlementSentence": "{from} paid {recipients}.",
-  "@expenseSettlementSentence": {
-    "placeholders": {
-      "from": {
-        "type": "String"
-      },
-      "recipients": {
-        "type": "String"
-      }
-    }
-  },
-  "expenseSettlementRecipient": "{name} {amount}",
-  "@expenseSettlementRecipient": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      },
-      "amount": {
-        "type": "String"
-      }
-    }
-  },
   "expenseListTwo": "{first} and {second}",
   "@expenseListTwo": {
     "placeholders": {
@@ -1068,7 +1063,6 @@
     }
   },
   "expenseListSeparator": ", ",
-  "expenseSettlementHint": "Enter what each person was paid.",
   "expenseSettlementNoRecipient": "Enter an amount for at least one person",
   "expenseInvalidRate": "Enter a rate greater than zero"
 }

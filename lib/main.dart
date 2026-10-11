@@ -140,9 +140,30 @@ Widget spliit2goAppBuilder(BuildContext context, Widget? child) {
     value: spliit2goSystemUiOverlayStyle(theme),
     child: Container(
       color: theme.scaffoldBackgroundColor,
-      child: SafeArea(top: false, bottom: false, child: child!),
+      child: _DismissKeyboardOnTap(child: SafeArea(top: false, bottom: false, child: child!)),
     ),
   );
+}
+
+/// On an iPhone, a tap on nothing in particular puts the keyboard away,
+/// as iOS apps do (Kenneth, 2026-10-11): Flutter's fields keep it up, and
+/// the number pad has no key to close it. Anything that takes taps (a
+/// button, a row, another field) gets them first. Android's keyboard has
+/// its own button to hide it.
+class _DismissKeyboardOnTap extends StatelessWidget {
+  const _DismissKeyboardOnTap({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!const {TargetPlatform.iOS, TargetPlatform.macOS}.contains(Theme.of(context).platform)) return child;
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      child: child,
+    );
+  }
 }
 
 /// Always shows GroupListScreen as the app's true root -- see

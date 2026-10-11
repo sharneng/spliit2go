@@ -592,6 +592,49 @@ void main() {
     });
   });
 
+  test('a settlement\'s From is never one of its To: the form clears their amount', () {
+    final m = model(euros)..paidBy = 'alex';
+    m.setSettlement(true, title: 'Settlement');
+    m.splitControllers['bea']!.text = '5';
+    m.splitControllers['cy']!.text = '3';
+    // Picking a To as From drops what they were paid.
+    m.paidBy = 'bea';
+    expect(m.splitControllers.map((k, c) => MapEntry(k, c.text)), {'alex': '', 'bea': '', 'cy': '3'});
+
+    // Or a To who became From while it was an expense, when it switches back.
+    m.setSettlement(false, title: 'Settlement');
+    m.paidBy = 'cy';
+    m.setSettlement(true, title: 'Settlement');
+    expect(m.splitControllers['cy']!.text, '');
+  });
+
+  group('an older settlement saved with its payer among the To keeps that share (#281 review)', () {
+    // €10: Alex, who paid, €4 to themselves, and €6 to Bea.
+    ExpenseFormModel legacy() => model(euros,
+        existing: expense(settlement: true, mode: SplitMode.byAmount, paidFor: const [
+          ExpenseShare(participantId: 'alex', shares: 400),
+          ExpenseShare(participantId: 'bea', shares: 600),
+        ]));
+
+    test('picking the same From again', () {
+      final m = legacy()..paidBy = 'alex';
+      expect(m.settlementTotal, 1000);
+      expect(m.hasChanges, isFalse);
+    });
+
+    test('switching to an expense and back', () {
+      final m = legacy()
+        ..setSettlement(false, title: 'Settlement')
+        ..setSettlement(true, title: 'Settlement');
+      expect(m.settlementTotal, 1000);
+    });
+
+    test('but a different From still leaves the To', () {
+      final m = legacy()..paidBy = 'bea';
+      expect(m.settlementTotal, 400);
+    });
+  });
+
   group('changes, for "Discard changes?" (#259)', () {
     test('typing, picking and choosing are changes; undoing them isn\'t', () {
       final m = model(euros);

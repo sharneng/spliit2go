@@ -535,6 +535,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
         ),
         child: GroupedScrollClip(
         child: ListView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: withBottomInset(context, const EdgeInsets.symmetric(vertical: 16)),
           children: [
             if (_error != null)
