@@ -99,6 +99,7 @@ class _CurrencyPickerState extends State<_CurrencyPicker> {
                 child: empty
                     ? Center(child: Text(context.l10n.currencyPickerNoResults))
                     : ListView(
+                        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                         children: [
                           for (final c in custom) _tile(context, c),
                           if (common.isNotEmpty)

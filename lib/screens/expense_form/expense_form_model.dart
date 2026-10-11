@@ -72,6 +72,9 @@ class ExpenseFormModel extends ChangeNotifier {
   /// one shows at a time.
   final amountFocus = FocusNode();
 
+  /// The exchange rate's field.
+  final rateFocus = FocusNode();
+
   // Per-participant values for the non-evenly modes -- shares (any
   // positive number), percentage (0-100, must sum to 100), or amount
   // (must sum to the total). Empty or 0 is "not included" (#260): only
@@ -81,11 +84,26 @@ class ExpenseFormModel extends ChangeNotifier {
     for (final p in group.participants) p.id: TextEditingController(),
   };
 
+  /// Each person's value field, which a tap anywhere on their value
+  /// focuses: as the Amount row's, the text is only as wide as typed.
+  late final Map<String, FocusNode> splitFocus = {for (final p in group.participants) p.id: FocusNode()};
+
   late final Map<String, bool> _included = {for (final p in group.participants) p.id: true};
 
   String? _paidBy;
   String? get paidBy => _paidBy;
-  set paidBy(String? id) => _set(() => _paidBy = id);
+  set paidBy(String? id) => _set(() {
+        _paidBy = id;
+        _dropPayerFromTo();
+      });
+
+  /// A settlement's From isn't one of its To (Kenneth, 2026-10-10): the
+  /// card leaves them out, so they mustn't keep an amount it can't show.
+  void _dropPayerFromTo() {
+    if (!_isSettlement || _paidBy == null || !splitControllers.containsKey(_paidBy)) return;
+    _included[_paidBy!] = false;
+    splitControllers[_paidBy]!.text = '';
+  }
 
   DateTime _date = DateTime.now();
   DateTime get date => _date;
@@ -161,6 +179,7 @@ class ExpenseFormModel extends ChangeNotifier {
       titleController.text = '';
     }
     if (!value) _autoTitle = null;
+    _dropPayerFromTo();
     _filling = false;
     _cleanAfterSwitch = clean ? _state() : null;
     notifyListeners();
@@ -1019,6 +1038,10 @@ class ExpenseFormModel extends ChangeNotifier {
       c.dispose();
     }
     amountFocus.dispose();
+    rateFocus.dispose();
+    for (final f in splitFocus.values) {
+      f.dispose();
+    }
     super.dispose();
   }
 }

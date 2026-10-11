@@ -35,10 +35,10 @@ void main() {
 
   /// Opens the form over a page, as the group screen does; returns what
   /// it was closed with.
-  Future<(AppDatabase, List<bool?>)> open(WidgetTester tester, {Expense? editing, Expense? draft}) async {
+  Future<(AppDatabase, List<bool?>)> open(WidgetTester tester, {Expense? editing, Expense? draft, Group group = banff}) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
-    await db.cacheGroup(banff);
+    await db.cacheGroup(group);
     final client = SpliitClient(
       baseUrl: 'https://example.test',
       httpClient: MockClient((req) async => throw http.ClientException('offline')),
@@ -56,7 +56,7 @@ void main() {
                 client: client,
                 db: db,
                 outbox: Outbox(db, client, groupId: 'g1'),
-                group: banff,
+                group: group,
                 existingExpense: editing,
                 initialDraft: draft,
               ),
@@ -138,8 +138,10 @@ void main() {
       // No Amount: the To amounts make it (#262), and the title is filled.
       expect(find.byKey(CurrencyCard.amountFieldKey), findsNothing);
       expect(tester.widget<TextFormField>(title()).controller!.text, 'Settlement');
-      await tester.enterText(title(), 'Bea paid Alex');
-      await tester.enterText(find.byKey(SplitCard.valueKey('alex')), '30');
+      await tester.enterText(title(), 'Alex paid Bea');
+      // Alex, the From, isn't among the To.
+      expect(find.byKey(SplitCard.valueKey('alex')), findsNothing);
+      await tester.enterText(find.byKey(SplitCard.valueKey('bea')), '30');
       await tester.tap(find.byTooltip('Save'));
       await tester.pumpAndSettle();
 
@@ -322,16 +324,119 @@ void main() {
       expect(gap(), lessThan(1));
     });
 
-    testWidgets('Select none doesn\'t make the Paid for caption taller than the others', (tester) async {
+    testWidgets('Paid by and Paid for share a card, Paid for a row label like Paid by', (tester) async {
       await open(tester);
-      final caption = find.widgetWithText(GroupedCaption, 'Paid for');
-      final withLink = tester.getSize(caption).height;
+      final card = find.ancestor(of: find.text('Paid by'), matching: find.byType(GroupedSection));
+      expect(find.descendant(of: card, matching: find.text('Paid for')), findsOneWidget);
+      expect(find.widgetWithText(GroupedCaption, 'Paid for'), findsNothing);
+      // An even split's Select none sits on that row, which stays a row's height.
+      final row = tester.getRect(find.text('Paid for'));
+      expect(tester.getCenter(find.text('Select none')).dy, closeTo(row.center.dy, 1));
+    });
+
+    testWidgets('a long name doesn\'t squeeze Paid by: the label stays on a line, the name wraps', (tester) async {
+      const long = 'This is a very very very very long name';
+      await open(tester,
+          group: const Group(
+              id: 'g1', name: 'Banff Trip', currency: '\$', participants: [Participant(id: 'tl', name: long)]));
+      final label = tester.getSize(find.text('Paid by'));
+      // One line, as Date's.
+      expect(label.height, tester.getSize(find.text('Date')).height);
+      final name = find.descendant(of: find.widgetWithText(GroupedRow, 'Paid by'), matching: find.text(long));
+      expect(tester.getSize(name).height, greaterThan(label.height));
+    });
+
+    testWidgets('a number field selects what\'s in it when tapped, for typing over', (tester) async {
+      await open(tester);
+      final amount = find.byKey(CurrencyCard.amountFieldKey);
+      await tester.enterText(amount, '42.50');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      await tester.tap(amount);
+      await tester.pumpAndSettle();
+      final controller = tester.widget<TextFormField>(amount).controller!;
+      expect(controller.selection, const TextSelection(baseOffset: 0, extentOffset: 5));
+
+      // And a person's value in the split.
       await tester.ensureVisible(find.text('Shares'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Shares'));
       await tester.pumpAndSettle();
-      expect(find.text('Select none'), findsNothing);
-      expect(tester.getSize(caption).height, closeTo(withLink, 4));
+      final share = find.byKey(SplitCard.valueKey('bea'));
+      await tester.ensureVisible(share);
+      await tester.pumpAndSettle();
+      await tester.tap(share);
+      await tester.pumpAndSettle();
+      final shareText = tester.widget<TextFormField>(share).controller!;
+      expect(shareText.selection, TextSelection(baseOffset: 0, extentOffset: shareText.text.length));
+      expect(shareText.text, isNotEmpty);
+    });
+
+    testWidgets('on an iPhone a number field keeps iOS\'s tap, and has a ⓧ while it\'s edited', (tester) async {
+      await open(tester);
+      final amount = find.byKey(CurrencyCard.amountFieldKey);
+      final clear = find.bySemanticsLabel('Clear');
+      await tester.enterText(amount, '42.50');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      expect(clear, findsNothing);
+
+      await tester.tap(amount);
+      await tester.pumpAndSettle();
+      final controller = tester.widget<TextFormField>(amount).controller!;
+      expect(controller.selection.isCollapsed, isTrue);
+      expect(clear, findsOneWidget);
+
+      await tester.tap(clear);
+      await tester.pumpAndSettle();
+      expect(controller.text, isEmpty);
+      // Still being edited, keyboard up; with nothing to clear, no ⓧ.
+      expect(tester.testTextInput.isVisible, isTrue);
+      expect(clear, findsNothing);
+
+      // A person's value has one too, after its "%".
+      await tester.ensureVisible(find.text('Percent'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Percent'));
+      await tester.pumpAndSettle();
+      final bea = find.byKey(SplitCard.valueKey('bea'));
+      await tester.ensureVisible(bea);
+      await tester.tap(bea);
+      await tester.pumpAndSettle();
+      final percent = find.descendant(of: find.ancestor(of: bea, matching: find.byType(Row)).last, matching: find.text('%'));
+      expect(tester.getCenter(clear).dx, greaterThan(tester.getCenter(percent).dx));
+      expect(tester.getCenter(clear).dy, closeTo(tester.getCenter(percent).dy, 4));
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('an even split checks who\'s in, where the other modes have their values', (tester) async {
+      await open(tester);
+      // The person's row in the split: the last of their name (Paid by
+      // can show it too).
+      Finder check(String name) => find.descendant(
+          of: find.ancestor(of: find.text(name).last, matching: find.byType(InkWell)).first,
+          matching: find.byIcon(Icons.check));
+      bool shown(String name) => tester.widget<Visibility>(
+          find.ancestor(of: check(name), matching: find.byType(Visibility)).first).visible;
+      expect((shown('Alex'), shown('Bea')), (true, true));
+      await tester.ensureVisible(find.text('Bea').last);
+      await tester.tap(find.text('Bea').last);
+      await tester.pumpAndSettle();
+      expect((shown('Alex'), shown('Bea')), (true, false));
+      // Out, its space stays: the check sits where it did.
+      expect(tester.getCenter(check('Bea')).dx, tester.getCenter(check('Alex')).dx);
+    });
+
+    testWidgets('how much is left goes above Save as default split', (tester) async {
+      await open(tester);
+      await tester.ensureVisible(find.text('Percent'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Percent'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(SplitCard.valueKey('alex')), '45');
+      await tester.pumpAndSettle();
+      final left = find.textContaining('5%');
+      expect(left, findsWidgets);
+      expect(tester.getTopLeft(left.first).dy, lessThan(tester.getTopLeft(find.text('Save as default split')).dy));
     });
 
     testWidgets('the split mode is a pill with the chosen mode selected', (tester) async {

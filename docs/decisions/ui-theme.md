@@ -59,6 +59,7 @@ The theme wasn't decided all at once. It was settled piece by piece, in focused 
    - **The message** is left-aligned in paragraphs with an 8pt gap above each. It's 15pt on iPhone (as iOS 26's alerts; Flutter's Cupertino alert still centres 13pt, as iOS 18's) and Material's 14sp on Android. It's in the primary text color: the systems' secondary grey was tried and was too hard to read in a message of several sentences. Justified text was tried and gapped the words on a dialog's short lines.
    - **Kept from Flutter's Cupertino alert:** the iOS 18 layout, with a centred title and buttons divided by hairlines. iOS 26 left-aligns the title and uses capsule buttons. Chasing that would mean drawing the alert ourselves.
    - **Not an alert:** a list of choices (app settings' options) stays a dialog of rows.
+16. **Small text is 13pt** ([#280](https://github.com/sharneng/spliit2go/issues/280), Kenneth on devices): iOS's footnote size, a step up from Material's 12, set once on the theme's `bodySmall`, so every note under a card, Stats' small text and small amounts follow it. A note under a card is `GroupedSection.footnoteStyle`, in the secondary text colour.
 
 The layout of particular screens is in their own records: [group-list-redesign.md](group-list-redesign.md), [expense-rows.md](expense-rows.md), [stats-screen.md](stats-screen.md) and [receipts.md](receipts.md).
 

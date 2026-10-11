@@ -592,6 +592,22 @@ void main() {
     });
   });
 
+  test('a settlement\'s From is never one of its To: the form clears their amount', () {
+    final m = model(euros)..paidBy = 'alex';
+    m.setSettlement(true, title: 'Settlement');
+    m.splitControllers['bea']!.text = '5';
+    m.splitControllers['cy']!.text = '3';
+    // Picking a To as From drops what they were paid.
+    m.paidBy = 'bea';
+    expect(m.splitControllers.map((k, c) => MapEntry(k, c.text)), {'alex': '', 'bea': '', 'cy': '3'});
+
+    // Or a To who became From while it was an expense, when it switches back.
+    m.setSettlement(false, title: 'Settlement');
+    m.paidBy = 'cy';
+    m.setSettlement(true, title: 'Settlement');
+    expect(m.splitControllers['cy']!.text, '');
+  });
+
   group('changes, for "Discard changes?" (#259)', () {
     test('typing, picking and choosing are changes; undoing them isn\'t', () {
       final m = model(euros);

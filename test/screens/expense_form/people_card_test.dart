@@ -171,7 +171,7 @@ void main() {
     expect(find.text('\$10.00 over the total.'), findsOneWidget);
     await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
-    final error = tester.widget<Text>(find.textContaining('off by \$10.00'));
+    final error = tester.widget<Text>(find.text('Amounts must add up to the total (\$10.00 over)'));
     expect(error.style?.color, Theme.of(tester.element(find.byType(SplitCard))).colorScheme.error);
   });
 }

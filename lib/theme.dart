@@ -388,7 +388,9 @@ TextTheme _systemLetterSpacing(TextTheme theme) {
     titleSmall: none(theme.titleSmall),
     bodyLarge: none(theme.bodyLarge, bodyLargeLetterSpacing),
     bodyMedium: none(theme.bodyMedium),
-    bodySmall: none(theme.bodySmall),
+    // iOS's footnote size, a step up from Material's 12, for every small
+    // text: notes under cards, Stats, small amounts (Kenneth, 2026-10-10).
+    bodySmall: none(theme.bodySmall)?.copyWith(fontSize: 13),
     labelLarge: none(theme.labelLarge),
     labelMedium: none(theme.labelMedium),
     labelSmall: none(theme.labelSmall),

@@ -4,6 +4,7 @@ import '../../l10n/context_l10n.dart';
 import '../../models/currency.dart';
 import '../../models/expense.dart';
 import '../../models/group.dart';
+import '../../theme.dart';
 import '../../utils/money.dart';
 import '../../widgets/expense_list.dart' show participantColors;
 import '../../widgets/group_monogram.dart';
@@ -29,16 +30,22 @@ class SplitCard extends StatelessWidget {
     super.key,
     required this.model,
     required this.showErrors,
+    this.payer,
     this.footerKey,
   });
 
   final ExpenseFormModel model;
 
+  /// "Paid by" (a settlement's "From"), the card's first row (Kenneth,
+  /// 2026-10-10: a card of its own, one row, looked stranded).
+  final Widget? payer;
+
   /// A save was tried: a split that can't be saved says why, in red,
   /// rather than how much is left (issue #29 section 6).
   final bool showErrors;
 
-  /// On the footer, for a refused save to scroll to.
+  /// On what the split says (how much is left, or what's wrong), for a
+  /// refused save to scroll to.
   final Key? footerKey;
 
   /// From this text size on, a value goes under the name rather than
@@ -63,44 +70,69 @@ class SplitCard extends StatelessWidget {
     final error = (showErrors ? _error(context) : null) ??
         (_m.isSettlement && _m.convertedAmountInvalid ? l10n.expenseConvertedAmountInvalid : null);
     final settlement = _m.isSettlement;
+    final message = Text(
+      error ?? _hint(context) ?? '',
+      style: GroupedSection.footnoteStyle(context, color: error != null ? theme.colorScheme.error : null),
+    );
+    final hasMessage = error != null || _hint(context) != null;
+    // "Paid for" (a settlement's "To") as a row's label, as "Paid by"'s
+    // above it; an even split's Select none/all at its end.
+    final heading = SizedBox(
+      height: GroupedRow.oneLineMinHeight,
+      child: Padding(
+        padding: const EdgeInsetsDirectional.only(start: 16, end: 8),
+        child: Row(children: [
+          // At a row's text size, as GroupedRow gives "Paid by"'s.
+          Expanded(
+            child: DefaultTextStyle.merge(
+              style: theme.textTheme.bodyLarge,
+              child: formLabel(context, settlement ? l10n.expenseToHeading : l10n.expensePaidForHeading),
+            ),
+          ),
+          // Always offers the opposite of the current state (issue #29
+          // section 2); only an even split selects anyone.
+          if (evenly)
+            TextButton(
+              onPressed: _m.toggleSelectAll,
+              style: TextButton.styleFrom(
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(_m.allIncluded ? l10n.expenseSelectNone : l10n.expenseSelectAll),
+            ),
+        ]),
+      ),
+    );
+    final people = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      // The people's lines start at their names; the card's own, around
+      // them, at its edge.
+      for (final (i, p) in _toList.indexed) ...[
+        if (i > 0) const GroupedDivider(indent: ChoiceRow.monogramIndent),
+        _row(context, p, colors[p.id]!, preview?[p.id]),
+      ],
+      // An expense's split says how much is left right under the people,
+      // above "Save as default split" (Kenneth, 2026-10-10).
+      if (!settlement && hasMessage)
+        Padding(key: footerKey, padding: const EdgeInsets.fromLTRB(16, 0, 16, 12), child: message),
+    ]);
     return Padding(
       padding: const EdgeInsets.fromLTRB(GroupedSection.inset, 0, GroupedSection.inset, GroupedSection.spacing),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           GroupedSection(
-            caption: settlement ? l10n.expenseToHeading : l10n.expensePaidForHeading,
-            // Always offers the opposite of the current state (issue #29
-            // section 2); only an even split selects anyone.
-            captionTrailing: evenly
-                ? TextButton(
-                    onPressed: _m.toggleSelectAll,
-                    // The caption's height, not a button's 48: otherwise
-                    // the caption grows, and the gap above the card with
-                    // it, only in Evenly (Kenneth, 2026-10-10).
-                    style: TextButton.styleFrom(
-                      minimumSize: Size.zero,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: Text(_m.allIncluded ? l10n.expenseSelectNone : l10n.expenseSelectAll),
-                  )
-                : null,
             margin: EdgeInsets.zero,
             children: [
-              if (!settlement)
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: _modes(context),
-                ),
-              // The people's lines start at their names; the card's own,
-              // around them, at its edge.
-              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                for (final (i, p) in _m.group.participants.indexed) ...[
-                  if (i > 0) const GroupedDivider(indent: ChoiceRow.monogramIndent),
-                  _row(context, p, colors[p.id]!, preview?[p.id]),
-                ],
-              ]),
+              if (payer case final payer?) payer,
+              if (settlement)
+                heading
+              else
+                Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  heading,
+                  Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), child: _modes(context)),
+                ]),
+              people,
               if (settlement) ..._totals(context),
               // A settlement is a one-off, not the group's usual split
               // (issue #29 section 7).
@@ -115,15 +147,9 @@ class SplitCard extends StatelessWidget {
                 ),
             ],
           ),
-          Padding(
-            key: footerKey,
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-            child: Text(
-              error ?? _hint(context),
-              style: theme.textTheme.bodySmall?.copyWith(
-                  color: error != null ? theme.colorScheme.error : theme.colorScheme.onSurfaceVariant),
-            ),
-          ),
+          // A settlement's, only what's wrong, under it.
+          if (settlement && hasMessage)
+            Padding(key: footerKey, padding: const EdgeInsets.fromLTRB(16, 6, 16, 0), child: message),
         ],
       ),
     );
@@ -162,7 +188,17 @@ class SplitCard extends StatelessWidget {
     final evenly = _m.splitMode == SplitMode.evenly;
     final included = _m.isIncluded(p.id);
     final value = evenly
-        ? (preview == null ? null : _amount(context, preview))
+        // Who's in is checked, as in the Paid by sheet, not only shown by
+        // the dimming (Kenneth, 2026-10-11): a mark doesn't rely on seeing
+        // the contrast. Out, the check's space stays, so the amounts line
+        // up.
+        ? Row(mainAxisSize: MainAxisSize.min, children: [
+            if (preview != null) ...[_amount(context, preview), const SizedBox(width: 12)],
+            Visibility.maintain(
+              visible: included,
+              child: Icon(Icons.check, color: theme.colorScheme.primary),
+            ),
+          ])
         : Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -170,7 +206,7 @@ class SplitCard extends StatelessWidget {
               SizedBox(width: 96, child: _valueField(context, p)),
               // Amount's value is the amount itself.
               if (preview != null && _m.splitMode != SplitMode.byAmount)
-                Padding(padding: const EdgeInsets.only(top: 2, right: 10), child: _amount(context, preview)),
+                Padding(padding: const EdgeInsets.only(top: 2), child: _amount(context, preview)),
             ],
           );
     final stacks = !evenly && MediaQuery.textScalerOf(context).scale(10) / 10 >= _stackingTextScale;
@@ -196,7 +232,8 @@ class SplitCard extends StatelessWidget {
                   monogram,
                   const SizedBox(width: 16),
                   Expanded(child: name),
-                  if (value != null) ...[const SizedBox(width: 12), value],
+                  const SizedBox(width: 12),
+                  value,
                 ]),
         ),
       ),
@@ -204,28 +241,55 @@ class SplitCard extends StatelessWidget {
     return evenly ? Semantics(checked: included, child: row) : row;
   }
 
+  /// A person's value, as the form's other fields (Kenneth, 2026-10-10):
+  /// plain right-aligned text on the card rather than a box in the page's
+  /// color, with its "%" or currency symbol right beside the digits, and
+  /// the whole value's width a tap target.
   Widget _valueField(BuildContext context, Participant p) {
-    final colors = Theme.of(context).colorScheme;
-    final shape = OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none);
-    return TextFormField(
-      key: valueKey(p.id),
-      controller: _m.splitControllers[p.id],
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      textAlign: TextAlign.right,
-      // A box on the card, so it reads as a field: the page's color.
-      decoration: InputDecoration(
-        isDense: true,
-        filled: true,
-        fillColor: GroupedSection.backgroundColor(context),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        border: shape,
-        enabledBorder: shape,
-        focusedBorder: shape.copyWith(borderSide: BorderSide(color: colors.primary, width: 1.5)),
-        prefixText: _m.splitMode == SplitMode.byAmount ? _m.splitSymbol : null,
-        suffixText: _m.splitMode == SplitMode.byPercentage ? '%' : null,
+    final controller = _m.splitControllers[p.id]!;
+    final focus = _m.splitFocus[p.id]!;
+    final prefix = _m.splitMode == SplitMode.byAmount ? '${_m.splitSymbol} ' : null;
+    final suffix = _m.splitMode == SplitMode.byPercentage ? '%' : null;
+    // On an iPhone, its ⓧ after the "%".
+    return RetypeAssist(
+      focus: focus,
+      controller: controller,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: focus.requestFocus,
+        child: ListenableBuilder(
+          listenable: controller,
+          builder: (context, field) {
+            // Dimmed with the "0" hint until something's typed.
+            final style = controller.text.isEmpty
+                ? TextStyle(color: SpliitColors.of(context).secondaryContent)
+                : formValueStyle(context);
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                if (prefix != null) Text(prefix, style: style),
+                Flexible(child: field!),
+                if (suffix != null) Text(suffix, style: style),
+              ],
+            );
+          },
+          child: IntrinsicWidth(
+            child: TextFormField(
+              key: valueKey(p.id),
+              controller: controller,
+              focusNode: focus,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              textAlign: TextAlign.end,
+              decoration: const InputDecoration(hintText: '0', isDense: true, contentPadding: EdgeInsets.zero),
+            ),
+          ),
+        ),
       ),
     );
   }
+
 
   /// A settlement's Total, in the paid-in currency, and converted.
   List<Widget> _totals(BuildContext context) {
@@ -245,26 +309,7 @@ class SplitCard extends StatelessWidget {
     ];
   }
 
-  /// "Bob paid Alice ¥8,000 and Carol ¥4,000." (#262), once there's
-  /// someone with an amount.
-  String? _sentence(BuildContext context) {
-    final l10n = context.l10n;
-    final from = _m.group.participants.where((p) => p.id == _m.paidBy).firstOrNull;
-    final recipients = [
-      for (final p in _m.includedParticipants)
-        if (_m.typedValue(p) case final value? when value > 0)
-          l10n.expenseSettlementRecipient(
-              p.name,
-              formatMoney(toMinorUnits(value, _m.splitDigits), _m.splitSymbol,
-                  decimalDigits: _m.splitDigits, locale: context.appLocale)),
-    ];
-    if (from == null || recipients.isEmpty) return null;
-    final list = recipients.length == 1
-        ? recipients.single
-        : l10n.expenseListTwo(
-            recipients.sublist(0, recipients.length - 1).join(l10n.expenseListSeparator), recipients.last);
-    return l10n.expenseSettlementSentence(from.name, list);
-  }
+
 
   Widget _amount(BuildContext context, int amount) => Money(
       formatMoney(amount, _m.group.currency, decimalDigits: _m.digits, locale: context.appLocale),
@@ -282,19 +327,37 @@ class SplitCard extends StatelessWidget {
           SplitMode.byPercentage => l10n.expenseEnterPercentage(participant.name),
           _ => l10n.expenseEnterAmount(participant.name),
         },
-      PercentagesDontAddUp(:final totalBasisPoints) =>
-        l10n.expensePercentageMismatch(trimTrailingZeros(totalBasisPoints / 100)),
-      AmountsDontAddUp(:final difference) => l10n.expenseAmountMismatch(formatMoney(
-          difference.abs(), _m.splitSymbol,
-          decimalDigits: _m.splitDigits, locale: context.appLocale)),
+      // Short or over, not just "off by" (Kenneth, 2026-10-10).
+      PercentagesDontAddUp(:final totalBasisPoints) => () {
+          final by = trimTrailingZeros((10000 - totalBasisPoints).abs() / 100);
+          return totalBasisPoints < 10000 ? l10n.expensePercentageShort(by) : l10n.expensePercentageOverBy(by);
+        }(),
+      AmountsDontAddUp(:final difference) => () {
+          final by = formatMoney(difference.abs(), _m.splitSymbol,
+              decimalDigits: _m.splitDigits, locale: context.appLocale);
+          // The difference is the total less what's split.
+          return difference > 0 ? l10n.expenseAmountShort(by) : l10n.expenseAmountOverBy(by);
+        }(),
     };
   }
 
   /// A running "still to allocate"/"over" for Percent and Amount, or the
   /// mode's explanation (issue #29 section 6).
-  String _hint(BuildContext context) {
+  /// Everyone, but a settlement's From isn't among its To (Kenneth,
+  /// 2026-10-10), unless an older one saved them with an amount, which
+  /// would otherwise count unseen.
+  List<Participant> get _toList => [
+        for (final p in _m.group.participants)
+          if (!_m.isSettlement || p.id != _m.paidBy || (_m.typedValue(p) ?? 0) != 0) p,
+      ];
+
+  /// How much is left to split, or how the mode works. A settlement has
+  /// none: "Enter what each person was paid" and "Ken paid Jenny $78.00"
+  /// only said what the card shows (Kenneth, 2026-10-10). Under it, only
+  /// what's wrong.
+  String? _hint(BuildContext context) {
     final l10n = context.l10n;
-    if (_m.isSettlement) return _sentence(context) ?? l10n.expenseSettlementHint;
+    if (_m.isSettlement) return null;
     final unallocated = _m.unallocated();
     if (unallocated != null && unallocated != 0) {
       final over = unallocated < 0;

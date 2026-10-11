@@ -92,4 +92,45 @@ void main() {
     final barrier = tester.getRect(find.byType(ModalBarrier).last);
     expect(barrier.bottom, 800);
   });
+
+  group('a tap outside a field puts the keyboard away', () {
+    Future<void> pump(WidgetTester tester, List<String> tapped) => tester.pumpWidget(MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: spliit2goLightTheme,
+          builder: spliit2goAppBuilder,
+          home: Scaffold(
+            body: Column(children: [
+              const TextField(),
+              TextButton(onPressed: () => tapped.add('button'), child: const Text('button')),
+              const Expanded(child: SizedBox.expand()),
+            ]),
+          ),
+        ));
+
+    testWidgets('on an iPhone, as its apps do; a button still gets its tap and the keyboard stays', (tester) async {
+      final tapped = <String>[];
+      await pump(tester, tapped);
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      expect(tester.testTextInput.isVisible, isTrue);
+      await tester.tap(find.text('button'));
+      await tester.pump();
+      expect(tapped, ['button']);
+      expect(tester.testTextInput.isVisible, isTrue);
+
+      await tester.tapAt(const Offset(200, 500));
+      await tester.pump();
+      expect(tester.testTextInput.isVisible, isFalse);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('not on Android, whose keyboard has its own button for it', (tester) async {
+      await pump(tester, []);
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      await tester.tapAt(const Offset(200, 500));
+      await tester.pump();
+      expect(tester.testTextInput.isVisible, isTrue);
+    });
+  });
 }

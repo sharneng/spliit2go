@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import '../l10n/context_l10n.dart';
 import '../services/error_reporting.dart';
 import '../services/receipt_scanner.dart';
-import 'error_message.dart';
 import 'confirm_dialog.dart';
+import 'error_message.dart';
+import 'grouped_section.dart';
 
 /// The receipt language picker beside Scan receipt (#153): the user says
 /// what's printed on the receipt, and the app reads it with that model;
@@ -172,7 +173,7 @@ class _ReceiptLanguageSheetState extends State<_ReceiptLanguageSheet> {
           if (ReceiptScript.values.any((s) => s.downloadable))
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-              child: Text(l10n.receiptLanguageNote, style: theme.textTheme.bodySmall),
+              child: Text(l10n.receiptLanguageNote, style: GroupedSection.footnoteStyle(context)),
             )
           else
             const SizedBox(height: 16),

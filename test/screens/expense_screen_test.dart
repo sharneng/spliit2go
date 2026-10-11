@@ -215,9 +215,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(await db.pendingExpenses(), isEmpty);
-    expect(find.textContaining('must add up to the total'), findsOneWidget);
+    // Which way it's off, not just by how much.
+    expect(find.textContaining(RegExp(r'^Amounts must add up to the total \(.*10\.00 short\)$')), findsOneWidget);
     // The refusal is felt too (#179).
     expect(haptics, ['HapticFeedbackType.errorNotification']);
+    await tester.enterText(amountFields.at(4), '40');
+    await tester.pumpAndSettle();
+    expect(find.textContaining(RegExp(r'^Amounts must add up to the total \(.*10\.00 over\)$')), findsOneWidget);
   });
 
   testWidgets('by-amount split with matching amounts saves with exact per-person shares',
@@ -264,7 +268,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(await db.pendingExpenses(), isEmpty);
-    expect(find.textContaining('must add up to 100'), findsOneWidget);
+    expect(find.text('Percentages must add up to 100% (10% short)'), findsOneWidget);
+    await tester.enterText(amountFields.at(4), '25');
+    await tester.pumpAndSettle();
+    expect(find.text('Percentages must add up to 100% (5% over)'), findsOneWidget);
   });
 
   // Regression test for issue #18: the server expects shares to sum to
@@ -875,7 +882,7 @@ void main() {
     answer.complete(_FakeRates.published(0.0061));
     await tester.pumpAndSettle();
     expect(rateText(tester), '166.667');
-    expect(find.text('EUR/JPY 163.934 is the published rate on Oct 1, 2026. Using the rate you entered.'),
+    expect(find.text('Using the rate you entered. EUR/JPY 163.934 is the published rate on Oct 1, 2026.'),
         findsOneWidget);
     expect(find.text('€6.00'), findsOneWidget);
 
@@ -951,7 +958,7 @@ void main() {
     expect(rates.lookups, 1);
     expect(rateText(tester), '164');
     expect(
-        find.text('EUR/JPY 163.934 is the published rate on Oct 1, 2026. Using the rate saved with this expense.'),
+        find.text('Using the rate saved with this expense. EUR/JPY 163.934 is the published rate on Oct 1, 2026.'),
         findsOneWidget);
     expect(find.text('Use the published rate'), findsOneWidget);
     await tapSave(tester);
@@ -1110,6 +1117,17 @@ void main() {
     expect((saved.amountCents, saved.originalCurrency, saved.conversionRate), (610, null, null));
   });
 
+  testWidgets('a settlement\'s To leaves out its From', (tester) async {
+    await pumpGroup(tester, euroGroup);
+    await tester.tap(find.byTooltip('Switch to settlement'));
+    await tester.pumpAndSettle();
+    final from = find.descendant(of: find.widgetWithText(GroupedRow, 'From'), matching: find.byType(Text)).last;
+    final payer = euroGroup.participants.firstWhere((p) => tester.widget<Text>(from).data!.startsWith(p.name));
+    for (final p in euroGroup.participants) {
+      expect(find.byKey(SplitCard.valueKey(p.id)), p == payer ? findsNothing : findsOneWidget);
+    }
+  });
+
   testWidgets('a settlement in another currency: its To amounts in it, converted (#262)', (tester) async {
     final db = await pumpGroup(tester, euroGroup);
     await tester.tap(find.byTooltip('Switch to settlement'));
@@ -1124,7 +1142,8 @@ void main() {
     expect(find.widgetWithText(GroupedRow, 'Total'), findsOneWidget);
     expect(find.text('¥1,000'), findsOneWidget);
     expect(find.text('€6.10'), findsOneWidget);
-    expect(find.text('Alex paid Bea ¥1,000.'), findsOneWidget);
+    // No "Alex paid Bea" sentence: it only repeated the card (Kenneth, 2026-10-10).
+    expect(find.textContaining('paid Bea'), findsNothing);
     final saved = await save(tester, db);
     expect((saved.title, saved.amountCents, saved.originalAmountCents, saved.originalCurrency),
         ('Settlement', 610, 1000, 'JPY'));
@@ -1142,13 +1161,13 @@ void main() {
     await tester.pumpAndSettle();
     await paidIn(tester, '', 'Yen', 'Japanese Yen (JPY)');
     await tester.enterText(rateField(), '1000'); // EUR/JPY: a yen is a tenth of a cent
-    await tester.ensureVisible(find.byKey(SplitCard.valueKey('alex')));
-    await tester.enterText(find.byKey(SplitCard.valueKey('alex')), '1');
+    await tester.ensureVisible(find.byKey(SplitCard.valueKey('bea')));
+    await tester.enterText(find.byKey(SplitCard.valueKey('bea')), '1');
     FocusManager.instance.primaryFocus?.unfocus();
     await tester.pumpAndSettle();
     await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -2000));
     await tester.pumpAndSettle();
-    expect(find.byKey(SplitCard.valueKey('alex')).hitTestable(), findsNothing);
+    expect(find.byKey(SplitCard.valueKey('bea')).hitTestable(), findsNothing);
 
     await tapSave(tester);
     const error = "The amount in the group's currency rounds to nothing. Change the amount or the rate.";
@@ -1156,9 +1175,12 @@ void main() {
     expect(await db.pendingExpenses(), isEmpty);
 
     // Corrected, it saves.
-    await tester.enterText(find.byKey(SplitCard.valueKey('alex')), '1000');
+    await tester.enterText(find.byKey(SplitCard.valueKey('bea')), '1000');
     await tester.pump();
     expect(find.text(error), findsNothing);
+    // Its selection handle, at the top of so short a screen, covers Save.
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
     expect((await save(tester, db)).amountCents, 100);
   });
 
@@ -1335,7 +1357,7 @@ void main() {
       of: find.byType(TextFormField).at(2),
       matching: find.byType(TextField),
     ));
-    expect(textField.textAlign, TextAlign.right);
+    expect(textField.textAlign, TextAlign.end);
   });
 
   // issue #34: Shares and Percentage should both accept a decimal point,

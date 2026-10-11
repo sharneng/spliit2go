@@ -636,8 +636,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ? l10n.expenseRatePublishedOffline(_m.ratePair, _m.shownRateText(found.rate), day)
               : l10n.expenseRatePublished(_m.ratePair, _m.shownRateText(found.rate), day);
           // The footer is for reference (#261): it says when the field is
-          // another rate.
-          return _m.rateIsOwn && !_m.showsRate(found.rate) ? '$published $own' : published;
+          // another rate, first (Kenneth, 2026-10-10).
+          return _m.rateIsOwn && !_m.showsRate(found.rate) ? '$own $published' : published;
         }(),
       _ when _m.rateIsOwn => own,
       _RateState.noRate => l10n.expenseRateNone,
@@ -770,25 +770,38 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   /// "Paid by" (#260): the payer by their monogram, opening the
   /// participant sheet.
-  Widget _paidByCard(BuildContext context) {
+  /// The split card's first row (Kenneth, 2026-10-10: a card of its own
+  /// looked stranded).
+  Widget _paidByRow(BuildContext context) {
     final l10n = context.l10n;
     final participants = widget.group.participants;
     final payer = participants.where((p) => p.id == _m.paidBy).firstOrNull;
     // A settlement's is "From" (#262).
     final label = _m.isSettlement ? l10n.expenseFromLabel : l10n.expensePaidByLabel;
-    return GroupedSection(children: [
-      GroupedRow(
-        title: formLabel(context, label),
-        trailing: payer == null
-            ? null
-            : Row(mainAxisSize: MainAxisSize.min, children: [
+    // Not a trailing: ListTile gives that all the width it asks for, and a
+    // long name squeezed "From" to a letter a line. The label keeps its
+    // width; the name takes what's left and wraps.
+    return GroupedRow(
+        title: Row(children: [
+          formLabel(context, label),
+          const SizedBox(width: 16),
+          if (payer != null)
+            Expanded(
+              child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
                 Monogram(
                     name: payer.name,
                     color: participantColors(participants, widget.activeUserId)[payer.id]!,
                     radius: 12),
                 const SizedBox(width: 8),
-                Flexible(child: _value(context, participantName(context, payer, widget.activeUserId))),
+                Flexible(
+                  child: DefaultTextStyle.merge(
+                    textAlign: TextAlign.end,
+                    child: _value(context, participantName(context, payer, widget.activeUserId)),
+                  ),
+                ),
               ]),
+            ),
+        ]),
         onTap: () async {
           _dropFocus();
           final picked = await showParticipantSheet(context,
@@ -798,8 +811,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               activeUserId: widget.activeUserId);
           if (picked != null) _m.paidBy = picked;
         },
-      ),
-    ]);
+      );
   }
 
   /// A field on a card, which draws no box of its own.
@@ -908,6 +920,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         child: GroupedScrollClip(
           child: SingleChildScrollView(
             controller: _scroll,
+            // Scrolling puts the keyboard away, as iOS's forms do.
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: withBottomInset(context, const EdgeInsets.symmetric(vertical: 16)),
             child: Form(
               key: _formKey,
@@ -973,8 +987,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     calculatedKey: _calculatedKey,
                     showErrors: _hasAttemptedSave,
                   ),
-                  _paidByCard(context),
-                  SplitCard(model: _m, showErrors: _hasAttemptedSave, footerKey: _paidForFooterKey),
+                  SplitCard(
+                      model: _m,
+                      showErrors: _hasAttemptedSave,
+                      payer: _paidByRow(context),
+                      footerKey: _paidForFooterKey),
                   ReceiptsCard(controller: _receipts, onAdd: _addReceipt, keepsUnsent: !widget.isEditing),
                   // Last: receipts hardly change height, notes can be long
                   // (#268). Past 12 lines they scroll inside the field.
