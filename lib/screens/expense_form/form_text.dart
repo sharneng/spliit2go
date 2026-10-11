@@ -15,6 +15,22 @@ Text formLabel(BuildContext context, String label) =>
 /// A row's value at its end, at the rows' text size.
 TextStyle? formValueStyle(BuildContext context) => Theme.of(context).textTheme.bodyLarge;
 
+/// A number field's name for a screen reader, where the row shows it
+/// some other way or not at all (#288): "Amount", "Cid, Shares".
+/// Its placeholder goes in as [unreadHint], or the name would read
+/// "Amount, 0", and still would with a value typed.
+Widget namedField(String name, Widget field) => Semantics(label: name, child: field);
+
+/// A field's placeholder that a screen reader skips, for a [namedField]:
+/// [hint] as `InputDecoration.hintText` draws it, in the theme's hint
+/// style.
+Widget unreadHint(BuildContext context, String hint, {TextAlign textAlign = TextAlign.end}) {
+  final theme = Theme.of(context);
+  return ExcludeSemantics(
+    child: Text(hint, textAlign: textAlign, style: theme.textTheme.bodyLarge!.merge(theme.inputDecorationTheme.hintStyle)),
+  );
+}
+
 /// A number field's [child], made quick to retype (Kenneth, 2026-10-11):
 /// a number is mostly typed over, not edited, and neither platform lets
 /// an app add a clear key to its number pad.

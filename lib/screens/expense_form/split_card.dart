@@ -138,14 +138,15 @@ class SplitCard extends StatelessWidget {
               // A settlement is a one-off, not the group's usual split
               // (issue #29 section 7).
               if (!settlement)
-                GroupedRow(
+                // One element: "Save as default split, switch, off".
+                MergeSemantics(child: GroupedRow(
                   title: Text(l10n.expenseSaveDefaultSplit),
                   trailing: Switch.adaptive(
                     value: _m.saveDefaultSplit,
                     onChanged: (v) => _m.saveDefaultSplit = v,
                   ),
                   onTap: () => _m.saveDefaultSplit = !_m.saveDefaultSplit,
-                ),
+                )),
             ],
           ),
           // A settlement's, only what's wrong, under it.
@@ -156,17 +157,21 @@ class SplitCard extends StatelessWidget {
     );
   }
 
+  static String _modeName(BuildContext context, SplitMode mode) {
+    final l10n = context.l10n;
+    return switch (mode) {
+      SplitMode.evenly => l10n.expenseSplitEvenly,
+      SplitMode.byShares => l10n.expenseSplitShares,
+      SplitMode.byPercentage => l10n.expenseSplitPercent,
+      SplitMode.byAmount => l10n.expenseSplitAmount,
+    };
+  }
+
   /// The split mode, as spliit-ios's (Kenneth, 2026-10-10), at the old
   /// control's height.
   Widget _modes(BuildContext context) {
-    final l10n = context.l10n;
     return SegmentedPill<SplitMode>(
-      segments: {
-        SplitMode.evenly: l10n.expenseSplitEvenly,
-        SplitMode.byShares: l10n.expenseSplitShares,
-        SplitMode.byPercentage: l10n.expenseSplitPercent,
-        SplitMode.byAmount: l10n.expenseSplitAmount,
-      },
+      segments: {for (final mode in SplitMode.values) mode: _modeName(context, mode)},
       selected: _m.splitMode,
       onChanged: (mode) {
         // A focused value field that this removes or refills would hand
@@ -277,13 +282,17 @@ class SplitCard extends StatelessWidget {
             );
           },
           child: IntrinsicWidth(
-            child: TextFormField(
-              key: valueKey(p.id),
-              controller: controller,
-              focusNode: focus,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              textAlign: TextAlign.end,
-              decoration: const InputDecoration(hintText: '0', isDense: true, contentPadding: EdgeInsets.zero),
+            child: namedField(
+              context.l10n.expenseFieldName(p.name, _modeName(context, _m.splitMode)),
+              TextFormField(
+                key: valueKey(p.id),
+                controller: controller,
+                focusNode: focus,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                textAlign: TextAlign.end,
+                decoration: InputDecoration(
+                    hint: unreadHint(context, '0'), isDense: true, contentPadding: EdgeInsets.zero),
+              ),
             ),
           ),
         ),
@@ -343,8 +352,6 @@ class SplitCard extends StatelessWidget {
     };
   }
 
-  /// A running "still to allocate"/"over" for Percent and Amount, or the
-  /// mode's explanation (issue #29 section 6).
   /// Everyone, but a settlement's From isn't among its To (Kenneth,
   /// 2026-10-10), unless an older one saved them with an amount, which
   /// would otherwise count unseen.
@@ -353,7 +360,8 @@ class SplitCard extends StatelessWidget {
           if (!_m.isSettlement || p.id != _m.paidBy || (_m.typedValue(p) ?? 0) != 0) p,
       ];
 
-  /// How much is left to split, or how the mode works. A settlement has
+  /// A running "still to allocate"/"over" for Percent and Amount, or the
+  /// mode's explanation (issue #29 section 6). A settlement has
   /// none: "Enter what each person was paid" and "Ken paid Jenny $78.00"
   /// only said what the card shows (Kenneth, 2026-10-10). Under it, only
   /// what's wrong.
