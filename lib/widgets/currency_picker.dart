@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../l10n/context_l10n.dart';
@@ -32,6 +34,21 @@ Future<Currency?> pickCurrency(
     builder: (_) => _CurrencyPicker(currencies: currencies, selectedCode: selectedCode),
   );
 }
+
+/// A search sheet's height above the keyboard: three quarters of the
+/// screen, but never taller than the room left above the keyboard (#279).
+/// Its search field brings the keyboard up as it opens, and 75% plus the
+/// keyboard ran the sheet off the top of the screen. Below the status bar,
+/// a gap is left so it still reads as a sheet.
+double searchSheetHeight(BuildContext context) {
+  final media = MediaQuery.of(context);
+  // The window's: a sheet's own MediaQuery has the status bar removed.
+  final statusBar = MediaQueryData.fromView(View.of(context)).padding.top;
+  final room = media.size.height - media.viewInsets.bottom - statusBar - _sheetTopGap;
+  return math.max(0, math.min(media.size.height * 0.75, room));
+}
+
+const _sheetTopGap = 24.0;
 
 class _CurrencyPicker extends StatefulWidget {
   final List<Currency> currencies;
@@ -78,7 +95,7 @@ class _CurrencyPickerState extends State<_CurrencyPicker> {
       child: Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: SizedBox(
-          height: MediaQuery.of(context).size.height * 0.75,
+          height: searchSheetHeight(context),
           child: Column(
             children: [
               Padding(

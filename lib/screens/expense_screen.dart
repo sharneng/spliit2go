@@ -1353,7 +1353,7 @@ class _CategoryPickerState extends State<_CategoryPicker> {
       child: Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: SizedBox(
-          height: MediaQuery.of(context).size.height * 0.75,
+          height: searchSheetHeight(context),
           child: Column(
             children: [
               Padding(
