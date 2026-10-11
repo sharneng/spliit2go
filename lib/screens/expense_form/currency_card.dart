@@ -198,13 +198,16 @@ class CurrencyCard extends StatelessWidget {
                 child: RetypeAssist(
                   focus: focus,
                   controller: controller,
-                  child: TextFormField(
-                    key: amountFieldKey,
-                    controller: controller,
-                    focusNode: focus,
-                    textAlign: TextAlign.end,
-                    decoration: const InputDecoration(hintText: '0', isDense: true),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  child: namedField(
+                    l10n.expenseAmountLabel,
+                    TextFormField(
+                      key: amountFieldKey,
+                      controller: controller,
+                      focusNode: focus,
+                      textAlign: TextAlign.end,
+                      decoration: InputDecoration(hint: unreadHint(context, '0'), isDense: true),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    ),
                   ),
                 ),
               ),
@@ -240,15 +243,18 @@ class CurrencyCard extends StatelessWidget {
         focus: _m.rateFocus,
         controller: _m.rateController,
         onCleared: _m.rateTyped,
-        child: TextFormField(
-          key: rateFieldKey,
-          controller: _m.rateController,
-          focusNode: _m.rateFocus,
-          textAlign: TextAlign.end,
-          decoration: InputDecoration(hintText: l10n.expenseExchangeRate),
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          onChanged: (_) => _m.rateTyped(),
-          validator: (_) => _m.rate == null ? l10n.expenseInvalidRate : null,
+        child: namedField(
+          l10n.expenseFieldName(l10n.expenseExchangeRate, _m.ratePair),
+          TextFormField(
+            key: rateFieldKey,
+            controller: _m.rateController,
+            focusNode: _m.rateFocus,
+            textAlign: TextAlign.end,
+            decoration: InputDecoration(hint: unreadHint(context, l10n.expenseExchangeRate)),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => _m.rateTyped(),
+            validator: (_) => _m.rate == null ? l10n.expenseInvalidRate : null,
+          ),
         ),
       ),
     );

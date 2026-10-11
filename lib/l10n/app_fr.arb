@@ -382,6 +382,7 @@
   "appSettingsExchangeRatesFailed": "Impossible de mettre à jour les taux de change.",
   "expensePaidIn": "Payé en",
   "expenseExchangeRate": "Taux de change",
+  "expenseFieldName": "{name}, {detail}",
   "expenseAmountNotYetKnown": "Pas encore connu",
   "expenseRateLoading": "Récupération du taux de change…",
   "expenseRateTyped": "Taux que vous avez saisi.",

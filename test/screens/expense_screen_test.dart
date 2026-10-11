@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show SemanticsNode;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -994,6 +995,17 @@ void main() {
     await tester.enterText(find.widgetWithText(TextFormField, 'Ramen'), 'Ramen and gyoza');
     await tapSave(tester);
     expect((sent!['conversionRate'], sent!['amount']), (0.00565, 565));
+  });
+
+  testWidgets('a screen reader names the rate field by its pair, not by its number (#288)', (tester) async {
+    await pumpGroup(tester, euroGroup);
+    await paidIn(tester, '1000', 'Yen', 'Japanese Yen (JPY)');
+    SemanticsNode node() => tester.getSemantics(find.descendant(of: rateField(), matching: find.byType(EditableText)));
+    expect((node().label, node().value), ('Exchange rate, EUR/JPY', '163.934'));
+    await tester.ensureVisible(find.text('EUR/JPY'));
+    await tester.tap(find.text('EUR/JPY'));
+    await tester.pumpAndSettle();
+    expect(node().label, 'Exchange rate, JPY/EUR');
   });
 
   testWidgets('a tap on the pair swaps it, remembered for the pair on this device (#261)', (tester) async {

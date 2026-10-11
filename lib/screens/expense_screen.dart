@@ -47,13 +47,12 @@ import '../widgets/expense_list.dart' show participantColors;
 import '../widgets/group_monogram.dart';
 import '../widgets/participant_sheet.dart';
 
-/// Adds -- or, given [existingExpense], edits -- an expense. An expense
-/// with [Expense.isSettlement] set is a settlement/"paid back"
-/// entry -- same fields, same screen, no special-casing needed here.
-/// (balances_screen.dart's own "mark as paid" writes a pending
-/// settlement expense directly rather than opening this screen, but
-/// it's still this same [Expense] shape -- see that file's doc comment.)
-/// Renamed from AddExpenseScreen/add_expense_screen.dart (issue #21) once
+/// Adds -- or, given [existingExpense], edits -- an expense. A settlement
+/// ([Expense.isSettlement]) uses the same screen with its own fields: From
+/// and To in place of Paid by and Paid for (#262), and the kind button
+/// switches between the two (#272). Balances' "Mark as paid" opens it
+/// with a settlement draft ([initialDraft]), so a partial payment can be
+/// entered. Renamed from AddExpenseScreen/add_expense_screen.dart (issue #21) once
 /// "add expense screen" stopped describing what this actually covers.
 ///
 /// Adding works online or offline: it always writes to the local db first
@@ -75,21 +74,21 @@ import '../widgets/participant_sheet.dart';
 ///
 /// Supports all four of Spliit's split modes (evenly / by shares / by
 /// percentage / by amount) plus excluding participants from "paid for",
-/// matching the web app's "Advanced splitting options" -- see
-/// decisions/feature-backlog.md for how this was scoped.
+/// matching the web app's "Advanced splitting options".
 ///
 /// Field set matches Spliit's own add/edit expense form (issue #16):
-/// title, amount, category, paid by, paid for/split mode, date, "paid
-/// in" a different currency, settlement flag, save-as-default-split,
-/// recurrence, notes, and receipts (#123): photos are uploaded as they're
-/// added, so they're documents by the time the expense is saved; see
-/// [ReceiptAttachmentsController] for what happens to one that isn't
-/// uploaded.
+/// title, category, date, repeat, "paid in" a different currency and its
+/// rate (#252), amount, paid by, paid for with its split mode and
+/// save-as-default-split, notes, and receipts (#123): photos are uploaded
+/// as they're added, so they're documents by the time the expense is
+/// saved; see [ReceiptAttachmentsController] for what happens to one that
+/// isn't uploaded. The form's state is [ExpenseFormModel]; its cards are
+/// in expense_form/ (see docs/decisions/expense-form-restyle.md).
 ///
-/// A new expense can be filled in from a receipt (#125, Android): Scan
-/// receipt reads it on the phone, keeps the photo with the expense, and
-/// fills in only what the user hasn't; see [receiptFill]. The receipt's
-/// language is picked beside it (#153).
+/// A new expense can be filled in from a receipt (#125 on Android, #155
+/// on the iPhone): Scan receipt reads it on the phone, keeps the photo
+/// with the expense, and fills in only what the user hasn't; see
+/// [receiptFill]. The receipt's language is picked beside it (#153).
 class ExpenseScreen extends StatefulWidget {
   final SpliitClient client;
   final AppDatabase db;
@@ -251,7 +250,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// category id this device hasn't fetched a name for.
   Category get _selectedCategory => _categories.firstWhere(
         (c) => c.id == _m.category,
-        orElse: () => Category(id: _m.category, name: 'Category $_m.category', grouping: 'Other'),
+        orElse: () => Category(id: _m.category, name: 'Category ${_m.category}', grouping: 'Other'),
       );
 
   @override
@@ -770,8 +769,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   /// "Paid by" (#260): the payer by their monogram, opening the
   /// participant sheet.
-  /// The split card's first row (Kenneth, 2026-10-10: a card of its own
-  /// looked stranded).
+  ///
+  /// It's the split card's first row (Kenneth, 2026-10-10: a card of its
+  /// own looked stranded).
   Widget _paidByRow(BuildContext context) {
     final l10n = context.l10n;
     final participants = widget.group.participants;
@@ -861,7 +861,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   Widget _form(BuildContext context) {
     final l10n = context.l10n;
-    // Today's look, for the fields steps 3-5 of #256 restyle.
     final pageTheme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
@@ -1287,11 +1286,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 /// model isn't on the phone any more (#153).
 enum _Scan { idle, reading, filled, hintsOnly, nothing, failed, modelMissing }
 
-/// What a reading put in the form (#153), and for the date and category
-/// what they were before, so reading the photo again can take it back.
 /// Where the rate lookup stands (#252).
 enum _RateState { idle, loading, found, noRate, unavailable }
 
+/// What a reading put in the form (#153), and for the date and category
+/// what they were before, so reading the photo again can take it back.
 class _ScanFilled {
   String? title;
   String? amount;

@@ -494,6 +494,17 @@ void main() {
       expect(m.paidFor()!.map((s) => s.shares), [600, 400]);
     });
 
+    test('amounts that add up leave no remainder, though 0.10 + 0.20 isn\'t 0.30 in doubles (#288)', () {
+      final m = model(euros)
+        ..amountController.text = '0.30'
+        ..splitMode = SplitMode.byAmount;
+      m.splitControllers['cy']!.text = '';
+      m.splitControllers['alex']!.text = '0.10';
+      m.splitControllers['bea']!.text = '0.20';
+      expect(m.splitProblem(), isNull);
+      expect(m.unallocated(), 0);
+    });
+
     test('a converted expense\'s amounts are in yen; the calculated total is shared out (#261)', () {
       final m = model(euros)
         ..choosePaidIn('JPY')

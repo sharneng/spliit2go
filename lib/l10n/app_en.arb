@@ -1006,6 +1006,14 @@
   "appSettingsExchangeRatesFailed": "Couldn't update exchange rates.",
   "expensePaidIn": "Paid in",
   "expenseExchangeRate": "Exchange rate",
+  "expenseFieldName": "{name}, {detail}",
+  "@expenseFieldName": {
+    "description": "A field's name for a screen reader: a person and what's typed for them (\"Cid, Shares\"), or the exchange rate and its pair (\"Exchange rate, EUR/JPY\").",
+    "placeholders": {
+      "name": {"type": "String"},
+      "detail": {"type": "String"}
+    }
+  },
   "expenseAmountNotYetKnown": "Not yet known",
   "expenseRateLoading": "Getting the exchange rate…",
   "expenseRateTyped": "Using the rate you entered.",

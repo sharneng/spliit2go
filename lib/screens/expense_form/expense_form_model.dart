@@ -767,13 +767,15 @@ class ExpenseFormModel extends ChangeNotifier {
     if (_splitMode == SplitMode.byAmount) {
       final amountMinor = splitTotal;
       if (amountMinor == null) return null;
-      var total = 0.0;
+      // In minor units, as [splitProblem] counts it: 0.10 + 0.20 summed
+      // as doubles is a hair over 0.30, which showed as "€0.00 over" (#288).
+      var totalMinor = 0;
       for (final p in includedParticipants) {
         final v = typedValue(p);
         if (v == null) return null;
-        total += v;
+        totalMinor += toMinorUnits(v, splitDigits);
       }
-      return fromMinorUnits(amountMinor, splitDigits) - total;
+      return fromMinorUnits(amountMinor - totalMinor, splitDigits);
     }
     return null;
   }

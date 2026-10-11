@@ -1,5 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show SemanticsNode;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -173,5 +174,42 @@ void main() {
     await tester.pumpAndSettle();
     final error = tester.widget<Text>(find.text('Amounts must add up to the total (\$10.00 over)'));
     expect(error.style?.color, Theme.of(tester.element(find.byType(SplitCard))).colorScheme.error);
+  });
+
+  // #288: what a screen reader says for each field.
+  SemanticsNode fieldNode(WidgetTester tester, Finder field) =>
+      tester.getSemantics(find.descendant(of: field, matching: find.byType(EditableText)));
+
+  testWidgets('the Amount field is named "Amount", not by its "0" placeholder', (tester) async {
+    await open(tester);
+    final amount = find.byKey(CurrencyCard.amountFieldKey);
+    expect(fieldNode(tester, amount).label, 'Amount');
+    await tester.enterText(amount, '30');
+    await tester.pumpAndSettle();
+    expect((fieldNode(tester, amount).label, fieldNode(tester, amount).value), ('Amount', '30'));
+  });
+
+  testWidgets('a split value field is named by its person and the mode', (tester) async {
+    await open(tester);
+    await mode(tester, 'Shares');
+    expect(fieldNode(tester, splitField('Cid')).label, 'Cid, Shares');
+    await mode(tester, 'Percent');
+    expect(fieldNode(tester, splitField('Cid')).label, 'Cid, Percent');
+    await mode(tester, 'Amount');
+    expect(fieldNode(tester, splitField('Cid')).label, 'Cid, Amount');
+  });
+
+  testWidgets('"Save as default split" reads as one switch with its name', (tester) async {
+    await open(tester);
+    final row = find.text('Save as default split');
+    await tester.ensureVisible(row);
+    expect(
+        tester.getSemantics(row),
+        isSemantics(
+            label: 'Save as default split', hasToggledState: true, isToggled: false, hasTapAction: true,
+            hasEnabledState: true, isEnabled: true, isFocusable: true, hasFocusAction: true));
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(tester.getSemantics(row), isSemantics(label: 'Save as default split', hasToggledState: true, isToggled: true));
   });
 }
