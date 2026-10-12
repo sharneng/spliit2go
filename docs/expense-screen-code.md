@@ -110,7 +110,9 @@ Its functions, by job:
 | `participant_sheet.dart` | `showParticipantSheet`, `ChoiceRow`, `participantName`: Paid by and From; "Who are you?" shares the rows |
 | `group_monogram.dart`, `participant_colors.dart` | `Monogram` and `participantColors`: each person's initials and color |
 | `segmented_pill.dart` | `SegmentedPill`: Evenly / Shares / Percent / Amount, and `fits`, whether its names fit |
-| `label_and_value.dart` | `LabelAndValue`: a label and its value on a line, or the value under it when they don't fit (#263) |
+| `label_and_value.dart` | `LabelAndValue`: a label and its value on a line, or the value under it at the line's end when they don't fit (#263, #294) |
+| `line_or_stack.dart` | `LineOrStack`: Scan receipt's icon, text and language on a line, or on two centered lines (#294) |
+| `text_scaled.dart`, `flag_glyph.dart` | `context.textScaled`, `FlagGlyph`: glyphs that grow with the text by its square root (#294) |
 | `money.dart` | `Money`: an amount, formatted |
 | `currency_picker.dart` | `pickCurrency`, `searchSheetHeight` (Group settings uses it too) |
 | `category_picker.dart`, `category_icon.dart` | `showCategoryPicker`, `CategoryIconGlyph` |

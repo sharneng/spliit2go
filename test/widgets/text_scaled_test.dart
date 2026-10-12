@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:spliit2go/main.dart';
 import 'package:spliit2go/theme.dart';
 import 'package:spliit2go/widgets/category_icon.dart';
+import 'package:spliit2go/widgets/flag_glyph.dart';
 import 'package:spliit2go/widgets/group_monogram.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/widgets/top_bar_buttons.dart';
@@ -72,5 +73,14 @@ void main() {
     expect(width(tester, 'inline'), 48);
     expect(width(tester, 'leading'), 48);
     expect(width(tester, 'monogram'), 48);
+  });
+
+  testWidgets('a flag, an emoji, grows as a glyph, not as the text', (tester) async {
+    double fontSize() => tester.widget<Text>(find.text('🇪🇺')).style!.fontSize!;
+    await pumpAt(tester, 1, const FlagGlyph('🇪🇺'));
+    expect(fontSize(), 20);
+    await pumpAt(tester, 4, const FlagGlyph('🇪🇺'));
+    expect(fontSize(), 40);
+    expect(tester.widget<Text>(find.text('🇪🇺')).textScaler, TextScaler.noScaling);
   });
 }

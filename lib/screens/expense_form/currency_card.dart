@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../widgets/flag_glyph.dart';
 import '../../l10n/context_l10n.dart';
 import '../../l10n/currency_names.dart';
 import '../../models/currency.dart';
@@ -80,7 +81,7 @@ class CurrencyCard extends StatelessWidget {
             // it opens a sheet, not a screen.
             value: Row(mainAxisSize: MainAxisSize.min, children: [
               if (_m.paidInCurrency.flagEmoji case final flag when flag.isNotEmpty) ...[
-                ExcludeSemantics(child: Text(flag, style: formValueStyle(context))),
+                FlagGlyph(flag),
                 const SizedBox(width: 8),
               ],
               Flexible(child: Text(localizedCurrencyName(context, _m.paidInCurrency), style: formValueStyle(context))),
