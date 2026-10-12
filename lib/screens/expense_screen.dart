@@ -799,7 +799,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     });
     // Each refusal below says why on screen; the haptic says to look.
     final invalid = _formKey.currentState!.validateGranularly();
-    if (invalid.isNotEmpty) return _refuse(invalid);
+    if (invalid.isNotEmpty) return _refuse(invalid: invalid);
     // The split first: a settlement's amount is its To amounts' sum.
     if (_m.splitProblem() != null) return _refuse();
     final amounts = _m.amountsToSave();
@@ -810,16 +810,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     // A new expense keeps photos that didn't upload, and syncs with them
     // later (#124); only ones still on their way hold it back. An edit is
     // online-only: each new photo is uploaded or removed first, as before.
-    if (_receipts.busy) {
-      setState(() => _saveError = context.l10n.expenseReceiptsWaitBeforeSave);
-      _scrollToTop();
-      return _refuse();
-    }
-    if (widget.isEditing && _receipts.hasFailed) {
-      setState(() => _saveError = context.l10n.expenseReceiptsUploadOrRemove);
-      _scrollToTop();
-      return _refuse();
-    }
+    if (_receipts.busy) return _refuse(blocker: context.l10n.expenseReceiptsWaitBeforeSave);
+    if (widget.isEditing && _receipts.hasFailed) return _refuse(blocker: context.l10n.expenseReceiptsUploadOrRemove);
 
     setState(() => _saving = true);
 
@@ -838,12 +830,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ? 'Saving expense ${widget.existingExpense!.id}'
               : 'Adding an expense to ${widget.group.id}');
       if (!mounted) return;
+      final message = errorMessageFor(context, error, unexpected: context.l10n.expenseEditSaveFailed);
       setState(() {
         _saving = false;
-        _saveError = errorMessageFor(context, error, unexpected: context.l10n.expenseEditSaveFailed);
+        _saveError = message;
         _saveErrorDiagnostics = error.diagnostics;
       });
       _scrollToTop();
+      _announce(message);
     }
   }
 
@@ -852,8 +846,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// highest. A screen reader, which can't feel the haptic or see the
   /// scroll, hears what it is (#263): the [Form] says a field's error
   /// itself, so this says the split's or an amount's when no field has one.
-  void _refuse([Set<FormFieldState<Object?>> invalid = const {}]) {
+  ///
+  /// A [blocker] is a reason outside the form's fields, such as a receipt
+  /// still uploading (#295 review): it goes above the cards, which scroll
+  /// to the top, and is announced as it is.
+  void _refuse({Set<FormFieldState<Object?>> invalid = const {}, String? blocker}) {
     unawaited(Haptics.refused());
+    if (blocker != null) {
+      setState(() => _saveError = blocker);
+      _scrollToTop();
+      _announce(blocker);
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final l10n = context.l10n;
@@ -876,12 +880,17 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       if (first case (final where, final message)) {
         unawaited(Scrollable.ensureVisible(where,
             alignment: 0.2, duration: const Duration(milliseconds: 300), curve: Curves.easeOut));
-        if (message != null && invalid.isEmpty && MediaQuery.supportsAnnounceOf(context)) {
-          unawaited(SemanticsService.sendAnnouncement(View.of(context), message, Directionality.of(context),
-              assertiveness: Assertiveness.assertive));
-        }
+        if (message != null && invalid.isEmpty) _announce(message);
       }
     });
+  }
+
+  /// Says [message] to a screen reader, as soon as it's said: why a save
+  /// was refused or failed, which a reader can't see appear (#263).
+  void _announce(String message) {
+    if (!MediaQuery.supportsAnnounceOf(context)) return;
+    unawaited(SemanticsService.sendAnnouncement(View.of(context), message, Directionality.of(context),
+        assertiveness: Assertiveness.assertive));
   }
 
   /// Up to why the save failed, at the top of the list (#259).

@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -177,6 +178,21 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// What a screen reader is told (#263): collected from the accessibility
+  /// channel's announcements.
+  List<String> announcements(WidgetTester tester) {
+    final said = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockDecodedMessageHandler<Object?>(SystemChannels.accessibility,
+        (message) async {
+      final event = message! as Map<Object?, Object?>;
+      if (event['type'] == 'announce') said.add((event['data']! as Map<Object?, Object?>)['message']! as String);
+      return null;
+    });
+    addTearDown(() =>
+        tester.binding.defaultBinaryMessenger.setMockDecodedMessageHandler<Object?>(SystemChannels.accessibility, null));
+    return said;
+  }
+
   Future<void> closeTree(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
@@ -261,6 +277,7 @@ void main() {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final s = server(signs: [offline]);
+    final said = announcements(tester);
     final popped = await openForm(tester, db, s.client, _FakePicker(),
         existing: Expense(
           id: 'e1',
@@ -280,12 +297,44 @@ void main() {
 
     expect(popped, isEmpty);
     expect(find.text("Wait for receipts to upload, or remove the ones that weren't."), findsOneWidget);
+    // And a screen reader is told (#295 review).
+    expect(said, ["Wait for receipts to upload, or remove the ones that weren't."]);
     expect(s.requests.where((r) => r.url.path.endsWith('groups.expenses.update')), isEmpty);
 
     await tester.tap(find.byTooltip('Remove receipt'));
     await tester.pumpAndSettle();
     await fillAndSave(tester, fill: false);
     expect(popped, [true]);
+    await closeTree(tester);
+  });
+
+  testWidgets('a photo still uploading holds Save, and a screen reader is told why (#295 review)', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final upload = Completer<http.Response>();
+    final s = server(signs: [() => upload.future]);
+    final said = announcements(tester);
+    final popped = await openForm(tester, db, s.client, _FakePicker());
+
+    // Its spinner never settles while it uploads: pumped a step at a time.
+    await tester.tap(find.text('Add receipt'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose from library'));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Coffee');
+    await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '18.60');
+    await tester.tap(find.byTooltip('Save'));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(popped, isEmpty);
+    expect(find.text('Wait for receipts to finish uploading.'), findsOneWidget);
+    expect(said, ['Wait for receipts to finish uploading.']);
+
+    upload.completeError(http.ClientException('offline'));
+    await tester.pumpAndSettle();
     await closeTree(tester);
   });
 

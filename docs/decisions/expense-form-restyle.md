@@ -277,7 +277,7 @@ Done in [#263](https://github.com/sharneng/spliit2go/issues/263), with no change
   - Select none/all and the rate pair are as tall as their row.
   - "Use the published rate" takes taps 12pt above and below its text (`Overhang`).
   - The top bar's buttons are 48 on Android (ui-theme.md, item 18).
-- **A refused save is announced.** The form already announces the first field error. `_refuse` announces the split's problem or a converted amount that comes to nothing, and the Amount field's error is read with the field.
+- **A refused save is announced.** The form already announces the first field error. `_refuse` announces the split's problem or a converted amount that comes to nothing. It also announces a receipt holding the save back, still uploading or (when editing) not uploaded (#295 review), and a save that failed. The Amount field's error is read with the field.
 - **Tests.** `expense_form_a11y_test.dart` checks Flutter's tap-target and label guidelines on Android and iOS for five forms: an expense, a split by percent, a converted expense, a typed rate and a settlement, and again at twice the text size. Tests now draw text in Roboto, loaded in `test/flutter_test_config.dart`, instead of the test font, whose letters are each 1em wide. A measured fit then comes out as it does on a phone.
 
 ## Decisions so far
