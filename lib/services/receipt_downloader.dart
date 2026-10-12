@@ -49,7 +49,8 @@ class ReceiptDownloadStatus {
     this.detailsUnknown = 0,
   });
 
-  /// A favorite group, downloads on, and receipts to have.
+  /// A favorite group, downloads on, and receipts to have; or any
+  /// favorite whose details couldn't be read (#237), for its Retry.
   final bool shown;
   final bool running;
 
@@ -169,8 +170,11 @@ class ReceiptDownloader {
       final problem = ReceiptDownloadProblem.values.asNameMap()[row?.receiptDownloadProblem];
       _statuses[groupId]?.value = ReceiptDownloadStatus(
         shown: row?.organization == GroupOrganization.favorite &&
-            mode != ReceiptDownloadMode.off &&
-            (counts.total > 0 || running),
+            ((mode != ReceiptDownloadMode.off && (counts.total > 0 || running)) ||
+                // Reading the details went wrong: shown with its Retry,
+                // with no receipts or downloads off too (PR #303 review).
+                problem == ReceiptDownloadProblem.noActivityLog ||
+                problem == ReceiptDownloadProblem.failed),
         running: running,
         total: counts.total,
         available: counts.available,
@@ -257,7 +261,22 @@ class ReceiptDownloader {
 
     run.downloading = true;
     await refreshStatus(groupId);
-    StreamSubscription<List<ConnectivityResult>>? watch;
+    // The network as it is now, followed from the start: reading the
+    // details can take a while, and receipt files go by the network
+    // they'd use (PR #303 review). A "none" isn't taken: iOS reports it
+    // the moment this starts listening, and going offline fails a
+    // transfer by itself.
+    var current = network;
+    var downloadingFiles = false;
+    final watch = (_connectivityChanges ?? _platformChanges())?.listen((network) {
+      if (network.every((r) => r == ConnectivityResult.none)) return;
+      current = network;
+      // Only moving onto mobile data under "Wi-Fi only" cancels, and only
+      // a receipt transfer: the details are read over any network.
+      if (downloadingFiles && mode == ReceiptDownloadMode.wifiOnly && !_allowed(mode, network)) {
+        run.cancel(ReceiptDownloadProblem.waitingForWifi);
+      }
+    });
     try {
       final details = await _readDetails(groupId, client, run);
       if (run.cancelled) return null;
@@ -267,18 +286,10 @@ class ReceiptDownloader {
       final detailsProblem =
           details.failure == null ? null : (problem: ReceiptDownloadProblem.failed, diagnostics: details.failure!.diagnostics);
       if (mode == ReceiptDownloadMode.off) return detailsProblem;
-      if (!_allowed(mode, network)) {
+      if (!_allowed(mode, current)) {
         return detailsProblem ?? (problem: ReceiptDownloadProblem.waitingForWifi, diagnostics: null);
       }
-      // Only moving onto mobile data under "Wi-Fi only" cancels: going
-      // offline fails the transfer by itself, and iOS reports "none" when
-      // this starts listening on the simulator, which mustn't stop a run.
-      watch = (_connectivityChanges ?? _platformChanges())?.listen((network) {
-        final onMobileData = network.any((r) => r != ConnectivityResult.none);
-        if (mode == ReceiptDownloadMode.wifiOnly && onMobileData && !_allowed(mode, network)) {
-          run.cancel(ReceiptDownloadProblem.waitingForWifi);
-        }
-      });
+      downloadingFiles = true;
       final (problem, diagnostics) = await _downloadFiles(groupId, run, details.failure);
       return (problem: problem, diagnostics: diagnostics);
     } catch (e, st) {

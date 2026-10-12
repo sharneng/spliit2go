@@ -37,6 +37,9 @@ void main() {
   late Set<String> failingReads;
   Completer<void>? holdDownload;
 
+  /// Holds every expense read until completed.
+  Completer<void>? holdRead;
+
   const wifi = [ConnectivityResult.wifi];
   const mobile = [ConnectivityResult.mobile];
 
@@ -100,6 +103,7 @@ void main() {
       }
       final id = input['expenseId'] as String;
       reads.add(id);
+      if (holdRead case final hold?) await hold.future;
       if (failingReads.contains(id)) return http.Response('boom', 500);
       return http.Response(
           jsonEncode([
@@ -142,6 +146,7 @@ void main() {
     downloads = [];
     reads = [];
     holdDownload = null;
+    holdRead = null;
     activities = [('a2', 'UPDATE_EXPENSE', 'e1'), ('a1', 'CREATE_EXPENSE', 'e1')];
     activityReads = 0;
     noActivityLog = false;
@@ -736,6 +741,74 @@ void main() {
       expect(downloads, isEmpty);
       expect(reads, unorderedEquals(['e1', 'e2', 'e3']));
       expect((await cachedNotes())['e1'], 'Tip included');
+    });
+
+    // PR #303 review (Ezra): receipt files go by the network once the
+    // details are read, not the one the run started on.
+    group('the network changing while the expenses are read', () {
+      Future<void> changeWhileReading(List<ConnectivityResult> to) async {
+        final d = downloader();
+        holdRead = Completer();
+        final running = d.run('g1', server);
+        while (reads.isEmpty) {
+          await pumpEventQueue();
+        }
+        network = to;
+        changes.add(to);
+        await pumpEventQueue();
+        holdRead!.complete();
+        await running;
+      }
+
+      test('Wi-Fi to mobile data under Wi-Fi only: the reads finish, no receipt downloads', () async {
+        network = wifi;
+        await changeWhileReading(mobile);
+
+        expect(reads, unorderedEquals(['e1', 'e2', 'e3']));
+        expect(downloads, isEmpty);
+        expect((await statusOf(downloader())).problem, ReceiptDownloadProblem.waitingForWifi);
+      });
+
+      test('mobile data to Wi-Fi: the receipts download', () async {
+        network = mobile;
+        await changeWhileReading(wifi);
+
+        expect(downloads, hasLength(3));
+        expect((await statusOf(downloader())).problem, isNull);
+      });
+    });
+
+    // PR #303 review (Ezra): the error and its Retry stay reachable.
+    test('a server without an activity log shows on a favorite without receipts', () async {
+      documents = {'e3': []};
+      notes = {'e3': 'Parking'};
+      await refresh();
+      noActivityLog = true;
+      final d = downloader();
+      await d.run('g1', server);
+
+      final status = await statusOf(d);
+      expect((status.shown, status.isError, status.problem),
+          (true, true, ReceiptDownloadProblem.noActivityLog));
+    });
+
+    test('and with downloads Off', () async {
+      await SettingsService().setReceiptDownloadMode(ReceiptDownloadMode.off);
+      noActivityLog = true;
+      final d = downloader();
+      await d.run('g1', server);
+
+      final status = await statusOf(d);
+      expect((status.shown, status.isError), (true, true));
+    });
+
+    test('a favorite without receipts is otherwise not shown', () async {
+      documents = {'e3': []};
+      await refresh();
+      final d = downloader();
+      await d.run('g1', server);
+
+      expect((await statusOf(d)).shown, isFalse);
     });
 
     test('a server without an activity log: red, nothing read, and a refresh forgets what was; '
