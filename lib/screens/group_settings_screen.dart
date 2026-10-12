@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../widgets/flag_glyph.dart';
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
 import '../l10n/context_l10n.dart';
@@ -559,7 +560,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                   child: Row(
                     children: [
                       if (_selectedCurrency.flagEmoji.isNotEmpty) ...[
-                        Text(_selectedCurrency.flagEmoji, style: const TextStyle(fontSize: 18)),
+                        FlagGlyph(_selectedCurrency.flagEmoji, size: 18),
                         const SizedBox(width: 8),
                       ],
                       Expanded(child: Text(localizedCurrencyLabel(context, _selectedCurrency))),

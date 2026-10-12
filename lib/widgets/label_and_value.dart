@@ -10,25 +10,37 @@ import 'package:flutter/widgets.dart';
 /// one in French goes under sooner.
 ///
 /// Beside, the value gets the rest of the line, so a text field fills it.
-/// Under, it's [indent] in from the label's start, [runGap] below it, and
-/// as wide as it needs.
+/// Under, it's [runGap] below the label, as wide as it needs, and at the
+/// line's end as it is beside: values line up on one edge (Kenneth, #294).
+///
+/// [under] decides instead of measuring, for rows that decide together,
+/// as the split's (#294). Beside, a label that doesn't fit then wraps.
 class LabelAndValue extends MultiChildRenderObjectWidget {
-  LabelAndValue({super.key, required Widget label, required Widget value, this.gap = 16, this.runGap = 2, this.indent = 0})
+  LabelAndValue(
+      {super.key,
+      required Widget label,
+      required Widget value,
+      this.gap = 16,
+      this.runGap = 2,
+      this.under})
       : super(children: [label, value]);
 
   final double gap;
   final double runGap;
-  final double indent;
+  final bool? under;
 
   @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderLabelAndValue(gap: gap, runGap: runGap, indent: indent, textDirection: Directionality.of(context));
+  RenderObject createRenderObject(BuildContext context) => _RenderLabelAndValue(
+      gap: gap,
+      runGap: runGap,
+      under: under,
+      textDirection: Directionality.of(context));
 
   @override
   void updateRenderObject(BuildContext context, RenderObject renderObject) => (renderObject as _RenderLabelAndValue)
     ..gap = gap
     ..runGap = runGap
-    ..indent = indent
+    ..under = under
     ..textDirection = Directionality.of(context);
 }
 
@@ -37,11 +49,21 @@ class _ParentData extends ContainerBoxParentData<RenderBox> {}
 class _RenderLabelAndValue extends RenderBox
     with ContainerRenderObjectMixin<RenderBox, _ParentData>, RenderBoxContainerDefaultsMixin<RenderBox, _ParentData> {
   _RenderLabelAndValue(
-      {required double gap, required double runGap, required double indent, required TextDirection textDirection})
+      {required double gap,
+      required double runGap,
+      required bool? under,
+      required TextDirection textDirection})
       : _gap = gap,
         _runGap = runGap,
-        _indent = indent,
+        _under = under,
         _textDirection = textDirection;
+
+  bool? _under;
+  set under(bool? value) {
+    if (value == _under) return;
+    _under = value;
+    markNeedsLayout();
+  }
 
   double _gap;
   set gap(double value) {
@@ -57,12 +79,6 @@ class _RenderLabelAndValue extends RenderBox
     markNeedsLayout();
   }
 
-  double _indent;
-  set indent(double value) {
-    if (value == _indent) return;
-    _indent = value;
-    markNeedsLayout();
-  }
 
   TextDirection _textDirection;
   set textDirection(TextDirection value) {
@@ -82,9 +98,15 @@ class _RenderLabelAndValue extends RenderBox
   bool _fits(double width) =>
       _label.getMaxIntrinsicWidth(double.infinity) + _gap + _value.getMaxIntrinsicWidth(double.infinity) <= width;
 
+  bool _beside(double width) => switch (_under) { true => false, false => true, null => _fits(width) };
+
+  /// Beside, the label's width: all it asks for, or what the value leaves.
+  double _labelWidth(double width) => math.min(_label.getMaxIntrinsicWidth(double.infinity),
+      math.max(0, width - _gap - _value.getMaxIntrinsicWidth(double.infinity)));
+
   @override
   double computeMinIntrinsicWidth(double height) =>
-      math.max(_label.getMinIntrinsicWidth(double.infinity), _indent + _value.getMinIntrinsicWidth(double.infinity));
+      math.max(_label.getMinIntrinsicWidth(double.infinity), _value.getMinIntrinsicWidth(double.infinity));
 
   @override
   double computeMaxIntrinsicWidth(double height) =>
@@ -94,9 +116,9 @@ class _RenderLabelAndValue extends RenderBox
   double computeMinIntrinsicHeight(double width) => computeMaxIntrinsicHeight(width);
 
   @override
-  double computeMaxIntrinsicHeight(double width) => _fits(width)
-      ? math.max(_label.getMaxIntrinsicHeight(double.infinity), _value.getMaxIntrinsicHeight(double.infinity))
-      : _label.getMaxIntrinsicHeight(width) + _runGap + _value.getMaxIntrinsicHeight(math.max(0, width - _indent));
+  double computeMaxIntrinsicHeight(double width) => _beside(width)
+      ? math.max(_label.getMaxIntrinsicHeight(_labelWidth(width)), _value.getMaxIntrinsicHeight(double.infinity))
+      : _label.getMaxIntrinsicHeight(width) + _runGap + _value.getMaxIntrinsicHeight(width);
 
   @override
   Size computeDryLayout(BoxConstraints constraints) => _layout(constraints, dry: true);
@@ -113,8 +135,8 @@ class _RenderLabelAndValue extends RenderBox
       (child.parentData! as _ParentData).offset = Offset(x, top);
     }
 
-    if (_fits(width)) {
-      final labelWidth = _label.getMaxIntrinsicWidth(double.infinity);
+    if (_beside(width)) {
+      final labelWidth = _labelWidth(width);
       final label = lay(_label, BoxConstraints(maxWidth: labelWidth));
       final value = lay(_value, BoxConstraints(maxWidth: math.max(0, width - labelWidth - _gap)));
       final height = math.max(label.height, value.height);
@@ -123,9 +145,9 @@ class _RenderLabelAndValue extends RenderBox
       return constraints.constrain(Size(width, height));
     }
     final label = lay(_label, BoxConstraints(maxWidth: width));
-    final value = lay(_value, BoxConstraints(maxWidth: math.max(0, width - _indent)));
+    final value = lay(_value, BoxConstraints(maxWidth: width));
     place(_label, 0, 0, label);
-    place(_value, _indent, label.height + _runGap, value);
+    place(_value, width - value.width, label.height + _runGap, value);
     return constraints.constrain(Size(width, label.height + _runGap + value.height));
   }
 

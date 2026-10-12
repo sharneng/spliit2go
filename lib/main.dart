@@ -22,6 +22,7 @@ import 'services/error_reporting.dart';
 import 'services/receipt_cache.dart';
 import 'services/receipt_scanner.dart';
 import 'widgets/error_message.dart';
+import 'widgets/text_scaled.dart';
 import 'app_name.dart';
 
 Future<void> main() async {
@@ -140,7 +141,23 @@ Widget spliit2goAppBuilder(BuildContext context, Widget? child) {
     value: spliit2goSystemUiOverlayStyle(theme),
     child: Container(
       color: theme.scaffoldBackgroundColor,
-      child: _DismissKeyboardOnTap(child: SafeArea(top: false, bottom: false, child: child!)),
+      // Icons grow with the text size (#294), as text does: in the theme,
+      // so a screen's own Theme copied from it keeps them.
+      child: Theme(
+        data: theme.copyWith(
+          iconTheme: theme.iconTheme.copyWith(size: context.textScaled(24)),
+          // A text button's icon, beside its label: Material's 18, scaled.
+          textButtonTheme: TextButtonThemeData(style: ButtonStyle(iconSize: WidgetStatePropertyAll(context.textScaled(18)))),
+          outlinedButtonTheme:
+              OutlinedButtonThemeData(style: ButtonStyle(iconSize: WidgetStatePropertyAll(context.textScaled(18)))),
+          filledButtonTheme: FilledButtonThemeData(style: ButtonStyle(iconSize: WidgetStatePropertyAll(context.textScaled(18)))),
+          // An icon button keeps Material's 24, in the top bar or not: its
+          // card or target doesn't grow, and an icon beside text that
+          // should grow sets its own size.
+          iconButtonTheme: const IconButtonThemeData(style: ButtonStyle(iconSize: WidgetStatePropertyAll(24))),
+        ),
+        child: _DismissKeyboardOnTap(child: SafeArea(top: false, bottom: false, child: child!)),
+      ),
     ),
   );
 }
@@ -160,6 +177,10 @@ class _DismissKeyboardOnTap extends StatelessWidget {
     if (!const {TargetPlatform.iOS, TargetPlatform.macOS}.contains(Theme.of(context).platform)) return child;
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
+      // Not a button to VoiceOver, which has its own ways to close the
+      // keyboard: otherwise the whole screen is one unlabeled tap target
+      // (found by the form's guideline tests, #294).
+      excludeFromSemantics: true,
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
       child: child,
     );

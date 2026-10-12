@@ -59,8 +59,10 @@ class TopBarButtons extends StatelessWidget {
     );
   }
 
-  /// Each button the card's height square, with no padding of its own.
+  /// Each button the card's height square, with no padding of its own,
+  /// its icon fixed as the card is: not growing with the text (#294).
   static final buttonStyle = IconButton.styleFrom(
+    iconSize: 24,
     fixedSize: const Size.square(size),
     minimumSize: const Size.square(size),
     padding: EdgeInsets.zero,
@@ -96,6 +98,6 @@ Widget topBarCircleIcon(BuildContext context, IconData icon) => SizedBox.square(
         maxWidth: TopBarButtons.size,
         minHeight: TopBarButtons.size,
         maxHeight: TopBarButtons.size,
-        child: topBarCard(context, Center(child: Icon(icon))),
+        child: topBarCard(context, Center(child: Icon(icon, size: 24))),
       ),
     );

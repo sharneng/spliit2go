@@ -8,6 +8,7 @@ import '../services/build_info.dart';
 import '../theme.dart';
 import '../widgets/bottom_inset.dart';
 import '../app_name.dart';
+import '../widgets/text_scaled.dart';
 
 /// Where About's links go (#109).
 const spliitUrl = 'https://spliit.app';
@@ -107,7 +108,7 @@ class _AboutScreenState extends State<AboutScreen> {
           leading: Icon(icon),
           title: Text(title),
           subtitle: Text(subtitle),
-          trailing: const Icon(Icons.open_in_new, size: 20),
+          trailing: Icon(Icons.open_in_new, size: context.textScaled(20)),
           onTap: () => _open(url),
         );
     return Scaffold(
@@ -134,7 +135,7 @@ class _AboutScreenState extends State<AboutScreen> {
                 ),
                 if (commit != null && commit.known)
                   IconButton(
-                    icon: const Icon(Icons.copy, size: 18),
+                    icon: Icon(Icons.copy, size: context.textScaled(18)),
                     tooltip: l10n.aboutCopyVersion,
                     visualDensity: VisualDensity.compact,
                     onPressed: () => _copyVersion(info!, commit),

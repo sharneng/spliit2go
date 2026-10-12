@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'grouped_section.dart';
+import 'text_scaled.dart';
 
 /// One entry of an [AppMenuButton] or a row's long-press menu.
 class AppMenuItem {
@@ -107,6 +108,7 @@ PopupMenuItem<int> appPopupMenuItem(BuildContext context, int index, AppMenuItem
     {bool choice = false}) {
   final colors = Theme.of(context).colorScheme;
   final color = item.destructive ? colors.error : null;
+  final markSize = context.textScaled(24);
   return PopupMenuItem<int>(
     value: index,
     enabled: item.enabled,
@@ -119,12 +121,14 @@ PopupMenuItem<int> appPopupMenuItem(BuildContext context, int index, AppMenuItem
       checked: choice ? item.checked : null,
       inMutuallyExclusiveGroup: choice ? true : null,
       child: Row(children: [
+      // A row's mark, growing with the text (#294); the rows without one
+      // keep its room.
       if (item.checked)
-        Icon(Icons.check, color: colors.primary)
+        Icon(Icons.check, size: markSize, color: colors.primary)
       else if (item.icon != null)
-        Icon(item.icon, color: color)
+        Icon(item.icon, size: markSize, color: color)
       else if (choice)
-        const SizedBox(width: 24),
+        SizedBox(width: markSize),
       if (item.checked || item.icon != null || choice) const SizedBox(width: 14),
       Expanded(
           child: Text(item.label, style: color == null ? null : TextStyle(color: color))),

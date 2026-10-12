@@ -33,6 +33,7 @@ import '../widgets/group_monogram.dart';
 import '../widgets/top_bar_buttons.dart';
 import '../theme.dart';
 import '../widgets/confirm_dialog.dart';
+import '../widgets/text_scaled.dart';
 
 /// What tapping an expense does, from both the expense list and the
 /// Activity tab (issue #90): a bottom sheet showing the expense's details,
@@ -807,7 +808,8 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       icons[mark] = icon;
       return mark;
     });
-    final size = (style?.fontSize ?? 14) * 1.2;
+    // As the text grows (#294).
+    final size = context.textScaled((style?.fontSize ?? 14) * 1.2);
     final spans = <InlineSpan>[];
     text.splitMapJoin(RegExp(icons.keys.map(RegExp.escape).join('|')), onMatch: (m) {
       final icon = icons[m[0]!]!;
@@ -880,7 +882,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
                   child: Icon(LucideIcons.banknote,
                       size: TopBarButtons.size * 0.55, color: theme.colorScheme.primary),
                 ))
-            : CategoryIconGlyph(category: known, size: TopBarButtons.size),
+            : CategoryIconGlyph(category: known, size: TopBarButtons.size, scales: false),
         const SizedBox(width: 12),
         Expanded(
           child: message == null

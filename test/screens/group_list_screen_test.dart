@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:spliit2go/models/group_organization.dart';
@@ -301,7 +303,8 @@ void main() {
 
     final normal = await iconSize(1);
     expect(normal, greaterThan(14)); // was a fixed 14 px
-    expect(await iconSize(2), closeTo(normal * 2, 0.01));
+    // By the square root of the text's growth, as every glyph (#294).
+    expect(await iconSize(2), closeTo(normal * math.sqrt(2), 0.01));
   });
 
   testWidgets(

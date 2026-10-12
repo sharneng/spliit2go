@@ -18,6 +18,7 @@ import 'category_icon.dart';
 import 'grouped_section.dart';
 import 'participant_colors.dart';
 import 'bottom_inset.dart';
+import 'text_scaled.dart';
 
 /// Expenses in date sections (issue #88), each a grouped card under its
 /// caption (#185), built lazily. Shared by the Expenses tab and search
@@ -367,7 +368,7 @@ class ExpenseTile extends StatelessWidget {
     if (e.syncFailed) {
       final error = Theme.of(context).colorScheme.error;
       return Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.error_outline, size: 13, color: error),
+        Icon(Icons.error_outline, size: context.textScaled(13), color: error),
         const SizedBox(width: 2),
         Flexible(
             child: Text(l10n.groupScreenSyncFailed,

@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'flag_glyph.dart';
+import 'text_scaled.dart';
 import '../l10n/context_l10n.dart';
 import '../l10n/currency_names.dart';
 import '../models/currency.dart';
@@ -102,7 +104,7 @@ class _CurrencyPickerState extends State<_CurrencyPicker> {
                   controller: _searchController,
                   autofocus: true,
                   decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search),
+                    prefixIcon: Icon(Icons.search, size: context.textScaled(24)),
                     hintText: context.l10n.currencyPickerSearchHint,
                     isDense: true,
                     border: const OutlineInputBorder(),
@@ -145,13 +147,10 @@ class _CurrencyPickerState extends State<_CurrencyPicker> {
       );
 
   Widget _tile(BuildContext context, Currency c) => ListTile(
+        // Growing as a glyph, with room for it (#294).
         leading: SizedBox(
-          width: 28,
-          child: Text(
-            c.code.isEmpty ? '＋' : c.flagEmoji,
-            style: const TextStyle(fontSize: 20),
-            textAlign: TextAlign.center,
-          ),
+          width: context.textScaled(28),
+          child: FlagGlyph(c.code.isEmpty ? '＋' : c.flagEmoji),
         ),
         title: Text(localizedCurrencyLabel(context, c)),
         selected: c.code == (widget.selectedCode ?? ''),

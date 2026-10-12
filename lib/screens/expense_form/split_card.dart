@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../l10n/context_l10n.dart';
@@ -14,6 +16,7 @@ import '../../widgets/label_and_value.dart';
 import '../../widgets/money.dart';
 import '../../widgets/participant_sheet.dart';
 import '../../widgets/segmented_pill.dart';
+import '../../widgets/text_scaled.dart';
 import 'expense_form_model.dart';
 import 'form_text.dart';
 import 'inline_number_field.dart';
@@ -98,25 +101,26 @@ class SplitCard extends StatelessWidget {
                     child: Text(_m.allIncluded ? l10n.expenseSelectNone : l10n.expenseSelectAll),
                   ),
                   runGap: 0,
-                  // Its text under the label's, past the button's padding.
-                  indent: -8,
                 )
               : headingLabel,
         ),
       ),
     );
-    final people = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    final people = LayoutBuilder(builder: (context, constraints) {
+      final under = _valuesUnder(context, constraints.maxWidth, preview);
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       // The people's lines start at their names; the card's own, around
       // them, at its edge.
       for (final (i, p) in _toList.indexed) ...[
         if (i > 0) const GroupedDivider(indent: ChoiceRow.monogramIndent),
-        _row(context, p, colors[p.id]!, preview?[p.id]),
+        _row(context, p, colors[p.id]!, preview?[p.id], under: under),
       ],
       // An expense's split says how much is left right under the people,
       // above "Save as default split" (Kenneth, 2026-10-10).
       if (!settlement && hasMessage)
         Padding(key: footerKey, padding: const EdgeInsets.fromLTRB(16, 0, 16, 12), child: message),
     ]);
+    });
     return GroupedSection(
       // A settlement's, only what's wrong, under it.
       footerKey: settlement ? footerKey : null,
@@ -208,7 +212,50 @@ class SplitCard extends StatelessWidget {
   /// it, in large text) their value with what it comes to under that.
   /// In Evenly the row is a checkbox: a tap includes or leaves them out,
   /// and it says checked or not to a screen reader.
-  Widget _row(BuildContext context, Participant p, Color color, int? preview) {
+  /// Whether every row's value goes under its name (Kenneth, #294): when
+  /// the widest would leave the names less than half the row. One answer
+  /// for all of them, so they don't go under one by one as names grow.
+  bool _valuesUnder(BuildContext context, double width, Map<String, int>? preview) {
+    final evenly = _m.splitMode == SplitMode.evenly;
+    final amounts = [
+      if (preview != null && _m.splitMode != SplitMode.byAmount)
+        for (final amount in preview.values)
+          formatMoney(amount, _m.group.currency, decimalDigits: _m.digits, locale: context.appLocale),
+    ];
+    // What each field shows: its prefix or suffix, and what's typed or "0".
+    final typed = [
+      if (!evenly)
+        for (final p in _toList)
+          [
+            if (_m.splitMode == SplitMode.byAmount) '${_m.splitSymbol} ',
+            switch (_m.splitControllers[p.id]?.text) { final text? when text.isNotEmpty => text, _ => '0' },
+            if (_m.splitMode == SplitMode.byPercentage) '%',
+          ].join(),
+    ];
+    final scaler = MediaQuery.textScalerOf(context);
+    double widthOf(String text, TextStyle? style) {
+      final painter = TextPainter(
+          text: TextSpan(text: text, style: style), textScaler: scaler, textDirection: Directionality.of(context))
+        ..layout();
+      final width = painter.width;
+      painter.dispose();
+      return width;
+    }
+
+    final amountStyle = Money.styleOf(context, size: MoneySize.support);
+    final fieldStyle = DefaultTextStyle.of(context).style.merge(formValueStyle(context));
+    final widest = [
+      0.0,
+      for (final amount in amounts) widthOf(amount, amountStyle),
+      for (final text in typed) widthOf(text, fieldStyle),
+    ].reduce(math.max);
+    final row = width - 2 * 16;
+    final monogram = context.textScaled(24) + 16;
+    final check = evenly ? 12 + context.textScaled(24) : 0;
+    return row - monogram - 12 - widest - check < row / 2;
+  }
+
+  Widget _row(BuildContext context, Participant p, Color color, int? preview, {required bool under}) {
     final theme = Theme.of(context);
     final evenly = _m.splitMode == SplitMode.evenly;
     final included = _m.isIncluded(p.id);
@@ -220,7 +267,7 @@ class SplitCard extends StatelessWidget {
     // height: here the amount goes under the value. The value goes under
     // the name when the two don't fit on a line, which would squeeze the
     // name to a word a line (#266 review), as spliit-ios does at
-    // accessibility sizes; measured (#263), not at a set text size.
+    // accessibility sizes. Every row's goes under, or none (#294).
     Widget layout(Widget name, Widget value) => ConstrainedBox(
           constraints: const BoxConstraints(minHeight: GroupedRow.oneLineMinHeight),
           child: Padding(
@@ -234,15 +281,15 @@ class SplitCard extends StatelessWidget {
               value: value,
               gap: 12,
               runGap: 6,
-              // Under the name, past the monogram.
-              indent: 40,
+              under: under,
             ),
           ),
         );
     if (evenly) {
       // Who's in is checked, as in the Paid by sheet, not only shown by the
       // dimming (Kenneth, 2026-10-11): a mark doesn't rely on seeing the
-      // contrast. Out, the check's space stays, so the amounts line up.
+      // contrast. Out, the check's space stays, so the amounts line up. It
+      // goes with the amount, beside the name or under it (Kenneth).
       final value = Row(mainAxisSize: MainAxisSize.min, children: [
         if (preview != null) ...[_amount(context, preview), const SizedBox(width: 12)],
         Visibility.maintain(visible: included, child: Icon(Icons.check, color: theme.colorScheme.primary)),
@@ -266,7 +313,8 @@ class SplitCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            SizedBox(width: 96, child: field),
+            // As wide as its characters at the text size (Kenneth, #294).
+            field,
             // Amount's value is the amount itself.
             if (preview != null && _m.splitMode != SplitMode.byAmount)
               Padding(padding: const EdgeInsets.only(top: 2), child: _amount(context, preview)),

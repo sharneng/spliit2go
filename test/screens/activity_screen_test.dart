@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -374,7 +375,10 @@ void main() {
       expect(tester.widget<ListTile>(opens).onTap, isNotNull);
       final circle = circleIn(opens);
       expect(circle, findsOneWidget);
-      expect(tester.getSize(circle), const Size.square(28), reason: 'round, not squashed to the line');
+      // 28 at the usual text size, growing by the square root of the
+      // text's growth (#294).
+      expect(tester.getSize(circle), Size.square(28 * math.sqrt(scale)),
+          reason: 'round, not squashed to the line');
       expect((tester.widget<Container>(circle).decoration! as BoxDecoration).color, scheme.primaryContainer);
       final icon = find.descendant(of: circle, matching: find.byType(Icon));
       expect(tester.widget<Icon>(icon).color, scheme.onPrimaryContainer);
