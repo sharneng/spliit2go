@@ -179,6 +179,7 @@
   "expenseSaveDefaultSplit": "Save as default split",
   "expenseNotesLabel": "Notes",
   "expenseNotesHint": "Anything worth remembering?",
+  "expenseNotesWhenOnline": "Available when online",
   "expenseSaveButton": "Save",
   "expenseCategorySearchLabel": "Search categories",
   "expenseNoMatchingCategories": "No matching categories",

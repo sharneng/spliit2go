@@ -96,6 +96,10 @@ class Expenses extends Table {
   /// ids (create gives documents new ones).
   TextColumn get documentsJson => text().nullable()();
 
+  /// See [Expense.detailsFetchedAt] (#237). Every refresh clears it, with
+  /// [notes] and [conversionRate], since the list doesn't send them.
+  DateTimeColumn get detailsFetchedAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -357,7 +361,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -491,6 +495,18 @@ class AppDatabase extends _$AppDatabase {
           if (from < 19) {
             // Exchange rates kept for offline use (#252).
             await m.createTable(rateDays);
+          }
+          if (from < 20) {
+            // Notes and the rate known only once read in full (#237). Only
+            // when missing: the older steps' tests start from today's
+            // tables, which already have it.
+            final columns = {
+              for (final c in await customSelect('PRAGMA table_info(expenses)').get())
+                c.read<String>('name'),
+            };
+            if (!columns.contains(expenses.detailsFetchedAt.name)) {
+              await m.addColumn(expenses, expenses.detailsFetchedAt);
+            }
           }
         },
       );
@@ -679,6 +695,8 @@ class AppDatabase extends _$AppDatabase {
               ? const Value.absent()
               : Value(moveDocs ? null : jsonEncode([for (final d in docs) d.toJson()])),
           documentCount: row == null || docs.isEmpty ? const Value.absent() : Value(docs.length),
+          // Its notes and rate are what was just sent (#237).
+          detailsFetchedAt: Value(DateTime.now()),
           // A synced row can't also be a failed one -- clear whatever a
           // prior failed attempt (before a successful retry) left behind
           // (issue #44).
@@ -885,6 +903,26 @@ class AppDatabase extends _$AppDatabase {
             return pendingUrls.isEmpty ? unreferenced : unreferenced & f.url.isNotIn(pendingUrls);
           }))
         .go();
+  }
+
+  /// Stores what only reading [fresh] in full gives (#237): its notes,
+  /// rate and documents, marking its details as known. The document count
+  /// follows the documents read: the list's may be older, and the stored
+  /// list counts only while the two match. Only on a synced row; a
+  /// pending one keeps its own. The next refresh clears them again, as
+  /// the list doesn't send them.
+  Future<void> cacheExpenseDetails(String groupId, Expense fresh, {DateTime? at}) {
+    return transaction(() async {
+      final updated = await (update(expenses)
+            ..where((e) => e.id.equals(fresh.id) & e.pending.equals(false)))
+          .write(ExpensesCompanion(
+        notes: Value(fresh.notes),
+        conversionRate: Value(fresh.conversionRate),
+        documentCount: Value(fresh.documents.length),
+        detailsFetchedAt: Value(at ?? DateTime.now()),
+      ));
+      if (updated > 0) await cacheExpenseDocuments(groupId, fresh.id, fresh.documents);
+    });
   }
 
   /// Stores the documents an expense was just read with (#123), replacing
@@ -1117,6 +1155,7 @@ class AppDatabase extends _$AppDatabase {
         documentsJson: Value(e.pending && e.documents.isNotEmpty
             ? jsonEncode([for (final d in e.documents) d.toJson()])
             : null),
+        detailsFetchedAt: Value(e.detailsFetchedAt),
       );
 
   /// Device-local organization, never sent to the server or changed by refresh.
@@ -1331,6 +1370,7 @@ class AppDatabase extends _$AppDatabase {
         lastError: row.lastError,
         createdAt: row.createdAt,
         documentCount: row.documentCount,
+        detailsFetchedAt: row.detailsFetchedAt,
         documents: [
           for (final d in (row.documentsJson == null ? const [] : jsonDecode(row.documentsJson!) as List))
             ExpenseDocument.fromJson(d as Map<String, dynamic>),

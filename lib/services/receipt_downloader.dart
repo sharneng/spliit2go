@@ -315,7 +315,8 @@ class ReceiptDownloader {
       if (run.cancelled) return (run.reason, null);
       try {
         final fresh = await client.fetchExpense(groupId: groupId, expenseId: expenseId);
-        await db.cacheExpenseDocuments(groupId, expenseId, fresh.documents);
+        // Its notes and rate too, read anyway (#237).
+        await db.cacheExpenseDetails(groupId, fresh);
       } catch (e, st) {
         // Deleted meanwhile: the next refresh drops it.
         if (e is SpliitApiException && e.isNotFound) continue;

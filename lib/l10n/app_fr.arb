@@ -136,6 +136,7 @@
   "expenseSaveDefaultSplit": "Enregistrer comme répartition par défaut",
   "expenseNotesLabel": "Notes",
   "expenseNotesHint": "Quelque chose à retenir ?",
+  "expenseNotesWhenOnline": "Disponible une fois en ligne",
   "expenseSaveButton": "Enregistrer",
   "expenseCategorySearchLabel": "Rechercher une catégorie",
   "expenseNoMatchingCategories": "Aucune catégorie correspondante",

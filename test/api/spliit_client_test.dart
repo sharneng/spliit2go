@@ -649,6 +649,36 @@ void main() {
       expect(cursor, isA<int>());
     });
 
+    // Without a limit the server sends 10 a page (#237).
+    test('asks for the largest page the server allows, on every page', () async {
+      final limits = <Object?>[];
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async {
+          final input = jsonDecode(req.url.queryParameters['input']!) as Map<String, dynamic>;
+          limits.add((input['0'] as Map<String, dynamic>)['json']['limit']);
+          final body = jsonEncode([
+            {
+              'result': {
+                'data': {
+                  'json': {
+                    'expenses': [],
+                    'hasMore': limits.length == 1,
+                    'nextCursor': 100,
+                  },
+                },
+              },
+            },
+          ]);
+          return http.Response(body, 200);
+        }),
+      );
+
+      await client.fetchExpenses('g1');
+
+      expect(limits, [100, 100]);
+    });
+
     // Same regression as fetchGroup above, for the fields fetchExpenses
     // reads: expense id, a bare-id paidBy, and the pagination cursor.
     test('tolerates a numeric expense id, paidBy id, and cursor', () async {

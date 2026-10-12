@@ -207,6 +207,13 @@ class Expense {
   /// opened online (#123).
   final int documentCount;
 
+  /// When this device last read the expense in full
+  /// ([SpliitClient.fetchExpense]), which is the only way to know its
+  /// [notes] and [conversionRate]: the expense list sends neither (#237).
+  /// Null while they aren't known, which is how a refresh leaves every
+  /// synced row. Never set on anything read from the API.
+  final DateTime? detailsFetchedAt;
+
   const Expense({
     required this.id,
     required this.groupId,
@@ -229,5 +236,6 @@ class Expense {
     this.createdAt,
     this.documents = const [],
     this.documentCount = 0,
+    this.detailsFetchedAt,
   });
 }

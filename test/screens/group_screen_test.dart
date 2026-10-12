@@ -130,6 +130,7 @@ void main() {
       participants: [Participant(id: 'p1', name: 'Ken')],
     );
 
+    // Read in full already (#237), so viewing it needs nothing more.
     Expense syncedExpense() => Expense(
           id: 'e1',
           groupId: 'g1',
@@ -138,6 +139,7 @@ void main() {
           paidBy: 'p1',
           paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
           date: DateTime.utc(2026, 9, 16),
+          detailsFetchedAt: DateTime(2026, 10, 1),
         );
 
     testWidgets('tapping a synced expense shows its details; Edit fetches it fresh and opens the form',
