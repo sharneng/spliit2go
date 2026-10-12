@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../theme.dart';
+import 'text_scaled.dart';
 
 // Matches spliit-ios MonogramPalette; see THIRD_PARTY_NOTICES.md.
 int groupColorIndex(String id) {
@@ -33,20 +34,28 @@ class GroupMonogram extends StatelessWidget {
 
 /// [name]'s initials in white on a [color] circle: a group's in the group
 /// list, a participant's in "Who are you?" (#218).
+///
+/// [radius] is at the usual text size; it grows with the text (#294), and
+/// the initials with it.
 class Monogram extends StatelessWidget {
   const Monogram({super.key, required this.name, required this.color, this.radius = 20});
   final String name;
   final Color color;
   final double radius;
+
   @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-        child: CircleAvatar(
-          radius: radius,
-          backgroundColor: color,
-          foregroundColor: Colors.white,
-          child: Text(groupInitials(name),
-              textScaler: TextScaler.noScaling,
-              style: TextStyle(fontSize: radius * 0.85, fontWeight: FontWeight.w600)),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final radius = context.textScaled(this.radius);
+    return ExcludeSemantics(
+      child: CircleAvatar(
+        radius: radius,
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        // Already scaled with the circle.
+        child: Text(groupInitials(name),
+            textScaler: TextScaler.noScaling,
+            style: TextStyle(fontSize: radius * 0.85, fontWeight: FontWeight.w600)),
+      ),
+    );
+  }
 }

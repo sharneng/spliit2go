@@ -273,7 +273,6 @@ class GroupedRow extends StatelessWidget {
     this.leading,
     required this.title,
     this.value,
-    this.valueIndent = 0,
     this.subtitle,
     this.trailing,
     this.onTap,
@@ -290,8 +289,6 @@ class GroupedRow extends StatelessWidget {
   /// under: it has the width it asks for, and the title gets what's left.
   final Widget? value;
 
-  /// How far in from the title's start [value] goes when it's under it.
-  final double valueIndent;
   final Widget? subtitle;
   final Widget? trailing;
   final VoidCallback? onTap;
@@ -319,7 +316,7 @@ class GroupedRow extends StatelessWidget {
   Widget build(BuildContext context) => ListTile(
         leading: leading,
         title: switch (value) {
-          final value? => LabelAndValue(label: title, value: value, indent: valueIndent),
+          final value? => LabelAndValue(label: title, value: value),
           null => title,
         },
         subtitle: subtitle,

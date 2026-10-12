@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show SemanticsData;
@@ -8,6 +10,7 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
+import 'package:spliit2go/main.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
@@ -49,6 +52,8 @@ void main() {
     await db.cacheGroup(lisbon);
     await tester.pumpWidget(MaterialApp(
       theme: spliit2goLightTheme.copyWith(platform: platform),
+      // The app's, so icons grow with the text as they do in it (#294).
+      builder: spliit2goAppBuilder,
       locale: const Locale('en'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -279,16 +284,91 @@ void main() {
       expect(find.byKey(SplitCard.valueKey('bea')), findsOneWidget);
     });
 
-    testWidgets('the receipt language goes under "Scan receipt" when they don\'t fit', (tester) async {
+    testWidgets('the scan row takes two lines when one won\'t do: the icon and "Scan receipt", then the language',
+        (tester) async {
       await openAt(tester, 1);
       expect(tester.getCenter(find.byIcon(Icons.translate)).dy, closeTo(tester.getCenter(find.text('Scan receipt')).dy, 1));
+      for (final scale in [3.0, 5.0]) {
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        await tester.pumpAndSettle();
+        final icon = tester.getRect(find.byIcon(Icons.document_scanner_outlined));
+        final text = tester.getRect(find.text('Scan receipt'));
+        final language = tester.getRect(find.byIcon(Icons.translate));
+        final card = tester.getRect(find.ancestor(of: find.text('Scan receipt'), matching: find.byType(ListTile)));
+        // The icon beside the text, on one line; the language under both.
+        expect(icon.center.dy, closeTo(text.center.dy, 1), reason: '$scale');
+        expect(icon.right, lessThan(text.left), reason: '$scale');
+        expect(language.top, greaterThan(text.bottom), reason: '$scale');
+        // Centered, and inside the card: smaller, past the line's room.
+        expect((icon.left + text.right) / 2, closeTo(card.center.dx, 1), reason: '$scale');
+        expect(text.right, lessThanOrEqualTo(card.right), reason: '$scale');
+      }
+    });
+
+    testWidgets('"Add receipt" wraps, and its camera grows rather than shrinking (#294)', (tester) async {
+      await openAt(tester, 1);
+      final camera = find.byIcon(Icons.add_a_photo_outlined);
+      final label = find.text('Add receipt');
+      await tester.ensureVisible(camera);
+      final normal = tester.getSize(camera).width;
+      final oneLine = tester.getSize(label).height;
       tester.platformDispatcher.textScaleFactorTestValue = 3;
       await tester.pumpAndSettle();
-      final text = tester.getRect(find.text('Scan receipt'));
-      expect(tester.getTopLeft(find.byIcon(Icons.translate)).dy, greaterThan(text.bottom));
-      // One line, not a word broken over three, with its icon.
-      expect(text.height, lessThan(2 * 3 * 16));
-      expect(tester.getCenter(find.byIcon(Icons.document_scanner_outlined)).dy, closeTo(text.center.dy, 1));
+      await tester.ensureVisible(camera);
+      expect(tester.getSize(camera).width, moreOrLessEquals(normal * math.sqrt(3), epsilon: 0.5));
+      expect(tester.getSize(label).height, greaterThan(2 * 3 * oneLine * 0.9));
+      final tile = tester.getRect(find.ancestor(of: camera, matching: find.byType(OutlinedButton)));
+      expect(tile.contains(tester.getBottomLeft(label) - const Offset(-1, 1)), isTrue);
+    });
+
+    testWidgets('in Evenly, the check goes with the amount: beside the name, or under it at the end', (tester) async {
+      for (final (scale, under) in [(1.0, false), (3.0, true)]) {
+        await openAt(tester, scale);
+        await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '100');
+        await tester.pumpAndSettle();
+        for (final (i, name) in ['Alex', 'Bea'].indexed) {
+          final text = find.textContaining(name).last;
+          await tester.ensureVisible(text);
+          final row = find.ancestor(of: text, matching: find.byType(InkWell)).first;
+          final check = tester.getRect(find.descendant(of: row, matching: find.byIcon(Icons.check)));
+          final amount = tester.getRect(find.text('€50.00').at(i));
+          final nameRect = tester.getRect(text);
+          expect(check.left, greaterThan(amount.right), reason: '$name $scale');
+          expect(check.center.dy, closeTo(amount.center.dy, check.height / 2), reason: '$name $scale');
+          expect(check.top >= nameRect.bottom - 1, under, reason: '$name $scale');
+          expect(check.right, closeTo(tester.getRect(row).right - 16, 1), reason: '$name $scale');
+        }
+      }
+    });
+
+    testWidgets('the shares all go under the names together, at the row\'s end (#294)', (tester) async {
+      for (final (scale, under) in [(1.0, false), (3.0, true)]) {
+        await openAt(tester, scale);
+        await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '100');
+        await tester.pumpAndSettle();
+        final rects = [
+          for (final name in ['Alex', 'Bea'])
+            (tester.getRect(find.textContaining(name).last), tester.getRect(find.text('€50.00').at(name == 'Alex' ? 0 : 1)))
+        ];
+        for (final (name, amount) in rects) {
+          expect(amount.top >= name.bottom - 1, under, reason: '$scale');
+        }
+        expect(rects[0].$2.right, closeTo(rects[1].$2.right, 1), reason: '$scale');
+      }
+    });
+
+    testWidgets('a share\'s field is as wide as its characters, not cut off (#294)', (tester) async {
+      await openAt(tester, 3);
+      await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '1000');
+      await tester.pumpAndSettle();
+      for (final (mode, typed) in [('Percent', '25'), ('Amount', '858.00')]) {
+        await pick(tester, mode);
+        final field = find.byKey(SplitCard.valueKey('bea'));
+        await tester.enterText(field, typed);
+        await tester.pumpAndSettle();
+        final editable = tester.state<EditableTextState>(find.descendant(of: field, matching: find.byType(EditableText))).renderEditable;
+        expect(editable.size.width, greaterThanOrEqualTo(editable.getMaxIntrinsicWidth(double.infinity) - 0.5), reason: mode);
+      }
     });
 
     testWidgets('a long title wraps, and stays one line of text', (tester) async {

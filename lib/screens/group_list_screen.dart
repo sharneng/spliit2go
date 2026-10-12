@@ -456,10 +456,13 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
                   child: InkResponse(
                       onTap: openMenu,
                       radius: 24,
-                      child: SizedBox(
-                          width: 48,
-                          height: 48,
+                      // At least 48 square, more as the monogram grows
+                      // with the text (#294).
+                      child: ConstrainedBox(
+                          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                           child: Center(
+                              widthFactor: 1,
+                              heightFactor: 1,
                               child:
                                   GroupMonogram(id: row.id, name: row.name))))))),
           // The clip and the date sit at the right edge, next to the

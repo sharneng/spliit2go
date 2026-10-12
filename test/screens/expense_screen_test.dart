@@ -848,6 +848,15 @@ void main() {
     expect(find.text('6.10'), findsOneWidget);
   });
 
+  testWidgets('Paid in shows its currency\'s flag, and no chevron: it opens a sheet', (tester) async {
+    await pumpGroup(tester, euroGroup);
+    final row = find.widgetWithText(GroupedRow, 'Paid in');
+    expect(find.descendant(of: row, matching: find.text('🇪🇺')), findsOneWidget);
+    expect(find.descendant(of: row, matching: find.byIcon(Icons.chevron_right)), findsNothing);
+    await paidIn(tester, '', 'Yen', 'Japanese Yen (JPY)');
+    expect(find.descendant(of: row, matching: find.text('🇯🇵')), findsOneWidget);
+  });
+
   testWidgets('a euro group stores a yen expense in whole yen, at the published rate (#251, #252)',
       (tester) async {
     final db = await pumpGroup(tester, euroGroup);

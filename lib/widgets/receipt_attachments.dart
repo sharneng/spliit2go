@@ -14,6 +14,7 @@ import '../services/receipt_photo.dart';
 import 'error_message.dart';
 import 'grouped_section.dart';
 import 'receipts.dart';
+import 'text_scaled.dart';
 import 'confirm_dialog.dart';
 
 enum ReceiptUpload { uploading, uploaded, failed }
@@ -323,7 +324,9 @@ class _AddedPhoto extends StatelessWidget {
 class _RemovableTile extends StatelessWidget {
   const _RemovableTile({super.key, required this.child, this.onRemove, this.onRetry, this.onTap});
 
-  static const double size = 88;
+  /// 88 at the usual text size, growing as a glyph does (#294), so
+  /// "Add receipt" has room to wrap beside the thumbnails.
+  static double sizeOf(BuildContext context) => context.textScaled(88);
   final Widget child;
   final VoidCallback? onRemove;
 
@@ -335,7 +338,7 @@ class _RemovableTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return SizedBox.square(
-      dimension: size,
+      dimension: sizeOf(context),
       child: Stack(
         children: [
           Positioned.fill(
@@ -394,8 +397,9 @@ class _AddTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final theme = Theme.of(context);
+    final size = _RemovableTile.sizeOf(context);
     return SizedBox.square(
-      dimension: _RemovableTile.size,
+      dimension: size,
       child: OutlinedButton(
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.all(4),
@@ -405,17 +409,22 @@ class _AddTile extends StatelessWidget {
           final source = await chooseReceiptSource(context);
           if (source != null) onAdd(source);
         },
-        // Scaled down to fit at large text sizes: the tile stays square.
+        // The label wraps in the tile's width, under the icon, both growing
+        // with the text (#294); scaled down only if even that is too tall,
+        // so the tile stays square.
         child: FittedBox(
           fit: BoxFit.scaleDown,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.add_a_photo_outlined, color: theme.colorScheme.primary),
-              const SizedBox(height: 4),
-              Text(l10n.expenseReceiptAdd,
-                  textAlign: TextAlign.center, style: theme.textTheme.labelSmall),
-            ],
+          child: SizedBox(
+            width: size - 2 * 4,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add_a_photo_outlined, color: theme.colorScheme.primary),
+                const SizedBox(height: 4),
+                Text(l10n.expenseReceiptAdd,
+                    textAlign: TextAlign.center, style: theme.textTheme.labelSmall),
+              ],
+            ),
           ),
         ),
       ),

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../l10n/context_l10n.dart';
 import '../../widgets/error_message.dart';
 import '../../widgets/grouped_section.dart';
+import '../../widgets/line_or_stack.dart';
+import '../../widgets/text_scaled.dart';
 import '../../widgets/receipt_language.dart';
 import 'receipt_scan_controller.dart';
 
@@ -50,32 +52,31 @@ class ReceiptScanCard extends StatelessWidget {
       ],
       children: [
         GroupedRow(
-          // The icon goes with "Scan receipt" when the language goes under
-          // it (#263), so it's in the title rather than leading.
-          title: Row(mainAxisSize: MainAxisSize.min, children: [
-            reading
-                ? const SizedBox.square(dimension: 24, child: Padding(
-                    padding: EdgeInsets.all(2), child: CircularProgressIndicator(strokeWidth: 2)))
+          // On a line while it fits; otherwise the icon and "Scan receipt"
+          // over the language, each centered (#294).
+          title: LineOrStack(
+            leading: reading
+                ? SizedBox.square(
+                    dimension: context.textScaled(24),
+                    child: const Padding(padding: EdgeInsets.all(2), child: CircularProgressIndicator(strokeWidth: 2)))
                 : Icon(Icons.document_scanner_outlined, color: theme.colorScheme.primary),
-            const SizedBox(width: 16),
-            Flexible(
+            // One line: smaller, rather than wrapping, once the line is full.
+            title: FittedBox(
+              fit: BoxFit.scaleDown,
               child: Text(l10n.expenseScanReceipt,
-                  style: TextStyle(color: reading ? null : theme.colorScheme.primary)),
+                  maxLines: 1, style: TextStyle(color: reading ? null : theme.colorScheme.primary)),
             ),
-          ]),
-          // Its icon under the text, past the button's own 12 of padding.
-          valueIndent: 24 + 16 - 12,
-          // Its own element (#263), "Latin, Receipt language", rather than
-          // "ABC" with the tooltip on the row's. Under "Scan receipt" when
-          // the two don't fit on a line.
-          value: MergeSemantics(
-            child: Tooltip(
-              message: l10n.receiptLanguage,
-              child: TextButton.icon(
-                onPressed: reading ? null : onPickLanguage,
-                icon: const Icon(Icons.translate),
-                label: Text(receiptScriptShortName(scan.script),
-                    semanticsLabel: receiptScriptName(context, scan.script)),
+            // Its own element (#263), "Latin, Receipt language", rather than
+            // "ABC" with the tooltip on the row's.
+            trailing: MergeSemantics(
+              child: Tooltip(
+                message: l10n.receiptLanguage,
+                child: TextButton.icon(
+                  onPressed: reading ? null : onPickLanguage,
+                  icon: const Icon(Icons.translate),
+                  label: Text(receiptScriptShortName(scan.script),
+                      semanticsLabel: receiptScriptName(context, scan.script)),
+                ),
               ),
             ),
           ),

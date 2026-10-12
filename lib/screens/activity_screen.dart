@@ -18,6 +18,7 @@ import '../services/error_reporting.dart';
 import '../widgets/empty_state.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../widgets/bottom_inset.dart';
+import '../widgets/text_scaled.dart';
 
 /// The group's server-side activity log (issue #26) -- who changed what
 /// and when. Read-only and **online-only**: unlike expenses, activity
@@ -324,7 +325,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
           first: first,
           last: last,
           // Past the icon, under the sentence.
-          dividerIndent: GroupedSection.inset + _ActivityIcon.width + _ActivityIcon.gap,
+          dividerIndent: GroupedSection.inset + _ActivityIcon.widthOf(context) + _ActivityIcon.gap,
           child: GroupedRow(
             // The icon in the title's own row, not ListTile.leading: there
             // it's aligned to the tile, not to the sentence, and sat high
@@ -381,9 +382,9 @@ class _ActivityIcon extends StatelessWidget {
   /// the add button's tonal emerald, a shape as well as a color.
   final bool opens;
 
-  /// The circle's width, and a small gap: it's a marker, so the sentence
-  /// starts close by.
-  static const double width = 28;
+  /// The circle's width, growing with the text (#294), and a
+  /// small gap: it's a marker, so the sentence starts close by.
+  static double widthOf(BuildContext context) => context.textScaled(28);
   static const double gap = 10;
 
   @override
@@ -392,6 +393,7 @@ class _ActivityIcon extends StatelessWidget {
     // The sentence's style: a ListTile title, bodyLarge in Material 3.
     final style = theme.textTheme.bodyLarge;
     final line = MediaQuery.textScalerOf(context).scale(style?.fontSize ?? 16) * (style?.height ?? 1.5);
+    final width = widthOf(context);
     return SizedBox(
       width: width,
       height: line,
@@ -406,11 +408,11 @@ class _ActivityIcon extends StatelessWidget {
                 width: width,
                 height: width,
                 decoration: BoxDecoration(color: theme.colorScheme.primaryContainer, shape: BoxShape.circle),
-                child: Icon(icon, size: 16, color: theme.colorScheme.onPrimaryContainer),
+                child: Icon(icon, size: context.textScaled(16), color: theme.colorScheme.onPrimaryContainer),
               ),
             )
           // The captions' secondary color, as the time beside it (#233).
-          : Icon(icon, size: 18, color: SpliitColors.of(context).secondaryContent),
+          : Icon(icon, size: context.textScaled(18), color: SpliitColors.of(context).secondaryContent),
     );
   }
 }

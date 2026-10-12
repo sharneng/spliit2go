@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'text_scaled.dart';
+
 /// An icon in a row's caption, sized from the caption's own text so it
 /// grows with the system text size, in the caption's color (#180). Lucide,
 /// whose line drawings sit next to text the way spliit-ios's SF Symbols
@@ -18,16 +20,14 @@ class CaptionIcon extends StatelessWidget {
 }
 
 /// A [CaptionIcon]'s size beside text of [captionFontSize], or of the
-/// surrounding text's size, at the current text size.
+/// surrounding text's size, growing with the text as every glyph does
+/// (#294).
 double captionIconSize(BuildContext context, {double? captionFontSize}) =>
-    MediaQuery.textScalerOf(context)
-        .scale(captionFontSize ?? DefaultTextStyle.of(context).style.fontSize ?? 14) *
-    1.15;
+    context.textScaled((captionFontSize ?? DefaultTextStyle.of(context).style.fontSize ?? 14) * 1.15);
 
 /// A mark beside a row's title (an expense's repeats, receipts and notes,
 /// a group's 📎), at the usual text size: one size for every row (#209).
 const titleMarkBaseSize = 14.0;
 
-/// A title mark's size at the current text size.
-double titleMarkSize(BuildContext context) =>
-    MediaQuery.textScalerOf(context).scale(titleMarkBaseSize);
+/// A title mark's size, growing with the text as every glyph does (#294).
+double titleMarkSize(BuildContext context) => context.textScaled(titleMarkBaseSize);

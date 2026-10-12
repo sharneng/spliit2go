@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -211,8 +213,8 @@ void main() {
 
     testWidgets('the target grows with the text size', (tester) async {
       await pumpRow(tester, done, scale: 2);
-      expect(tester.getSize(find.byType(InkResponse)),
-          const Size.square(titleMarkBaseSize * 2 + 2 * ReceiptDownloadTapArea.margin));
+      expect(tester.getSize(find.byType(InkResponse)).width,
+          closeTo(titleMarkBaseSize * math.sqrt(2) + 2 * ReceiptDownloadTapArea.margin, 0.01));
     });
 
     // #212 review (Ezra): a clip capped to leave the name room keeps a
@@ -238,23 +240,24 @@ void main() {
       expect(data.flagsCollection.isButton, isTrue);
     });
 
+    // By the square root of the text's growth, as every glyph (#294).
     testWidgets('the expense rows\' marks\' size, growing and shrinking with the text',
         (tester) async {
       await pumpRow(tester, done);
       final normal = tester.getSize(find.byIcon(LucideIcons.paperclip)).width;
       expect(normal, titleMarkBaseSize);
       await pumpRow(tester, done, scale: 0.8);
-      expect(tester.getSize(find.byIcon(LucideIcons.paperclip)).width, closeTo(normal * 0.8, 0.01));
+      expect(tester.getSize(find.byIcon(LucideIcons.paperclip)).width, closeTo(normal * math.sqrt(0.8), 0.01));
       await pumpRow(tester, done, scale: 2);
-      expect(tester.getSize(find.byIcon(LucideIcons.paperclip)).width, closeTo(normal * 2, 0.01));
+      expect(tester.getSize(find.byIcon(LucideIcons.paperclip)).width, closeTo(normal * math.sqrt(2), 0.01));
     });
 
     testWidgets('grows only as far as the title leaves room, never below its usual size',
         (tester) async {
       await pumpRow(tester, done);
       final normal = tester.getSize(find.byIcon(LucideIcons.paperclip)).width;
-      await pumpRow(tester, done, scale: 3, maxRowSize: 30);
-      expect(tester.getSize(find.byIcon(LucideIcons.paperclip)).width, 30);
+      await pumpRow(tester, done, scale: 3, maxRowSize: 20);
+      expect(tester.getSize(find.byIcon(LucideIcons.paperclip)).width, 20);
       await pumpRow(tester, done, scale: 3, maxRowSize: 5);
       expect(tester.getSize(find.byIcon(LucideIcons.paperclip)).width, closeTo(normal, 0.01));
     });

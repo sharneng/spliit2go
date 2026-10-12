@@ -5,6 +5,7 @@ import '../models/category.dart';
 import '../theme.dart';
 import 'group_monogram.dart';
 import 'grouped_section.dart';
+import 'text_scaled.dart';
 
 /// The glyph that stands for an expense category (issue #28), grounded
 /// in spliit-web's own map rather than guessed: `category-icon.tsx`
@@ -116,14 +117,25 @@ const Map<String, int> _groupingColors = {
 /// near-black would sink into it).
 class CategoryIconGlyph extends StatelessWidget {
   final Category? category;
+  /// At the usual text size; it grows with the text (#294) unless it
+  /// doesn't [scales].
   final double size;
   final bool isSettlement;
 
+  /// False in the details' header, beside the top bar's buttons, which
+  /// don't grow either.
+  final bool scales;
+
   const CategoryIconGlyph(
-      {super.key, required this.category, this.size = 34, this.isSettlement = false});
+      {super.key,
+      required this.category,
+      this.size = 34,
+      this.isSettlement = false,
+      this.scales = true});
 
   @override
   Widget build(BuildContext context) {
+    final size = scales ? context.textScaled(this.size) : this.size;
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     if (isSettlement) {

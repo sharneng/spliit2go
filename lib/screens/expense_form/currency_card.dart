@@ -9,6 +9,7 @@ import 'expense_form_model.dart';
 import 'form_text.dart';
 import 'inline_number_field.dart';
 import 'rate_lookup.dart';
+import '../../widgets/text_scaled.dart';
 
 /// The currency and the amount (#261), in the order of a conversion: Paid
 /// in, the amount typed in it, the rate as one number with the more
@@ -75,8 +76,15 @@ class CurrencyCard extends StatelessWidget {
         if (_m.hasGroupCurrencyCode)
           GroupedRow(
             title: formLabel(context, l10n.expensePaidIn),
-            value: Text(localizedCurrencyName(context, _m.paidInCurrency), style: formValueStyle(context)),
-            navigates: true,
+            // Its flag before it, as Category's icon (Kenneth); no chevron:
+            // it opens a sheet, not a screen.
+            value: Row(mainAxisSize: MainAxisSize.min, children: [
+              if (_m.paidInCurrency.flagEmoji case final flag when flag.isNotEmpty) ...[
+                ExcludeSemantics(child: Text(flag, style: formValueStyle(context))),
+                const SizedBox(width: 8),
+              ],
+              Flexible(child: Text(localizedCurrencyName(context, _m.paidInCurrency), style: formValueStyle(context))),
+            ]),
             onTap: onPickPaidIn,
           ),
         // An expense's amount is what was paid, in the currency it
@@ -202,7 +210,7 @@ class CurrencyCard extends StatelessWidget {
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Text(_m.rateField.pair, style: TextStyle(color: colors.primary)),
               const SizedBox(width: 4),
-              Icon(Icons.swap_horiz, size: 18, color: colors.primary),
+              Icon(Icons.swap_horiz, size: context.textScaled(18), color: colors.primary),
             ]),
           ),
         ),

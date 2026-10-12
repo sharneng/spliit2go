@@ -7,6 +7,7 @@ import '../../utils/money.dart';
 import '../../widgets/grouped_section.dart';
 import '../../widgets/label_and_value.dart';
 import '../../widgets/money.dart';
+import '../../widgets/text_scaled.dart';
 
 /// The form's rows (Kenneth, 2026-10-10): what was entered is the main
 /// content, in the primary text color; the label naming it is secondary.
@@ -153,7 +154,7 @@ class _RetypeAssistState extends State<RetypeAssist> {
                 },
                 child: Padding(
                   padding: const EdgeInsetsDirectional.only(start: 6, top: 4, bottom: 4),
-                  child: Icon(Icons.cancel, size: 18, color: SpliitColors.of(context).secondaryContent),
+                  child: Icon(Icons.cancel, size: context.textScaled(18), color: SpliitColors.of(context).secondaryContent),
                 ),
               ),
             ),
