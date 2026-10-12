@@ -136,6 +136,7 @@
   "expenseSaveDefaultSplit": "保存为默认分账设置",
   "expenseNotesLabel": "附注",
   "expenseNotesHint": "有什么值得记下的吗？",
+  "expenseNotesWhenOnline": "联网后可查看",
   "expenseSaveButton": "保存",
   "expenseCategorySearchLabel": "搜索类别",
   "expenseNoMatchingCategories": "没有匹配的类别",

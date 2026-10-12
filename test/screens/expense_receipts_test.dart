@@ -60,7 +60,9 @@ void main() {
     participants: [Participant(id: 'alex', name: 'Alex'), Participant(id: 'bea', name: 'Bea')],
   );
 
-  Expense coffee({int documents = 2}) => Expense(
+  /// Its notes known unless [detailsKnown] is false (#237), so what's
+  /// read is up to its receipts.
+  Expense coffee({int documents = 2, bool detailsKnown = true}) => Expense(
         id: 'e1',
         groupId: 'g1',
         title: 'Coffee',
@@ -69,6 +71,7 @@ void main() {
         paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
         date: DateTime(2026, 9, 23),
         documentCount: documents,
+        detailsFetchedAt: detailsKnown ? DateTime(2026, 10, 1) : null,
       );
 
   const receipts = [
@@ -116,9 +119,9 @@ void main() {
 
   Future<http.Response> ok() async => http.Response(expenseResponse(), 200);
 
-  Future<(AppDatabase, _FakeReceipts)> setUpDb({int documents = 2}) async {
+  Future<(AppDatabase, _FakeReceipts)> setUpDb({int documents = 2, bool detailsKnown = true}) async {
     final db = AppDatabase(NativeDatabase.memory());
-    await db.replaceServerExpenses('g1', [coffee(documents: documents)]);
+    await db.replaceServerExpenses('g1', [coffee(documents: documents, detailsKnown: detailsKnown)]);
     final fake = _FakeReceipts(db);
     ReceiptCache.use(fake);
     return (db, fake);
@@ -186,18 +189,20 @@ void main() {
     final stored = await tester.runAsync(() => db.watchExpenseDocuments('e1').first);
     expect(stored!.map((d) => d.id), ['d1', 'd2']);
 
-    // Opening it again shows the stored ones, and checks them again.
+    // Opening it again shows the stored ones without asking again: they
+    // count as current until the next refresh (#237).
     await closeTree(tester);
     await openSheet(tester, db, s.client);
-    expect(s.gets.single, 2);
+    expect(s.gets.single, 1);
     expect(receiptImages(), findsNWidgets(2));
     await closeTree(tester);
   });
 
-  // #130 review (Ezra): a same-count swap on the web must show.
-  testWidgets('stored receipts are checked online: one swapped on the web shows, '
-      'and the old one\'s file goes', (tester) async {
-    final (db, fake) = await setUpDb();
+  // #130 review (Ezra): a same-count swap on the web must show. The next
+  // refresh leaves the details unknown (#237), so they're read again.
+  testWidgets('after a refresh, stored receipts are read again online: one swapped on the web '
+      'shows, and the old one\'s file goes', (tester) async {
+    final (db, fake) = await setUpDb(detailsKnown: false);
     addTearDown(db.close);
     await tester.runAsync(() async {
       await db.cacheExpenseDocuments('g1', 'e1', docs());
@@ -287,7 +292,7 @@ void main() {
   });
 
   testWidgets('an unexpected failure reading them says so, with details (#119)', (tester) async {
-    expectUnexpectedError<SpliitApiException>('Loading receipts of expense e1');
+    expectUnexpectedError<SpliitApiException>('Loading details of expense e1');
     final (db, _) = await setUpDb();
     addTearDown(db.close);
     final s = server([() async => http.Response('boom', 500)]);

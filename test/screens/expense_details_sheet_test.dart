@@ -44,7 +44,10 @@ void main() {
   );
   const diningOut = Category(id: 8, name: 'Dining Out', grouping: 'Food and Drink');
 
-  Expense dinner({String title = 'Dinner', SplitMode splitMode = SplitMode.byShares}) => Expense(
+  /// Read in full already: the cache knows its notes (#237). As the list
+  /// sends it, with [detailsKnown] false: no notes, no rate.
+  Expense dinner({String title = 'Dinner', SplitMode splitMode = SplitMode.byShares, bool detailsKnown = true}) =>
+      Expense(
         id: 'e1',
         groupId: 'g1',
         title: title,
@@ -63,12 +66,13 @@ void main() {
               ],
         splitMode: splitMode,
         category: 8,
-        notes: 'Birthday dinner',
+        notes: detailsKnown ? 'Birthday dinner' : '',
         date: DateTime(2026, 9, 16),
         recurrenceRule: RecurrenceRule.weekly,
         originalAmountCents: 5500,
         originalCurrency: 'EUR',
-        conversionRate: 1.09,
+        conversionRate: detailsKnown ? 1.09 : null,
+        detailsFetchedAt: detailsKnown ? DateTime(2026, 10, 1) : null,
       );
 
   /// groups.expenses.get's response for [dinner].
@@ -232,6 +236,7 @@ void main() {
       paidFor: const [ExpenseShare(participantId: 'bea', shares: 1)],
       isSettlement: true,
       date: DateTime(2026, 9, 16),
+      detailsFetchedAt: DateTime(2026, 10, 1),
     ));
     addTearDown(db.close);
     await openSheet(tester, db);
@@ -671,6 +676,101 @@ void main() {
     expect(find.byType(BottomSheet), findsNothing);
     expect(result, isFalse);
     await closeTree(tester);
+  });
+
+  // #237: the list sends no notes, so a cached expense's are known only
+  // once it's been read in full since the last refresh.
+  group('notes the list doesn\'t send', () {
+    testWidgets('known: shown from the cache, without asking the server', (tester) async {
+      tallView(tester);
+      final db = await cachedDb();
+      addTearDown(db.close);
+      var fetches = 0;
+      await openSheet(tester, db, connectivity: Stream.value(true), client: serverClient((_) async {
+        fetches++;
+        return http.Response(expenseResponse(), 200);
+      }));
+
+      expect(inSheet(find.text('Birthday dinner')), findsOneWidget);
+      expect(fetches, 0);
+      await closeTree(tester);
+    });
+
+    testWidgets('unknown, online: read once, shown and stored', (tester) async {
+      tallView(tester);
+      final db = await cachedDb(dinner(detailsKnown: false));
+      addTearDown(db.close);
+      var fetches = 0;
+      final client = serverClient((_) async {
+        fetches++;
+        return http.Response(expenseResponse(), 200);
+      });
+      await openSheet(tester, db, connectivity: Stream.value(true), client: client);
+
+      expect(inSheet(find.text('Birthday dinner')), findsOneWidget);
+      expect(fetches, 1);
+      final row = await tester.runAsync(() => db.expensesForGroup('g1'));
+      expect(row!.single.notes, 'Birthday dinner');
+      expect(row.single.detailsFetchedAt, isNotNull);
+
+      // Known now: opening it again doesn't ask.
+      await closeTree(tester);
+      await openSheet(tester, db, connectivity: Stream.value(true), client: client);
+      expect(inSheet(find.text('Birthday dinner')), findsOneWidget);
+      expect(fetches, 1);
+      await closeTree(tester);
+    });
+
+    testWidgets('a refresh while open keeps showing what the sheet read', (tester) async {
+      tallView(tester);
+      final db = await cachedDb(dinner(detailsKnown: false));
+      addTearDown(db.close);
+      await openSheet(tester, db,
+          connectivity: Stream.value(true),
+          client: serverClient((_) async => http.Response(expenseResponse(), 200)));
+      expect(inSheet(find.text('Birthday dinner')), findsOneWidget);
+
+      await tester.runAsync(() => db.replaceServerExpenses('g1', [dinner(detailsKnown: false)]));
+      await tester.pumpAndSettle();
+
+      expect(inSheet(find.text('Birthday dinner')), findsOneWidget);
+      await closeTree(tester);
+    });
+
+    testWidgets('unknown, offline: "available when online", then read once back online', (tester) async {
+      tallView(tester);
+      final db = await cachedDb(dinner(detailsKnown: false));
+      addTearDown(db.close);
+      // Offline from the start: buffered until the sheet listens.
+      final online = StreamController<bool>()..add(false);
+      addTearDown(online.close);
+      var fetches = 0;
+      await openSheet(tester, db, connectivity: online.stream, client: serverClient((_) async {
+        fetches++;
+        return http.Response(expenseResponse(), 200);
+      }));
+
+      expect(inSheet(find.text('Notes')), findsOneWidget);
+      expect(inSheet(find.text('Available when online')), findsOneWidget);
+      expect(fetches, 0);
+
+      online.add(true);
+      await tester.pumpAndSettle();
+      expect(inSheet(find.text('Birthday dinner')), findsOneWidget);
+      expect(inSheet(find.text('Available when online')), findsNothing);
+      expect(fetches, 1);
+      await closeTree(tester);
+    });
+
+    testWidgets('unknown, and the server can\'t be reached: "available when online"', (tester) async {
+      tallView(tester);
+      final db = await cachedDb(dinner(detailsKnown: false));
+      addTearDown(db.close);
+      await openSheet(tester, db, connectivity: Stream.value(true));
+
+      expect(inSheet(find.text('Available when online')), findsOneWidget);
+      await closeTree(tester);
+    });
   });
 
   group('pending and failed expenses', () {

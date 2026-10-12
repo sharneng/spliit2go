@@ -235,10 +235,14 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
   List<ExpenseDocument>? _storedDocs;
   List<ExpenseDocument>? _fetchedDocs;
 
-  /// Documents are read at most once per open, and again after a
-  /// connection failure once the phone is back online.
-  bool _docsFetchStarted = false;
-  bool _docsOffline = false;
+  /// The notes this sheet just read (#237), kept while it's open: a
+  /// refresh meanwhile clears the cached ones.
+  String? _fetchedNotes;
+
+  /// The expense is read in full at most once per open, and again after
+  /// a connection failure once the phone is back online.
+  bool _detailsFetchStarted = false;
+  bool _detailsOffline = false;
   String? _docsDiagnostics;
 
   /// A pending expense's photos not uploaded yet (#124), shown from this
@@ -263,7 +267,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     _docSub = widget.db.watchExpenseDocuments(widget.expenseId).listen((docs) {
       if (!mounted) return;
       setState(() => _storedDocs = docs);
-      _maybeFetchDocuments();
+      _maybeFetchDetails();
     });
     _attachmentSub = widget.db.watchAttachments(widget.expenseId).listen((rows) {
       if (mounted) setState(() => _attachments = rows);
@@ -272,12 +276,12 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       (online) {
         if (!mounted) return;
         setState(() => _online = online);
-        if (online && _docsOffline) {
-          // Back online: read the documents that couldn't be read offline.
-          _docsFetchStarted = false;
-          _docsOffline = false;
+        if (online && _detailsOffline) {
+          // Back online: read what couldn't be read offline.
+          _detailsFetchStarted = false;
+          _detailsOffline = false;
         }
-        _maybeFetchDocuments();
+        _maybeFetchDetails();
       },
       onError: (Object e, StackTrace st) =>
           ErrorReporter.instance.report(e, st, operation: 'Watching connectivity'),
@@ -304,7 +308,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
         _loading = false;
         _problem = null;
       });
-      _maybeFetchDocuments();
+      _maybeFetchDetails();
     } else if (_cached) {
       _close(_closeWith);
     } else if (_expense != null || _fetching) {
@@ -393,29 +397,42 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     return stored != null && stored.length == e.documentCount ? stored : null;
   }
 
-  /// Reads a cached expense's documents once per open while online, and
-  /// stores them (#123). Stored ones show meanwhile, but a matching count
-  /// doesn't mean they're current: a receipt can be swapped on the web
-  /// with the count unchanged (#130 review), so they're always checked.
-  Future<void> _maybeFetchDocuments() async {
+  /// The expense's notes, or null while they aren't known (#237): the
+  /// list doesn't send them, so a cached expense's are known only once
+  /// it's been read in full since the last refresh.
+  String? _notesOf(Expense e) {
+    if (!_cached || e.pending || e.detailsFetchedAt != null) return e.notes;
+    return _fetchedNotes;
+  }
+
+  /// Reads a cached expense in full, once per open while online, when
+  /// the cache can't show all of it: its notes and rate (#237) or its
+  /// documents (#123) aren't known. Stores what it read. What the cache
+  /// has shows as is, and may be stale until the next refresh.
+  Future<void> _maybeFetchDetails() async {
     final e = _expense;
-    if (e == null || !_cached || e.pending || e.documentCount == 0) return;
-    if (_docsFetchStarted || _online == false || _storedDocs == null) return;
-    _docsFetchStarted = true;
+    if (e == null || !_cached || e.pending) return;
+    if (_detailsFetchStarted || _online == false || _storedDocs == null) return;
+    final docsKnown = e.documentCount == 0 || _storedDocs!.length == e.documentCount;
+    if (e.detailsFetchedAt != null && docsKnown) return;
+    _detailsFetchStarted = true;
     try {
       final fresh =
           await widget.client.fetchExpense(groupId: widget.group.id, expenseId: widget.expenseId);
-      await widget.db.cacheExpenseDocuments(widget.group.id, widget.expenseId, fresh.documents);
+      await widget.db.cacheExpenseDetails(widget.group.id, fresh);
       if (!mounted) return;
-      setState(() => _fetchedDocs = fresh.documents);
+      setState(() {
+        _fetchedDocs = fresh.documents;
+        _fetchedNotes = fresh.notes;
+      });
     } catch (err, st) {
       // Deleted meanwhile: the row watch closes the sheet.
       if (err is SpliitApiException && err.isNotFound) return;
       final error = ErrorReporter.instance
-          .report(err, st, operation: 'Loading receipts of expense ${widget.expenseId}');
+          .report(err, st, operation: 'Loading details of expense ${widget.expenseId}');
       if (!mounted) return;
       setState(() {
-        _docsOffline = error.kind == ErrorKind.connection;
+        _detailsOffline = error.kind == ErrorKind.connection;
         // With stored ones showing, a failed check is only logged.
         if (_documentsOf(e) == null) _docsDiagnostics = error.diagnostics;
       });
@@ -432,6 +449,12 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
     try {
       final fresh = await widget.client
           .fetchExpense(groupId: widget.group.id, expenseId: widget.expenseId);
+      // Read in full anyway (#237). Best effort: editing goes on either way.
+      try {
+        await widget.db.cacheExpenseDetails(widget.group.id, fresh);
+      } catch (e, st) {
+        ErrorReporter.instance.report(e, st, operation: 'Storing the details of expense ${widget.expenseId}');
+      }
       if (mounted) _close(_Edit(fresh));
     } catch (e, st) {
       // Only a connection problem is a connection problem (#119 review);
@@ -751,14 +774,27 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
         ],
       );
       }),
-      if (e.notes.isNotEmpty)
+      if (_notesOf(e) case final notes? when notes.isNotEmpty)
         GroupedSection(
           margin: _sectionMargin,
           caption: l10n.expenseNotesLabel,
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
-              child: SelectableText(e.notes),
+              child: SelectableText(notes),
+            ),
+          ],
+        )
+      // Not known, and can't be read now (#237): there may be none.
+      else if (_notesOf(e) == null && (_online == false || _detailsOffline))
+        GroupedSection(
+          margin: _sectionMargin,
+          caption: l10n.expenseNotesLabel,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(l10n.expenseNotesWhenOnline,
+                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             ),
           ],
         ),
@@ -768,7 +804,7 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
           groupId: widget.group.id,
           count: _documentsOf(e)?.length ?? e.documentCount,
           documents: _documentsOf(e),
-          online: _docsOffline ? false : _online,
+          online: _detailsOffline ? false : _online,
           loadDiagnostics: _docsDiagnostics,
           pending: _attachments,
         ),

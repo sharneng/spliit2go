@@ -130,6 +130,9 @@ class SpliitClient {
     );
   }
 
+  /// Expenses per `groups.expenses.list` page; see [fetchExpenses].
+  static const pageSize = 100;
+
   /// Fetches every expense in the group, following pagination.
   ///
   /// `cursor` is passed through opaquely -- whatever type `nextCursor`
@@ -140,11 +143,14 @@ class SpliitClient {
   /// next request unchanged, rather than being coerced to a String and
   /// then rejected by the server with "expected number, received
   /// string".
+  ///
+  /// Reads [pageSize] a page, the most `groups.expenses.list` allows; without a
+  /// `limit` the server sends 10 (#237).
   Future<List<Expense>> fetchExpenses(String groupId) async {
     final all = <Expense>[];
     dynamic cursor;
     while (true) {
-      final query = <String, dynamic>{'groupId': groupId};
+      final query = <String, dynamic>{'groupId': groupId, 'limit': pageSize};
       if (cursor != null) query['cursor'] = cursor;
       final uri = _trpcUri('groups.expenses.list', input: query);
       final res = await _http.get(uri);
