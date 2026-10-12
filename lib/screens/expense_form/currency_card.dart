@@ -67,52 +67,58 @@ class CurrencyCard extends StatelessWidget {
     ];
     // A settlement in a group without a currency code has nothing here.
     if (_m.isSettlement && !_m.hasGroupCurrencyCode) return const SizedBox.shrink();
+    final card = GroupedSection(
+      margin: EdgeInsets.zero,
+      footerContent: footer,
+      children: [
+        // Only an ISO code converts.
+        if (_m.hasGroupCurrencyCode)
+          GroupedRow(
+            title: formLabel(context, l10n.expensePaidIn),
+            value: Text(localizedCurrencyName(context, _m.paidInCurrency), style: formValueStyle(context)),
+            navigates: true,
+            onTap: onPickPaidIn,
+          ),
+        // An expense's amount is what was paid, in the currency it
+        // was paid in. A settlement's is its To amounts' sum (#262),
+        // on the To card.
+        if (!_m.isSettlement)
+          if (converting)
+            _amountRow(context, _m.originalAmountController, _m.paidInSymbol, _m.originalDigits)
+          else
+            _amountRow(context, _m.amountController, _m.group.currency, _m.digits),
+        if (converting) ...[
+          _rateRow(context),
+          if (!_m.isSettlement)
+            workedOutRow(context, l10n.expenseInCurrency(
+                localizedCurrencyName(context, currencyByCode(_m.group.currencyCode), inSentence: true)),
+                _m.amount, _m.group.currency, _m.digits, key: calculatedKey),
+        ],
+      ],
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(GroupedSection.inset, 0, GroupedSection.inset, GroupedSection.spacing),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          GroupedSection(
-            margin: EdgeInsets.zero,
-            footerContent: footer,
-            children: [
-              // Only an ISO code converts.
-              if (_m.hasGroupCurrencyCode)
-                GroupedRow(
-                  title: formLabel(context, l10n.expensePaidIn),
-                  trailing: Text(localizedCurrencyName(context, _m.paidInCurrency), style: formValueStyle(context)),
-                  navigates: true,
-                  onTap: onPickPaidIn,
-                ),
-              // An expense's amount is what was paid, in the currency it
-              // was paid in. A settlement's is its To amounts' sum (#262),
-              // on the To card.
-              if (!_m.isSettlement)
-                if (converting)
-                  _amountRow(context, _m.originalAmountController, _m.paidInSymbol, _m.originalDigits)
-                else
-                  _amountRow(context, _m.amountController, _m.group.currency, _m.digits),
-              if (converting) ...[
-                _rateRow(context),
-                if (!_m.isSettlement)
-                  workedOutRow(context, l10n.expenseInCurrency(
-                      localizedCurrencyName(context, currencyByCode(_m.group.currencyCode), inSentence: true)),
-                      _m.amount, _m.group.currency, _m.digits, key: calculatedKey),
-              ],
-            ],
-          ),
+          card,
           // A link under the note, its text in line with the note's, and
           // only a line's height (Kenneth, 2026-10-10): a button's own
-          // padding and 48pt pushed it in and the next card down.
+          // padding and 48pt pushed it in and the next card down. Its
+          // target is 48pt all the same (#263), reaching up over the note
+          // and down into the space under the card.
           if (converting && rates.canRefresh)
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Padding(
-                padding: const EdgeInsetsDirectional.only(start: 8),
-                child: TextButton(
-                  onPressed: () => rates.lookUp(force: true),
-                  style: compactTextButtonStyle(),
-                  child: Text(l10n.expenseUsePublishedRate),
+            Overhang(
+              reach: _linkReach,
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.only(start: 8),
+                  child: TextButton(
+                    onPressed: () => rates.lookUp(force: true),
+                    style: compactTextButtonStyle(reach: _linkReach),
+                    child: Text(l10n.expenseUsePublishedRate),
+                  ),
                 ),
               ),
             ),
@@ -120,6 +126,9 @@ class CurrencyCard extends StatelessWidget {
       ),
     );
   }
+
+  /// A compact button's 24pt line, and this above and below: 48.
+  static const _linkReach = 12.0;
 
   /// Where the rate in the field comes from, under it.
   String _rateStatus(BuildContext context) {
@@ -156,7 +165,8 @@ class CurrencyCard extends StatelessWidget {
       validator: (_) => _m.isPositiveAmount(controller.text, digits) ? null : l10n.expenseInvalidAmount,
       builder: (_) => ListenableBuilder(
         listenable: controller,
-        builder: (context, _) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        // What's wrong is read with the field (#263).
+        builder: (context, _) => MergeSemantics(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           InlineNumberField(
             fieldKey: amountFieldKey,
             controller: controller,
@@ -170,7 +180,7 @@ class CurrencyCard extends StatelessWidget {
               child: Text(l10n.expenseInvalidAmount,
                   style: GroupedSection.footnoteStyle(context, color: Theme.of(context).colorScheme.error)),
             ),
-        ]),
+        ])),
       ),
     );
   }
@@ -186,8 +196,9 @@ class CurrencyCard extends StatelessWidget {
         child: InkWell(
           onTap: rates.swap,
           borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+          // The row's full height (#263).
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Text(_m.rateField.pair, style: TextStyle(color: colors.primary)),
               const SizedBox(width: 4),

@@ -68,7 +68,7 @@ Its functions, by job:
 - **Saving:** `_save` checks the form and the receipts, then:
   - `_saveNew`: a new expense goes into the database as a pending row (`db.insertPending`), so it shows straight away and works offline. When the screen closes, the screen that opened it (the group screen, Balances) syncs, and the `Outbox` sends it.
   - `_saveEdit`: an edit goes to the server (`client.updateExpense`).
-  - `_refuse` shows what's wrong and scrolls to it; `_rememberDefaultSplitIfRequested` saves the default split (`db.setDefaultSplit`); `_activityParticipant` credits the change to the active user.
+  - `_refuse` shows what's wrong, scrolls to it, and announces it when the form's own announcement doesn't (#263); `_rememberDefaultSplitIfRequested` saves the default split (`db.setDefaultSplit`); `_activityParticipant` credits the change to the active user.
 
 ## The model: `expense_form/expense_form_model.dart`
 
@@ -91,14 +91,14 @@ Its functions, by job:
 
 | File | Contains | Does |
 |---|---|---|
-| `split_card.dart` | `SplitCard` | Paid by and Paid for, or a settlement's From and To. The mode pill (`_modes`), a row per person (`_row`, `_valueField`), a settlement's totals, and the message under it (`_error`, `_hint`) |
+| `split_card.dart` | `SplitCard` | Paid by and Paid for, or a settlement's From and To. The mode pill, or a menu row where it doesn't fit (`_modes`); a row per person (`_row`); a settlement's totals; and the message under it (`_hint`, and `problem`, which `_refuse` also announces) |
 | `currency_card.dart` | `CurrencyCard`, `_RateField` | Paid in, the amount, the rate row with its pair to swap, the rate's note (`_rateStatus`), and the "In {currency}" rows |
 | `rate_field.dart` | `ExchangeRateField` | The rate field's logic: which currency is first in the pair (`swap`), filling in a looked-up rate without overwriting a typed one (`fill`, `typed`), a saved rate when editing (`showSaved`) |
 | `rate_lookup.dart` | `RateLookup`, `RateLookupState` | Looks up the published rate (`lookUp`) and remembers the pair's order on this device (`swap`, `loadOrder`) |
 | `receipt_scan_controller.dart` | `ReceiptScanController`, `ReceiptScanStatus` | Reads a receipt into the form (`read`), its language (`loadLanguage`, `pickLanguage`), and takes a fill back when reading again |
 | `receipt_scan_card.dart` | `ReceiptScanCard` | The scan button, language and status |
-| `inline_number_field.dart` | `InlineNumberField` | A number field inside a row, with its symbol or %: the amount and each person's value |
-| `form_text.dart` | helpers, `RetypeAssist` | The rows' label and value styles (`formLabel`, `formValueStyle`), `formFieldRow`, `workedOutRow`, `compactTextButtonStyle`; screen-reader names (`namedField`, `unreadHint`, #288); `RetypeAssist`: select-all on Android, ⓧ on iPhone |
+| `inline_number_field.dart` | `InlineNumberField` | A number field inside a row, with its symbol or %: the amount and each person's value. Given a `label` or a `row` builder, the whole row is one screen-reader element and a tap anywhere on it types into it (#263) |
+| `form_text.dart` | helpers, `RetypeAssist`, `Overhang` | The rows' label and value styles (`formLabel`, `formValueStyle`), `formFieldRow`, `workedOutRow`, `compactTextButtonStyle`; screen-reader names (`namedField`, `unreadHint`, #288); `RetypeAssist`: select-all on Android, ⓧ on iPhone; `Overhang`: a tap target bigger than the space it takes ("Use the published rate") |
 
 ## Shared code it uses
 
@@ -109,7 +109,8 @@ Its functions, by job:
 | `grouped_section.dart` | `GroupedSection` (a card), `GroupedRow`, `GroupedCaption`, `GroupedDivider`, `GroupedScrollClip`: every card and row |
 | `participant_sheet.dart` | `showParticipantSheet`, `ChoiceRow`, `participantName`: Paid by and From; "Who are you?" shares the rows |
 | `group_monogram.dart`, `participant_colors.dart` | `Monogram` and `participantColors`: each person's initials and color |
-| `segmented_pill.dart` | `SegmentedPill`: Evenly / Shares / Percent / Amount |
+| `segmented_pill.dart` | `SegmentedPill`: Evenly / Shares / Percent / Amount, and `fits`, whether its names fit |
+| `label_and_value.dart` | `LabelAndValue`: a label and its value on a line, or the value under it when they don't fit (#263) |
 | `money.dart` | `Money`: an amount, formatted |
 | `currency_picker.dart` | `pickCurrency`, `searchSheetHeight` (Group settings uses it too) |
 | `category_picker.dart`, `category_icon.dart` | `showCategoryPicker`, `CategoryIconGlyph` |
@@ -117,7 +118,7 @@ Its functions, by job:
 | `receipt_language.dart` | `showReceiptLanguagePicker` |
 | `confirm_dialog.dart` | `showConfirmDialog`: every alert (#276) |
 | `error_message.dart` | `ErrorMessage`, `showErrorSnackBar` |
-| `top_bar_buttons.dart`, `app_menu.dart`, `bottom_inset.dart` | ✕/✓ (`TopBarButtons`), the Repeat menu, `AboveBottomBar` (#283) |
+| `top_bar_buttons.dart`, `app_menu.dart`, `bottom_inset.dart` | ✕/✓ (`TopBarButtons`), the Repeat and split menus (`MenuRow`), `AboveBottomBar` (#283) |
 
 **Services, models and utilities**
 
@@ -138,5 +139,6 @@ Its functions, by job:
 - `test/screens/expense_form/expense_form_model_test.dart`: the model, without widgets.
 - `test/screens/expense_form/expense_form_frame_test.dart`: the top bar, the cards' layout, the kind button, the keyboard.
 - `test/screens/expense_form/people_card_test.dart`: Paid by and Paid for, and what a screen reader hears.
+- `test/screens/expense_form/expense_form_a11y_test.dart`: tap targets and screen-reader labels on both platforms, large text, and what a refused save announces (#263).
 - `test/screens/expense_screen_test.dart`: whole flows: saving, editing, currencies and rates, settlements.
 - `test/screens/expense_receipt_scan_test.dart`, `expense_receipts_form_test.dart`, `expense_receipts_test.dart`: scanning and attaching receipts.

@@ -334,8 +334,9 @@ void main() {
       expect(tester.getCenter(find.text('Select none')).dy, closeTo(row.center.dy, 1));
     });
 
-    testWidgets('a long name doesn\'t squeeze Paid by: the label stays on a line, the name wraps', (tester) async {
-      const long = 'This is a very very very very long name';
+    testWidgets('a long name doesn\'t squeeze Paid by: the label stays on a line, the name goes under it (#263)',
+        (tester) async {
+      const long = 'This is a very very very very very very very very very very very very very very very very very very long name';
       await open(tester,
           group: const Group(
               id: 'g1', name: 'Banff Trip', currency: '\$', participants: [Participant(id: 'tl', name: long)]));
@@ -343,7 +344,7 @@ void main() {
       // One line, as Date's.
       expect(label.height, tester.getSize(find.text('Date')).height);
       final name = find.descendant(of: find.widgetWithText(GroupedRow, 'Paid by'), matching: find.text(long));
-      expect(tester.getSize(name).height, greaterThan(label.height));
+      expect(tester.getTopLeft(name).dy, greaterThanOrEqualTo(tester.getBottomLeft(find.text('Paid by')).dy));
     });
 
     testWidgets('a number field selects what\'s in it when tapped, for typing over', (tester) async {
@@ -375,7 +376,8 @@ void main() {
     testWidgets('on an iPhone a number field keeps iOS\'s tap, and has a ⓧ while it\'s edited', (tester) async {
       await open(tester);
       final amount = find.byKey(CurrencyCard.amountFieldKey);
-      final clear = find.bySemanticsLabel('Clear');
+      // Not a screen reader's (#263), so found by its icon.
+      final clear = find.byIcon(Icons.cancel);
       await tester.enterText(amount, '42.50');
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();

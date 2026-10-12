@@ -50,18 +50,33 @@ class ReceiptScanCard extends StatelessWidget {
       ],
       children: [
         GroupedRow(
-          leading: reading
-              ? const SizedBox.square(dimension: 24, child: Padding(
-                  padding: EdgeInsets.all(2), child: CircularProgressIndicator(strokeWidth: 2)))
-              : Icon(Icons.document_scanner_outlined, color: theme.colorScheme.primary),
-          title: Text(l10n.expenseScanReceipt,
-              style: TextStyle(color: reading ? null : theme.colorScheme.primary)),
-          trailing: Tooltip(
-            message: l10n.receiptLanguage,
-            child: TextButton.icon(
-              onPressed: reading ? null : onPickLanguage,
-              icon: const Icon(Icons.translate),
-              label: Text(receiptScriptShortName(scan.script)),
+          // The icon goes with "Scan receipt" when the language goes under
+          // it (#263), so it's in the title rather than leading.
+          title: Row(mainAxisSize: MainAxisSize.min, children: [
+            reading
+                ? const SizedBox.square(dimension: 24, child: Padding(
+                    padding: EdgeInsets.all(2), child: CircularProgressIndicator(strokeWidth: 2)))
+                : Icon(Icons.document_scanner_outlined, color: theme.colorScheme.primary),
+            const SizedBox(width: 16),
+            Flexible(
+              child: Text(l10n.expenseScanReceipt,
+                  style: TextStyle(color: reading ? null : theme.colorScheme.primary)),
+            ),
+          ]),
+          // Its icon under the text, past the button's own 12 of padding.
+          valueIndent: 24 + 16 - 12,
+          // Its own element (#263), "Latin, Receipt language", rather than
+          // "ABC" with the tooltip on the row's. Under "Scan receipt" when
+          // the two don't fit on a line.
+          value: MergeSemantics(
+            child: Tooltip(
+              message: l10n.receiptLanguage,
+              child: TextButton.icon(
+                onPressed: reading ? null : onPickLanguage,
+                icon: const Icon(Icons.translate),
+                label: Text(receiptScriptShortName(scan.script),
+                    semanticsLabel: receiptScriptName(context, scan.script)),
+              ),
             ),
           ),
           enabled: !reading,

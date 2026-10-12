@@ -17,6 +17,7 @@ import 'package:spliit2go/models/category.dart';
 import 'package:spliit2go/models/default_split.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
+import 'package:spliit2go/screens/expense_form/inline_number_field.dart';
 import 'package:spliit2go/screens/expense_form/split_card.dart';
 import 'package:spliit2go/screens/expense_form/currency_card.dart';
 import 'package:spliit2go/screens/expense_screen.dart';
@@ -46,7 +47,10 @@ void main() {
 
   /// [name]'s row in "Paid for" (#260).
   Finder person(String name) =>
-      find.descendant(of: find.byType(SplitCard), matching: find.widgetWithText(InkWell, name));
+      // In Evenly a row to tap; otherwise their value's row (#263).
+      find.ancestor(
+              of: find.descendant(of: find.byType(SplitCard), matching: find.text(name)),
+              matching: find.byWidgetPredicate((w) => w is InkWell || w is InlineNumberField));
 
   /// Whether [name] is checked in an even split.
   bool checked(WidgetTester tester, String name) => tester

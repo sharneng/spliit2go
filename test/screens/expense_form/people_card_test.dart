@@ -1,6 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show SemanticsNode;
+import 'package:flutter/rendering.dart' show SemanticsData;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -10,6 +10,7 @@ import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
+import 'package:spliit2go/screens/expense_form/inline_number_field.dart';
 import 'package:spliit2go/screens/expense_form/split_card.dart';
 import 'package:spliit2go/screens/expense_form/currency_card.dart';
 import 'package:spliit2go/screens/expense_screen.dart';
@@ -55,7 +56,10 @@ void main() {
 
   Finder paidByRow() => find.widgetWithText(GroupedRow, 'Paid by');
   Finder person(String name) =>
-      find.descendant(of: find.byType(SplitCard), matching: find.widgetWithText(InkWell, name));
+      // In Evenly a row to tap; otherwise their value's row (#263).
+      find.ancestor(
+              of: find.descendant(of: find.byType(SplitCard), matching: find.text(name)),
+              matching: find.byWidgetPredicate((w) => w is InkWell || w is InlineNumberField));
   Finder splitField(String name) => find.descendant(of: person(name), matching: find.byType(TextFormField));
 
   Future<void> mode(WidgetTester tester, String label) async {
@@ -111,7 +115,7 @@ void main() {
     expect(db.rowToExpense((await db.pendingExpenses()).single).paidFor.map((s) => s.participantId), ['alex', 'bea']);
   });
 
-  testWidgets('the amount goes under the value, and in large text the value under the name', (tester) async {
+  testWidgets('the amount goes under the value, and the value under the name when they don\'t fit', (tester) async {
     await open(tester);
     await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '30');
     await mode(tester, 'Shares');
@@ -119,8 +123,18 @@ void main() {
     expect(tester.getTopLeft(amount).dy, greaterThan(tester.getBottomLeft(splitField('Alex')).dy - 1));
     expect(tester.getTopLeft(splitField('Alex')).dy, lessThan(tester.getBottomLeft(find.text('Alex')).dy));
 
+    // Measured, not at a text size (#263): large text that still fits
+    // keeps them side by side...
     tester.platformDispatcher.textScaleFactorTestValue = 1.5;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(splitField('Alex')).dy, lessThan(tester.getBottomLeft(find.text('Alex')).dy));
+
+    // ...and on a phone's width, at the largest sizes, it goes under.
+    tester.view.physicalSize = const Size(320, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    tester.platformDispatcher.textScaleFactorTestValue = 3;
     await tester.pumpAndSettle();
     expect(tester.getTopLeft(splitField('Alex')).dy, greaterThan(tester.getBottomLeft(find.text('Alex')).dy));
   });
@@ -176,9 +190,10 @@ void main() {
     expect(error.style?.color, Theme.of(tester.element(find.byType(SplitCard))).colorScheme.error);
   });
 
-  // #288: what a screen reader says for each field.
-  SemanticsNode fieldNode(WidgetTester tester, Finder field) =>
-      tester.getSemantics(find.descendant(of: field, matching: find.byType(EditableText)));
+  // #288: what a screen reader says for each field; since #263 its row's,
+  // one element.
+  SemanticsData fieldNode(WidgetTester tester, Finder field) =>
+      tester.getSemantics(find.ancestor(of: field, matching: find.byType(MergeSemantics)).first).getSemanticsData();
 
   testWidgets('the Amount field is named "Amount", not by its "0" placeholder', (tester) async {
     await open(tester);

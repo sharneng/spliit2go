@@ -266,6 +266,20 @@ Before the restyle `expense_screen.dart` was about 1,900 lines; after #289 it's 
 
 Kenneth, 2026-10-09: don't make everyone pay for accessibility. The split control stays a 4-way segmented control, one tap. A follow-up issue will make it switch to a menu **only when the segments don't fit** (large text, narrow screens), measured, not by a fixed text size. Label-and-value rows stacking at large text sizes, and screen-reader labels per row, go in the same follow-up.
 
+Done in [#263](https://github.com/sharneng/spliit2go/issues/263), with no change to the form at the default text size:
+
+- **Split control.** `SegmentedPill.fits` measures each mode's name, semibold, at the screen's text size. When one doesn't fit its segment, the pill becomes a "Split" menu row like Repeat's. On a 390pt-wide phone in English that's from about 1.35× text. Both menus (`MenuRow`) open under their value, from its end.
+- **Stacking.** A label and its value share a line when both fit, and the value goes under the label when they don't (`LabelAndValue`, measured, as the Stats rows, #103). This covers `GroupedRow.value` (Paid by, Category, Date, Repeat, Paid in, the worked-out amounts), the Amount row, the split rows, and Paid for with its Select none/all. `SplitCard`'s fixed 1.3× switch is gone. The receipt language goes under "Scan receipt", with the scan icon kept beside its text. A long Title wraps onto more lines, still one line of text: Return finishes, and a pasted line break is a space. Icons don't grow with the text yet, anywhere in the app: [#294](https://github.com/sharneng/spliit2go/issues/294).
+- **Screen readers.** Each row is one element: "Amount, 30", "Bea, Percent, 50" and Repeat's "Repeat, Never" as a button. The receipt language reads its full name, "English, Français and other Latin-script languages", with "Receipt language" as its hint. The iPhone's ⓧ clear button isn't read: a screen reader clears with the keyboard, and the button is only about 24pt.
+- **Tap targets**, at least each platform's own (Android's 48, iOS's 44), with nothing drawn bigger:
+  - A tap anywhere on the Amount row or a person's row types into its field.
+  - The split pill's segments reach 12pt into the card under it.
+  - Select none/all and the rate pair are as tall as their row.
+  - "Use the published rate" takes taps 12pt above and below its text (`Overhang`).
+  - The top bar's buttons are 48 on Android (ui-theme.md, item 18).
+- **A refused save is announced.** The form already announces the first field error. `_refuse` announces the split's problem or a converted amount that comes to nothing. It also announces a receipt holding the save back, still uploading or (when editing) not uploaded (#295 review), and a save that failed. The Amount field's error is read with the field.
+- **Tests.** `expense_form_a11y_test.dart` checks Flutter's tap-target and label guidelines on Android and iOS for five forms: an expense, a split by percent, a converted expense, a typed rate and a settlement, and again at twice the text size. Tests now draw text in Roboto, loaded in `test/flutter_test_config.dart`, instead of the test font, whose letters are each 1em wide. A measured fit then comes out as it does on a phone.
+
 ## Decisions so far
 
 | Date | Decision |

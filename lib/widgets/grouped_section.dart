@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'label_and_value.dart';
+
 import '../theme.dart';
 
 /// A settings-style section (#180): one rounded card, inset from the
@@ -270,6 +272,8 @@ class GroupedRow extends StatelessWidget {
     super.key,
     this.leading,
     required this.title,
+    this.value,
+    this.valueIndent = 0,
     this.subtitle,
     this.trailing,
     this.onTap,
@@ -280,6 +284,14 @@ class GroupedRow extends StatelessWidget {
 
   final Widget? leading;
   final Widget title;
+
+  /// What [title] names, at the row's end, or under the title when the two
+  /// don't fit on a line ([LabelAndValue], #263). A [trailing] can't go
+  /// under: it has the width it asks for, and the title gets what's left.
+  final Widget? value;
+
+  /// How far in from the title's start [value] goes when it's under it.
+  final double valueIndent;
   final Widget? subtitle;
   final Widget? trailing;
   final VoidCallback? onTap;
@@ -306,7 +318,10 @@ class GroupedRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListTile(
         leading: leading,
-        title: title,
+        title: switch (value) {
+          final value? => LabelAndValue(label: title, value: value, indent: valueIndent),
+          null => title,
+        },
         subtitle: subtitle,
         minTileHeight: subtitle == null ? oneLineMinHeight : null,
         trailing: trailing ?? (navigates ? chevron(context) : null),

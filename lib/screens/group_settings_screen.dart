@@ -501,9 +501,9 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
         actions: [
           TopBarButtons(children: [
           _saving
-              ? const SizedBox.square(
-                  dimension: TopBarButtons.size,
-                  child: Center(
+              ? SizedBox.square(
+                  dimension: TopBarButtons.slotSize(context),
+                  child: const Center(
                     child: SizedBox(
                       width: 20,
                       height: 20,

@@ -2,6 +2,8 @@ import 'dart:async' show unawaited;
 
 import 'package:flutter/foundation.dart' show TargetPlatform, Uint8List, defaultTargetPlatform, visibleForTesting;
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show Assertiveness, SemanticsService;
+import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:intl/intl.dart' show NumberFormat;
 import 'package:uuid/uuid.dart';
 
@@ -526,29 +528,20 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     // A settlement's is "From" (#262).
     final label = _m.isSettlement ? l10n.expenseFromLabel : l10n.expensePaidByLabel;
     // Not a trailing: ListTile gives that all the width it asks for, and a
-    // long name squeezed "From" to a letter a line. The label keeps its
-    // width; the name takes what's left and wraps.
+    // long name squeezed "From" to a letter a line. A name that doesn't
+    // fit beside the label goes under it (#263).
     return GroupedRow(
-        title: Row(children: [
-          formLabel(context, label),
-          const SizedBox(width: 16),
-          if (payer != null)
-            Expanded(
-              child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+        title: formLabel(context, label),
+        value: payer == null
+            ? null
+            : Row(mainAxisSize: MainAxisSize.min, children: [
                 Monogram(
                     name: payer.name,
                     color: participantColors(participants, widget.activeUserId)[payer.id]!,
                     radius: 12),
                 const SizedBox(width: 8),
-                Flexible(
-                  child: DefaultTextStyle.merge(
-                    textAlign: TextAlign.end,
-                    child: _value(context, participantName(context, payer, widget.activeUserId)),
-                  ),
-                ),
+                Flexible(child: _value(context, participantName(context, payer, widget.activeUserId))),
               ]),
-            ),
-        ]),
         onTap: () async {
           _dropFocus();
           final picked = await showParticipantSheet(context,
@@ -583,27 +576,17 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   void _dropFocus() => FocusManager.instance.primaryFocus?.unfocus();
 
   /// "Repeat", whose value opens a menu of the choices.
-  Widget _repeatRow(BuildContext context) => PopupMenuButton<int>(
-        tooltip: context.l10n.expenseRepeatLabel,
-        position: PopupMenuPosition.under,
+  Widget _repeatRow(BuildContext context) => MenuRow(
+        title: formLabel(context, context.l10n.expenseRepeatLabel),
+        value: _value(context, _repeatLabel(_m.recurrenceRule)),
         onOpened: _dropFocus,
-        onSelected: (i) => _m.recurrenceRule = RecurrenceRule.values[i],
-        itemBuilder: (context) => [
-          for (final (i, rule) in RecurrenceRule.values.indexed)
-            appPopupMenuItem(
-                context,
-                i,
-                AppMenuItem(
-                    label: _repeatLabel(rule), checked: rule == _m.recurrenceRule, onSelected: () {}),
-                choice: true),
+        items: [
+          for (final rule in RecurrenceRule.values)
+            AppMenuItem(
+                label: _repeatLabel(rule),
+                checked: rule == _m.recurrenceRule,
+                onSelected: () => _m.recurrenceRule = rule),
         ],
-        child: GroupedRow(
-          title: formLabel(context, context.l10n.expenseRepeatLabel),
-          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-            _value(context, _repeatLabel(_m.recurrenceRule)),
-            const Icon(Icons.arrow_drop_down),
-          ]),
-        ),
       );
 
   Widget _form(BuildContext context) {
@@ -624,9 +607,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             // Mark as paid's is a settlement by definition (#272).
             if (widget.initialDraft == null) _kindButton(context),
             _saving
-                ? const SizedBox.square(
-                    dimension: TopBarButtons.size,
-                    child: Center(
+                ? SizedBox.square(
+                    dimension: TopBarButtons.slotSize(context),
+                    child: const Center(
                       child: SizedBox(
                         width: 20,
                         height: 20,
@@ -685,6 +668,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   GroupedSection(children: [
                     _cell(TextFormField(
                       controller: _m.titleController,
+                      // A long title wraps rather than scrolling out of
+                      // sight (#263), still one line of text: Return
+                      // finishes, and a pasted line break is a space.
+                      maxLines: null,
+                      keyboardType: TextInputType.text,
+                      textInputAction: TextInputAction.done,
+                      inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'[\r\n]+'), replacementString: ' ')],
                       decoration: InputDecoration(
                           labelText: l10n.expenseTitleLabel, helperText: _scanHint(_scan.fill?.titleHint)),
                       validator: (v) => (v == null || v.isEmpty) ? l10n.commonRequired : null,
@@ -704,7 +694,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                         },
                         // The icon goes with the category it shows, as
                         // Paid by's monogram with the payer.
-                        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        value: Row(mainAxisSize: MainAxisSize.min, children: [
                           CategoryIconGlyph(category: _selectedCategory, size: 24),
                           const SizedBox(width: 8),
                           Flexible(
@@ -718,7 +708,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                         final hint? => Text(hint),
                         null => null,
                       },
-                      trailing: _value(context, formatDate(_m.date, locale: context.appLocale)),
+                      value: _value(context, formatDate(_m.date, locale: context.appLocale)),
                       onTap: _pickDate,
                     ),
                     _repeatRow(context),
@@ -809,7 +799,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     });
     // Each refusal below says why on screen; the haptic says to look.
     final invalid = _formKey.currentState!.validateGranularly();
-    if (invalid.isNotEmpty) return _refuse(invalid);
+    if (invalid.isNotEmpty) return _refuse(invalid: invalid);
     // The split first: a settlement's amount is its To amounts' sum.
     if (_m.splitProblem() != null) return _refuse();
     final amounts = _m.amountsToSave();
@@ -820,16 +810,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     // A new expense keeps photos that didn't upload, and syncs with them
     // later (#124); only ones still on their way hold it back. An edit is
     // online-only: each new photo is uploaded or removed first, as before.
-    if (_receipts.busy) {
-      setState(() => _saveError = context.l10n.expenseReceiptsWaitBeforeSave);
-      _scrollToTop();
-      return _refuse();
-    }
-    if (widget.isEditing && _receipts.hasFailed) {
-      setState(() => _saveError = context.l10n.expenseReceiptsUploadOrRemove);
-      _scrollToTop();
-      return _refuse();
-    }
+    if (_receipts.busy) return _refuse(blocker: context.l10n.expenseReceiptsWaitBeforeSave);
+    if (widget.isEditing && _receipts.hasFailed) return _refuse(blocker: context.l10n.expenseReceiptsUploadOrRemove);
 
     setState(() => _saving = true);
 
@@ -848,42 +830,67 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ? 'Saving expense ${widget.existingExpense!.id}'
               : 'Adding an expense to ${widget.group.id}');
       if (!mounted) return;
+      final message = errorMessageFor(context, error, unexpected: context.l10n.expenseEditSaveFailed);
       setState(() {
         _saving = false;
-        _saveError = errorMessageFor(context, error, unexpected: context.l10n.expenseEditSaveFailed);
+        _saveError = message;
         _saveErrorDiagnostics = error.diagnostics;
       });
       _scrollToTop();
+      _announce(message);
     }
   }
 
   /// Says no, and scrolls to the first thing that's wrong (#259): one of
   /// the [invalid] fields, the split, or a calculated amount, whichever is
-  /// highest.
-  void _refuse([Set<FormFieldState<Object?>> invalid = const {}]) {
+  /// highest. A screen reader, which can't feel the haptic or see the
+  /// scroll, hears what it is (#263): the [Form] says a field's error
+  /// itself, so this says the split's or an amount's when no field has one.
+  ///
+  /// A [blocker] is a reason outside the form's fields, such as a receipt
+  /// still uploading (#295 review): it goes above the cards, which scroll
+  /// to the top, and is announced as it is.
+  void _refuse({Set<FormFieldState<Object?>> invalid = const {}, String? blocker}) {
     unawaited(Haptics.refused());
+    if (blocker != null) {
+      setState(() => _saveError = blocker);
+      _scrollToTop();
+      _announce(blocker);
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      final l10n = context.l10n;
       final problems = [
-        for (final field in invalid) field.context,
+        for (final field in invalid) (field.context, field.errorText),
         if ((_m.splitProblem() != null || (_m.isSettlement && _m.convertedAmountInvalid),
             _paidForFooterKey.currentContext) case (true, final footer?))
-          footer,
-        if ((_m.convertedAmountInvalid, _calculatedKey.currentContext) case (true, final amount?)) amount,
+          (footer, SplitCard.problem(context, _m)),
+        if ((_m.convertedAmountInvalid, _calculatedKey.currentContext) case (true, final amount?))
+          (amount, l10n.expenseConvertedAmountInvalid),
       ];
-      BuildContext? first;
+      (BuildContext, String?)? first;
       double? top;
       for (final problem in problems) {
-        final box = problem.findRenderObject();
+        final box = problem.$1.findRenderObject();
         if (box is! RenderBox || !box.attached) continue;
         final y = box.localToGlobal(Offset.zero).dy;
         if (top == null || y < top) (first, top) = (problem, y);
       }
-      if (first != null) {
-        unawaited(Scrollable.ensureVisible(first,
+      if (first case (final where, final message)) {
+        unawaited(Scrollable.ensureVisible(where,
             alignment: 0.2, duration: const Duration(milliseconds: 300), curve: Curves.easeOut));
+        if (message != null && invalid.isEmpty) _announce(message);
       }
     });
+  }
+
+  /// Says [message] to a screen reader, as soon as it's said: why a save
+  /// was refused or failed, which a reader can't see appear (#263).
+  void _announce(String message) {
+    if (!MediaQuery.supportsAnnounceOf(context)) return;
+    unawaited(SemanticsService.sendAnnouncement(View.of(context), message, Directionality.of(context),
+        assertiveness: Assertiveness.assertive));
   }
 
   /// Up to why the save failed, at the top of the list (#259).
