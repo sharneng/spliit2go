@@ -371,6 +371,28 @@ void main() {
       }
     });
 
+    testWidgets('the split menu\'s labels stay on a line while the screen has room (#294)', (tester) async {
+      await openAt(tester, 4);
+      final menu = find.byKey(SplitCard.modeMenuKey);
+      await tester.ensureVisible(menu);
+      await tester.tap(menu);
+      await tester.pumpAndSettle();
+      final label = tester.getRect(find.text('Percent').last);
+      expect(label.height, lessThan(2 * 4 * 16));
+    });
+
+    testWidgets('"Save as default split"\'s switch goes under it, at the end, when they don\'t fit', (tester) async {
+      await openAt(tester, 1);
+      final label = find.text('Save as default split');
+      final toggle = find.byType(Switch);
+      expect(tester.getCenter(toggle).dy, closeTo(tester.getCenter(label).dy, 1));
+      tester.platformDispatcher.textScaleFactorTestValue = 4;
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(toggle);
+      expect(tester.getTopLeft(toggle).dy, greaterThanOrEqualTo(tester.getBottomLeft(label).dy - 1));
+      expect(tester.getTopRight(toggle).dx, closeTo(tester.getTopRight(label).dx, 1));
+    });
+
     testWidgets('a long title wraps, and stays one line of text', (tester) async {
       await openAt(tester, 2);
       final title = find.widgetWithText(TextFormField, 'Title');

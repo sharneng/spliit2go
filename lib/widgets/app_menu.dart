@@ -37,6 +37,7 @@ class AppMenuButton extends StatelessWidget {
       icon: icon,
       tooltip: tooltip,
       onSelected: (i) => items[i].onSelected(),
+      constraints: appMenuConstraints(context),
       itemBuilder: (context) => [
         for (var i = 0; i < items.length; i++)
           appPopupMenuItem(context, i, items[i], choice: items.any((item) => item.checked)),
@@ -78,6 +79,7 @@ class _MenuRowState extends State<MenuRow> {
       context: context,
       position: RelativeRect.fromRect(
           Rect.fromLTRB(rect.left, rect.bottom, rect.right, rect.bottom), Offset.zero & overlay.size),
+      constraints: appMenuConstraints(context),
       items: [
         for (final (i, item) in widget.items.indexed) appPopupMenuItem(context, i, item, choice: true),
       ],
@@ -99,6 +101,12 @@ class _MenuRowState extends State<MenuRow> {
         ),
       );
 }
+
+/// As wide as its labels, up to the screen's width inside the cards' edges:
+/// Material stops at 280, which wraps "Percent" at large text with the
+/// screen beside it empty (Kenneth, #294).
+BoxConstraints appMenuConstraints(BuildContext context) => BoxConstraints(
+    minWidth: 2 * 56, maxWidth: MediaQuery.sizeOf(context).width - 2 * GroupedSection.inset);
 
 /// [item] as a row of a popup menu, valued [index], its icon leading. In
 /// a menu that picks one ([choice]), the current choice's emerald check
