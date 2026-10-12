@@ -2,6 +2,8 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/models/expense.dart';
+import 'package:spliit2go/models/group.dart';
+import 'package:spliit2go/models/group_organization.dart';
 
 // Issue #237: the expense list sends neither notes nor the rate, so the
 // cache knows them only once an expense is read in full, until the next
@@ -67,7 +69,8 @@ void main() {
     expect((await cached(db, 'e1')).documentCount, 0);
   });
 
-  test('a refresh clears them again: the list doesn\'t send them', () async {
+  test('a refresh clears them again in a group that isn\'t a favorite: the list doesn\'t send them',
+      () async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     await db.replaceServerExpenses('g1', [expense('e1')]);
@@ -79,6 +82,50 @@ void main() {
     expect(e.notes, '');
     expect(e.conversionRate, isNull);
     expect(e.detailsFetchedAt, isNull);
+  });
+
+  group('a favorite keeps them through a refresh', () {
+    Future<AppDatabase> favoriteWithNotes() async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await db.cacheGroup(const Group(id: 'g1', name: 'Banff Trip', currency: '\$', participants: []));
+      await db.setGroupOrganization('g1', GroupOrganization.favorite);
+      await db.replaceServerExpenses('g1', [expense('e1'), expense('e2')]);
+      await db.cacheExpenseDetails('g1', expense('e1', notes: 'Split the tip', rate: 1.25));
+      return db;
+    }
+
+    test('kept: the receipt downloader reads what changed', () async {
+      final db = await favoriteWithNotes();
+      addTearDown(db.close);
+
+      await db.replaceServerExpenses('g1', [expense('e1'), expense('e2')]);
+
+      final e = await cached(db, 'e1');
+      expect((e.notes, e.conversionRate), ('Split the tip', 1.25));
+      expect(e.detailsFetchedAt, isNotNull);
+      expect(await db.expensesWithUnknownDetails('g1'), ['e2']);
+    });
+
+    test('not on a server without an activity log', () async {
+      final db = await favoriteWithNotes();
+      addTearDown(db.close);
+      await db.setReceiptDownloadProblem('g1', AppDatabase.noActivityLog);
+
+      await db.replaceServerExpenses('g1', [expense('e1')]);
+
+      expect((await cached(db, 'e1')).detailsFetchedAt, isNull);
+    });
+
+    test('forgotten, one or all, they\'re read again', () async {
+      final db = await favoriteWithNotes();
+      addTearDown(db.close);
+      await db.cacheExpenseDetails('g1', expense('e2'));
+
+      await db.forgetExpenseDetails('g1', ids: ['e2']);
+      expect(await db.expensesWithUnknownDetails('g1'), ['e2']);
+      await db.forgetExpenseDetails('g1');
+      expect(await db.expensesWithUnknownDetails('g1'), unorderedEquals(['e1', 'e2']));
+    });
   });
 
   test('a pending expense keeps its own', () async {

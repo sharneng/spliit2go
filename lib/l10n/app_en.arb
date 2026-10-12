@@ -611,6 +611,7 @@
   "receiptDownloadsOffline": "Couldn't reach the server. Downloads continue when you're back online.",
   "receiptDownloadsNoSpace": "Not enough space: raise the receipt storage limit in App settings, or clear stored receipts.",
   "receiptDownloadsFailed": "Some receipts couldn't be downloaded.",
+  "receiptDownloadsNoActivityLog": "This server can't tell what changed, so notes and receipts aren't kept up to date for offline. Retry after the server is updated.",
   "receiptDownloadsUnverified": "Receipts may be out of date",
   "expenseScanReceipt": "Scan receipt",
   "expenseScanIntro": "Fills in what it can read, on this phone. The photo is kept with the expense.",

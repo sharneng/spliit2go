@@ -27,6 +27,13 @@ enum ReceiptDownloadProblem {
 
   /// Something unexpected (#119): logged, with details.
   failed,
+
+  /// The server has no activity log (too old), so nothing tells which
+  /// expenses changed: notes and receipts can't be kept current for
+  /// offline (#237). Nothing is read until Retry; the group's details
+  /// are read when opened, as in any other group. The name is stored
+  /// ([AppDatabase.noActivityLog]).
+  noActivityLog,
 }
 
 /// A favorite group's receipts on this device, for its 📎 (#127).
@@ -39,9 +46,11 @@ class ReceiptDownloadStatus {
     this.available = 0,
     this.problem,
     this.diagnostics,
+    this.detailsUnknown = 0,
   });
 
-  /// A favorite group, downloads on, and receipts to have.
+  /// A favorite group, downloads on, and receipts to have; or any
+  /// favorite whose details couldn't be read (#237), for its Retry.
   final bool shown;
   final bool running;
 
@@ -53,12 +62,16 @@ class ReceiptDownloadStatus {
   final ReceiptDownloadProblem? problem;
   final String? diagnostics;
 
+  /// Expenses whose notes and rate aren't on this device yet (#237).
+  final int detailsUnknown;
+
   /// Every receipt is here, and the last check found nothing it
   /// couldn't read: safe to go offline. A check that stopped short
   /// (#144 review) can't vouch for the receipts it didn't read, such as
   /// one swapped on the web with the count unchanged, even when the
   /// counts add up; the problem is stored, so this survives a restart.
-  bool get complete => available >= total && problem == null;
+  /// Every expense's notes too (#237).
+  bool get complete => available >= total && detailsUnknown == 0 && problem == null;
 
   /// All counted, but the last check stopped short: some may be out of
   /// date.
@@ -73,18 +86,23 @@ class ReceiptDownloadStatus {
 /// offline without having been opened (#127). Favorites only: they mark
 /// the groups a traveller needs (Kenneth).
 ///
+/// Their expenses' notes and rate too (#237), which only reading an
+/// expense in full gives: a refresh keeps them for a favorite, and the
+/// activity log tells which changed.
+///
 /// A run, per group:
-/// 1. reads the expenses whose documents aren't known yet (the list only
-///    counts them);
+/// 1. reads the expenses whose details or documents aren't known yet (the
+///    list only counts documents), over any network and whatever the
+///    setting;
 /// 2. keeps receipts already stored (opened earlier) as favorite
 ///    downloads;
 /// 3. downloads the rest, one at a time, as favorite downloads, while
 ///    they fit under the storage limit after evicting viewing cache.
 ///
 /// It runs after a favorite group refreshes, when a group is made a
-/// favorite, and on Retry; never right after Clear. Under "Wi-Fi only"
-/// nothing goes over mobile data: losing Wi-Fi cancels the transfer in
-/// flight. Unfavoriting, removing the group, turning downloads off and
+/// favorite, and on Retry; never right after Clear. Under "Wi-Fi only" no
+/// receipt goes over mobile data: losing Wi-Fi cancels the transfer in
+/// flight. "Off" downloads no receipts. Unfavoriting, removing the group, turning downloads off and
 /// Clear cancel too.
 class ReceiptDownloader {
   ReceiptDownloader(
@@ -146,18 +164,23 @@ class ReceiptDownloader {
       final row = await db.groupRow(groupId);
       final mode = await _settings.receiptDownloadMode();
       final counts = await db.receiptAvailability(groupId);
+      final detailsUnknown = (await db.expensesWithUnknownDetails(groupId)).length;
       // Not while it's still checking the network.
       final running = _runs[groupId]?.downloading ?? false;
       final problem = ReceiptDownloadProblem.values.asNameMap()[row?.receiptDownloadProblem];
       _statuses[groupId]?.value = ReceiptDownloadStatus(
         shown: row?.organization == GroupOrganization.favorite &&
-            mode != ReceiptDownloadMode.off &&
-            (counts.total > 0 || running),
+            ((mode != ReceiptDownloadMode.off && (counts.total > 0 || running)) ||
+                // Reading the details went wrong: shown with its Retry,
+                // with no receipts or downloads off too (PR #303 review).
+                problem == ReceiptDownloadProblem.noActivityLog ||
+                problem == ReceiptDownloadProblem.failed),
         running: running,
         total: counts.total,
         available: counts.available,
         problem: problem,
         diagnostics: problem == ReceiptDownloadProblem.failed ? _diagnostics[groupId] : null,
+        detailsUnknown: detailsUnknown,
       );
     } catch (e, st) {
       ErrorReporter.instance.report(e, st, operation: 'Checking receipts offline for $groupId');
@@ -181,7 +204,10 @@ class ReceiptDownloader {
   /// Downloads [groupId]'s receipts that aren't on this device, from
   /// [client]'s server, if it's a favorite and the setting and network
   /// allow. Returns when the run ends; a run already going is joined.
-  Future<void> run(String groupId, SpliitClient client) async {
+  ///
+  /// [retry] is the 📎's Retry: a server found to have no activity log is
+  /// tried again (#237); otherwise it stays stopped.
+  Future<void> run(String groupId, SpliitClient client, {bool retry = false}) async {
     if (_runs[groupId] case final running?) return running.done.future;
     // Registered before anything is awaited, so Clear, turning downloads
     // off, unfavoriting and removing the group cancel it while it's still
@@ -189,7 +215,7 @@ class ReceiptDownloader {
     final run = _runs[groupId] = _Run(_newHttpClient());
     ({ReceiptDownloadProblem? problem, String? diagnostics})? result;
     try {
-      result = await _runSteps(groupId, client, run);
+      result = await _runSteps(groupId, client, run, retry: retry);
     } finally {
       run.client.close();
       _runs.remove(groupId);
@@ -202,47 +228,69 @@ class ReceiptDownloader {
   }
 
   /// [run]'s work: what to store when it ends, or null for nothing (not a
-  /// favorite, downloads off, the network unknown). Overridden by a
-  /// cancellation's reason.
+  /// favorite, the network unknown). Overridden by a cancellation's
+  /// reason.
+  ///
+  /// Two steps (#237): the expenses' details, over any network and
+  /// whatever the setting, since they're small; then the receipt files,
+  /// as the setting allows. A server without an activity log stops both,
+  /// and stays stopped until Retry ([retry]).
   Future<({ReceiptDownloadProblem? problem, String? diagnostics})?> _runSteps(
-      String groupId, SpliitClient client, _Run run) async {
+      String groupId, SpliitClient client, _Run run, {required bool retry}) async {
     final row = await db.groupRow(groupId);
-    final mode = await _settings.receiptDownloadMode();
-    if (row?.organization != GroupOrganization.favorite || mode == ReceiptDownloadMode.off) {
-      return null;
+    if (row?.organization != GroupOrganization.favorite) return null;
+    if (row?.receiptDownloadProblem == ReceiptDownloadProblem.noActivityLog.name) {
+      if (!retry) return (problem: ReceiptDownloadProblem.noActivityLog, diagnostics: null);
+      await db.setReceiptDownloadProblem(groupId, null);
     }
+    final mode = await _settings.receiptDownloadMode();
     final List<ConnectivityResult> network;
     try {
       network = await _network(run);
     } catch (e, st) {
-      // No plugin (widget tests): unknown, so nothing is downloaded.
+      // No plugin (widget tests): unknown, so nothing is read.
       if (!isMissingPlugin(e)) {
         ErrorReporter.instance.report(e, st, operation: 'Checking connectivity');
       }
       return null;
     }
     if (run.cancelled) return null;
-    if (!_allowed(mode, network)) {
-      final offline = network.every((r) => r == ConnectivityResult.none);
-      return (
-        problem: offline ? ReceiptDownloadProblem.offline : ReceiptDownloadProblem.waitingForWifi,
-        diagnostics: null,
-      );
+    if (network.every((r) => r == ConnectivityResult.none)) {
+      return (problem: ReceiptDownloadProblem.offline, diagnostics: null);
     }
 
     run.downloading = true;
-    // Only moving onto mobile data under "Wi-Fi only" cancels: going
-    // offline fails the transfer by itself, and iOS reports "none" when
-    // this starts listening on the simulator, which mustn't stop a run.
+    await refreshStatus(groupId);
+    // The network as it is now, followed from the start: reading the
+    // details can take a while, and receipt files go by the network
+    // they'd use (PR #303 review). A "none" isn't taken: iOS reports it
+    // the moment this starts listening, and going offline fails a
+    // transfer by itself.
+    var current = network;
+    var downloadingFiles = false;
     final watch = (_connectivityChanges ?? _platformChanges())?.listen((network) {
-      final onMobileData = network.any((r) => r != ConnectivityResult.none);
-      if (mode == ReceiptDownloadMode.wifiOnly && onMobileData && !_allowed(mode, network)) {
+      if (network.every((r) => r == ConnectivityResult.none)) return;
+      current = network;
+      // Only moving onto mobile data under "Wi-Fi only" cancels, and only
+      // a receipt transfer: the details are read over any network.
+      if (downloadingFiles && mode == ReceiptDownloadMode.wifiOnly && !_allowed(mode, network)) {
         run.cancel(ReceiptDownloadProblem.waitingForWifi);
       }
     });
-    await refreshStatus(groupId);
     try {
-      final (problem, diagnostics) = await _download(groupId, client, run);
+      final details = await _readDetails(groupId, client, run);
+      if (run.cancelled) return null;
+      if (details.problem == ReceiptDownloadProblem.noActivityLog) {
+        return (problem: details.problem, diagnostics: null);
+      }
+      final detailsProblem =
+          details.failure == null ? null : (problem: ReceiptDownloadProblem.failed, diagnostics: details.failure!.diagnostics);
+      if (mode == ReceiptDownloadMode.off) return detailsProblem;
+      if (!_allowed(mode, current)) {
+        return detailsProblem ?? (problem: ReceiptDownloadProblem.waitingForWifi, diagnostics: null);
+      }
+      downloadingFiles = true;
+      final (problem, diagnostics) = await _downloadFiles(groupId, run, details.failure);
       return (problem: problem, diagnostics: diagnostics);
     } catch (e, st) {
       if (run.cancelled) return null;
@@ -302,34 +350,46 @@ class ReceiptDownloader {
     await refreshStatus(groupId);
   }
 
-  /// One run's work. Throws on a connection failure (which stops it);
-  /// an unexpected failure on one receipt is reported and the rest go on.
-  Future<(ReceiptDownloadProblem?, String?)> _download(
+  /// The first step: reads in full every expense whose details aren't
+  /// known (#237), and every receipt list not known yet, then moves the
+  /// activity-log check on. Throws on a connection failure (which stops
+  /// the run); an unexpected failure on one expense is reported, returned,
+  /// and the rest go on.
+  Future<({ReceiptDownloadProblem? problem, ReportedError? failure})> _readDetails(
       String groupId, SpliitClient client, _Run run) async {
-    ReportedError? failure;
-    // Which receipt lists to read: the ones not known yet, plus those of
-    // expenses edited since the last complete check, which the activity
-    // log tells (a receipt swapped on the web keeps the count).
-    final (:toRead, :newest) = await _listsToRead(groupId, client);
+    final changes = await _forgetChanged(groupId, client);
+    if (changes.problem != null) return (problem: changes.problem, failure: null);
+    var failure = changes.failure;
+    final toRead = {
+      ...await db.expensesWithUnknownDetails(groupId),
+      ...await db.expensesWithUnreadDocuments(groupId),
+    };
     for (final expenseId in toRead) {
-      if (run.cancelled) return (run.reason, null);
+      if (run.cancelled) return (problem: null, failure: failure);
       try {
         final fresh = await client.fetchExpense(groupId: groupId, expenseId: expenseId);
-        // Its notes and rate too, read anyway (#237).
         await db.cacheExpenseDetails(groupId, fresh);
       } catch (e, st) {
         // Deleted meanwhile: the next refresh drops it.
         if (e is SpliitApiException && e.isNotFound) continue;
         if (classifyError(e) == ErrorKind.connection) rethrow;
-        failure ??= ErrorReporter.instance
-            .report(e, st, operation: 'Reading receipts of expense $expenseId');
+        failure ??= ErrorReporter.instance.report(e, st, operation: 'Reading expense $expenseId');
       }
     }
-    // Every list read: the next run starts from here. Taken before the
+    // Everything read: the next run starts from here. Taken before the
     // reads, so an edit made meanwhile is seen next time, never skipped.
-    if (failure == null && newest != null && !run.cancelled) {
+    if (changes.newest case final newest? when failure == null && !run.cancelled) {
       await db.setReceiptsChecked(groupId, activityId: newest.id, at: newest.time);
     }
+    return (problem: null, failure: failure);
+  }
+
+  /// The second step: keeps the receipts opened earlier, and downloads
+  /// the rest. Throws on a connection failure; an unexpected failure on
+  /// one receipt is reported and the rest go on. [failure] is the first
+  /// step's, if any.
+  Future<(ReceiptDownloadProblem?, String?)> _downloadFiles(
+      String groupId, _Run run, ReportedError? failure) async {
     // Opened earlier: already here, so kept rather than downloaded again.
     await db.keepGroupReceipts(groupId);
     await refreshStatus(groupId);
@@ -356,23 +416,30 @@ class ReceiptDownloader {
   }
 
   /// How many activity-log pages a run reads looking for where the last
-  /// check stopped, before re-reading every list instead.
+  /// check stopped, before reading every expense again instead.
   @visibleForTesting
   static const activityPages = 5;
   static const _activityPageSize = 50;
 
-  /// The receipt lists [groupId]'s run reads, and the newest activity-log
-  /// entry now (null for an empty log).
+  /// Marks the details of [groupId]'s expenses changed since the last
+  /// complete check unknown, so they're read again, and returns the
+  /// newest activity-log entry now (null for an empty log).
   ///
   /// Spliit has no `updatedAt` on expenses; its activity log records every
-  /// edit made through its API. So after the first check (which reads
-  /// every list), a run reads the log back to the entry the last complete
-  /// check saw, and re-reads the expenses updated since, plus any list not
-  /// known yet. If that entry isn't within [activityPages] pages, or the
-  /// log can't be read for an unexpected reason, every list is read.
-  Future<({List<String> toRead, Activity? newest})> _listsToRead(
+  /// edit made through its API (a receipt swapped on the web keeps the
+  /// count, a note changes nothing the list shows). So a run reads the
+  /// log back to the entry the last complete check saw. On the first
+  /// check, or if that entry isn't within [activityPages] pages, every
+  /// expense's details are forgotten. New expenses, recurring ones
+  /// included (they make no activity), come from the list with theirs
+  /// unknown.
+  ///
+  /// A server without the log ([ReceiptDownloadProblem.noActivityLog])
+  /// can't tell what changed (#237). A log that can't be read for another
+  /// unexpected reason is reported and returned: what changed since isn't
+  /// read this time, and the check doesn't move on.
+  Future<({Activity? newest, ReceiptDownloadProblem? problem, ReportedError? failure})> _forgetChanged(
       String groupId, SpliitClient client) async {
-    final unread = await db.expensesWithUnreadDocuments(groupId);
     final row = await db.groupRow(groupId);
     final checked = row?.receiptsCheckedActivityId;
     final checkedAt = row?.receiptsCheckedAt;
@@ -404,18 +471,19 @@ class ReceiptDownloader {
       }
     } catch (e, st) {
       if (classifyError(e) == ErrorKind.connection) rethrow;
-      ErrorReporter.instance.report(e, st, operation: 'Reading the activity log of $groupId');
-      return (toRead: await db.expensesWithReceipts(groupId), newest: null);
+      if (e is SpliitApiException && e.isNotFound) {
+        return (newest: null, problem: ReceiptDownloadProblem.noActivityLog, failure: null);
+      }
+      final failure = ErrorReporter.instance.report(e, st, operation: 'Reading the activity log of $groupId');
+      return (newest: null, problem: null, failure: failure);
     }
     if (checked == null || !reachedCheck) {
-      // The first check, or too much changed since: every list.
-      return (toRead: await db.expensesWithReceipts(groupId), newest: newest);
+      // The first check, or too much changed since: every expense.
+      await db.forgetExpenseDetails(groupId);
+    } else if (updated.isNotEmpty) {
+      await db.forgetExpenseDetails(groupId, ids: updated);
     }
-    final withReceipts = (await db.expensesWithReceipts(groupId)).toSet();
-    return (
-      toRead: {...unread, ...updated.where(withReceipts.contains)}.toList(),
-      newest: newest,
-    );
+    return (newest: newest, problem: null, failure: null);
   }
 
   /// Stops [groupId]'s run, closing the transfer in flight.

@@ -30,9 +30,15 @@ void main() {
   late List<String> downloads;
   late List<String> reads;
 
+  /// The server's notes, by expense (#237).
+  late Map<String, String> notes;
+
   /// Expenses whose read the server answers with a 500.
   late Set<String> failingReads;
   Completer<void>? holdDownload;
+
+  /// Holds every expense read until completed.
+  Completer<void>? holdRead;
 
   const wifi = [ConnectivityResult.wifi];
   const mobile = [ConnectivityResult.mobile];
@@ -50,6 +56,9 @@ void main() {
   late List<(String, String, String?)> activities;
   late int activityReads;
 
+  /// A server too old to have the activity log (#237).
+  late bool noActivityLog;
+
   http.Response trpc(Object data) => http.Response(
       jsonEncode([
         {
@@ -66,6 +75,12 @@ void main() {
       final input = jsonDecode(req.url.queryParameters['input']!)['0']['json'] as Map;
       if (req.url.path.endsWith('groups.activities.list')) {
         activityReads++;
+        if (noActivityLog) {
+          return http.Response(
+              '[{"error":{"json":{"message":"No procedure found on path \\"groups.activities.list\\"",'
+              '"code":-32004,"data":{"code":"NOT_FOUND","httpStatus":404}}}}]',
+              404);
+        }
         final cursor = input['cursor'] as int, limit = input['limit'] as int;
         final page = activities.skip(cursor).take(limit).toList();
         return trpc({
@@ -88,6 +103,7 @@ void main() {
       }
       final id = input['expenseId'] as String;
       reads.add(id);
+      if (holdRead case final hold?) await hold.future;
       if (failingReads.contains(id)) return http.Response('boom', 500);
       return http.Response(
           jsonEncode([
@@ -102,6 +118,7 @@ void main() {
                       'paidBy': {'id': 'p1'},
                       'paidFor': [],
                       'expenseDate': '2026-09-27T00:00:00.000Z',
+                      'notes': notes[id] ?? '',
                       'documents': [
                         for (final (i, url) in documents[id]!.indexed)
                           {'id': '$id-d$i', 'url': url, 'width': 600, 'height': 900},
@@ -129,9 +146,12 @@ void main() {
     downloads = [];
     reads = [];
     holdDownload = null;
+    holdRead = null;
     activities = [('a2', 'UPDATE_EXPENSE', 'e1'), ('a1', 'CREATE_EXPENSE', 'e1')];
     activityReads = 0;
+    noActivityLog = false;
     failingReads = {};
+    notes = {};
     server = newServer();
     await db.cacheGroup(const Group(id: 'g1', name: 'Banff Trip', currency: '\$', participants: []));
     await db.setGroupOrganization('g1', GroupOrganization.favorite);
@@ -202,14 +222,14 @@ void main() {
     expect((await statusOf(d)).shown, isFalse);
   });
 
-  test('Wi-Fi only, on mobile data: nothing downloads, and it waits for Wi-Fi without an error',
-      () async {
+  test('Wi-Fi only, on mobile data: no receipt downloads, and it waits for Wi-Fi without an error; '
+      'the expenses are read (#237)', () async {
     network = mobile;
     final d = downloader();
 
     await d.run('g1', server);
 
-    expect(reads, isEmpty);
+    expect(reads, ['e1', 'e2']);
     expect(downloads, isEmpty);
     final status = await statusOf(d);
     expect((status.problem, status.isError), (ReceiptDownloadProblem.waitingForWifi, false));
@@ -593,7 +613,7 @@ void main() {
     });
 
     test('a run that fails partway checks the same range again next time', () async {
-      expectUnexpectedError<SpliitApiException>('Reading receipts of expense e2');
+      expectUnexpectedError<SpliitApiException>('Reading expense e2');
       final d = downloader();
       await d.run('g1', server);
       reads = [];
@@ -653,9 +673,174 @@ void main() {
   });
 
   // #144 review (Ezra): two reproductions.
+  // #237: a favorite's notes and rate, kept for offline like its receipts.
+  group('notes', () {
+    /// The server's refresh, with e3: no receipts.
+    Future<void> refresh() => db.replaceServerExpenses('g1', [
+          for (final MapEntry(key: id, value: urls) in documents.entries)
+            Expense(
+                id: id,
+                groupId: 'g1',
+                title: 'Coffee',
+                amountCents: 500,
+                paidBy: 'p1',
+                paidFor: const [],
+                date: DateTime(2026, 9, 27),
+                documentCount: urls.length),
+        ]);
+
+    Future<Map<String, String>> cachedNotes() async =>
+        {for (final r in await db.expensesForGroup('g1')) r.id: r.notes};
+
+    setUp(() async {
+      documents['e3'] = [];
+      notes = {'e1': 'Tip included', 'e3': 'Parking'};
+      await refresh();
+    });
+
+    test('every expense is read, receipts or not, and a refresh keeps what was read', () async {
+      final d = downloader();
+      await d.run('g1', server);
+
+      expect(reads, unorderedEquals(['e1', 'e2', 'e3']));
+      expect(await cachedNotes(), {'e1': 'Tip included', 'e2': '', 'e3': 'Parking'});
+      expect((await statusOf(d)).complete, isTrue);
+
+      await refresh();
+      expect(await cachedNotes(), {'e1': 'Tip included', 'e2': '', 'e3': 'Parking'});
+      reads = [];
+      await d.run('g1', server);
+      expect(reads, isEmpty);
+    });
+
+    test('until read, the group isn\'t complete', () async {
+      final d = downloader();
+      final status = await statusOf(d);
+      expect((status.detailsUnknown, status.complete), (3, false));
+    });
+
+    test('an expense edited on the web is read again, receipts or not', () async {
+      final d = downloader();
+      await d.run('g1', server);
+      reads = [];
+
+      notes['e3'] = 'Parking, paid cash';
+      activities.insert(0, ('a3', 'UPDATE_EXPENSE', 'e3'));
+      await refresh();
+      await d.run('g1', server);
+
+      expect(reads, ['e3']);
+      expect((await cachedNotes())['e3'], 'Parking, paid cash');
+    });
+
+    test('downloads Off: no receipt downloads, but the expenses are read', () async {
+      await SettingsService().setReceiptDownloadMode(ReceiptDownloadMode.off);
+      final d = downloader();
+      await d.run('g1', server);
+
+      expect(downloads, isEmpty);
+      expect(reads, unorderedEquals(['e1', 'e2', 'e3']));
+      expect((await cachedNotes())['e1'], 'Tip included');
+    });
+
+    // PR #303 review (Ezra): receipt files go by the network once the
+    // details are read, not the one the run started on.
+    group('the network changing while the expenses are read', () {
+      Future<void> changeWhileReading(List<ConnectivityResult> to) async {
+        final d = downloader();
+        holdRead = Completer();
+        final running = d.run('g1', server);
+        while (reads.isEmpty) {
+          await pumpEventQueue();
+        }
+        network = to;
+        changes.add(to);
+        await pumpEventQueue();
+        holdRead!.complete();
+        await running;
+      }
+
+      test('Wi-Fi to mobile data under Wi-Fi only: the reads finish, no receipt downloads', () async {
+        network = wifi;
+        await changeWhileReading(mobile);
+
+        expect(reads, unorderedEquals(['e1', 'e2', 'e3']));
+        expect(downloads, isEmpty);
+        expect((await statusOf(downloader())).problem, ReceiptDownloadProblem.waitingForWifi);
+      });
+
+      test('mobile data to Wi-Fi: the receipts download', () async {
+        network = mobile;
+        await changeWhileReading(wifi);
+
+        expect(downloads, hasLength(3));
+        expect((await statusOf(downloader())).problem, isNull);
+      });
+    });
+
+    // PR #303 review (Ezra): the error and its Retry stay reachable.
+    test('a server without an activity log shows on a favorite without receipts', () async {
+      documents = {'e3': []};
+      notes = {'e3': 'Parking'};
+      await refresh();
+      noActivityLog = true;
+      final d = downloader();
+      await d.run('g1', server);
+
+      final status = await statusOf(d);
+      expect((status.shown, status.isError, status.problem),
+          (true, true, ReceiptDownloadProblem.noActivityLog));
+    });
+
+    test('and with downloads Off', () async {
+      await SettingsService().setReceiptDownloadMode(ReceiptDownloadMode.off);
+      noActivityLog = true;
+      final d = downloader();
+      await d.run('g1', server);
+
+      final status = await statusOf(d);
+      expect((status.shown, status.isError), (true, true));
+    });
+
+    test('a favorite without receipts is otherwise not shown', () async {
+      documents = {'e3': []};
+      await refresh();
+      final d = downloader();
+      await d.run('g1', server);
+
+      expect((await statusOf(d)).shown, isFalse);
+    });
+
+    test('a server without an activity log: red, nothing read, and a refresh forgets what was; '
+        'Retry tries again', () async {
+      noActivityLog = true;
+      final d = downloader();
+      await d.run('g1', server);
+
+      expect(reads, isEmpty);
+      expect(downloads, isEmpty);
+      var status = await statusOf(d);
+      expect((status.problem, status.isError), (ReceiptDownloadProblem.noActivityLog, true));
+      expect(await db.keepsExpenseDetails('g1'), isFalse);
+
+      // Stays stopped: the log isn't asked for again.
+      final asked = activityReads;
+      await d.run('g1', server);
+      expect(activityReads, asked);
+
+      // The server was updated.
+      noActivityLog = false;
+      await d.run('g1', server, retry: true);
+      expect(reads, unorderedEquals(['e1', 'e2', 'e3']));
+      status = await statusOf(d);
+      expect((status.problem, status.complete), (null, true));
+      expect(await db.keepsExpenseDetails('g1'), isTrue);
+    });
+  });
+
   test('a swap whose expense can\'t be read leaves the group not complete, red, with Retry, '
       'even across a restart', () async {
-    expectUnexpectedError<SpliitApiException>('Reading receipts of expense e1', times: 2);
+    expectUnexpectedError<SpliitApiException>('Reading expense e1', times: 2);
     final d = downloader();
     await d.run('g1', server);
     expect((await statusOf(d)).complete, isTrue);

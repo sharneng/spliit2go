@@ -96,8 +96,10 @@ class Expenses extends Table {
   /// ids (create gives documents new ones).
   TextColumn get documentsJson => text().nullable()();
 
-  /// See [Expense.detailsFetchedAt] (#237). Every refresh clears it, with
-  /// [notes] and [conversionRate], since the list doesn't send them.
+  /// See [Expense.detailsFetchedAt] (#237). A refresh clears it, with
+  /// [notes] and [conversionRate], since the list doesn't send them;
+  /// except in a favorite group, whose activity log tells which changed
+  /// (see [AppDatabase.keepsExpenseDetails]).
   DateTimeColumn get detailsFetchedAt => dateTime().nullable()();
 
   @override
@@ -850,11 +852,29 @@ class AppDatabase extends _$AppDatabase {
           fetchedAtGeneration != expensesGeneration(groupId)) {
         return false;
       }
+      // What only a full read gives, kept where the activity log tells
+      // which expenses changed (#237).
+      final kept = {
+        if (await keepsExpenseDetails(groupId))
+          for (final r in await (select(expenses)
+                ..where((e) =>
+                    e.groupId.equals(groupId) & e.pending.equals(false) & e.detailsFetchedAt.isNotNull()))
+              .get())
+            r.id: r,
+      };
       await (delete(expenses)
             ..where((e) => e.groupId.equals(groupId) & e.pending.equals(false)))
           .go();
-      await batch(
-          (b) => b.insertAll(expenses, fresh.map(toCompanion).toList()));
+      await batch((b) => b.insertAll(expenses, [
+            for (final e in fresh)
+              if (kept[e.id] case final old?)
+                toCompanion(e).copyWith(
+                    notes: Value(old.notes),
+                    conversionRate: Value(old.conversionRate),
+                    detailsFetchedAt: Value(old.detailsFetchedAt))
+              else
+                toCompanion(e),
+          ]));
       await _pruneDocuments(groupId, {for (final e in fresh) e.id: e.documentCount});
       return true;
     });
@@ -905,12 +925,43 @@ class AppDatabase extends _$AppDatabase {
         .go();
   }
 
+  /// Whether a refresh keeps [groupId]'s expense details (#237): only a
+  /// favorite's, which the receipt downloader keeps current from the
+  /// activity log, and not on a server without one ([noActivityLog]).
+  Future<bool> keepsExpenseDetails(String groupId) async {
+    final row = await groupRow(groupId);
+    return row?.organization == GroupOrganization.favorite && row?.receiptDownloadProblem != noActivityLog;
+  }
+
+  /// The ReceiptDownloadProblem name for a server without an activity log.
+  static const noActivityLog = 'noActivityLog';
+
+  /// Marks [groupId]'s synced expenses' details unknown, or only those
+  /// in [ids], so they're read again (#237): changed since they were read.
+  Future<void> forgetExpenseDetails(String groupId, {Iterable<String>? ids}) =>
+      (update(expenses)
+            ..where((e) {
+              final synced = e.groupId.equals(groupId) & e.pending.equals(false);
+              return ids == null ? synced : synced & e.id.isIn(ids);
+            }))
+          .write(const ExpensesCompanion(detailsFetchedAt: Value(null)));
+
+  /// [groupId]'s synced expenses whose details aren't known (#237),
+  /// newest first.
+  Future<List<String>> expensesWithUnknownDetails(String groupId) async {
+    final rows = await (select(expenses)
+          ..where((e) =>
+              e.groupId.equals(groupId) & e.pending.equals(false) & e.detailsFetchedAt.isNull()))
+        .get();
+    return [for (final r in _newestFirst(rows)) r.id];
+  }
+
   /// Stores what only reading [fresh] in full gives (#237): its notes,
   /// rate and documents, marking its details as known. The document count
   /// follows the documents read: the list's may be older, and the stored
   /// list counts only while the two match. Only on a synced row; a
   /// pending one keeps its own. The next refresh clears them again, as
-  /// the list doesn't send them.
+  /// the list doesn't send them, unless [keepsExpenseDetails].
   Future<void> cacheExpenseDetails(String groupId, Expense fresh, {DateTime? at}) {
     return transaction(() async {
       final updated = await (update(expenses)
