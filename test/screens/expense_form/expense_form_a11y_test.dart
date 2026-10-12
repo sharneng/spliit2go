@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/main.dart';
+import 'package:spliit2go/widgets/group_monogram.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
@@ -391,6 +392,19 @@ void main() {
       await tester.ensureVisible(toggle);
       expect(tester.getTopLeft(toggle).dy, greaterThanOrEqualTo(tester.getBottomLeft(label).dy - 1));
       expect(tester.getTopRight(toggle).dx, closeTo(tester.getTopRight(label).dx, 1));
+    });
+
+    testWidgets('a person\'s monogram is level with their name\'s first line (#296)', (tester) async {
+      for (final scale in [1.0, 3.0]) {
+        await openAt(tester, scale);
+        final name = find.text('Bea').last;
+        await tester.ensureVisible(name);
+        final row = find.ancestor(of: name, matching: find.byType(InkWell)).first;
+        final monogram = tester.getRect(find.descendant(of: row, matching: find.byType(Monogram)));
+        final nameRect = tester.getRect(name);
+        // One line here, so its middle is the first line's.
+        expect(monogram.center.dy, closeTo(nameRect.center.dy, 1), reason: '$scale');
+      }
     });
 
     testWidgets('a long title wraps, and stays one line of text', (tester) async {

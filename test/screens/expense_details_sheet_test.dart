@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:spliit2go/widgets/group_monogram.dart';
+import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
@@ -330,6 +332,37 @@ void main() {
       expect(inSheet(find.text(expected.$2)), findsWidgets, reason: expected.$2);
       await closeTree(tester);
       await db.close();
+    }
+  });
+
+  testWidgets('at large text, every share goes under its name at the row\'s end, uncut (#296)', (tester) async {
+    tester.view.physicalSize = const Size(390, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final db = await cachedDb(dinner(splitMode: SplitMode.byPercentage));
+    addTearDown(db.close);
+    for (final (scale, under) in [(1.0, false), (3.0, true)]) {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await openSheet(tester, db);
+      final shares = [for (final label in ['66.67%', '33.33%']) tester.getRect(inSheet(find.text(label)))];
+      for (final (i, name) in ['Alex', 'Bea'].indexed) {
+        final nameRect = tester.getRect(inSheet(find.text(name)).last);
+        expect(shares[i].top >= nameRect.bottom - 1, under, reason: '$name $scale');
+        // The name keeps its words, not a letter a line.
+        expect(nameRect.height, lessThan(2 * scale * 16), reason: '$name $scale');
+      }
+      // Each monogram level with its name, not centered on the row.
+      for (final name in ['Alex', 'Bea']) {
+        final row = find.ancestor(of: inSheet(find.text(name)).last, matching: find.byType(GroupedRow));
+        expect(tester.getCenter(find.descendant(of: row, matching: find.byType(Monogram))).dy,
+            closeTo(tester.getCenter(inSheet(find.text(name)).last).dy, 1), reason: '$name $scale');
+      }
+      // At the same end, whole: a trailing was cut to a line's height.
+      expect(shares[0].right, closeTo(shares[1].right, 1));
+      expect(tester.getSize(inSheet(find.text('66.67%'))).height,
+          greaterThanOrEqualTo(tester.getSize(inSheet(find.text('Alex')).last).height * 0.8));
+      await closeTree(tester);
     }
   });
 

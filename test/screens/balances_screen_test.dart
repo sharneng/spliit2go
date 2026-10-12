@@ -279,6 +279,28 @@ void main() {
     await teardown(tester);
   });
 
+  testWidgets('at large text, every balance goes under its name at the row\'s end (#296)', (tester) async {
+    tester.view.physicalSize = const Size(390, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final db = await dbWithEvenExpense();
+    addTearDown(db.close);
+    for (final (scale, under) in [(1.0, false), (3.0, true)]) {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await pumpBalances(tester, db);
+      final rights = <double>[];
+      for (final name in ['Alex', 'Bea', 'Cid']) {
+        final row = find.ancestor(of: find.text(name), matching: find.byType(GroupedRow));
+        final amount = tester.getRect(find.descendant(of: row, matching: find.byType(Money)));
+        expect(amount.top >= tester.getRect(find.text(name)).bottom - 1, under, reason: '$name $scale');
+        rights.add(amount.right);
+      }
+      expect(rights.every((r) => (r - rights.first).abs() < 1), isTrue, reason: '$scale');
+      await teardown(tester);
+    }
+  });
+
   testWidgets('owed: says so, the amount unsigned in the positive money color, and marks your row',
       (tester) async {
     final db = await dbWithEvenExpense();

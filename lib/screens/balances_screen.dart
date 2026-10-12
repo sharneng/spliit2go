@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../api/spliit_client.dart';
@@ -11,6 +13,7 @@ import '../sync/outbox.dart';
 import '../utils/money.dart';
 import '../widgets/money.dart';
 import '../widgets/grouped_section.dart';
+import '../widgets/label_and_value.dart';
 import 'expense_screen.dart';
 import '../services/error_reporting.dart';
 import '../widgets/empty_state.dart';
@@ -258,24 +261,32 @@ class _BalancesScreenState extends State<BalancesScreen> {
               children: [
                 _youSection(context, balances),
                 if (balances.isNotEmpty)
-                  GroupedSection(
-                    caption: context.l10n.balancesTitle,
-                    footer: context.l10n.balancesExplainer,
-                    children: [
-                      for (final b in balances)
-                        GroupedRow(
-                          title: Text(b.participantId == widget.activeUserId
-                              ? context.l10n.expenseDetailsYou(_name(b.participantId))
-                              : _name(b.participantId)),
-                          trailing: Money(
-                            formatMoney(b.netCents, widget.group.currency,
-                                decimalDigits: widget.group.decimalDigits,
-                                locale: context.appLocale),
-                            sign: MoneySign.ofBalance(b.netCents),
+                  LayoutBuilder(builder: (context, constraints) {
+                    String amount(int cents) => formatMoney(cents, widget.group.currency,
+                        decimalDigits: widget.group.decimalDigits, locale: context.appLocale);
+                    // Every balance under its name, at the end, or none, as
+                    // Paid for's (#296): a trailing squeezed the name.
+                    final under = valuesGoUnder(
+                        row: constraints.maxWidth - 2 * GroupedSection.inset - 2 * GroupedSection.inset,
+                        label: 0,
+                        widest: 16 +
+                            [for (final b in balances) measuredTextWidth(context, amount(b.netCents), Money.styleOf(context))]
+                                .fold(0.0, math.max));
+                    return GroupedSection(
+                      caption: context.l10n.balancesTitle,
+                      footer: context.l10n.balancesExplainer,
+                      children: [
+                        for (final b in balances)
+                          GroupedRow(
+                            title: Text(b.participantId == widget.activeUserId
+                                ? context.l10n.expenseDetailsYou(_name(b.participantId))
+                                : _name(b.participantId)),
+                            value: Money(amount(b.netCents), sign: MoneySign.ofBalance(b.netCents)),
+                            valueUnder: under,
                           ),
-                        ),
-                    ],
-                  ),
+                      ],
+                    );
+                  }),
                 if (settlements.isNotEmpty)
                   GroupedSection(
                     caption: context.l10n.balancesSuggestedSettlements,
@@ -283,7 +294,8 @@ class _BalancesScreenState extends State<BalancesScreen> {
                       for (final s in settlements)
                         GroupedRow(
                           title: Text(context.l10n.balancesOwes(_name(s.fromId), _name(s.toId))),
-                          trailing: _settlingKey == '${s.fromId}->${s.toId}'
+                          // Under it, at the end, when they don't fit (#296).
+                          value: _settlingKey == '${s.fromId}->${s.toId}'
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,

@@ -233,27 +233,15 @@ class SplitCard extends StatelessWidget {
             if (_m.splitMode == SplitMode.byPercentage) '%',
           ].join(),
     ];
-    final scaler = MediaQuery.textScalerOf(context);
-    double widthOf(String text, TextStyle? style) {
-      final painter = TextPainter(
-          text: TextSpan(text: text, style: style), textScaler: scaler, textDirection: Directionality.of(context))
-        ..layout();
-      final width = painter.width;
-      painter.dispose();
-      return width;
-    }
-
     final amountStyle = Money.styleOf(context, size: MoneySize.support);
     final fieldStyle = DefaultTextStyle.of(context).style.merge(formValueStyle(context));
     final widest = [
       0.0,
-      for (final amount in amounts) widthOf(amount, amountStyle),
-      for (final text in typed) widthOf(text, fieldStyle),
+      for (final amount in amounts) measuredTextWidth(context, amount, amountStyle),
+      for (final text in typed) measuredTextWidth(context, text, fieldStyle),
     ].reduce(math.max);
-    final row = width - 2 * 16;
-    final monogram = context.textScaled(24) + 16;
     final check = evenly ? 12 + context.textScaled(24) : 0;
-    return row - monogram - 12 - widest - check < row / 2;
+    return valuesGoUnder(row: width - 2 * 16, label: context.textScaled(24) + 16, widest: 12 + widest + check);
   }
 
   Widget _row(BuildContext context, Participant p, Color color, int? preview, {required bool under}) {
@@ -274,11 +262,7 @@ class SplitCard extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: LabelAndValue(
-              label: Row(mainAxisSize: MainAxisSize.min, children: [
-                monogram,
-                const SizedBox(width: 16),
-                Flexible(child: name),
-              ]),
+              label: MonogramLabel(monogram: monogram, name: name, nameStyle: theme.textTheme.bodyLarge),
               value: value,
               gap: 12,
               runGap: 6,

@@ -108,7 +108,7 @@ Its functions, by job:
 |---|---|
 | `grouped_section.dart` | `GroupedSection` (a card), `GroupedRow`, `GroupedCaption`, `GroupedDivider`, `GroupedScrollClip`: every card and row |
 | `participant_sheet.dart` | `showParticipantSheet`, `ChoiceRow`, `participantName`: Paid by and From; "Who are you?" shares the rows |
-| `group_monogram.dart`, `participant_colors.dart` | `Monogram` and `participantColors`: each person's initials and color |
+| `group_monogram.dart`, `participant_colors.dart` | `Monogram`, `MonogramLabel` and `participantColors`: each person's initials and color, and a monogram level with a name's first line (#296) |
 | `segmented_pill.dart` | `SegmentedPill`: Evenly / Shares / Percent / Amount, and `fits`, whether its names fit |
 | `label_and_value.dart` | `LabelAndValue`: a label and its value on a line, or the value under it at the line's end when they don't fit (#263, #294) |
 | `line_or_stack.dart` | `LineOrStack`: Scan receipt's icon, text and language on a line, or on two centered lines (#294) |
