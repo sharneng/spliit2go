@@ -9,6 +9,7 @@ import '../models/expense.dart';
 import '../services/error_reporting.dart';
 import '../services/receipt_cache.dart';
 import 'error_message.dart';
+import 'grouped_section.dart';
 
 /// An expense's receipts (#123): a row of thumbnails that open a
 /// full-screen viewer.
@@ -88,12 +89,17 @@ class _ReceiptsSectionState extends State<ReceiptsSection> {
     final failure = _unavailable.values.whereType<String>().firstOrNull ?? widget.loadDiagnostics;
     final offline = unknownOffline || _unavailable.containsValue(null);
 
+    // An inset card under its caption, as the form's receipts (Kenneth, #304).
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(l10n.expenseReceiptsHeading, style: theme.textTheme.titleSmall),
-        const SizedBox(height: 8),
-        Wrap(
+        GroupedSection(
+          caption: l10n.expenseReceiptsHeading,
+          margin: EdgeInsets.zero,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(GroupedSection.inset),
+              child: Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
@@ -123,6 +129,9 @@ class _ReceiptsSectionState extends State<ReceiptsSection> {
             for (final a in widget.pending)
               _PendingThumbnail(
                   key: ValueKey('attachment-${a.id}'), cache: widget.cache, attachment: a),
+          ],
+              ),
+            ),
           ],
         ),
         if (failure != null) ...[

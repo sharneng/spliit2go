@@ -774,6 +774,22 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
         ],
       );
       }),
+      if (e.documentCount > 0 || (_documentsOf(e)?.isNotEmpty ?? false) || _attachments.isNotEmpty) ...[
+        // Before the notes, as in the form: a long note doesn't push
+        // the receipts down (Kenneth, #304).
+        Padding(
+          padding: _sectionMargin,
+          child: ReceiptsSection(
+          cache: ReceiptCache.of(widget.db),
+          groupId: widget.group.id,
+          count: _documentsOf(e)?.length ?? e.documentCount,
+          documents: _documentsOf(e),
+          online: _detailsOffline ? false : _online,
+          loadDiagnostics: _docsDiagnostics,
+          pending: _attachments,
+          ),
+        ),
+      ],
       if (_notesOf(e) case final notes? when notes.isNotEmpty)
         GroupedSection(
           margin: _sectionMargin,
@@ -798,17 +814,6 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
             ),
           ],
         ),
-      if (e.documentCount > 0 || (_documentsOf(e)?.isNotEmpty ?? false) || _attachments.isNotEmpty) ...[
-        ReceiptsSection(
-          cache: ReceiptCache.of(widget.db),
-          groupId: widget.group.id,
-          count: _documentsOf(e)?.length ?? e.documentCount,
-          documents: _documentsOf(e),
-          online: _detailsOffline ? false : _online,
-          loadDiagnostics: _docsDiagnostics,
-          pending: _attachments,
-        ),
-      ],
     ];
   }
 
