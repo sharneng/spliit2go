@@ -99,7 +99,8 @@ class _ActiveUserPickerState extends State<ActiveUserPicker> {
               children: [
                 GroupedRow(
                   title: Text(l10n.activeUserRememberName),
-                  trailing: Switch.adaptive(
+                  // Under it at large text, as a row's value (#294).
+                  value: Switch.adaptive(
                     value: _rememberName,
                     onChanged: (value) => setState(() => _rememberName = value),
                   ),

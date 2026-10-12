@@ -94,9 +94,8 @@ class _GroupRowActionsState extends State<GroupRowActions>
             Rect.fromLTWH(localAnchor.dx, localAnchor.dy, 1, 1),
             Offset.zero & overlay.size),
         // The popup route clamps the menu to safe screen edges and scrolls
-        // when necessary. Text can wrap instead of truncating French labels.
-        constraints:
-            BoxConstraints(maxWidth: (overlay.size.width - 32).clamp(0, 320)),
+        // when necessary. Text wraps only past the screen's width (#294).
+        constraints: appMenuConstraints(context),
         items: [
           for (final (i, item) in _menuItems.indexed) appPopupMenuItem(context, i, item),
         ],

@@ -142,7 +142,8 @@ class SplitCard extends StatelessWidget {
           // One element: "Save as default split, switch, off".
           MergeSemantics(child: GroupedRow(
             title: Text(l10n.expenseSaveDefaultSplit),
-            trailing: Switch.adaptive(
+            // Under it at large text, as a row's value (Kenneth, #294).
+            value: Switch.adaptive(
               value: _m.saveDefaultSplit,
               onChanged: (v) => _m.saveDefaultSplit = v,
             ),
