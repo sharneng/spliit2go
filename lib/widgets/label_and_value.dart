@@ -3,6 +3,27 @@ import 'dart:math' as math;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
+/// Whether a list's values all go under their labels (Kenneth, #294): when
+/// the widest would leave the labels less than half of [row], what's left
+/// after [label]'s fixed part (a monogram and its gap) and [widest] (the
+/// widest value with its gap). One answer for every row, so they don't go
+/// under one by one as names grow: Paid for, in the form and the details.
+bool valuesGoUnder({required double row, required double label, required double widest}) =>
+    row - label - widest < row / 2;
+
+/// [text]'s width in [style] at the screen's text size, for measuring a
+/// value before it's laid out.
+double measuredTextWidth(BuildContext context, String text, TextStyle? style) {
+  final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textScaler: MediaQuery.textScalerOf(context),
+      textDirection: Directionality.of(context))
+    ..layout();
+  final width = painter.width;
+  painter.dispose();
+  return width;
+}
+
 /// A label and its value on one line when both fit at their full width,
 /// the value at the line's end; the value under the label when they don't
 /// (#263). Measured, as the Stats rows' (#103), rather than switched at a

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
@@ -30,6 +31,7 @@ import '../widgets/grouped_section.dart';
 import '../widgets/bottom_inset.dart';
 import '../widgets/participant_colors.dart';
 import '../widgets/group_monogram.dart';
+import '../widgets/label_and_value.dart';
 import '../widgets/top_bar_buttons.dart';
 import '../theme.dart';
 import '../widgets/confirm_dialog.dart';
@@ -688,7 +690,21 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       ),
       // Paid for one person, the sentence names them (#247).
       if (_onlyRecipient(e) == null)
-      GroupedSection(
+      LayoutBuilder(builder: (context, constraints) {
+      // What each row shows: the share as entered, or the amount.
+      String shown(ExpenseShare share) => switch (_shareLabel(context, e.splitMode, share)) {
+            final label? when !_showAmounts => label,
+            _ => formatMoney(shares[share.participantId] ?? 0, currency, decimalDigits: digits, locale: locale),
+          };
+      // Every share under its name, at the end, or none (#296), as in the
+      // form's Paid for.
+      final under = valuesGoUnder(
+          row: constraints.maxWidth - 2 * GroupedSection.inset,
+          label: context.textScaled(24) + 16,
+          widest: 16 +
+              [for (final share in e.paidFor) measuredTextWidth(context, shown(share), Money.styleOf(context))]
+                  .fold(0.0, math.max));
+      return GroupedSection(
         margin: _sectionMargin,
         caption: l10n.expensePaidForHeading,
         // In line with the amounts in the card, as the caption is with the
@@ -717,22 +733,24 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
         children: [
           for (final share in e.paidFor)
             GroupedRow(
-              leading: Monogram(
-                  name: _participantName(share.participantId),
-                  color: colors[share.participantId] ?? monogramPalette.first,
-                  radius: 12),
-              // One line: the share, as the split was entered, or the
-              // amount it comes to (#226).
-              title: Text(_name(share.participantId)),
-              trailing: switch (_shareLabel(context, e.splitMode, share)) {
-                // In the amounts' digits, as an amount without its currency.
-                final label? when !_showAmounts => Money(label),
-                _ => Money(formatMoney(shares[share.participantId] ?? 0, currency,
-                    decimalDigits: digits, locale: locale)),
-              },
+              // The share, as the split was entered, or the amount it
+              // comes to (#226). The monogram level with the name's first
+              // line, as in the form (#296).
+              title: MonogramLabel(
+                  monogram: Monogram(
+                      name: _participantName(share.participantId),
+                      color: colors[share.participantId] ?? monogramPalette.first,
+                      radius: 12),
+                  name: Text(_name(share.participantId))),
+              // In the amounts' digits, a share as an amount without its
+              // currency. A value, not a trailing: that takes the width it
+              // asks for and squeezed the name to a letter a line (#296).
+              value: Money(shown(share)),
+              valueUnder: under,
             ),
         ],
-      ),
+      );
+      }),
       if (e.notes.isNotEmpty)
         GroupedSection(
           margin: _sectionMargin,

@@ -190,7 +190,8 @@ class _ExchangeRatesTileState extends State<_ExchangeRatesTile> {
               : l10n.appSettingsExchangeRatesSaved(
                   formatDate(saved.publishedOn, locale: context.appLocale, withYear: false),
                   saved.currencies)),
-      trailing: TextButton(
+      // Under the name, at the end, when they don't fit (#296).
+      value: TextButton(
         onPressed: _updating ? null : _update,
         child: Text(l10n.appSettingsExchangeRatesUpdate),
       ),
@@ -271,7 +272,7 @@ class _ReceiptStorageTileState extends State<_ReceiptStorageTile> {
           : bytes == 0
               ? l10n.appSettingsReceiptsNone
               : formatByteSize(context, bytes)),
-      trailing: TextButton(
+      value: TextButton(
         onPressed: bytes == null || bytes == 0 || _clearing ? null : _clear,
         child: Text(l10n.appSettingsReceiptsClear),
       ),
