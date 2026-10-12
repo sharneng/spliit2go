@@ -405,7 +405,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
     final count = (jsonDecode(row.participantsJson) as List).length;
     final downloads = ReceiptDownloader.of(widget.db);
     void retryDownloads() =>
-        unawaited(downloads.run(row.id, widget.clientFactory(row.serverUrl)));
+        unawaited(downloads.run(row.id, widget.clientFactory(row.serverUrl), retry: true));
     final actions = [
       GroupRowAction(
           label: row.organization == GroupOrganization.favorite

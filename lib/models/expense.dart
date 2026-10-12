@@ -210,8 +210,9 @@ class Expense {
   /// When this device last read the expense in full
   /// ([SpliitClient.fetchExpense]), which is the only way to know its
   /// [notes] and [conversionRate]: the expense list sends neither (#237).
-  /// Null while they aren't known, which is how a refresh leaves every
-  /// synced row. Never set on anything read from the API.
+  /// Null while they aren't known, which is how a refresh leaves a synced
+  /// row, except in a favorite group (AppDatabase.keepsExpenseDetails).
+  /// Never set on anything read from the API.
   final DateTime? detailsFetchedAt;
 
   const Expense({

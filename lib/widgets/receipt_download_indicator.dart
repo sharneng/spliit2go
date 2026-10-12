@@ -221,6 +221,7 @@ String? _reason(AppLocalizations l10n, ReceiptDownloadStatus s) => s.running || 
         ReceiptDownloadProblem.offline => l10n.receiptDownloadsOffline,
         ReceiptDownloadProblem.noSpace => l10n.receiptDownloadsNoSpace,
         ReceiptDownloadProblem.failed => l10n.receiptDownloadsFailed,
+        ReceiptDownloadProblem.noActivityLog => l10n.receiptDownloadsNoActivityLog,
         null => null,
       };
 

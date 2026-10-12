@@ -297,6 +297,7 @@
   "receiptDownloadsOffline": "无法连接服务器。联网后会继续下载。",
   "receiptDownloadsNoSpace": "空间不足：请在应用设置中提高收据存储上限，或清除已存储的收据。",
   "receiptDownloadsFailed": "部分收据无法下载。",
+  "receiptDownloadsNoActivityLog": "此服务器无法告知哪些内容有变动，因此附注和收据无法保持最新以供离线使用。服务器更新后请重试。",
   "receiptDownloadsUnverified": "收据可能不是最新的",
   "expenseScanReceipt": "扫描收据",
   "expenseScanIntro": "在本机识别并填写能读到的内容。照片会随支出一起保存。",

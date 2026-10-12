@@ -268,8 +268,8 @@ class _GroupScreenState extends State<GroupScreen> {
         actions: [
           ReceiptDownloadIndicator(
             status: ReceiptDownloader.of(widget.db).status(widget.groupId),
-            onRetry: () =>
-                unawaited(ReceiptDownloader.of(widget.db).run(widget.groupId, widget.client)),
+            onRetry: () => unawaited(
+                ReceiptDownloader.of(widget.db).run(widget.groupId, widget.client, retry: true)),
           ),
           TopBarButtons(children: [
           AppMenuButton(

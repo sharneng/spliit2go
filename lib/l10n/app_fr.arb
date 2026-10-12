@@ -297,6 +297,7 @@
   "receiptDownloadsOffline": "Impossible de joindre le serveur. Les téléchargements reprennent au retour de la connexion.",
   "receiptDownloadsNoSpace": "Pas assez d’espace : augmentez l’espace maximal pour les reçus dans les réglages, ou effacez les reçus stockés.",
   "receiptDownloadsFailed": "Certains reçus n’ont pas pu être téléchargés.",
+  "receiptDownloadsNoActivityLog": "Ce serveur ne peut pas indiquer ce qui a changé : les notes et les reçus ne sont pas tenus à jour hors ligne. Réessayez une fois le serveur mis à jour.",
   "receiptDownloadsUnverified": "Les reçus ne sont peut-être pas à jour",
   "expenseScanReceipt": "Scanner un reçu",
   "expenseScanIntro": "Remplit ce qui peut être lu, sur ce téléphone. La photo est gardée avec la dépense.",

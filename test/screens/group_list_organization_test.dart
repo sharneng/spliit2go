@@ -530,8 +530,8 @@ class _RecordingDownloader extends ReceiptDownloader {
   final calls = <String>[];
 
   @override
-  Future<void> run(String groupId, SpliitClient client) async =>
-      calls.add('run $groupId ${client.baseUrl}');
+  Future<void> run(String groupId, SpliitClient client, {bool retry = false}) async =>
+      calls.add('run $groupId ${client.baseUrl}${retry ? ' retry' : ''}');
 
   @override
   Future<void> unfavorited(String groupId) async => calls.add('unfavorited $groupId');
