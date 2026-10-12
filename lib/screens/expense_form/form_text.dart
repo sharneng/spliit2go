@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../../l10n/context_l10n.dart';
 import '../../theme.dart';
 import '../../utils/money.dart';
 import '../../widgets/grouped_section.dart';
+import '../../widgets/label_and_value.dart';
 import '../../widgets/money.dart';
 
 /// The form's rows (Kenneth, 2026-10-10): what was entered is the main
@@ -23,20 +25,22 @@ Widget formFieldRow(BuildContext context, Widget label, Widget field) => Constra
       constraints: const BoxConstraints(minHeight: GroupedRow.oneLineMinHeight),
       child: Padding(
         padding: const EdgeInsetsDirectional.only(start: 16, end: 16),
-        child: Row(children: [
-          DefaultTextStyle.merge(style: Theme.of(context).textTheme.bodyLarge, child: label),
-          const SizedBox(width: 16),
-          Expanded(child: field),
-        ]),
+        // The field under its label when they don't fit on a line (#263).
+        child: LabelAndValue(
+          label: DefaultTextStyle.merge(style: Theme.of(context).textTheme.bodyLarge, child: label),
+          value: field,
+        ),
       ),
     );
 
 /// A small text button beside a label or under a note: Select all/none
 /// and "Use the published rate" (Kenneth, 2026-10-10). A button's own
-/// padding and 48pt pushed it in and the next card down.
-ButtonStyle compactTextButtonStyle() => TextButton.styleFrom(
-      minimumSize: Size.zero,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+/// padding and 48pt pushed it in and the next card down. Where there's
+/// room, its target is taller than its text (#263): at least [minHeight],
+/// or [reach] more above and below.
+ButtonStyle compactTextButtonStyle({double minHeight = 0, double reach = 0}) => TextButton.styleFrom(
+      minimumSize: Size(0, minHeight),
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2 + reach),
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
 
@@ -46,7 +50,7 @@ Widget workedOutRow(BuildContext context, String label, int? amount, String symb
     GroupedRow(
       key: key,
       title: formLabel(context, label),
-      trailing: amount == null
+      value: amount == null
           ? Text('—', semanticsLabel: context.l10n.expenseAmountNotYetKnown, style: formValueStyle(context))
           : Money(formatMoney(amount, symbol, decimalDigits: digits, locale: context.appLocale)),
     );
@@ -137,10 +141,10 @@ class _RetypeAssistState extends State<RetypeAssist> {
         Flexible(child: child!),
         if (widget.focus.hasFocus && widget.controller.text.isNotEmpty)
           // Part of the field's tap region: tapping it keeps the keyboard.
+          // Not to a screen reader, which clears with the keyboard (#263):
+          // in a row that's one element, its tap would be the row's.
           TextFieldTapRegion(
-            child: Semantics(
-              button: true,
-              label: context.l10n.commonClear,
+            child: ExcludeSemantics(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () {
@@ -157,5 +161,48 @@ class _RetypeAssistState extends State<RetypeAssist> {
       ]),
       child: widget.child,
     );
+  }
+}
+
+/// [child] taking [reach] less room than its height above and below,
+/// which it draws and takes taps over (#263): a tap target taller than
+/// its line, over what's around it, without moving it. Its parent must
+/// cover the reach: Flutter only hit-tests inside a box.
+class Overhang extends SingleChildRenderObjectWidget {
+  const Overhang({super.key, required this.reach, required super.child});
+
+  final double reach;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderOverhang(reach);
+
+  @override
+  void updateRenderObject(BuildContext context, RenderObject renderObject) => (renderObject as _RenderOverhang).reach = reach;
+}
+
+class _RenderOverhang extends RenderShiftedBox {
+  _RenderOverhang(this._reach) : super(null);
+
+  double _reach;
+  set reach(double value) {
+    if (value == _reach) return;
+    _reach = value;
+    markNeedsLayout();
+  }
+
+  @override
+  void performLayout() {
+    final child = this.child!;
+    child.layout(constraints.loosen().copyWith(maxHeight: double.infinity), parentUsesSize: true);
+    (child.parentData! as BoxParentData).offset = Offset(0, -_reach);
+    size = constraints.constrain(Size(child.size.width, child.size.height - 2 * _reach));
+  }
+
+  // Into the reach too, which is outside this box.
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    if (!hitTestChildren(result, position: position)) return false;
+    result.add(BoxHitTestEntry(this, position));
+    return true;
   }
 }

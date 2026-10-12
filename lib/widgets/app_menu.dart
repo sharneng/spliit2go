@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'grouped_section.dart';
+
 /// One entry of an [AppMenuButton] or a row's long-press menu.
 class AppMenuItem {
   const AppMenuItem(
@@ -40,6 +42,61 @@ class AppMenuButton extends StatelessWidget {
       ],
     );
   }
+}
+
+/// A form's row that picks one of a few, its [value] at the end with a
+/// drop-down arrow: Repeat, and the split mode when its pill doesn't fit
+/// (#263). The menu opens under the value, from its end, rather than
+/// from the row's start, far from what was tapped. To a screen reader a
+/// button, "Repeat, Never".
+class MenuRow extends StatefulWidget {
+  const MenuRow(
+      {super.key, required this.title, required this.value, required this.items, this.onOpened});
+  final Widget title;
+  final Widget value;
+
+  /// Its choices, the current one [AppMenuItem.checked].
+  final List<AppMenuItem> items;
+  final VoidCallback? onOpened;
+
+  @override
+  State<MenuRow> createState() => _MenuRowState();
+}
+
+class _MenuRowState extends State<MenuRow> {
+  final _value = GlobalKey();
+
+  Future<void> _open() async {
+    widget.onOpened?.call();
+    final anchor = _value.currentContext!.findRenderObject()! as RenderBox;
+    final overlay = Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+    final rect = MatrixUtils.transformRect(anchor.getTransformTo(overlay), Offset.zero & anchor.size);
+    // Under the value; showMenu lines the menu up with the value's nearer
+    // edge of the screen, its end here.
+    final i = await showMenu<int>(
+      context: context,
+      position: RelativeRect.fromRect(
+          Rect.fromLTRB(rect.left, rect.bottom, rect.right, rect.bottom), Offset.zero & overlay.size),
+      items: [
+        for (final (i, item) in widget.items.indexed) appPopupMenuItem(context, i, item, choice: true),
+      ],
+    );
+    if (i != null) widget.items[i].onSelected();
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        child: GroupedRow(
+          title: widget.title,
+          value: Row(key: _value, mainAxisSize: MainAxisSize.min, children: [
+            Flexible(child: widget.value),
+            // As a trailing icon was.
+            Icon(Icons.arrow_drop_down, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ]),
+          onTap: _open,
+        ),
+      );
 }
 
 /// [item] as a row of a popup menu, valued [index], its icon leading. In

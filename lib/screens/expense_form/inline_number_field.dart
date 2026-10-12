@@ -10,7 +10,9 @@ import 'form_text.dart';
 /// amount and each person's value in the split are one (#289).
 ///
 /// The text is only as wide as typed, so the whole value is the tap
-/// target, or with a [label], the whole row. It owns its focus.
+/// target, or with a [label] or a [row], the whole row. A row is then one
+/// element to a screen reader, named by [name] (#263): "Amount, 30",
+/// "Bea, Percent, 50", with its tap target the row's. It owns its focus.
 class InlineNumberField extends StatefulWidget {
   const InlineNumberField({
     super.key,
@@ -18,6 +20,7 @@ class InlineNumberField extends StatefulWidget {
     required this.controller,
     required this.name,
     this.label,
+    this.row,
     this.prefix,
     this.suffix,
     this.contentPadding,
@@ -32,6 +35,10 @@ class InlineNumberField extends StatefulWidget {
 
   /// The row's label: the field then lays out the row, label first.
   final Widget? label;
+
+  /// Or the row around the field, for a row laid out otherwise. What in
+  /// it repeats [name] is for it to leave out of the semantics.
+  final Widget Function(BuildContext context, Widget field)? row;
   final String? prefix;
   final String? suffix;
   final EdgeInsetsGeometry? contentPadding;
@@ -67,9 +74,10 @@ class _InlineNumberFieldState extends State<InlineNumberField> {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              if (widget.prefix case final prefix?) Text(prefix, style: style),
+              // The name says what it's in.
+              if (widget.prefix case final prefix?) ExcludeSemantics(child: Text(prefix, style: style)),
               Flexible(child: field!),
-              if (widget.suffix case final suffix?) Text(suffix, style: style),
+              if (widget.suffix case final suffix?) ExcludeSemantics(child: Text(suffix, style: style)),
             ],
           );
         },
@@ -89,13 +97,13 @@ class _InlineNumberFieldState extends State<InlineNumberField> {
         ),
       ),
     );
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _focus.requestFocus,
-      child: switch (widget.label) {
-        final label? => formFieldRow(context, label, value),
-        null => value,
-      },
-    );
+    final row = switch ((widget.label, widget.row)) {
+      // The label is the name.
+      (final label?, _) => formFieldRow(context, ExcludeSemantics(child: label), value),
+      (_, final row?) => row(context, value),
+      _ => null,
+    };
+    final tappable = GestureDetector(behavior: HitTestBehavior.opaque, onTap: _focus.requestFocus, child: row ?? value);
+    return row == null ? tappable : MergeSemantics(child: tappable);
   }
 }

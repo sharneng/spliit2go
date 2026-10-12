@@ -656,15 +656,15 @@ void main() {
   testWidgets('the time trails the sentence, right-aligned, on its own line only when it must',
       (tester) async {
     final semantics = tester.ensureSemantics();
-    // The test font draws each character a square of its size: 16 wide in
-    // the sentence. At 800 the sentence has 708, 44 characters.
+    // Roboto, as on a phone (flutter_test_config.dart). At 800 the
+    // sentence has 708.
     tester.view.physicalSize = const Size(800, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final db = await newDb();
     addTearDown(db.close);
-    // "Alex added “…”." with this is exactly the 44: no room for the time.
-    final full = 'X' * 30;
+    // "Alex added “…”." with this still fits a line, but not the time with it.
+    final full = 'X' * 58;
     Map<String, dynamic> added(String id, String time, String title) => activityJson(id, time)
       ..['activityType'] = 'CREATE_EXPENSE'
       ..['participantId'] = 'alex'

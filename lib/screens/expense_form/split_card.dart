@@ -8,7 +8,9 @@ import '../../models/group.dart';
 import '../../utils/money.dart';
 import '../../widgets/participant_colors.dart';
 import '../../widgets/group_monogram.dart';
+import '../../widgets/app_menu.dart';
 import '../../widgets/grouped_section.dart';
+import '../../widgets/label_and_value.dart';
 import '../../widgets/money.dart';
 import '../../widgets/participant_sheet.dart';
 import '../../widgets/segmented_pill.dart';
@@ -49,11 +51,6 @@ class SplitCard extends StatelessWidget {
   /// refused save to scroll to.
   final Key? footerKey;
 
-  /// From this text size on, a value goes under the name rather than
-  /// beside it, which would squeeze the name to a word a line (#266
-  /// review), as spliit-ios does at accessibility sizes.
-  static const double _stackingTextScale = 1.3;
-
   ExpenseFormModel get _m => model;
 
   /// A person's value field: their shares, percent or amount.
@@ -68,8 +65,7 @@ class SplitCard extends StatelessWidget {
     final preview = _m.livePreviewAmounts();
     // A settlement's amount is this card's: when it converts to nothing,
     // it says so here, where a refused save scrolls (#262 review).
-    final error = (showErrors ? _error(context) : null) ??
-        (_m.isSettlement && _m.convertedAmountInvalid ? l10n.expenseConvertedAmountInvalid : null);
+    final error = showErrors ? problem(context, _m) : _convertedError(context, _m);
     final settlement = _m.isSettlement;
     final message = Text(
       error ?? _hint(context) ?? '',
@@ -78,27 +74,35 @@ class SplitCard extends StatelessWidget {
     final hasMessage = error != null || _hint(context) != null;
     // "Paid for" (a settlement's "To") as a row's label, as "Paid by"'s
     // above it; an even split's Select none/all at its end.
-    final heading = SizedBox(
-      height: GroupedRow.oneLineMinHeight,
+    // At a row's text size, as GroupedRow gives "Paid by"'s.
+    final headingLabel = DefaultTextStyle.merge(
+      style: theme.textTheme.bodyLarge,
+      child: formLabel(context, settlement ? l10n.expenseToHeading : l10n.expensePaidForHeading),
+    );
+    final heading = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: GroupedRow.oneLineMinHeight),
       child: Padding(
         padding: const EdgeInsetsDirectional.only(start: 16, end: 8),
-        child: Row(children: [
-          // At a row's text size, as GroupedRow gives "Paid by"'s.
-          Expanded(
-            child: DefaultTextStyle.merge(
-              style: theme.textTheme.bodyLarge,
-              child: formLabel(context, settlement ? l10n.expenseToHeading : l10n.expensePaidForHeading),
-            ),
-          ),
-          // Always offers the opposite of the current state (issue #29
-          // section 2); only an even split selects anyone.
-          if (evenly)
-            TextButton(
-              onPressed: _m.toggleSelectAll,
-              style: compactTextButtonStyle(),
-              child: Text(_m.allIncluded ? l10n.expenseSelectNone : l10n.expenseSelectAll),
-            ),
-        ]),
+        // Vertically centered when it's the label alone.
+        child: Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: evenly
+              ? LabelAndValue(
+                  label: headingLabel,
+                  // Always offers the opposite of the current state (issue
+                  // #29 section 2); only an even split selects anyone.
+                  value: TextButton(
+                    onPressed: _m.toggleSelectAll,
+                    // As tall as the heading's row.
+                    style: compactTextButtonStyle(minHeight: kMinInteractiveDimension),
+                    child: Text(_m.allIncluded ? l10n.expenseSelectNone : l10n.expenseSelectAll),
+                  ),
+                  runGap: 0,
+                  // Its text under the label's, past the button's padding.
+                  indent: -8,
+                )
+              : headingLabel,
+        ),
       ),
     );
     final people = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -124,7 +128,7 @@ class SplitCard extends StatelessWidget {
         else
           Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             heading,
-            Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), child: _modes(context)),
+            _modes(context),
           ]),
         people,
         if (settlement) ..._totals(context),
@@ -156,19 +160,47 @@ class SplitCard extends StatelessWidget {
 
   /// The split mode, as spliit-ios's (Kenneth, 2026-10-10), at the old
   /// control's height.
+  ///
+  /// A menu row instead, as Repeat's, when a mode's name doesn't fit its
+  /// segment (#263): at large text sizes, on a narrow screen, in a longer
+  /// language.
   Widget _modes(BuildContext context) {
-    return SegmentedPill<SplitMode>(
+    void choose(SplitMode mode) {
+      // A focused value field that this removes or refills would hand
+      // its focus back up the form, which then scrolls to it (issue
+      // #36): unfocus first.
+      FocusScope.of(context).unfocus();
+      _m.splitMode = mode;
+    }
+
+    final pill = SegmentedPill<SplitMode>(
       segments: {for (final mode in SplitMode.values) mode: _modeName(context, mode)},
       selected: _m.splitMode,
-      onChanged: (mode) {
-        // A focused value field that this removes or refills would hand
-        // its focus back up the form, which then scrolls to it (issue
-        // #36): unfocus first.
-        FocusScope.of(context).unfocus();
-        _m.splitMode = mode;
-      },
+      // The pill is 35pt; its segments' targets 48 (#263), into the card's
+      // space under it and a point above.
+      tapPadding: const EdgeInsets.only(top: 1, bottom: 12),
+      onChanged: choose,
+    );
+    const inset = EdgeInsets.symmetric(horizontal: 12);
+    return LayoutBuilder(
+      builder: (context, constraints) => pill.fits(context, constraints.maxWidth - inset.horizontal)
+          ? Padding(padding: inset, child: pill)
+          // To a screen reader a button, "Split, Evenly", as Repeat's.
+          : MenuRow(
+              key: modeMenuKey,
+              title: formLabel(context, context.l10n.expenseSplitLabel),
+              value: Text(_modeName(context, _m.splitMode), style: formValueStyle(context)),
+              onOpened: () => FocusScope.of(context).unfocus(),
+              items: [
+                for (final mode in SplitMode.values)
+                  AppMenuItem(label: _modeName(context, mode), checked: mode == _m.splitMode, onSelected: () => choose(mode)),
+              ],
+            ),
     );
   }
+
+  /// The split mode's menu, where the pill doesn't fit.
+  static const modeMenuKey = Key('split-mode-menu');
 
 
 
@@ -180,74 +212,69 @@ class SplitCard extends StatelessWidget {
     final theme = Theme.of(context);
     final evenly = _m.splitMode == SplitMode.evenly;
     final included = _m.isIncluded(p.id);
-    final value = evenly
-        // Who's in is checked, as in the Paid by sheet, not only shown by
-        // the dimming (Kenneth, 2026-10-11): a mark doesn't rely on seeing
-        // the contrast. Out, the check's space stays, so the amounts line
-        // up.
-        ? Row(mainAxisSize: MainAxisSize.min, children: [
-            if (preview != null) ...[_amount(context, preview), const SizedBox(width: 12)],
-            Visibility.maintain(
-              visible: included,
-              child: Icon(Icons.check, color: theme.colorScheme.primary),
-            ),
-          ])
-        : Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              SizedBox(width: 96, child: _valueField(context, p)),
-              // Amount's value is the amount itself.
-              if (preview != null && _m.splitMode != SplitMode.byAmount)
-                Padding(padding: const EdgeInsets.only(top: 2), child: _amount(context, preview)),
-            ],
-          );
-    final stacks = !evenly && MediaQuery.textScalerOf(context).scale(10) / 10 >= _stackingTextScale;
     final name = Text(participantName(context, p, _m.activeUserId),
         style: theme.textTheme.bodyLarge
             ?.copyWith(color: included ? null : theme.colorScheme.onSurface.withValues(alpha: 0.4)));
     final monogram = Opacity(opacity: included ? 1 : 0.4, child: Monogram(name: p.name, color: color, radius: 12));
     // Not a ListTile, which caps what's beside the name at one line's
-    // height: here the amount goes under the value.
-    final row = InkWell(
-      onTap: evenly ? () => _m.setIncluded(p.id, !included) : null,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: GroupedRow.oneLineMinHeight),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: stacks
-              ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [monogram, const SizedBox(width: 16), Expanded(child: name)]),
-                  const SizedBox(height: 6),
-                  Padding(padding: const EdgeInsetsDirectional.only(start: 40), child: value),
-                ])
-              : Row(children: [
-                  monogram,
-                  const SizedBox(width: 16),
-                  Expanded(child: name),
-                  const SizedBox(width: 12),
-                  value,
-                ]),
+    // height: here the amount goes under the value. The value goes under
+    // the name when the two don't fit on a line, which would squeeze the
+    // name to a word a line (#266 review), as spliit-ios does at
+    // accessibility sizes; measured (#263), not at a set text size.
+    Widget layout(Widget name, Widget value) => ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: GroupedRow.oneLineMinHeight),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: LabelAndValue(
+              label: Row(mainAxisSize: MainAxisSize.min, children: [
+                monogram,
+                const SizedBox(width: 16),
+                Flexible(child: name),
+              ]),
+              value: value,
+              gap: 12,
+              runGap: 6,
+              // Under the name, past the monogram.
+              indent: 40,
+            ),
+          ),
+        );
+    if (evenly) {
+      // Who's in is checked, as in the Paid by sheet, not only shown by the
+      // dimming (Kenneth, 2026-10-11): a mark doesn't rely on seeing the
+      // contrast. Out, the check's space stays, so the amounts line up.
+      final value = Row(mainAxisSize: MainAxisSize.min, children: [
+        if (preview != null) ...[_amount(context, preview), const SizedBox(width: 12)],
+        Visibility.maintain(visible: included, child: Icon(Icons.check, color: theme.colorScheme.primary)),
+      ]);
+      return Semantics(
+          checked: included, child: InkWell(onTap: () => _m.setIncluded(p.id, !included), child: layout(name, value)));
+    }
+    // The whole row is the value's: a tap anywhere types it, and it's one
+    // element to a screen reader, "Bea, Percent", its value, and what that
+    // comes to (#263).
+    return InlineNumberField(
+      fieldKey: valueKey(p.id),
+      controller: _m.splitControllers[p.id]!,
+      name: context.l10n.expenseFieldName(p.name, _modeName(context, _m.splitMode)),
+      prefix: _m.splitMode == SplitMode.byAmount ? '${_m.splitSymbol} ' : null,
+      suffix: _m.splitMode == SplitMode.byPercentage ? '%' : null,
+      contentPadding: EdgeInsets.zero,
+      row: (context, field) => layout(
+        ExcludeSemantics(child: name),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            SizedBox(width: 96, child: field),
+            // Amount's value is the amount itself.
+            if (preview != null && _m.splitMode != SplitMode.byAmount)
+              Padding(padding: const EdgeInsets.only(top: 2), child: _amount(context, preview)),
+          ],
         ),
       ),
     );
-    return evenly ? Semantics(checked: included, child: row) : row;
   }
-
-  /// A person's value, as the form's other fields (Kenneth, 2026-10-10):
-  /// plain right-aligned text on the card rather than a box in the page's
-  /// color, with its "%" or currency symbol right beside the digits, and
-  /// the whole value's width a tap target.
-  Widget _valueField(BuildContext context, Participant p) => InlineNumberField(
-        fieldKey: valueKey(p.id),
-        controller: _m.splitControllers[p.id]!,
-        name: context.l10n.expenseFieldName(p.name, _modeName(context, _m.splitMode)),
-        prefix: _m.splitMode == SplitMode.byAmount ? '${_m.splitSymbol} ' : null,
-        suffix: _m.splitMode == SplitMode.byPercentage ? '%' : null,
-        contentPadding: EdgeInsets.zero,
-      );
-
-
 
   /// A settlement's Total, in the paid-in currency, and converted.
   List<Widget> _totals(BuildContext context) {
@@ -273,26 +300,34 @@ class SplitCard extends StatelessWidget {
       formatMoney(amount, _m.group.currency, decimalDigits: _m.digits, locale: context.appLocale),
       size: MoneySize.support);
 
+  /// What a refused save says is wrong here (#263): the split, or a
+  /// settlement's amount that converts to nothing.
+  static String? problem(BuildContext context, ExpenseFormModel model) =>
+      _splitError(context, model) ?? _convertedError(context, model);
+
+  static String? _convertedError(BuildContext context, ExpenseFormModel m) =>
+      m.isSettlement && m.convertedAmountInvalid ? context.l10n.expenseConvertedAmountInvalid : null;
+
   /// What's wrong with the split, in words, if anything.
-  String? _error(BuildContext context) {
+  static String? _splitError(BuildContext context, ExpenseFormModel m) {
     final l10n = context.l10n;
-    return switch (_m.splitProblem()) {
+    return switch (m.splitProblem()) {
       null => null,
-      NoOneIncluded() when _m.isSettlement => l10n.expenseSettlementNoRecipient,
+      NoOneIncluded() when m.isSettlement => l10n.expenseSettlementNoRecipient,
       NoOneIncluded() => l10n.expenseSelectAtLeastOne,
-      InvalidValue(:final participant) => switch (_m.splitMode) {
+      InvalidValue(:final participant) => switch (m.splitMode) {
           SplitMode.byShares => l10n.expenseEnterShares(participant.name),
           SplitMode.byPercentage => l10n.expenseEnterPercentage(participant.name),
           _ => l10n.expenseEnterAmount(participant.name),
         },
       // Short or over, not just "off by" (Kenneth, 2026-10-10).
       PercentagesDontAddUp(:final totalBasisPoints) => () {
-          final by = _m.shareText((10000 - totalBasisPoints).abs() / 100);
+          final by = m.shareText((10000 - totalBasisPoints).abs() / 100);
           return totalBasisPoints < 10000 ? l10n.expensePercentageShort(by) : l10n.expensePercentageOverBy(by);
         }(),
       AmountsDontAddUp(:final difference) => () {
-          final by = formatMoney(difference.abs(), _m.splitSymbol,
-              decimalDigits: _m.splitDigits, locale: context.appLocale);
+          final by = formatMoney(difference.abs(), m.splitSymbol,
+              decimalDigits: m.splitDigits, locale: context.appLocale);
           // The difference is the total less what's split.
           return difference > 0 ? l10n.expenseAmountShort(by) : l10n.expenseAmountOverBy(by);
         }(),
