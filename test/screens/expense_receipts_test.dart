@@ -198,6 +198,23 @@ void main() {
     await closeTree(tester);
   });
 
+  // PR #302 review (Ezra): receipts added on the web since the refresh
+  // come with the full read; the list's count of 0 is out of date.
+  testWidgets('receipts the list didn\'t count yet are kept with their count, and show again '
+      'without asking', (tester) async {
+    final (db, _) = await setUpDb(documents: 0, detailsKnown: false);
+    addTearDown(db.close);
+    final s = server([ok]);
+    await openSheet(tester, db, s.client);
+    expect(receiptImages(), findsNWidgets(2));
+
+    await closeTree(tester);
+    await openSheet(tester, db, s.client);
+    expect(receiptImages(), findsNWidgets(2));
+    expect(s.gets.single, 1);
+    await closeTree(tester);
+  });
+
   // #130 review (Ezra): a same-count swap on the web must show. The next
   // refresh leaves the details unknown (#237), so they're read again.
   testWidgets('after a refresh, stored receipts are read again online: one swapped on the web '

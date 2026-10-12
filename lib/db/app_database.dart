@@ -906,9 +906,11 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Stores what only reading [fresh] in full gives (#237): its notes,
-  /// rate and documents, marking its details as known. Only on a synced
-  /// row; a pending one keeps its own. The next refresh clears them
-  /// again, as the list doesn't send them.
+  /// rate and documents, marking its details as known. The document count
+  /// follows the documents read: the list's may be older, and the stored
+  /// list counts only while the two match. Only on a synced row; a
+  /// pending one keeps its own. The next refresh clears them again, as
+  /// the list doesn't send them.
   Future<void> cacheExpenseDetails(String groupId, Expense fresh, {DateTime? at}) {
     return transaction(() async {
       final updated = await (update(expenses)
@@ -916,6 +918,7 @@ class AppDatabase extends _$AppDatabase {
           .write(ExpensesCompanion(
         notes: Value(fresh.notes),
         conversionRate: Value(fresh.conversionRate),
+        documentCount: Value(fresh.documents.length),
         detailsFetchedAt: Value(at ?? DateTime.now()),
       ));
       if (updated > 0) await cacheExpenseDocuments(groupId, fresh.id, fresh.documents);

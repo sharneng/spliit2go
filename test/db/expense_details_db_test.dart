@@ -54,6 +54,17 @@ void main() {
     expect(e.conversionRate, 1.25);
     expect(e.detailsFetchedAt, DateTime(2026, 10, 12));
     expect((await db.watchExpenseDocuments('e1').first).map((d) => d.id), ['d1']);
+    expect(e.documentCount, 1);
+  });
+
+  test('a full read\'s documents set the count: the list\'s may be older (PR #302 review)', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.replaceServerExpenses('g1', [expense('e1', documents: 2)]);
+
+    await db.cacheExpenseDetails('g1', expense('e1'));
+
+    expect((await cached(db, 'e1')).documentCount, 0);
   });
 
   test('a refresh clears them again: the list doesn\'t send them', () async {
