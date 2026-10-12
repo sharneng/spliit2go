@@ -49,6 +49,7 @@ Kenneth's point in [#90](https://github.com/sharneng/spliit2go/issues/90): tappi
       - A "Show amounts" link before the split method swaps the shares for what they come to, and back. It isn't remembered.
       - Kenneth turned down a two-line row with the share under the amount: the monogram no longer lined up with the name.
     - **Screen readers** hear the title, amount and original amount as one item, then the sentence, then each person.
+    - **Receipts come before Notes,** in an inset card under their caption, as in the form, so a long note doesn't push them down (Kenneth, [#304](https://github.com/sharneng/spliit2go/issues/304)). Messages about them (offline, failed) sit under the card.
     - **Notes** ([#237](https://github.com/sharneng/spliit2go/issues/237)). Spliit's expense list sends neither notes nor the conversion rate. Only `groups.expenses.get` does, so they're cached only once an expense is read in full, and every refresh clears them again (`Expenses.detailsFetchedAt`). The sheet shows what the cache has. When the cache doesn't know them, the sheet reads the expense once per open while online, then stores and shows them. Offline, Notes says "Available when online", since there may be none. A refresh while the sheet is open keeps showing what it read. Edit's fresh read stores them too. A favorite keeps them through refreshes and reads them ahead with its receipts, so they're there offline (see [receipts.md](receipts.md), downloading ahead).
 
 ## Bugs found in review
