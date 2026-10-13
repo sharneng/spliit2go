@@ -293,6 +293,26 @@ void main() {
       expect(await db.pendingExpensesForGroup('g1'), isEmpty);
     });
 
+    test('offline flushes are not attempts: past maxRetries the row is still pending (#309)', () async {
+      await db.insertPending(pendingExpense('local-1'));
+
+      final client = SpliitClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((req) async => throw http.ClientException('Failed host lookup')),
+      );
+      final outbox = Outbox(db, client, groupId: 'g1');
+
+      for (var i = 0; i < Outbox.maxRetries + 1; i++) {
+        await outbox.flush();
+      }
+
+      final rows = await db.expensesForGroup('g1');
+      expect(rows.single.syncFailed, isFalse);
+      expect(rows.single.retryCount, 0);
+      expect(rows.single.lastError, contains('Failed host lookup'));
+      expect(await db.pendingExpensesForGroup('g1'), hasLength(1));
+    });
+
     test("flush() doesn't retry a syncFailed row automatically, even if the server would now "
         'accept it', () async {
       await db.insertPending(pendingExpense('local-1'));
