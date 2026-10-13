@@ -7,6 +7,7 @@ import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:intl/intl.dart' show NumberFormat;
 import 'package:uuid/uuid.dart';
 
+import '../widgets/app_switch.dart';
 import '../api/spliit_client.dart';
 import '../db/app_database.dart';
 import '../services/exchange_rates.dart';
@@ -42,7 +43,6 @@ import '../widgets/app_menu.dart';
 import '../widgets/bottom_inset.dart';
 import '../widgets/grouped_section.dart';
 import '../widgets/notes_text.dart';
-import '../widgets/segmented_pill.dart';
 import '../utils/markdown_note.dart';
 import '../widgets/top_bar_buttons.dart';
 import 'expense_form/currency_card.dart';
@@ -204,8 +204,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// before they've done anything.
   bool _hasAttemptedSave = false;
 
-  /// Notes shown as they'll look, not as typed (#311).
+  /// Notes shown as they'll look, not as typed (#311): links, and
+  /// markdown if it's on.
   bool _notesPreview = false;
+
+  /// Edit puts the cursor back in the notes (Kenneth).
+  final _notesFocus = FocusNode();
 
   /// Scan receipt's state (#125, #153); the screen picks the photo.
   late final _scan = ReceiptScanController(
@@ -339,6 +343,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     _m.dispose();
     _receipts.dispose();
     _scroll.dispose();
+    _notesFocus.dispose();
     super.dispose();
   }
 
@@ -562,61 +567,121 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   /// A field on a card, which draws no box of its own.
   /// Notes, and whether they're markdown (#311): the switch saves them
-  /// behind the marker, and adds Edit and Preview.
+  /// behind the marker. Preview / Edit, a link on the caption's line as
+  /// Select all/none, for any note (Kenneth): links show too, and a long
+  /// note reads better. The count and the switch share one slim line
+  /// under the field.
   Widget _notesSection(BuildContext context) {
     final l10n = context.l10n;
-    final preview = _m.notesMarkdown && _notesPreview;
+    final theme = Theme.of(context);
+    // The rows' size in the secondary color, as the field's hint
+    // (Kenneth): onSurfaceVariant is darker, the text's own grey.
+    final muted = theme.textTheme.bodyLarge?.copyWith(color: SpliitColors.of(context).secondaryContent);
+    final preview = _notesPreview;
+    final fieldMax = expenseNotesMax - (_m.notesMarkdown ? markdownMarker.length + 1 : 0);
     return GroupedSection(
       caption: l10n.expenseNotesLabel,
+      // Its target 48pt (#263), reaching over the caption's space and the
+      // card's top, as "Use the published rate".
+      captionTrailing: Overhang(
+        reach: 12,
+        child: TextButton(
+        onPressed: () {
+          final editing = _notesPreview;
+          setState(() => _notesPreview = !_notesPreview);
+          if (editing) {
+            // Once the field is back on stage.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _notesFocus.requestFocus();
+            });
+          } else {
+            FocusScope.of(context).unfocus();
+          }
+        },
+        style: compactTextButtonStyle(reach: 12),
+        child: Text(_notesPreview ? l10n.expenseNotesEdit : l10n.expenseNotesPreview),
+      )),
       children: [
-        if (preview)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: _m.notes.isEmpty
-                ? Text(l10n.expenseNotesPreviewEmpty,
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))
-                : NotesText(_m.notes),
-          ),
-        // Kept in the form under Preview, so the limit is still checked
-        // on save (PR #312 review).
-        Offstage(
-          offstage: preview,
-          child: _cell(TextFormField(
-            controller: _m.notesController,
-            decoration: InputDecoration(hintText: l10n.expenseNotesHint),
-            minLines: 1,
-            maxLines: 12,
-            // Spliit's limit, the marker included.
-            maxLength: expenseNotesMax - (_m.notesMarkdown ? markdownMarker.length + 1 : 0),
-            // Typing stops at the limit, but a note already near it can
-            // pass it when the switch adds the marker: said, not cut.
-            validator: (_) => switch (_m.notes.length - expenseNotesMax) {
-              > 0 && final over => l10n.expenseNotesTooLong(over),
-              _ => null,
-            },
-          )),
-        ),
-        // One element: "Markdown, switch, off".
-        MergeSemantics(child: GroupedRow(
-          title: Text(l10n.expenseNotesMarkdown),
-          value: Switch.adaptive(
-            value: _m.notesMarkdown,
-            onChanged: (v) => _m.notesMarkdown = v,
-          ),
-          onTap: () => _m.notesMarkdown = !_m.notesMarkdown,
-        )),
-        if (_m.notesMarkdown)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: SegmentedPill<bool>(
-              segments: {false: l10n.expenseNotesEdit, true: l10n.expenseNotesPreview},
-              selected: _notesPreview,
-              onChanged: (v) {
-                FocusScope.of(context).unfocus();
-                setState(() => _notesPreview = v);
-              },
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (preview)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: _m.notes.isEmpty
+                    ? Text(l10n.expenseNotesPreviewEmpty, style: muted)
+                    : NotesText(_m.notes),
+              ),
+            // Kept in the form under Preview, so the limit is still checked
+            // on save (PR #312 review).
+            Offstage(
+              offstage: preview,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: TextFormField(
+                  controller: _m.notesController,
+                  focusNode: _notesFocus,
+                  // The count is on the line under it, beside the switch.
+                  decoration: InputDecoration(hintText: l10n.expenseNotesHint, counterText: ''),
+                  minLines: 1,
+                  maxLines: 12,
+                  // Spliit's limit, the marker included.
+                  maxLength: fieldMax,
+                  // Typing stops at the limit, but a note already near it can
+                  // pass it when the switch adds the marker: said, not cut.
+                  validator: (_) => switch (_m.notes.length - expenseNotesMax) {
+                    > 0 && final over => l10n.expenseNotesTooLong(over),
+                    _ => null,
+                  },
+                ),
+              ),
             ),
-          ),
+            // A row's 48 (GroupedRow.oneLineMinHeight), the switch in its
+            // middle, ending where the rows' switches do (Kenneth): the
+            // switch takes only the room it draws in now (AppSwitch).
+            Container(
+              constraints: const BoxConstraints(minHeight: GroupedRow.oneLineMinHeight),
+              alignment: AlignmentDirectional.centerStart,
+              padding: const EdgeInsetsDirectional.symmetric(horizontal: GroupedSection.inset),
+              // On one line while they fit; at large text the switch goes
+              // under the count, at the end.
+              child: OverflowBar(
+                alignment: MainAxisAlignment.spaceBetween,
+                overflowAlignment: OverflowBarAlignment.end,
+                children: [
+                  ListenableBuilder(
+                    listenable: _m.notesController,
+                    builder: (context, _) {
+                      final count = _m.notesController.text.characters.length;
+                      return Text('$count/$fieldMax',
+                          style: count > fieldMax ? muted?.copyWith(color: theme.colorScheme.error) : muted);
+                    },
+                  ),
+                  // One element: "Markdown, switch, off".
+                  MergeSemantics(
+                    child: InkWell(
+                      onTap: () => _m.notesMarkdown = !_m.notesMarkdown,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                              child: Text(l10n.expenseNotesMarkdown, style: muted)),
+                          // The scaled switch keeps its full width around it.
+                          const SizedBox(width: 2),
+                          AppSwitch(
+                            value: _m.notesMarkdown,
+                            onChanged: (v) => _m.notesMarkdown = v,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }

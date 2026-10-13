@@ -50,6 +50,15 @@ void main() {
     expect(opened, [Uri.parse('https://example.test/stay?id=1')]);
   });
 
+  testWidgets('a tap on the address opens it, inside selectable text', (tester) async {
+    final opened = await pump(tester, 'Booked at https://example.test/stay ok');
+    final text = tester.getRect(find.byType(EditableText));
+    // 'Booked at ' is 10 of 38 characters: the address is around 45%.
+    await tester.tapAt(Offset(text.left + text.width * 0.45, text.center.dy));
+    await tester.pumpAndSettle();
+    expect(opened, [Uri.parse('https://example.test/stay')]);
+  });
+
   testWidgets('a closing parenthesis stays when the address opened one (PR #312 review)', (tester) async {
     await pump(tester, 'See https://en.wikipedia.org/wiki/Paris_(mythology). Or (https://example.test/a), later');
     expect(links(tester).map((l) => l.text),

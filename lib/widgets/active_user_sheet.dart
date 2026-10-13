@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_switch.dart';
 import '../l10n/context_l10n.dart';
 import '../models/group.dart';
 import '../services/active_user.dart';
@@ -100,7 +101,7 @@ class _ActiveUserPickerState extends State<ActiveUserPicker> {
                 GroupedRow(
                   title: Text(l10n.activeUserRememberName),
                   // Under it at large text, as a row's value (#294).
-                  value: Switch.adaptive(
+                  value: AppSwitch(
                     value: _rememberName,
                     onChanged: (value) => setState(() => _rememberName = value),
                   ),

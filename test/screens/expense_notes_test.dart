@@ -16,7 +16,6 @@ import 'package:spliit2go/screens/expense_form/currency_card.dart';
 import 'package:spliit2go/screens/expense_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
 import 'package:spliit2go/utils/markdown_note.dart';
-import 'package:spliit2go/widgets/segmented_pill.dart';
 
 // Issue #311: the form's Markdown switch saves the notes behind the marker,
 // which the field never shows, and adds Edit and Preview.
@@ -80,23 +79,32 @@ void main() {
   Finder notesField() => find.byWidgetPredicate(
       (w) => w is TextField && w.decoration?.hintText == 'Anything worth remembering?');
 
+  bool markdownOn(WidgetTester tester) => tester
+      .widget<Switch>(find.descendant(
+          of: find.ancestor(of: find.text('Markdown'), matching: find.byType(MergeSemantics)),
+          matching: find.byType(Switch)))
+      .value;
+
   Future<void> tapMarkdown(WidgetTester tester) async {
     await tester.ensureVisible(find.text('Markdown'));
     await tester.tap(find.text('Markdown'));
     await tester.pumpAndSettle();
   }
 
+  /// Taps Preview or Edit, the link on the Notes caption's line.
   Future<void> choose(WidgetTester tester, String segment) async {
-    final finder = find.descendant(of: find.byType(SegmentedPill<bool>), matching: find.text(segment));
+    final finder = find.widgetWithText(TextButton, segment);
     await tester.ensureVisible(finder);
     await tester.tap(finder);
     await tester.pumpAndSettle();
   }
 
-  testWidgets('off by default: no Edit or Preview, and the notes saved as typed', (tester) async {
+  testWidgets('off by default: the notes saved as typed', (tester) async {
     final db = await pump(tester);
     expect(find.text('Markdown'), findsOneWidget);
-    expect(find.byType(SegmentedPill<bool>), findsNothing);
+    // The count shares the switch's line (Kenneth).
+    expect(find.text('0/5000'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Preview'), findsOneWidget);
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Hotel');
     await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '90');
@@ -112,6 +120,8 @@ void main() {
     await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Hotel');
     await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '90');
     await tapMarkdown(tester);
+    // The marker's room taken from the field's.
+    expect(find.text('0/${expenseNotesMax - markdownMarker.length - 1}'), findsOneWidget);
 
     await choose(tester, 'Preview');
     expect(find.text('Nothing to preview yet'), findsOneWidget);
@@ -127,18 +137,31 @@ void main() {
     expect(db.rowToExpense((await db.pendingExpenses()).single).notes, '$markdownMarker\n## Booking\nRoom 25');
   });
 
+  testWidgets('Preview shows a plain note too, its links tappable; Edit puts the cursor back (Kenneth)',
+      (tester) async {
+    await pump(tester);
+    await tester.enterText(notesField(), 'Booked at https://example.test/stay');
+    await choose(tester, 'Preview');
+    expect(notesField().hitTestable(), findsNothing);
+    expect(find.byType(MarkdownBody), findsNothing);
+    expect(find.textContaining('https://example.test/stay', findRichText: true), findsOneWidget);
+
+    await choose(tester, 'Edit');
+    expect(tester.widget<TextField>(notesField()).focusNode!.hasFocus, isTrue);
+  });
+
   testWidgets('editing a markdown note: the switch on, the field without the marker', (tester) async {
     await pump(tester, existing: markdownExpense);
 
     expect(tester.widget<TextField>(notesField()).controller!.text, '## Booking\nRoom 25');
-    expect(find.byType(SegmentedPill<bool>), findsOneWidget);
+    expect(markdownOn(tester), isTrue);
   });
 
   testWidgets('turning it off saves the note plain', (tester) async {
     final sent = <http.Request>[];
     await pump(tester, existing: markdownExpense, sent: sent);
     await tapMarkdown(tester);
-    expect(find.byType(SegmentedPill<bool>), findsNothing);
+    expect(markdownOn(tester), isFalse);
 
     await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();

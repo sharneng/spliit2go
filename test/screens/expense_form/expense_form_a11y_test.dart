@@ -21,6 +21,7 @@ import 'package:spliit2go/screens/expense_screen.dart';
 import 'package:spliit2go/services/exchange_rates.dart';
 import 'package:spliit2go/sync/outbox.dart';
 import 'package:spliit2go/theme.dart';
+import 'package:spliit2go/widgets/app_switch.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/widgets/segmented_pill.dart';
 
@@ -386,7 +387,7 @@ void main() {
       await openAt(tester, 1);
       final label = find.text('Save as default split');
       // Its own: Notes has one too (#311).
-      final toggle = find.descendant(of: find.widgetWithText(GroupedRow, 'Save as default split'), matching: find.byType(Switch));
+      final toggle = find.descendant(of: find.widgetWithText(GroupedRow, 'Save as default split'), matching: find.byType(AppSwitch));
       expect(tester.getCenter(toggle).dy, closeTo(tester.getCenter(label).dy, 1));
       tester.platformDispatcher.textScaleFactorTestValue = 4;
       await tester.pumpAndSettle();
