@@ -50,6 +50,12 @@ void main() {
     expect(opened, [Uri.parse('https://example.test/stay?id=1')]);
   });
 
+  testWidgets('a closing parenthesis stays when the address opened one (PR #312 review)', (tester) async {
+    await pump(tester, 'See https://en.wikipedia.org/wiki/Paris_(mythology). Or (https://example.test/a), later');
+    expect(links(tester).map((l) => l.text),
+        ['https://en.wikipedia.org/wiki/Paris_(mythology)', 'https://example.test/a']);
+  });
+
   testWidgets('a plain note without an address has no links', (tester) async {
     await pump(tester, 'Split the tip');
     expect(links(tester), isEmpty);

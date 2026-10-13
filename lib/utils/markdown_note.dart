@@ -4,6 +4,10 @@
 /// ever render notes. Plain-text views show it as a line.
 const markdownMarker = '<!-- markdown -->';
 
+/// Spliit's EXPENSE_NOTES_MAX: a note as saved, a markdown one's marker
+/// included.
+const expenseNotesMax = 5000;
+
 /// Whether [notes] opted in to markdown: [markdownMarker] its first line.
 bool isMarkdownNote(String notes) => notes.split('\n').first.trim() == markdownMarker;
 

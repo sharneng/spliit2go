@@ -263,8 +263,14 @@ class ExpenseFormModel extends ChangeNotifier {
   bool get notesMarkdown => _notesMarkdown;
   set notesMarkdown(bool value) => _set(() => _notesMarkdown = value);
 
-  /// The notes as saved.
-  String get notes => noteText(notesController.text.trim(), markdown: _notesMarkdown);
+  /// The notes as saved. Markdown keeps its leading spaces (PR #312
+  /// review): four of them make a code block. Only an empty note is
+  /// emptied, and trailing space dropped.
+  String get notes {
+    final text = notesController.text;
+    if (text.trim().isEmpty) return '';
+    return _notesMarkdown ? noteText(text.trimRight(), markdown: true) : text.trim();
+  }
 
   RecurrenceRule _recurrenceRule = RecurrenceRule.none;
   RecurrenceRule get recurrenceRule => _recurrenceRule;

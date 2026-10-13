@@ -21,9 +21,24 @@ Future<bool> _openExternally(Uri url) async {
 /// A web address in a plain note: from http(s):// to the next space.
 final _link = RegExp(r'https?://[^\s<>"]+', caseSensitive: false);
 
-/// Punctuation that ends a sentence rather than the address: "see
-/// https://x.test/a." links https://x.test/a.
-final _trailing = RegExp(r'''[.,;:!?'")\]]+$''');
+/// [address] without the punctuation after it that ends a sentence rather
+/// than the address: "see https://x.test/a." links https://x.test/a. A
+/// closing parenthesis stays when the address opened one (PR #312
+/// review): https://en.wikipedia.org/wiki/Paris_(mythology).
+String _withoutTrailing(String address) {
+  var end = address.length;
+  while (end > 0) {
+    final last = address[end - 1];
+    final opened = '('.allMatches(address.substring(0, end)).length;
+    final closed = ')'.allMatches(address.substring(0, end)).length;
+    if ('.,;:!?\'"]'.contains(last) || (last == ')' && closed > opened)) {
+      end--;
+    } else {
+      break;
+    }
+  }
+  return address.substring(0, end);
+}
 
 /// An expense's notes (#311): markdown when [isMarkdownNote], else as
 /// written, its web addresses tappable either way. Selectable, as notes
@@ -84,7 +99,7 @@ class _NotesTextState extends State<NotesText> {
     var at = 0;
     final notes = widget.notes;
     for (final match in _link.allMatches(notes)) {
-      final href = match[0]!.replaceFirst(_trailing, '');
+      final href = _withoutTrailing(match[0]!);
       spans.add(TextSpan(text: notes.substring(at, match.start)));
       final recognizer = TapGestureRecognizer()..onTap = () => _open(href);
       _recognizers.add(recognizer);

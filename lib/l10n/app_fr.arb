@@ -140,6 +140,7 @@
   "expenseNotesEdit": "Modifier",
   "expenseNotesPreview": "Aperçu",
   "expenseNotesPreviewEmpty": "Rien à afficher pour l’instant",
+  "expenseNotesTooLong": "{count, plural, =1{1 caractère de trop} other{{count} caractères de trop}}",
   "expenseNotesWhenOnline": "Disponible une fois en ligne",
   "expenseSaveButton": "Enregistrer",
   "expenseCategorySearchLabel": "Rechercher une catégorie",

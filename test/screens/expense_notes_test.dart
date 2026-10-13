@@ -147,4 +147,55 @@ void main() {
     expect(body, contains(jsonEncode('## Booking\nRoom 25')));
     expect(body, isNot(contains(markdownMarker)));
   });
+
+  testWidgets('a note the marker takes past the limit is refused, in Edit, not cut (PR #312 review)',
+      (tester) async {
+    final db = await pump(tester);
+    await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Hotel');
+    await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '90');
+    final full = 'x' * expenseNotesMax;
+    await tester.enterText(notesField(), full);
+    await tapMarkdown(tester);
+    await choose(tester, 'Preview');
+
+    await tester.tap(find.byTooltip('Save'));
+    await tester.pumpAndSettle();
+
+    expect(await db.pendingExpenses(), isEmpty);
+    expect(find.byType(MarkdownBody), findsNothing);
+    expect(find.text('${markdownMarker.length + 1} characters too long'), findsOneWidget);
+    expect(tester.widget<TextField>(notesField()).controller!.text, full);
+  });
+
+  testWidgets('markdown keeps its leading spaces: preview, save and edit (PR #312 review)', (tester) async {
+    const body = '    confirmation = 25';
+    final db = await pump(tester);
+    await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Hotel');
+    await tester.enterText(find.byKey(CurrencyCard.amountFieldKey), '90');
+    await tapMarkdown(tester);
+    await tester.enterText(notesField(), '$body\n');
+    await choose(tester, 'Preview');
+    expect(tester.widget<MarkdownBody>(find.byType(MarkdownBody)).data, body);
+
+    await tester.tap(find.byTooltip('Save'));
+    await tester.pumpAndSettle();
+    final saved = db.rowToExpense((await db.pendingExpenses()).single);
+    expect(saved.notes, '$markdownMarker\n$body');
+  });
+
+  testWidgets('editing keeps them too', (tester) async {
+    const body = '    confirmation = 25';
+    await pump(tester,
+        existing: Expense(
+          id: 'e1',
+          groupId: 'g1',
+          title: 'Hotel',
+          amountCents: 9000,
+          paidBy: 'bea',
+          paidFor: const [ExpenseShare(participantId: 'bea', shares: 1)],
+          notes: '$markdownMarker\n$body',
+          date: DateTime.utc(2026, 10, 10),
+        ));
+    expect(tester.widget<TextField>(notesField()).controller!.text, body);
+  });
 }

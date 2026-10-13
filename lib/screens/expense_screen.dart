@@ -572,20 +572,30 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         if (preview)
           Padding(
             padding: const EdgeInsets.all(16),
-            child: _m.notesController.text.trim().isEmpty
+            child: _m.notes.isEmpty
                 ? Text(l10n.expenseNotesPreviewEmpty,
                     style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))
                 : NotesText(_m.notes),
-          )
-        else
-          _cell(TextFormField(
+          ),
+        // Kept in the form under Preview, so the limit is still checked
+        // on save (PR #312 review).
+        Offstage(
+          offstage: preview,
+          child: _cell(TextFormField(
             controller: _m.notesController,
             decoration: InputDecoration(hintText: l10n.expenseNotesHint),
             minLines: 1,
             maxLines: 12,
-            // Spliit's EXPENSE_NOTES_MAX, the marker included.
-            maxLength: 5000 - (_m.notesMarkdown ? markdownMarker.length + 1 : 0),
+            // Spliit's limit, the marker included.
+            maxLength: expenseNotesMax - (_m.notesMarkdown ? markdownMarker.length + 1 : 0),
+            // Typing stops at the limit, but a note already near it can
+            // pass it when the switch adds the marker: said, not cut.
+            validator: (_) => switch (_m.notes.length - expenseNotesMax) {
+              > 0 && final over => l10n.expenseNotesTooLong(over),
+              _ => null,
+            },
           )),
+        ),
         // One element: "Markdown, switch, off".
         MergeSemantics(child: GroupedRow(
           title: Text(l10n.expenseNotesMarkdown),
@@ -842,6 +852,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _saveError = null;
       _saveErrorDiagnostics = null;
     });
+    // Too long notes say so in the field, not the preview.
+    if (_notesPreview && _m.notes.length > expenseNotesMax) {
+      setState(() => _notesPreview = false);
+    }
     // Each refusal below says why on screen; the haptic says to look.
     final invalid = _formKey.currentState!.validateGranularly();
     if (invalid.isNotEmpty) return _refuse(invalid: invalid);
