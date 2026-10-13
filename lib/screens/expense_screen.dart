@@ -41,6 +41,9 @@ import '../utils/haptics.dart';
 import '../widgets/app_menu.dart';
 import '../widgets/bottom_inset.dart';
 import '../widgets/grouped_section.dart';
+import '../widgets/notes_text.dart';
+import '../widgets/segmented_pill.dart';
+import '../utils/markdown_note.dart';
 import '../widgets/top_bar_buttons.dart';
 import 'expense_form/currency_card.dart';
 import 'expense_form/receipt_scan_card.dart';
@@ -200,6 +203,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// section 6): a fresh form shouldn't greet the user with red text
   /// before they've done anything.
   bool _hasAttemptedSave = false;
+
+  /// Notes shown as they'll look, not as typed (#311).
+  bool _notesPreview = false;
 
   /// Scan receipt's state (#125, #153); the screen picks the photo.
   late final _scan = ReceiptScanController(
@@ -555,6 +561,56 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   /// A field on a card, which draws no box of its own.
+  /// Notes, and whether they're markdown (#311): the switch saves them
+  /// behind the marker, and adds Edit and Preview.
+  Widget _notesSection(BuildContext context) {
+    final l10n = context.l10n;
+    final preview = _m.notesMarkdown && _notesPreview;
+    return GroupedSection(
+      caption: l10n.expenseNotesLabel,
+      children: [
+        if (preview)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: _m.notesController.text.trim().isEmpty
+                ? Text(l10n.expenseNotesPreviewEmpty,
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))
+                : NotesText(_m.notes),
+          )
+        else
+          _cell(TextFormField(
+            controller: _m.notesController,
+            decoration: InputDecoration(hintText: l10n.expenseNotesHint),
+            minLines: 1,
+            maxLines: 12,
+            // Spliit's EXPENSE_NOTES_MAX, the marker included.
+            maxLength: 5000 - (_m.notesMarkdown ? markdownMarker.length + 1 : 0),
+          )),
+        // One element: "Markdown, switch, off".
+        MergeSemantics(child: GroupedRow(
+          title: Text(l10n.expenseNotesMarkdown),
+          value: Switch.adaptive(
+            value: _m.notesMarkdown,
+            onChanged: (v) => _m.notesMarkdown = v,
+          ),
+          onTap: () => _m.notesMarkdown = !_m.notesMarkdown,
+        )),
+        if (_m.notesMarkdown)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: SegmentedPill<bool>(
+              segments: {false: l10n.expenseNotesEdit, true: l10n.expenseNotesPreview},
+              selected: _notesPreview,
+              onChanged: (v) {
+                FocusScope.of(context).unfocus();
+                setState(() => _notesPreview = v);
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _cell(Widget field) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         child: field,
@@ -729,18 +785,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   ReceiptsCard(controller: _receipts, onAdd: _addReceipt, keepsUnsent: !widget.isEditing),
                   // Last: receipts hardly change height, notes can be long
                   // (#268). Past 12 lines they scroll inside the field.
-                  GroupedSection(
-                    caption: l10n.expenseNotesLabel,
-                    children: [
-                      _cell(TextFormField(
-                        controller: _m.notesController,
-                        decoration: InputDecoration(hintText: l10n.expenseNotesHint),
-                        minLines: 1,
-                        maxLines: 12,
-                        maxLength: 5000, // matches Spliit's EXPENSE_NOTES_MAX
-                      )),
-                    ],
-                  ),
+                  _notesSection(context),
                 ],
               ),
             ),
@@ -940,7 +985,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       paidFor: paidFor,
       splitMode: _m.splitModeToSave,
       category: _m.categoryToSave,
-      notes: _m.notesController.text.trim(),
+      notes: _m.notes,
       date: _m.date,
       isSettlement: _m.isSettlement,
       recurrenceRule: _m.recurrenceRule,
@@ -998,7 +1043,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       paidFor: paidFor,
       splitMode: _m.splitModeToSave,
       category: _m.categoryToSave,
-      notes: _m.notesController.text.trim(),
+      notes: _m.notes,
       date: _m.date,
       isSettlement: _m.isSettlement,
       recurrenceRule: _m.recurrenceRule,

@@ -19,6 +19,7 @@ import '../services/expense_shares.dart';
 import '../sync/outbox.dart';
 import '../utils/date_format.dart';
 import '../utils/money.dart';
+import '../widgets/notes_text.dart';
 import '../widgets/money.dart';
 import '../widgets/category_icon.dart';
 import 'expense_screen.dart';
@@ -797,7 +798,8 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
-              child: SelectableText(notes),
+              // Links tappable, markdown if opted in (#311).
+              child: NotesText(notes),
             ),
           ],
         )

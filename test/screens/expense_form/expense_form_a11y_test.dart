@@ -385,7 +385,8 @@ void main() {
     testWidgets('"Save as default split"\'s switch goes under it, at the end, when they don\'t fit', (tester) async {
       await openAt(tester, 1);
       final label = find.text('Save as default split');
-      final toggle = find.byType(Switch);
+      // Its own: Notes has one too (#311).
+      final toggle = find.descendant(of: find.widgetWithText(GroupedRow, 'Save as default split'), matching: find.byType(Switch));
       expect(tester.getCenter(toggle).dy, closeTo(tester.getCenter(label).dy, 1));
       tester.platformDispatcher.textScaleFactorTestValue = 4;
       await tester.pumpAndSettle();
