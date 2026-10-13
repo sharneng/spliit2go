@@ -189,6 +189,29 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  // #301: how often the open group refreshes on its own.
+  testWidgets('auto refresh defaults to every 10 minutes, and can be turned off', (tester) async {
+    final settings = await AppSettings.load(SettingsService());
+    addTearDown(settings.dispose);
+    await tester.pumpWidget(Spliit2GoApp(settings: settings, home: const AppSettingsScreen()));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync'), findsOneWidget);
+    expect(find.textContaining('Every 10 minutes ·'), findsOneWidget);
+
+    await tester.tap(find.text('Refresh the open group'));
+    await tester.pumpAndSettle();
+    for (final choice in ['Every 5 minutes', 'Every 10 minutes', 'Every 30 minutes', 'Every hour', 'Off']) {
+      expect(find.text(choice), findsOneWidget, reason: choice);
+    }
+    await tester.tap(find.text('Off'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pumpAndSettle();
+    expect(await SettingsService().autoRefresh(), AutoRefresh.off);
+    expect(find.textContaining('Off ·'), findsOneWidget);
+  });
+
   // #252: exchange rates saved for offline use, with Update.
   Future<AppDatabase> pumpRates(WidgetTester tester, {required bool offline}) async {
     final db = AppDatabase(NativeDatabase.memory());

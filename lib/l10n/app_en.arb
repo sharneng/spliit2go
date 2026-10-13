@@ -582,6 +582,19 @@
   "appSettingsReceiptDownloadsOff": "Off",
   "appSettingsReceiptDownloadsWifiOnly": "Wi-Fi only",
   "appSettingsReceiptDownloadsAlways": "Always",
+  "appSettingsSync": "Sync",
+  "appSettingsAutoRefresh": "Refresh the open group",
+  "appSettingsAutoRefreshHint": "On its own, while the app is open. Archived groups refresh only when you pull down.",
+  "appSettingsAutoRefreshMinutes": "{count, plural, =1{Every minute} other{Every {count} minutes}}",
+  "@appSettingsAutoRefreshMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "appSettingsAutoRefreshHour": "Every hour",
+  "appSettingsAutoRefreshOff": "Off",
   "appSettingsReceiptLimit": "Receipt storage limit",
   "receiptDownloadsTooltip": "Receipts offline",
   "receiptDownloadsRunning": "Downloading receipts: {available} of {total}",

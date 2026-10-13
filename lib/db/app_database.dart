@@ -279,6 +279,10 @@ class Groups extends Table {
   TextColumn get receiptsCheckedActivityId => text().nullable()();
   DateTimeColumn get receiptsCheckedAt => dateTime().nullable()();
 
+  /// When the group last refreshed from the server, for the open group's
+  /// auto refresh (#301). Null until it has.
+  DateTimeColumn get refreshedAt => dateTime().nullable()();
+
   /// This device's remembered "Paid for" split for this group (issue
   /// #29, decisions/paid-for-split-ux-spec.md) -- [DefaultSplit.splitMode]
   /// as its wire value. Null means nothing's been remembered yet.
@@ -363,7 +367,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -508,6 +512,17 @@ class AppDatabase extends _$AppDatabase {
             };
             if (!columns.contains(expenses.detailsFetchedAt.name)) {
               await m.addColumn(expenses, expenses.detailsFetchedAt);
+            }
+          }
+          if (from < 21) {
+            // When a group last refreshed, for auto refresh (#301). Only
+            // when missing, as above.
+            final columns = {
+              for (final c in await customSelect('PRAGMA table_info(groups)').get())
+                c.read<String>('name'),
+            };
+            if (!columns.contains(groups.refreshedAt.name)) {
+              await m.addColumn(groups, groups.refreshedAt);
             }
           }
         },
@@ -1056,6 +1071,11 @@ class AppDatabase extends _$AppDatabase {
         .get();
     return [for (final r in rows) r.id];
   }
+
+  /// Remembers that [groupId] refreshed from the server (#301).
+  Future<void> setGroupRefreshed(String groupId, {DateTime? at}) =>
+      (update(groups)..where((g) => g.id.equals(groupId)))
+          .write(GroupsCompanion(refreshedAt: Value(at ?? DateTime.now())));
 
   /// Remembers the newest activity-log entry a complete check of
   /// [groupId]'s receipt lists saw (#127).

@@ -70,6 +70,7 @@ class AppSettingsScreen extends StatelessWidget {
                 onSelected: () => settings.setLocale(option.locale),
               ),
           ]),
+          GroupedSection(caption: l10n.appSettingsSync, children: const [_AutoRefreshTile()]),
           if (receipts case final receipts?)
             GroupedSection(caption: l10n.appSettingsStorage, children: [
               _ReceiptStorageTile(receipts),
@@ -402,5 +403,82 @@ class _ReceiptDownloadSettingsState extends State<_ReceiptDownloadSettings> {
         onTap: limit == null ? null : _chooseLimit,
       ),
     ]);
+  }
+}
+
+/// How often the open group refreshes on its own (#301).
+class _AutoRefreshTile extends StatefulWidget {
+  const _AutoRefreshTile();
+
+  @override
+  State<_AutoRefreshTile> createState() => _AutoRefreshTileState();
+}
+
+class _AutoRefreshTileState extends State<_AutoRefreshTile> {
+  final _settings = SettingsService();
+  AutoRefresh? _value;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final value = await _settings.autoRefresh();
+      if (mounted) setState(() => _value = value);
+    } catch (e, st) {
+      ErrorReporter.instance.report(e, st, operation: 'Reading the auto refresh setting');
+    }
+  }
+
+  String _label(AutoRefresh value) => switch (value.interval) {
+        null => context.l10n.appSettingsAutoRefreshOff,
+        final interval when interval.inMinutes < 60 =>
+          context.l10n.appSettingsAutoRefreshMinutes(interval.inMinutes),
+        _ => context.l10n.appSettingsAutoRefreshHour,
+      };
+
+  Future<void> _choose() async {
+    final current = _value;
+    if (current == null) return;
+    final value = await showDialog<AutoRefresh>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text(context.l10n.appSettingsAutoRefresh),
+        children: [
+          for (final v in AutoRefresh.values)
+            ListTile(
+              title: Text(_label(v)),
+              trailing: v == current ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.pop(dialogContext, v),
+            ),
+        ],
+      ),
+    );
+    if (value == null || value == current) return;
+    try {
+      await _settings.setAutoRefresh(value);
+    } catch (e, st) {
+      final error = ErrorReporter.instance.report(e, st, operation: 'Saving an app setting');
+      if (mounted) {
+        showErrorSnackBar(context, context.l10n.appSettingsSaveError, diagnostics: error.diagnostics);
+      }
+    }
+    await _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final value = _value;
+    return GroupedRow(
+      title: Text(l10n.appSettingsAutoRefresh),
+      subtitle: Text(value == null
+          ? l10n.appSettingsAutoRefreshHint
+          : '${_label(value)} · ${l10n.appSettingsAutoRefreshHint}'),
+      onTap: value == null ? null : _choose,
+    );
   }
 }

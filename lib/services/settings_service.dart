@@ -11,6 +11,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Whether favorite groups' receipts download ahead (#127).
 enum ReceiptDownloadMode { off, wifiOnly, always }
 
+/// How often the open group refreshes on its own (#301), or never.
+enum AutoRefresh {
+  minutes5(Duration(minutes: 5)),
+  minutes10(Duration(minutes: 10)),
+  minutes30(Duration(minutes: 30)),
+  hour1(Duration(hours: 1)),
+  off(null);
+
+  const AutoRefresh(this.interval);
+  final Duration? interval;
+}
+
 /// The receipt storage limit's choices, in MB, and its default (#127).
 const receiptStorageLimitChoicesMb = [250, 500, 1000, 2000];
 const defaultReceiptStorageLimitMb = 500;
@@ -53,6 +65,20 @@ class SettingsService {
     final prefs = await SharedPreferences.getInstance();
     if (!await prefs.setString('receipt_download_mode', mode.name)) {
       throw StateError('Could not save the receipt download setting');
+    }
+  }
+
+  /// How often the open group refreshes on its own (#301): every 10
+  /// minutes by default.
+  Future<AutoRefresh> autoRefresh() async {
+    final value = (await SharedPreferences.getInstance()).getString('auto_refresh');
+    return AutoRefresh.values.asNameMap()[value] ?? AutoRefresh.minutes10;
+  }
+
+  Future<void> setAutoRefresh(AutoRefresh value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setString('auto_refresh', value.name)) {
+      throw StateError('Could not save the auto refresh setting');
     }
   }
 

@@ -15,6 +15,7 @@ import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/main.dart' show spliit2goAppBuilder;
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
+import 'package:spliit2go/models/group_organization.dart';
 import 'package:spliit2go/screens/activity_screen.dart';
 import 'package:spliit2go/screens/balances_screen.dart';
 import 'package:spliit2go/screens/expense_search_screen.dart';
@@ -22,6 +23,7 @@ import 'package:spliit2go/widgets/expense_list.dart';
 import 'package:spliit2go/screens/group_screen.dart';
 import 'package:spliit2go/screens/group_settings_screen.dart';
 import 'package:spliit2go/screens/stats_screen.dart';
+import 'package:spliit2go/services/settings_service.dart';
 import 'package:spliit2go/sync/outbox.dart';
 import 'package:spliit2go/theme.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
@@ -383,10 +385,13 @@ void main() {
       expect(lists, 1); // the startup refresh is waiting on its list
 
       await deleteFromList(tester, 'Coffee');
-      expect(lists, 2); // the delete's own refresh came and went
+      // The delete's own refresh waits for the one running, rather than
+      // running alongside it (PR #308 review).
+      expect(lists, 1);
 
       staleList.complete(http.Response(listJson(['Coffee', 'Tea']), 200));
       await tester.pumpAndSettle();
+      expect(lists, 2); // then came and went
 
       expect(find.text('Coffee'), findsNothing);
       expect((await db.expensesForGroup('g1')).map((e) => e.id), ['Tea']);
@@ -1208,6 +1213,260 @@ void main() {
       await tester.pump();
 
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  // #301: one rule. While a group is open and the app in the foreground,
+  // it refreshes once its last refresh is older than the setting's
+  // interval: on opening, on resuming, and by a timer meanwhile.
+  group('auto refresh (#301)', () {
+    const cachedGroup = Group(
+      id: 'g1',
+      name: 'Banff Trip',
+      currency: '\$',
+      participants: [Participant(id: 'p1', name: 'Ken')],
+    );
+    const groupJson = '[{"result":{"data":{"json":{"group":{"id":"g1","name":"Banff Trip",'
+        '"currency":"\$","participants":[{"id":"p1","name":"Ken"}]}}}}}]';
+    const listJson = '[{"result":{"data":{"json":{"expenses":[],"hasMore":false}}}}]';
+
+    late int refreshes;
+    SpliitClient countingClient() => SpliitClient(
+          baseUrl: 'https://example.test',
+          httpClient: MockClient((req) async {
+            final url = req.url.toString();
+            if (url.contains('groups.get')) {
+              refreshes++;
+              return http.Response(groupJson, 200);
+            }
+            if (url.contains('groups.expenses.list')) return http.Response(listJson, 200);
+            throw http.ClientException('offline');
+          }),
+        );
+
+    setUp(() {
+      refreshes = 0;
+      SharedPreferences.setMockInitialValues({'default_active_user_name': 'Ken'});
+    });
+
+    Future<AppDatabase> open(WidgetTester tester,
+        {Duration? refreshedAgo, GroupOrganization? organization}) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await tester.runAsync(() async {
+        await db.cacheGroup(cachedGroup);
+        if (refreshedAgo != null) {
+          await db.setGroupRefreshed('g1', at: DateTime.now().subtract(refreshedAgo));
+        }
+        if (organization != null) await db.setGroupOrganization('g1', organization);
+      });
+      final client = countingClient();
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: GroupScreen(client: client, db: db, outbox: Outbox(db, client, groupId: 'g1'), groupId: 'g1'),
+      ));
+      await tester.pumpAndSettle();
+      return db;
+    }
+
+    Future<void> close(WidgetTester tester) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+
+    testWidgets('never refreshed: refreshes on opening, and remembers when', (tester) async {
+      final db = await open(tester);
+
+      expect(refreshes, 1);
+      expect((await tester.runAsync(() => db.groupRow('g1')))!.refreshedAt, isNotNull);
+      await close(tester);
+    });
+
+    testWidgets('refreshed a minute ago: not on opening, but when the 10 minutes are up', (tester) async {
+      await open(tester, refreshedAgo: const Duration(minutes: 1));
+      expect(refreshes, 0);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+
+      await tester.pump(const Duration(minutes: 8));
+      expect(refreshes, 0);
+      await tester.pump(const Duration(minutes: 1, seconds: 1));
+      await tester.pumpAndSettle();
+      expect(refreshes, 1);
+
+      // And again a whole interval after that one.
+      await tester.pump(const Duration(minutes: 10));
+      await tester.pumpAndSettle();
+      expect(refreshes, 2);
+      await close(tester);
+    });
+
+    testWidgets('stale: refreshes on opening', (tester) async {
+      await open(tester, refreshedAgo: const Duration(minutes: 11));
+
+      expect(refreshes, 1);
+      await close(tester);
+    });
+
+    testWidgets('the setting\'s interval', (tester) async {
+      await SettingsService().setAutoRefresh(AutoRefresh.minutes30);
+      await open(tester, refreshedAgo: const Duration(minutes: 11));
+      expect(refreshes, 0);
+
+      await tester.pump(const Duration(minutes: 19, seconds: 1));
+      await tester.pumpAndSettle();
+      expect(refreshes, 1);
+      await close(tester);
+    });
+
+    testWidgets('off: never on its own', (tester) async {
+      await SettingsService().setAutoRefresh(AutoRefresh.off);
+      await open(tester, refreshedAgo: const Duration(hours: 2));
+      await tester.pump(const Duration(hours: 2));
+      await tester.pumpAndSettle();
+
+      expect(refreshes, 0);
+      await close(tester);
+    });
+
+    testWidgets('archived: never on its own, only by hand', (tester) async {
+      await open(tester, organization: GroupOrganization.archived);
+      await tester.pump(const Duration(hours: 2));
+      await tester.pumpAndSettle();
+      expect(refreshes, 0);
+
+      await tester.fling(find.byType(Scrollable).first, const Offset(0, 400), 1000);
+      await tester.pumpAndSettle();
+      expect(refreshes, 1);
+      await close(tester);
+    });
+
+    testWidgets('in the background: stops; back: refreshes if it\'s due by then', (tester) async {
+      final db = await open(tester, refreshedAgo: const Duration(minutes: 1));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump(const Duration(minutes: 30));
+      await tester.pumpAndSettle();
+      expect(refreshes, 0);
+
+      // Back hours later, by the clock.
+      await tester.runAsync(
+          () => db.setGroupRefreshed('g1', at: DateTime.now().subtract(const Duration(hours: 3))));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(refreshes, 1);
+      await close(tester);
+    });
+
+    // PR #308 review (Ezra): one sync at a time; triggers while one runs
+    // join it rather than each reading the whole list.
+    group('while a sync is sending', () {
+      Future<(Completer<void>, StreamController<List<ConnectivityResult>>)> openSending(
+          WidgetTester tester) async {
+        final sending = Completer<void>();
+        final client = SpliitClient(
+          baseUrl: 'https://example.test',
+          httpClient: MockClient((req) async {
+            final url = req.url.toString();
+            if (url.contains('groups.expenses.create')) {
+              await sending.future;
+              return http.Response('[{"result":{"data":{"json":{"expenseId":"s1"}}}}]', 200);
+            }
+            if (url.contains('groups.get')) {
+              refreshes++;
+              return http.Response(groupJson, 200);
+            }
+            if (url.contains('groups.expenses.list')) return http.Response(listJson, 200);
+            throw http.ClientException('offline');
+          }),
+        );
+        final db = AppDatabase(NativeDatabase.memory());
+        addTearDown(db.close);
+        await tester.runAsync(() async {
+          await db.cacheGroup(cachedGroup);
+          await db.insertPending(Expense(
+            id: 'local-1',
+            groupId: 'g1',
+            title: 'Coffee',
+            amountCents: 500,
+            paidBy: 'p1',
+            paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+            date: DateTime.utc(2026, 9, 27),
+            pending: true,
+          ));
+        });
+        final changes = StreamController<List<ConnectivityResult>>.broadcast();
+        addTearDown(changes.close);
+        await tester.pumpWidget(MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: GroupScreen(
+              client: client,
+              db: db,
+              outbox: Outbox(db, client, groupId: 'g1'),
+              groupId: 'g1',
+              connectivityChanges: changes.stream),
+        ));
+        await tester.pump();
+        return (sending, changes);
+      }
+
+      Future<void> release(WidgetTester tester, Completer<void> sending) async {
+        sending.complete();
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('resuming joins it: one refresh', (tester) async {
+        final (sending, _) = await openSending(tester);
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        await tester.pump();
+
+        await release(tester, sending);
+        expect(refreshes, 1);
+        await close(tester);
+      });
+
+      testWidgets('reconnecting joins it: one refresh', (tester) async {
+        final (sending, changes) = await openSending(tester);
+        changes.add([ConnectivityResult.wifi]);
+        await tester.pump();
+
+        await release(tester, sending);
+        expect(refreshes, 1);
+        await close(tester);
+      });
+
+      testWidgets('a pull meanwhile refreshes once more after it, not alongside', (tester) async {
+        final (sending, _) = await openSending(tester);
+        await tester.fling(find.byType(Scrollable).first, const Offset(0, 400), 1000);
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        expect(refreshes, 0);
+
+        await release(tester, sending);
+        expect(refreshes, 2);
+        await close(tester);
+      });
+    });
+
+    testWidgets('back soon after: not again until it\'s due', (tester) async {
+      await open(tester, refreshedAgo: const Duration(minutes: 1));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(refreshes, 0);
+
+      await tester.pump(const Duration(minutes: 9, seconds: 1));
+      await tester.pumpAndSettle();
+      expect(refreshes, 1);
+      await close(tester);
     });
   });
 }
