@@ -76,7 +76,7 @@ class GroupScreen extends StatefulWidget {
   State<GroupScreen> createState() => _GroupScreenState();
 }
 
-class _GroupScreenState extends State<GroupScreen> {
+class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
   final _settings = SettingsService();
 
   Group? _group;
@@ -114,9 +114,18 @@ class _GroupScreenState extends State<GroupScreen> {
   List<Category> _categories = spliitSeedCategories;
   StreamSubscription<List<Category>>? _categoriesSub;
 
+  /// The next auto refresh (#301), while the app is in the foreground.
+  Timer? _autoRefreshTimer;
+  bool _inForeground = true;
+
+  /// A refresh is running. [_loading] also starts true, for the spinner
+  /// before anything's known.
+  bool _refreshing = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _groupSub = widget.db.watchCachedGroup(widget.groupId).listen((group) {
       if (!mounted) return;
       setState(() => _group = group);
@@ -133,7 +142,9 @@ class _GroupScreenState extends State<GroupScreen> {
     _categoriesSub = CategoryStore.of(widget.db).watch(widget.client).listen((cats) {
       if (mounted) setState(() => _categories = cats);
     });
-    _refresh();
+    // Only when it's due (#301): opening a group refreshed a moment ago,
+    // after a look at another or at the settings, doesn't again.
+    _autoRefresh();
     // Guarded: connectivity_plus's platform channel isn't set up in every
     // environment (widget tests being the immediate reason this got
     // added, but a misconfigured platform is a real possibility too).
@@ -144,7 +155,7 @@ class _GroupScreenState extends State<GroupScreen> {
           (widget.connectivityChanges ?? Connectivity().onConnectivityChanged).listen(
         (results) {
           if (!results.contains(ConnectivityResult.none)) {
-            _syncThenRefresh();
+            _syncOnReconnect();
           }
         },
         onError: (Object e, StackTrace st) =>
@@ -160,6 +171,8 @@ class _GroupScreenState extends State<GroupScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _autoRefreshTimer?.cancel();
     _groupSub?.cancel();
     _expensesSub?.cancel();
     _categoriesSub?.cancel();
@@ -201,7 +214,10 @@ class _GroupScreenState extends State<GroupScreen> {
     // Called after awaits elsewhere (a sync first): the screen may have
     // closed meanwhile.
     if (!mounted) return;
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _refreshing = true;
+    });
     // Once per run; again on the next refresh if it didn't get through.
     unawaited(CategoryStore.of(widget.db).refresh(widget.client));
     try {
@@ -212,6 +228,7 @@ class _GroupScreenState extends State<GroupScreen> {
       // Skipped if an edit or delete landed while this was fetching (#90).
       await widget.db.replaceServerExpenses(widget.groupId, fresh,
           fetchedAtGeneration: generation);
+      await widget.db.setGroupRefreshed(widget.groupId);
       // Receipt files the refresh stopped referring to (#123).
       unawaited(ReceiptCache.of(widget.db).sweep());
       // A favorite's receipts, ahead for offline (#127); in the
@@ -244,7 +261,92 @@ class _GroupScreenState extends State<GroupScreen> {
         });
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _refreshing = false;
+        });
+        unawaited(_afterRefresh());
+      }
+    }
+  }
+
+  /// Auto refresh (#301), one rule: while the group is open and the app
+  /// in the foreground, it refreshes once its last refresh is older than
+  /// the setting's interval. Checked on opening, on coming back from the
+  /// background and on reconnecting; refreshing now when it's due, or
+  /// waiting for the rest of the interval. Any refresh, pulled or after
+  /// an edit too, starts the interval again. Never with the setting off,
+  /// nor in an archived group: those refresh only by hand.
+  Future<void> _autoRefresh() async {
+    _autoRefreshTimer?.cancel();
+    final interval = await _autoRefreshInterval();
+    if (!mounted || _refreshing) return;
+    final at = (await widget.db.groupRow(widget.groupId))?.refreshedAt;
+    final age = at == null ? null : DateTime.now().difference(at);
+    if (interval != null && _inForeground && (age == null || age >= interval)) {
+      await _syncThenRefresh();
+      return;
+    }
+    // Not refreshing: what's cached is all there is for now.
+    if (mounted && _loading) setState(() => _loading = false);
+    if (interval != null && age != null) _scheduleAutoRefresh(interval - age);
+  }
+
+  /// The setting's interval, or null when this group doesn't refresh on
+  /// its own: the setting off, or the group archived.
+  Future<Duration?> _autoRefreshInterval() async {
+    try {
+      final row = await widget.db.groupRow(widget.groupId);
+      if (row?.organization == GroupOrganization.archived) return null;
+      return (await SettingsService().autoRefresh()).interval;
+    } catch (e, st) {
+      ErrorReporter.instance.report(e, st, operation: 'Reading the auto refresh setting');
+      return null;
+    }
+  }
+
+  /// The next auto refresh, [after] from now. When the timer fires it's
+  /// due, so it refreshes without checking again.
+  void _scheduleAutoRefresh(Duration after) {
+    _autoRefreshTimer?.cancel();
+    if (!mounted || !_inForeground) return;
+    _autoRefreshTimer = Timer(after, () {
+      if (mounted && _inForeground && !_refreshing) _syncThenRefresh();
+    });
+  }
+
+  /// After any refresh, done or failed: the next one a whole interval
+  /// later. A failed one (offline) tries again then, or on reconnecting.
+  Future<void> _afterRefresh() async {
+    final interval = await _autoRefreshInterval();
+    if (interval != null) _scheduleAutoRefresh(interval);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _inForeground = true;
+        _autoRefresh();
+      case AppLifecycleState.hidden || AppLifecycleState.paused || AppLifecycleState.detached:
+        _inForeground = false;
+        _autoRefreshTimer?.cancel();
+      case AppLifecycleState.inactive:
+        // A passing interruption (Control Center, a call's banner).
+        break;
+    }
+  }
+
+  /// Back online: what's waiting goes out, and the group refreshes after
+  /// it as after an edit; with nothing sent, only if it's due (#301).
+  Future<void> _syncOnReconnect() async {
+    final sent = await widget.outbox.flush();
+    if (!mounted) return;
+    if (sent > 0) {
+      await _refresh();
+    } else {
+      await _autoRefresh();
     }
   }
 
