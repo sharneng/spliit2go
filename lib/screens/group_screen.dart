@@ -124,9 +124,11 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
   /// answers to the cache out of order.
   Future<void>? _syncRun;
 
-  /// A refresh asked for (an edit, a pull, the timer) while a sync ran:
-  /// it refreshes again once that one's done.
-  bool _syncAgain = false;
+  /// Any trigger while a sync ran: one more pass once that one's done,
+  /// as its own `always` asked (true wins). Null when none came. A
+  /// reconnect too: what the running one tried to send may have gone out
+  /// before the network was back, and failed.
+  bool? _syncAgain;
 
   @override
   void initState() {
@@ -275,8 +277,9 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
 
   /// Sends what's waiting, then refreshes the group: [always], or when
   /// something was sent, or when it's due by the auto refresh rule
-  /// (#301). Joins the sync already running; a refresh asked for
-  /// meanwhile runs once it's done.
+  /// (#301). Joins the sync already running, which then runs once more (#309):
+  /// sending again, and refreshing if this asked to, something went out,
+  /// or it's due.
   ///
   /// Auto refresh, one rule: while the group is open and the app in the
   /// foreground, it refreshes once its last refresh is older than the
@@ -287,7 +290,7 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
   /// nor in an archived group: those refresh only by hand.
   Future<void> _sync({required bool always}) {
     if (_syncRun case final running?) {
-      if (always) _syncAgain = true;
+      _syncAgain = always || (_syncAgain ?? false);
       return running;
     }
     _autoRefreshTimer?.cancel();
@@ -297,8 +300,8 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
   Future<void> _syncLoop(bool always) async {
     try {
       var refresh = always;
-      do {
-        _syncAgain = false;
+      while (true) {
+        _syncAgain = null;
         // No need to reload from the local cache first anymore (issue
         // #47) -- the outbox's own db writes (markSynced, etc.) already
         // reach [_expensesSub] on their own, synchronously with the
@@ -314,8 +317,10 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
           if (_loading) setState(() => _loading = false);
           if (wait != null) _scheduleAutoRefresh(wait);
         }
-        refresh = true;
-      } while (_syncAgain && mounted);
+        final again = _syncAgain;
+        if (again == null || !mounted) break;
+        refresh = again;
+      }
     } finally {
       _syncRun = null;
     }

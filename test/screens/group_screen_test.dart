@@ -1365,15 +1365,21 @@ void main() {
     // PR #308 review (Ezra): one sync at a time; triggers while one runs
     // join it rather than each reading the whole list.
     group('while a sync is sending', () {
+      // [offline]: the held send fails, as one started without a network
+      // does, and the next goes through.
       Future<(Completer<void>, StreamController<List<ConnectivityResult>>)> openSending(
-          WidgetTester tester) async {
+          WidgetTester tester, {bool offline = false}) async {
         final sending = Completer<void>();
+        var sends = 0;
         final client = SpliitClient(
           baseUrl: 'https://example.test',
           httpClient: MockClient((req) async {
             final url = req.url.toString();
             if (url.contains('groups.expenses.create')) {
-              await sending.future;
+              if (sends++ == 0) {
+                await sending.future;
+                if (offline) throw http.ClientException('offline');
+              }
               return http.Response('[{"result":{"data":{"json":{"expenseId":"s1"}}}}]', 200);
             }
             if (url.contains('groups.get')) {
@@ -1440,6 +1446,18 @@ void main() {
 
         await release(tester, sending);
         expect(refreshes, 1);
+        await close(tester);
+      });
+
+      testWidgets('reconnecting while one sent offline sends again after it fails (#309)', (tester) async {
+        final (sending, changes) = await openSending(tester, offline: true);
+        changes.add([ConnectivityResult.wifi]);
+        await tester.pump();
+
+        await release(tester, sending);
+        expect(find.text('syncing…'), findsNothing);
+        // The first pass's, due on opening, then the second's: it sent.
+        expect(refreshes, 2);
         await close(tester);
       });
 
