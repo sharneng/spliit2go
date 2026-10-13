@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:spliit2go/widgets/group_monogram.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
@@ -77,6 +78,9 @@ void main() {
         .widget<GroupedSection>(find.ancestor(of: find.text(text), matching: find.byType(GroupedSection)))
         .caption;
     expect(captionOf('Alex'), 'Balances');
+    // #306: each person's monogram before their name, as in Paid for.
+    expect(find.ancestor(of: find.text('Alex'), matching: find.byType(MonogramLabel)), findsOneWidget);
+    expect(find.descendant(of: find.byType(MonogramLabel), matching: find.byType(Monogram)), findsNWidgets(3));
     expect(captionOf('Bea owes Alex'), 'Suggested settlements');
     expect(find.byType(GroupedSection), findsNWidgets(3));
     expect(

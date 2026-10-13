@@ -11,6 +11,8 @@ import 'package:spliit2go/l10n/app_localizations.dart';
 import 'package:spliit2go/models/expense.dart';
 import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/group_settings_screen.dart';
+import 'package:spliit2go/theme.dart';
+import 'package:spliit2go/widgets/group_monogram.dart';
 
 import '../support/error_log.dart';
 
@@ -159,7 +161,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.close).first);
+    await tester.tap(find.byIcon(Icons.delete_outline).first);
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.check));
     await tester.pumpAndSettle();
@@ -256,6 +258,42 @@ void main() {
     // pump to fire, or flutter_test's automatic end-of-test teardown
     // trips "A Timer is still pending even after the widget tree was
     // disposed" before it gets the chance.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+
+  // #306: each person's monogram, as elsewhere, following the names as
+  // they're typed; you in emerald.
+  testWidgets('a monogram before each participant, as the name is typed', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final client = SpliitClient(
+        baseUrl: 'https://example.test', httpClient: MockClient((req) async => http.Response('[]', 500)));
+
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: GroupSettingsScreen(client: client, db: db, group: group, activeUserId: 'bea'),
+    ));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+
+    Monogram monogramIn(String name) => tester.widget<Monogram>(find.byWidgetPredicate(
+        (w) => w is Monogram && w.name == name));
+    expect(monogramIn('Alex').color, isNot(monogramPalette[0]));
+    expect(monogramIn('Bea').color, monogramPalette[0]);
+
+    await tester.tap(find.byIcon(Icons.person_add_outlined));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    expect(find.byType(Monogram), findsNWidgets(3));
+    await tester.enterText(find.byType(TextField).last, 'Cid');
+    await tester.pump();
+    expect(find.text('C'), findsOneWidget);
+
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
   });
@@ -558,7 +596,7 @@ void main() {
 
     final closeButtons = tester
         .widgetList<IconButton>(
-          find.ancestor(of: find.byIcon(Icons.close), matching: find.byType(IconButton)),
+          find.ancestor(of: find.byIcon(Icons.delete_outline), matching: find.byType(IconButton)),
         )
         .toList();
     // Row order matches group.participants: alex, then bea.
@@ -605,7 +643,7 @@ void main() {
 
     final closeButtons = tester
         .widgetList<IconButton>(
-          find.ancestor(of: find.byIcon(Icons.close), matching: find.byType(IconButton)),
+          find.ancestor(of: find.byIcon(Icons.delete_outline), matching: find.byType(IconButton)),
         )
         .toList();
     expect(closeButtons[0].onPressed, isNull); // alex: in paidFor
@@ -663,14 +701,14 @@ void main() {
     await tester.pumpAndSettle();
 
     // bea (second row) has no expenses -- its remove button still works.
-    // Scoped to bea's own row (rather than find.byIcon(Icons.close).at(1))
+    // Scoped to bea's own row (rather than find.byIcon(Icons.delete_outline).at(1))
     // so it can't accidentally resolve to a different participant's
     // button after the date-span field (issue #55) pushes this row
     // below the test surface's default viewport and it needs scrolling
     // into view first.
     final beaCloseButton = find.descendant(
       of: find.ancestor(of: find.widgetWithText(TextField, 'Bea'), matching: find.byType(Row)),
-      matching: find.byIcon(Icons.close),
+      matching: find.byIcon(Icons.delete_outline),
     );
     // See the comment above the equivalent drag in "adding a
     // participant sends them with no id" -- ensureVisible's default

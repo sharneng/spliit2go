@@ -12,13 +12,17 @@ import '../services/balance_calculator.dart';
 import '../sync/outbox.dart';
 import '../utils/money.dart';
 import '../widgets/money.dart';
+import '../widgets/group_monogram.dart';
 import '../widgets/grouped_section.dart';
 import '../widgets/label_and_value.dart';
 import 'expense_screen.dart';
 import '../services/error_reporting.dart';
 import '../widgets/empty_state.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../theme.dart';
 import '../widgets/bottom_inset.dart';
+import '../widgets/participant_colors.dart';
+import '../widgets/text_scaled.dart';
 
 /// Who-owes-whom for the group, plus one-tap "mark as paid" for the
 /// suggested settlements -- mirrors the web app's Balances tab.
@@ -268,19 +272,27 @@ class _BalancesScreenState extends State<BalancesScreen> {
                     // Paid for's (#296): a trailing squeezed the name.
                     final under = valuesGoUnder(
                         row: constraints.maxWidth - 2 * GroupedSection.inset - 2 * GroupedSection.inset,
-                        label: 0,
+                        label: context.textScaled(24) + 16,
                         widest: 16 +
                             [for (final b in balances) measuredTextWidth(context, amount(b.netCents), Money.styleOf(context))]
                                 .fold(0.0, math.max));
+                    final colors = participantColors(widget.group.participants, widget.activeUserId);
                     return GroupedSection(
                       caption: context.l10n.balancesTitle,
                       footer: context.l10n.balancesExplainer,
+                      // Past the monogram, under the name, as Paid for's (#306).
+                      dividerIndent: 56,
                       children: [
                         for (final b in balances)
                           GroupedRow(
-                            title: Text(b.participantId == widget.activeUserId
-                                ? context.l10n.expenseDetailsYou(_name(b.participantId))
-                                : _name(b.participantId)),
+                            title: MonogramLabel(
+                                monogram: Monogram(
+                                    name: _name(b.participantId),
+                                    color: colors[b.participantId] ?? monogramPalette.first,
+                                    radius: 12),
+                                name: Text(b.participantId == widget.activeUserId
+                                    ? context.l10n.expenseDetailsYou(_name(b.participantId))
+                                    : _name(b.participantId))),
                             value: Money(amount(b.netCents), sign: MoneySign.ofBalance(b.netCents)),
                             valueUnder: under,
                           ),

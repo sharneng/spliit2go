@@ -463,6 +463,7 @@ class _GroupScreenState extends State<GroupScreen> {
           db: widget.db,
           outbox: widget.outbox,
           group: _group!,
+          activeUserId: _activeUserId,
           embedded: true,
         );
       case 3:
@@ -548,6 +549,7 @@ class _GroupScreenState extends State<GroupScreen> {
           client: widget.client,
           db: widget.db,
           group: _group!,
+          activeUserId: _activeUserId,
         ),
       ),
     );

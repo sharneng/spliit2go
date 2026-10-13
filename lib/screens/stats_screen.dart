@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -12,11 +13,17 @@ import '../services/category_store.dart';
 import '../services/stats_calculator.dart';
 import '../sync/outbox.dart';
 import '../utils/money.dart';
+import '../widgets/category_icon.dart';
+import '../widgets/group_monogram.dart';
 import '../widgets/grouped_section.dart';
+import '../widgets/label_and_value.dart';
 import '../widgets/money.dart';
 import '../widgets/empty_state.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../theme.dart';
 import '../widgets/bottom_inset.dart';
+import '../widgets/participant_colors.dart';
+import '../widgets/text_scaled.dart';
 
 /// A first pass at the web app's Stats tab (issue #27, split from #6
 /// alongside Activity -- see issue #26): the group's total spending
@@ -52,6 +59,9 @@ class StatsScreen extends StatefulWidget {
   /// bodies.
   final bool embedded;
 
+  /// Who "you" are, for the people's colors (#306).
+  final String? activeUserId;
+
   const StatsScreen({
     super.key,
     required this.client,
@@ -59,6 +69,7 @@ class StatsScreen extends StatefulWidget {
     required this.outbox,
     required this.group,
     this.embedded = false,
+    this.activeUserId,
   });
 
   @override
@@ -170,14 +181,35 @@ class _StatsScreenState extends State<StatsScreen> {
             ),
           ],
         ),
-        GroupedSection(
-          caption: context.l10n.statsSectionByParticipant,
-          children: [for (final p in participants) _participantTile(context, p)],
-        ),
-        GroupedSection(
-          caption: context.l10n.statsSectionByCategory,
-          children: [for (final c in categories) _categoryTile(context, c)],
-        ),
+        // A monogram or category icon before each name, as Paid for's
+        // (#306); every amount under its name or none, as there.
+        LayoutBuilder(builder: (context, constraints) {
+          final colors = participantColors(widget.group.participants, widget.activeUserId);
+          final under = _valuesGoUnder(context, constraints, [for (final p in participants) p.paidCents]);
+          return GroupedSection(
+            caption: context.l10n.statsSectionByParticipant,
+            dividerIndent: 56,
+            children: [for (final p in participants) _participantTile(context, p, colors, under)],
+          );
+        }),
+        LayoutBuilder(builder: (context, constraints) {
+          // Category names are short and known, so the amounts go under
+          // only when a row's own name and amount don't fit, not by Paid
+          // for's half-the-row rule, nor the longest name against the
+          // largest amount (Kenneth, #306): one large total put them all
+          // under. Still all or none.
+          final label = Theme.of(context).textTheme.bodyLarge;
+          final room = constraints.maxWidth - 4 * GroupedSection.inset - context.textScaled(24) - 16 - 16;
+          final under = categories.any((c) =>
+              measuredTextWidth(context, _categoryLabel(c.categoryId), label) +
+                  measuredTextWidth(context, _money(c.totalCents), Money.styleOf(context)) >
+              room);
+          return GroupedSection(
+            caption: context.l10n.statsSectionByCategory,
+            dividerIndent: 56,
+            children: [for (final c in categories) _categoryTile(context, c, under)],
+          );
+        }),
       ],
     ));
   }
@@ -186,20 +218,39 @@ class _StatsScreenState extends State<StatsScreen> {
   // stack when they don't, not ListTile.trailing: a trailing amount has
   // no width limit, and in French at large text it took the whole tile
   // (#103).
-  Widget _participantTile(BuildContext context, ParticipantSpending p) {
+  bool _valuesGoUnder(BuildContext context, BoxConstraints constraints, List<int> cents) => valuesGoUnder(
+      row: constraints.maxWidth - 4 * GroupedSection.inset,
+      label: context.textScaled(24) + 16,
+      widest: 16 +
+          [for (final c in cents) measuredTextWidth(context, _money(c), Money.styleOf(context))]
+              .fold(0.0, math.max));
+
+  Widget _participantTile(BuildContext context, ParticipantSpending p, Map<String, Color> colors, bool under) {
     final small = Theme.of(context).textTheme.bodySmall;
     return GroupedRow(
-      title: _pair(Text(p.name),
-          Money(_money(p.paidCents))),
-      subtitle: _pair(Text(context.l10n.statsParticipantPaidCount(p.paidCount)),
-          Text(context.l10n.statsParticipantShare(_money(p.shareCents)), style: small)),
+      title: MonogramLabel(
+          monogram: Monogram(
+              name: p.name, color: colors[p.participantId] ?? monogramPalette.first, radius: 12),
+          name: Text(p.name)),
+      value: Money(_money(p.paidCents)),
+      valueUnder: under,
+      // Under the name, past the monogram.
+      subtitle: Padding(
+        padding: EdgeInsetsDirectional.only(start: context.textScaled(24) + 16),
+        child: _pair(Text(context.l10n.statsParticipantPaidCount(p.paidCount)),
+            Text(context.l10n.statsParticipantShare(_money(p.shareCents)), style: small)),
+      ),
     );
   }
 
-  Widget _categoryTile(BuildContext context, CategorySpending c) {
+  Widget _categoryTile(BuildContext context, CategorySpending c, bool under) {
     return GroupedRow(
-      title: _pair(Text(_categoryLabel(c.categoryId)),
-          Money(_money(c.totalCents))),
+      // The expense rows' icon, at a monogram's size.
+      title: MonogramLabel(
+          monogram: CategoryIconGlyph(category: _categoryNames[c.categoryId], size: 24),
+          name: Text(_categoryLabel(c.categoryId))),
+      value: Money(_money(c.totalCents)),
+      valueUnder: under,
     );
   }
 
