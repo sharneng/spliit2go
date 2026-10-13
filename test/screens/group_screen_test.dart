@@ -385,10 +385,13 @@ void main() {
       expect(lists, 1); // the startup refresh is waiting on its list
 
       await deleteFromList(tester, 'Coffee');
-      expect(lists, 2); // the delete's own refresh came and went
+      // The delete's own refresh waits for the one running, rather than
+      // running alongside it (PR #308 review).
+      expect(lists, 1);
 
       staleList.complete(http.Response(listJson(['Coffee', 'Tea']), 200));
       await tester.pumpAndSettle();
+      expect(lists, 2); // then came and went
 
       expect(find.text('Coffee'), findsNothing);
       expect((await db.expensesForGroup('g1')).map((e) => e.id), ['Tea']);
@@ -1357,6 +1360,100 @@ void main() {
       await tester.pumpAndSettle();
       expect(refreshes, 1);
       await close(tester);
+    });
+
+    // PR #308 review (Ezra): one sync at a time; triggers while one runs
+    // join it rather than each reading the whole list.
+    group('while a sync is sending', () {
+      Future<(Completer<void>, StreamController<List<ConnectivityResult>>)> openSending(
+          WidgetTester tester) async {
+        final sending = Completer<void>();
+        final client = SpliitClient(
+          baseUrl: 'https://example.test',
+          httpClient: MockClient((req) async {
+            final url = req.url.toString();
+            if (url.contains('groups.expenses.create')) {
+              await sending.future;
+              return http.Response('[{"result":{"data":{"json":{"expenseId":"s1"}}}}]', 200);
+            }
+            if (url.contains('groups.get')) {
+              refreshes++;
+              return http.Response(groupJson, 200);
+            }
+            if (url.contains('groups.expenses.list')) return http.Response(listJson, 200);
+            throw http.ClientException('offline');
+          }),
+        );
+        final db = AppDatabase(NativeDatabase.memory());
+        addTearDown(db.close);
+        await tester.runAsync(() async {
+          await db.cacheGroup(cachedGroup);
+          await db.insertPending(Expense(
+            id: 'local-1',
+            groupId: 'g1',
+            title: 'Coffee',
+            amountCents: 500,
+            paidBy: 'p1',
+            paidFor: const [ExpenseShare(participantId: 'p1', shares: 1)],
+            date: DateTime.utc(2026, 9, 27),
+            pending: true,
+          ));
+        });
+        final changes = StreamController<List<ConnectivityResult>>.broadcast();
+        addTearDown(changes.close);
+        await tester.pumpWidget(MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: GroupScreen(
+              client: client,
+              db: db,
+              outbox: Outbox(db, client, groupId: 'g1'),
+              groupId: 'g1',
+              connectivityChanges: changes.stream),
+        ));
+        await tester.pump();
+        return (sending, changes);
+      }
+
+      Future<void> release(WidgetTester tester, Completer<void> sending) async {
+        sending.complete();
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('resuming joins it: one refresh', (tester) async {
+        final (sending, _) = await openSending(tester);
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        await tester.pump();
+
+        await release(tester, sending);
+        expect(refreshes, 1);
+        await close(tester);
+      });
+
+      testWidgets('reconnecting joins it: one refresh', (tester) async {
+        final (sending, changes) = await openSending(tester);
+        changes.add([ConnectivityResult.wifi]);
+        await tester.pump();
+
+        await release(tester, sending);
+        expect(refreshes, 1);
+        await close(tester);
+      });
+
+      testWidgets('a pull meanwhile refreshes once more after it, not alongside', (tester) async {
+        final (sending, _) = await openSending(tester);
+        await tester.fling(find.byType(Scrollable).first, const Offset(0, 400), 1000);
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        expect(refreshes, 0);
+
+        await release(tester, sending);
+        expect(refreshes, 2);
+        await close(tester);
+      });
     });
 
     testWidgets('back soon after: not again until it\'s due', (tester) async {

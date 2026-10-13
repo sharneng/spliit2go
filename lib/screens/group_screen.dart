@@ -118,9 +118,15 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
   Timer? _autoRefreshTimer;
   bool _inForeground = true;
 
-  /// A refresh is running. [_loading] also starts true, for the spinner
-  /// before anything's known.
-  bool _refreshing = false;
+  /// The sync running: what's waiting sent, then the group refreshed if
+  /// asked or due. One at a time (PR #308 review): every trigger joins it,
+  /// so overlapping ones don't each read the whole list, nor write their
+  /// answers to the cache out of order.
+  Future<void>? _syncRun;
+
+  /// A refresh asked for (an edit, a pull, the timer) while a sync ran:
+  /// it refreshes again once that one's done.
+  bool _syncAgain = false;
 
   @override
   void initState() {
@@ -144,7 +150,7 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
     });
     // Only when it's due (#301): opening a group refreshed a moment ago,
     // after a look at another or at the settings, doesn't again.
-    _autoRefresh();
+    _sync(always: false);
     // Guarded: connectivity_plus's platform channel isn't set up in every
     // environment (widget tests being the immediate reason this got
     // added, but a misconfigured platform is a real possibility too).
@@ -155,7 +161,9 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
           (widget.connectivityChanges ?? Connectivity().onConnectivityChanged).listen(
         (results) {
           if (!results.contains(ConnectivityResult.none)) {
-            _syncOnReconnect();
+            // What's waiting goes out at once, and the group refreshes
+            // after it as after an edit; else only if it's due (#301).
+            _sync(always: false);
           }
         },
         onError: (Object e, StackTrace st) =>
@@ -214,10 +222,7 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
     // Called after awaits elsewhere (a sync first): the screen may have
     // closed meanwhile.
     if (!mounted) return;
-    setState(() {
-      _loading = true;
-      _refreshing = true;
-    });
+    setState(() => _loading = true);
     // Once per run; again on the next refresh if it didn't get through.
     unawaited(CategoryStore.of(widget.db).refresh(widget.client));
     try {
@@ -262,35 +267,70 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _loading = false;
-          _refreshing = false;
-        });
+        setState(() => _loading = false);
         unawaited(_afterRefresh());
       }
     }
   }
 
-  /// Auto refresh (#301), one rule: while the group is open and the app
-  /// in the foreground, it refreshes once its last refresh is older than
-  /// the setting's interval. Checked on opening, on coming back from the
+  /// Sends what's waiting, then refreshes the group: [always], or when
+  /// something was sent, or when it's due by the auto refresh rule
+  /// (#301). Joins the sync already running; a refresh asked for
+  /// meanwhile runs once it's done.
+  ///
+  /// Auto refresh, one rule: while the group is open and the app in the
+  /// foreground, it refreshes once its last refresh is older than the
+  /// setting's interval. Checked on opening, on coming back from the
   /// background and on reconnecting; refreshing now when it's due, or
   /// waiting for the rest of the interval. Any refresh, pulled or after
   /// an edit too, starts the interval again. Never with the setting off,
   /// nor in an archived group: those refresh only by hand.
-  Future<void> _autoRefresh() async {
-    _autoRefreshTimer?.cancel();
-    final interval = await _autoRefreshInterval();
-    if (!mounted || _refreshing) return;
-    final at = (await widget.db.groupRow(widget.groupId))?.refreshedAt;
-    final age = at == null ? null : DateTime.now().difference(at);
-    if (interval != null && _inForeground && (age == null || age >= interval)) {
-      await _syncThenRefresh();
-      return;
+  Future<void> _sync({required bool always}) {
+    if (_syncRun case final running?) {
+      if (always) _syncAgain = true;
+      return running;
     }
-    // Not refreshing: what's cached is all there is for now.
-    if (mounted && _loading) setState(() => _loading = false);
-    if (interval != null && age != null) _scheduleAutoRefresh(interval - age);
+    _autoRefreshTimer?.cancel();
+    return _syncRun = _syncLoop(always);
+  }
+
+  Future<void> _syncLoop(bool always) async {
+    try {
+      var refresh = always;
+      do {
+        _syncAgain = false;
+        // No need to reload from the local cache first anymore (issue
+        // #47) -- the outbox's own db writes (markSynced, etc.) already
+        // reach [_expensesSub] on their own, synchronously with the
+        // write, so there's no gap for _refresh's live fetch to race.
+        final sent = await widget.outbox.flush();
+        if (!mounted) return;
+        final wait = await _untilDue();
+        if (!mounted) return;
+        if (refresh || sent > 0 || wait == Duration.zero) {
+          await _refresh();
+        } else {
+          // Not refreshing: what's cached is all there is for now.
+          if (_loading) setState(() => _loading = false);
+          if (wait != null) _scheduleAutoRefresh(wait);
+        }
+        refresh = true;
+      } while (_syncAgain && mounted);
+    } finally {
+      _syncRun = null;
+    }
+  }
+
+  /// How long until an auto refresh is due: zero when it is (or the group
+  /// never refreshed), null when it doesn't refresh on its own or the app
+  /// is in the background.
+  Future<Duration?> _untilDue() async {
+    final interval = await _autoRefreshInterval();
+    if (interval == null || !_inForeground) return null;
+    final at = (await widget.db.groupRow(widget.groupId))?.refreshedAt;
+    if (at == null) return Duration.zero;
+    final left = interval - DateTime.now().difference(at);
+    return left > Duration.zero ? left : Duration.zero;
   }
 
   /// The setting's interval, or null when this group doesn't refresh on
@@ -312,7 +352,7 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
     _autoRefreshTimer?.cancel();
     if (!mounted || !_inForeground) return;
     _autoRefreshTimer = Timer(after, () {
-      if (mounted && _inForeground && !_refreshing) _syncThenRefresh();
+      if (mounted && _inForeground) _sync(always: true);
     });
   }
 
@@ -328,7 +368,7 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
     switch (state) {
       case AppLifecycleState.resumed:
         _inForeground = true;
-        _autoRefresh();
+        _sync(always: false);
       case AppLifecycleState.hidden || AppLifecycleState.paused || AppLifecycleState.detached:
         _inForeground = false;
         _autoRefreshTimer?.cancel();
@@ -338,26 +378,7 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// Back online: what's waiting goes out, and the group refreshes after
-  /// it as after an edit; with nothing sent, only if it's due (#301).
-  Future<void> _syncOnReconnect() async {
-    final sent = await widget.outbox.flush();
-    if (!mounted) return;
-    if (sent > 0) {
-      await _refresh();
-    } else {
-      await _autoRefresh();
-    }
-  }
-
-  Future<void> _syncThenRefresh() async {
-    // No need to reload from the local cache first anymore (issue #47)
-    // -- the outbox's own db writes (markSynced, etc.) already reach
-    // [_expensesSub] on their own, synchronously with the write, so
-    // there's no gap for _refresh's live fetch below to race against.
-    await widget.outbox.flush();
-    await _refresh();
-  }
+  Future<void> _syncThenRefresh() => _sync(always: true);
 
   @override
   Widget build(BuildContext context) {
@@ -542,11 +563,11 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
   /// reload wiring between tabs is needed any more either.
   Widget _tabBody() {
     if (_group == null) {
-      return _tabIndex == 0 ? RefreshIndicator(onRefresh: _refresh, child: _body()) : const SizedBox.shrink();
+      return _tabIndex == 0 ? RefreshIndicator(onRefresh: _syncThenRefresh, child: _body()) : const SizedBox.shrink();
     }
     switch (_tabIndex) {
       case 0:
-        return RefreshIndicator(onRefresh: _refresh, child: _body());
+        return RefreshIndicator(onRefresh: _syncThenRefresh, child: _body());
       case 1:
         return BalancesScreen(
           key: ValueKey('balances-${_group!.id}'),
