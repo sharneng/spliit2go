@@ -8,6 +8,7 @@ import '../../models/group.dart';
 import '../../services/active_user.dart';
 import '../../services/expense_shares.dart';
 import '../../utils/decimal_input.dart';
+import '../../utils/markdown_note.dart';
 import '../../utils/money.dart';
 import 'rate_field.dart';
 
@@ -256,6 +257,21 @@ class ExpenseFormModel extends ChangeNotifier {
   bool get saveDefaultSplit => _saveDefaultSplit;
   set saveDefaultSplit(bool value) => _set(() => _saveDefaultSplit = value);
 
+  /// The notes are markdown (#311): saved behind [markdownMarker], which
+  /// [notesController] doesn't show.
+  bool _notesMarkdown = false;
+  bool get notesMarkdown => _notesMarkdown;
+  set notesMarkdown(bool value) => _set(() => _notesMarkdown = value);
+
+  /// The notes as saved. Markdown keeps its leading spaces (PR #312
+  /// review): four of them make a code block. Only an empty note is
+  /// emptied, and trailing space dropped.
+  String get notes {
+    final text = notesController.text;
+    if (text.trim().isEmpty) return '';
+    return _notesMarkdown ? noteText(text.trimRight(), markdown: true) : text.trim();
+  }
+
   RecurrenceRule _recurrenceRule = RecurrenceRule.none;
   RecurrenceRule get recurrenceRule => _recurrenceRule;
   set recurrenceRule(RecurrenceRule value) => _set(() => _recurrenceRule = value);
@@ -354,6 +370,7 @@ class ExpenseFormModel extends ChangeNotifier {
         _category,
         _isSettlement,
         _saveDefaultSplit,
+        _notesMarkdown,
         _recurrenceRule,
         _splitMode,
       ];
@@ -829,7 +846,8 @@ class ExpenseFormModel extends ChangeNotifier {
   void _prefillFrom(Expense e) {
     titleController.text = e.title;
     amountController.text = minorText(e.amountCents, digits);
-    notesController.text = e.notes;
+    notesController.text = noteBody(e.notes);
+    _notesMarkdown = isMarkdownNote(e.notes);
     _paidBy = e.paidBy;
     _category = e.category;
     _date = e.date;

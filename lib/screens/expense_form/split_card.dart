@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../../widgets/app_switch.dart';
 import 'package:flutter/material.dart';
 
 import '../../l10n/context_l10n.dart';
@@ -143,7 +144,7 @@ class SplitCard extends StatelessWidget {
           MergeSemantics(child: GroupedRow(
             title: Text(l10n.expenseSaveDefaultSplit),
             // Under it at large text, as a row's value (Kenneth, #294).
-            value: Switch.adaptive(
+            value: AppSwitch(
               value: _m.saveDefaultSplit,
               onChanged: (v) => _m.saveDefaultSplit = v,
             ),
