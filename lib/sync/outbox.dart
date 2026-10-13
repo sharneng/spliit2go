@@ -30,12 +30,14 @@ class Outbox {
   final String groupId;
 
   /// After this many failed attempts, [flush] gives up retrying a row
-  /// automatically and marks it [Expenses.syncFailed] regardless of the
-  /// error (issue #44) -- otherwise a persistently-unreachable server,
-  /// or any other repeatedly-failing-but-not-obviously-permanent error,
+  /// automatically and marks it [Expenses.syncFailed] (issue #44) --
+  /// otherwise a repeatedly-failing-but-not-obviously-permanent error
   /// would retry the same row forever on every flush. A 4xx response
   /// gives up immediately instead, on the first attempt -- see [flush]'s
-  /// own body for why that's treated differently.
+  /// own body for why that's treated differently. A connection failure
+  /// doesn't count (#309): being offline is what the outbox is for, and
+  /// a phone in airplane mode used up its attempts on the auto refreshes
+  /// and resumes alone, leaving the expense failed once back online.
   static const maxRetries = 5;
 
   Outbox(this._db, this._api, {required this.groupId});
@@ -150,7 +152,8 @@ class Outbox {
         // connection, won't go up by itself either (#124). The expense's
         // details offer Retry, Sync without receipts, or Discard.
         final receiptRefused = uploading && classifyError(e) != ErrorKind.connection;
-        final retryCount = row.retryCount + 1;
+        // Offline isn't an attempt (#309): see [maxRetries].
+        final retryCount = classifyError(e) == ErrorKind.connection ? row.retryCount : row.retryCount + 1;
         await _db.recordSyncFailure(
           id: row.id,
           error: e.toString(),

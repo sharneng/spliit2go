@@ -55,7 +55,7 @@ A receipt is an expense *document*: `{id, url, width, height}` (`src/lib/schemas
   All of this is in the database, so an app restart at any step resumes where it was: a photo already uploaded isn't sent again when the create is retried.
 - **Interrupted uploads:** the app can stop after the transfer and before `uploaded` is written. On the next flush, an `uploading` photo is checked with a `HEAD` of its public URL; spliit.app's bucket answers 200 when the object exists, 403 when it doesn't. If it's there, the photo becomes `uploaded`. If not, it's signed again (the old signature may have expired) and sent. **Exactly-once uploads aren't promised:** a retry can leave an unreferenced object in the bucket. That's accepted; losing the receipt or duplicating the expense isn't.
 - **Failures (#119, #44):**
-  - A connection failure counts like any failed sync attempt, and the next flush tries again.
+  - A connection failure leaves the expense pending, and the next flush tries again. It doesn't count toward the 5 attempts after which a sync is marked failed (#309): a phone offline for a while used them all up on auto refreshes and resumes.
   - Anything else while uploading, such as a server that may not store receipts, marks the expense sync failed at once, with the error. Its details offer **Retry**, **Discard**, and **Sync without receipts**. Sync without receipts asks first, since the phone has the only copy, then drops the photos and syncs the expense.
 
   So a receipt is only ever dropped by the user's explicit choice.
