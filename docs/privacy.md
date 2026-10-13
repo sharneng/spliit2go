@@ -1,6 +1,6 @@
 # Spliit2Go privacy policy
 
-Last updated on October 2, 2026.
+Last updated on October 13, 2026.
 
 Spliit2Go is an unofficial, community-made mobile app for [Spliit](https://spliit.app), the free and open-source app for sharing expenses. It isn't affiliated with or endorsed by the Spliit project. Its source code is public at [github.com/sharneng/spliit2go](https://github.com/sharneng/spliit2go). This policy describes what the app keeps on your phone, what leaves it, and where it goes.
 
@@ -8,6 +8,7 @@ Spliit2Go is an unofficial, community-made mobile app for [Spliit](https://splii
 
 - Spliit2Go has no accounts and no ads, and its developers collect nothing: no analytics, no crash reports.
 - Your groups and expenses go to the Spliit server the group lives on (spliit.app unless you chose another), and are covered by that server's privacy policy.
+- Exchange rates come from Frankfurter, a free public service. The app asks it for a day's rates and tells it nothing else: not your currencies, amounts or groups.
 - Receipt scanning reads the photo on your phone. On Android the photo isn't sent to Google, but Google's ML Kit, which does the reading, sends Google some diagnostic data (see below). On iPhone nothing is sent.
 
 ## What stays on your phone
@@ -18,6 +19,7 @@ The app keeps, on your phone only:
 - for each group, which participant you are, and the name you gave the first time, to suggest it in other groups;
 - expenses and receipt photos you added offline, until they are uploaded;
 - copies of receipts you opened, and of your favorite groups' receipts if you turned that on, within the storage limit you set;
+- exchange-rate tables downloaded from Frankfurter (see below);
 - your settings: theme, language, how your group list is sorted, the receipt languages you picked, and the receipt download settings.
 
 Errors the app didn't expect are written to the phone's own log, which stays on the phone.
@@ -35,6 +37,15 @@ Spliit2Go is a client: it reads and changes your groups on the Spliit server eac
 
 The default server is spliit.app, operated by Sebastien Castiel, and its [privacy policy](https://spliit.app/privacy) applies to what is stored there. If you use a group on another Spliit server, that server's operator decides what happens to it. On Spliit, anyone with a group's link can see and change the group, so share links only with people you trust.
 
+## Exchange rates
+
+For an expense paid in another currency, the app fills in the day's exchange rate from [Frankfurter](https://frankfurter.dev), a free, open-source service publishing the rates of the European Central Bank and other central banks.
+
+- **What's sent:** a date. The app always asks for the whole day's table against the euro, so the request doesn't say which currencies you use, and nothing about your expenses, groups or you is sent. As with any server, Frankfurter sees your phone's IP address.
+- **When:** when an expense in another currency needs a rate that isn't saved on the phone, and when you tap Update next to Exchange rates in App settings. For use offline, the app also downloads the past week's rates ahead, at most every three hours, after a group refreshes if it's a favorite or has an expense in another currency from the last 30 days.
+- **On your phone:** the downloaded tables are kept so rates work offline. Days fetched more than 180 days ago are deleted, except the newest one.
+- **Security:** requests go over HTTPS.
+
 ## Receipt scanning on Android
 
 Scan receipt uses Google's [ML Kit](https://developers.google.com/ml-kit) and the Document Scanner from Google Play services, both running on your phone. The photo and the text read from it are not sent to Google or anyone else: the app only fills in the expense form with what it read.
@@ -48,7 +59,7 @@ Scan receipt uses Apple's VisionKit and Vision, which are part of iOS and run on
 ## Permissions
 
 - **Camera and photos:** only when you take or choose a receipt photo.
-- **Internet:** to talk to your Spliit servers.
+- **Internet:** to talk to your Spliit servers and to Frankfurter.
 
 Sharing a group's link goes through your phone's share sheet, only when you tap Share. Links on the About screen open in your browser.
 
