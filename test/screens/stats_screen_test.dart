@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:spliit2go/widgets/category_icon.dart';
+import 'package:spliit2go/widgets/group_monogram.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/api/spliit_client.dart';
 import 'package:spliit2go/db/app_database.dart';
@@ -141,6 +143,14 @@ void main() {
         .caption;
     expect(captionOf('Total group spending'), 'The group');
     expect(captionOf('Alex'), 'By participant');
+    // #306: a monogram before each person, the category's icon before
+    // each category, as elsewhere.
+    MonogramLabel labelOf(String text) =>
+        tester.widget<MonogramLabel>(find.ancestor(of: find.text(text), matching: find.byType(MonogramLabel)));
+    expect(labelOf('Alex').monogram, isA<Monogram>());
+    expect(labelOf('Bea').monogram, isA<Monogram>());
+    final groceries = find.ancestor(of: find.text('Groceries'), matching: find.byType(MonogramLabel));
+    expect((tester.widget<MonogramLabel>(groceries.last).monogram as CategoryIconGlyph).category?.name, 'Groceries');
     expect(find.byType(GroupedSection), findsNWidgets(3));
     expect(find.byType(Card), findsNothing);
     expect(

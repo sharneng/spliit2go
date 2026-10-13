@@ -22,6 +22,8 @@ import 'join_group_screen.dart' show cacheJoinedGroup;
 import '../services/error_reporting.dart';
 import '../widgets/grouped_section.dart';
 import '../widgets/bottom_inset.dart';
+import '../widgets/group_monogram.dart';
+import '../widgets/participant_colors.dart';
 
 /// Group settings: rename the group, add or change its notes, change its
 /// currency, and add, rename, or remove participants -- mirrors the web
@@ -51,6 +53,9 @@ class GroupSettingsScreen extends StatefulWidget {
   /// The group being edited, or null when creating one.
   final Group? group;
 
+  /// Who "you" are, for the monograms' colors (#306).
+  final String? activeUserId;
+
   /// Builds the client for the chosen server when creating; tests inject
   /// a MockClient-backed one, as for JoinGroupScreen.
   final SpliitClient Function(String serverUrl) clientFactory;
@@ -60,6 +65,7 @@ class GroupSettingsScreen extends StatefulWidget {
     required SpliitClient this.client,
     required this.db,
     required Group this.group,
+    this.activeUserId,
   }) : clientFactory = ((url) => SpliitClient(baseUrl: url));
 
   GroupSettingsScreen.create({
@@ -68,6 +74,7 @@ class GroupSettingsScreen extends StatefulWidget {
     SpliitClient Function(String serverUrl)? clientFactory,
   })  : client = null,
         group = null,
+        activeUserId = null,
         clientFactory = clientFactory ?? ((url) => SpliitClient(baseUrl: url));
 
   @override
@@ -613,12 +620,32 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                 tooltip: context.l10n.groupSettingsAddParticipantTooltip,
                 onPressed: _addParticipant,
               ),
+              // Past the monogram, under the name, as Paid for's (#306).
+              dividerIndent: 56,
               children: [
                 for (var i = 0; i < _participants.length; i++)
                   Padding(
                     padding: const EdgeInsets.only(left: 16, right: 4),
                     child: Row(
                       children: [
+                        // Each person's monogram, as elsewhere (#306), as
+                        // the names are typed: colored as they'll be once
+                        // saved, since the colors go by name.
+                        ListenableBuilder(
+                          listenable: Listenable.merge([for (final p in _participants) p.controller]),
+                          builder: (context, _) {
+                            final colors = participantColors([
+                              for (final (j, p) in _participants.indexed)
+                                Participant(id: p.id.isEmpty ? 'new-$j' : p.id, name: p.controller.text.trim()),
+                            ], widget.activeUserId);
+                            final p = _participants[i];
+                            return Monogram(
+                                name: p.controller.text.trim(),
+                                color: colors[p.id.isEmpty ? 'new-$i' : p.id]!,
+                                radius: 12);
+                          },
+                        ),
+                        const SizedBox(width: 16),
                         Expanded(
                           child: TextField(
                             controller: _participants[i].controller,
@@ -626,7 +653,8 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.close),
+                          // The app's delete icon, as in other rows (#306).
+                          icon: const Icon(Icons.delete_outline),
                           // Disabled rather than hidden (issue #46) -- still
                           // visible where every other participant's remove
                           // button is, but greyed out and inert, so a
