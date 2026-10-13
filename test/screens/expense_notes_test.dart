@@ -16,6 +16,7 @@ import 'package:spliit2go/screens/expense_form/currency_card.dart';
 import 'package:spliit2go/screens/expense_screen.dart';
 import 'package:spliit2go/sync/outbox.dart';
 import 'package:spliit2go/utils/markdown_note.dart';
+import 'package:spliit2go/widgets/app_switch.dart';
 
 // Issue #311: the form's Markdown switch saves the notes behind the marker,
 // which the field never shows, and adds Edit and Preview.
@@ -48,7 +49,8 @@ void main() {
 
   /// The form, adding or editing [existing]; the requests it sends land in
   /// [sent].
-  Future<AppDatabase> pump(WidgetTester tester, {Expense? existing, List<http.Request>? sent}) async {
+  Future<AppDatabase> pump(WidgetTester tester,
+      {Expense? existing, List<http.Request>? sent, double textScale = 1}) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final client = SpliitClient(
@@ -64,6 +66,10 @@ void main() {
       locale: const Locale('en'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
       home: ExpenseScreen(
         client: client,
         db: db,
@@ -149,6 +155,29 @@ void main() {
     await choose(tester, 'Edit');
     expect(tester.widget<TextField>(notesField()).focusNode!.hasFocus, isTrue);
   });
+
+  for (final textScale in [1.0, 3.0]) {
+      testWidgets('text x$textScale: the Markdown switch takes taps over its 48pt, past what it draws '
+          '(PR #312 review)', variant: const TargetPlatformVariant({TargetPlatform.iOS, TargetPlatform.android}),
+          (tester) async {
+        await pump(tester, textScale: textScale);
+        final toggle = find.descendant(
+            of: find.ancestor(of: find.text('Markdown'), matching: find.byType(MergeSemantics)),
+            matching: find.byType(AppSwitch));
+        await tester.ensureVisible(toggle);
+        await tester.pumpAndSettle();
+
+        final center = tester.getCenter(toggle);
+        // Above and below the drawn track, inside the target.
+        expect(tester.getSize(toggle).height, lessThan(40));
+        await tester.tapAt(center.translate(0, -22));
+        await tester.pumpAndSettle();
+        expect(markdownOn(tester), isTrue);
+        await tester.tapAt(center.translate(0, 22));
+        await tester.pumpAndSettle();
+        expect(markdownOn(tester), isFalse);
+      });
+  }
 
   testWidgets('editing a markdown note: the switch on, the field without the marker', (tester) async {
     await pump(tester, existing: markdownExpense);

@@ -657,12 +657,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                           style: count > fieldMax ? muted?.copyWith(color: theme.colorScheme.error) : muted);
                     },
                   ),
-                  // One element: "Markdown, switch, off".
+                  // One element: "Markdown, switch, off". A row's 48 tall,
+                  // on one line or under the count, so the switch's tap
+                  // target, reaching past what it draws, is inside it
+                  // (PR #312 review): taps only reach a box's children
+                  // inside the box.
                   MergeSemantics(
                     child: InkWell(
                       onTap: () => _m.notesMarkdown = !_m.notesMarkdown,
                       borderRadius: BorderRadius.circular(8),
-                      child: Row(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: GroupedRow.oneLineMinHeight),
+                        child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Flexible(
@@ -674,7 +680,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                             onChanged: (v) => _m.notesMarkdown = v,
                           ),
                         ],
-                      ),
+                      )),
                     ),
                   ),
                 ],
