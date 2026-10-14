@@ -120,3 +120,11 @@ Joining on Android failed with "type 'Null' is not a subtype of type 'Map<String
 - `parseGroupUrl` takes the first `http(s)://` link out of surrounding text (or the word holding `/groups/` when there's no scheme), and ends the id at the first character a Spliit id can't contain (nanoids: letters, digits, `_`, `-`).
 - A missing group is a user error: guidance only, no log or details. Only the explicit `{group: null}` means missing; any other shape is a malformed response. Kenneth's question about seeing full errors on the phone became an app-wide policy: see [error-handling.md](error-handling.md).
 
+## Offering a copied link on Join (2026-10-13, issue #221)
+
+On iOS a tapped spliit.app link always opens in Safari, so the way into the app is copying the link. Join now offers it: while the field is empty and the clipboard probably holds a link, a paste button sits at the end of the field. It's checked when Join opens, when the field is emptied, and when the app comes back to the foreground (as after copying the link in a browser).
+
+- **Checked without reading the clipboard.** iOS uses `UIPasteboard.hasURLs` and `detectPatterns(for: [.probableWebURL])`; Android the clip's description (a URI list, or text Android 12+ classifies as a URL). Neither shows iOS's "pasted from" notice or Android's clipboard toast. A platform that can't tell offers nothing.
+- **iOS pastes with Apple's own button** (`UIPasteControl`, in `ios/Runner/PasteLink.swift`, shown as a platform view). iOS trusts it without asking "Allow Paste?", which a button the app draws would trigger on every tap. Android has our own `IconButton`, since reading the clipboard there needs no permission.
+- **No Share Extension, no universal links.** Universal links would need spliit.app to list our app, which an unofficial client won't ask for (Kenneth, 2026-10-07). A share extension has no supported way to open its app: the direct route relies on a responder-chain workaround a future iOS could break, and the supported one (save the link, ask the user to open the app) is barely better than copying (Kenneth, 2026-10-13).
+
