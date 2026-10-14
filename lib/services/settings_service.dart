@@ -53,6 +53,19 @@ class SettingsService {
     }
   }
 
+  /// Whether a launch reopens the last opened group (#316): on while a
+  /// group is open, off once the group list is back in front, so the app
+  /// starts where it was left. Unset, as on an install from before #316,
+  /// it reopens the group, as before.
+  Future<bool> reopenLastGroup() async =>
+      (await SharedPreferences.getInstance()).getBool('reopen_last_group') ?? true;
+
+  Future<void> setReopenLastGroup(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('reopen_last_group') == value) return;
+    await prefs.setBool('reopen_last_group', value);
+  }
+
   /// Whether favorite groups' receipts download ahead for offline
   /// (#127). Wi-Fi only by default: a receipt uploaded from the web can
   /// be up to 5 MB.

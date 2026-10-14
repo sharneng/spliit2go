@@ -316,7 +316,8 @@ class _RootState extends State<AppRoot> {
       ErrorReporter.instance.report(error, stack, operation: 'Reading the initial app link');
     }
     await _migrateLegacySingleGroup();
-    final last = await _db.mostRecentlyOpenedGroup();
+    // Only if the app was left in a group, not on the list (#316).
+    final last = await _reopenLastGroup() ? await _db.mostRecentlyOpenedGroup() : null;
     if (!mounted) return;
     setState(() => _checked = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -330,11 +331,25 @@ class _RootState extends State<AppRoot> {
     });
   }
 
+  Future<bool> _reopenLastGroup() async {
+    try {
+      return await SettingsService().reopenLastGroup();
+    } catch (e, st) {
+      ErrorReporter.instance.report(e, st, operation: 'Reading the last screen');
+      return true;
+    }
+  }
+
   /// Pushes [row] as a GroupScreen on top of the (always-present)
   /// GroupListScreen -- the launch fast path above, and shared by
   /// GroupListScreen's own row taps rather than duplicating this.
   Future<void> _openGroup(GroupRow row) async {
     await _db.recordGroupOpened(row.id, serverUrl: row.serverUrl);
+    try {
+      await SettingsService().setReopenLastGroup(true);
+    } catch (e, st) {
+      ErrorReporter.instance.report(e, st, operation: 'Remembering the last screen');
+    }
     if (!mounted) return;
     final client = widget.clientFactory?.call(row.serverUrl) ??
         SpliitClient(baseUrl: row.serverUrl);
@@ -396,6 +411,6 @@ class _RootState extends State<AppRoot> {
     if (!_checked) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    return GroupListScreen(db: _db);
+    return GroupListScreen(db: _db, clientFactory: widget.clientFactory);
   }
 }

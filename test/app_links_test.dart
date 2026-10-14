@@ -162,6 +162,51 @@ void main() {
     expect(find.byType(JoinGroupScreen), findsNothing);
     await dispose(tester);
   });
+
+  group('a launch starts where the app was left (#316)', () {
+    setUp(() async {
+      await db.cacheGroup(
+          const Group(id: 'g1', name: 'Trip', currency: '€', participants: []));
+      await db.recordGroupOpened('g1', serverUrl: 'https://spliit.app');
+    });
+
+    // A new launch: the app's link stream is a fresh one.
+    Future<void> relaunch(WidgetTester tester) async {
+      await dispose(tester);
+      // Not awaited: its done event goes to a listener that's gone.
+      unawaited(links.close());
+      links = StreamController<Uri>();
+      await mount(tester);
+    }
+
+    Future<bool?> reopen() async =>
+        (await SharedPreferences.getInstance()).getBool('reopen_last_group');
+
+    testWidgets('in the last group, as before, on an install from before #316', (tester) async {
+      await mount(tester);
+      expect(find.byType(GroupScreen), findsOneWidget);
+      await dispose(tester);
+    });
+
+    testWidgets('on the list, once the user went back to it', (tester) async {
+      await mount(tester);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(await reopen(), isFalse);
+
+      await relaunch(tester);
+      expect(find.byType(GroupScreen), findsNothing);
+      expect(find.byType(GroupListScreen), findsOneWidget);
+
+      // Opening a group from the list: the next launch is in it again.
+      await tester.tap(find.text('Trip'));
+      await tester.pumpAndSettle();
+      expect(await reopen(), isTrue);
+      await relaunch(tester);
+      expect(find.byType(GroupScreen), findsOneWidget);
+      await dispose(tester);
+    });
+  });
 }
 
 class _JoinClient extends SpliitClient {

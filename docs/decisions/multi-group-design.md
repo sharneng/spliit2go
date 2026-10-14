@@ -8,7 +8,7 @@ Backlog item 4 (multiple groups) was put on hold because it touches the cache sc
 
 1. **Server URL is per-group, not global.** Each joined group carries its own server URL alongside its group id, so a device can have groups on Kenneth's self-hosted instance and on spliit.app (or anyone else's instance) at the same time.
 2. **Active user ("who am I") is per-group, with a global default that auto-fills it.** A device-wide preferred name is kept; when a group is opened (or just joined) with no active-user choice recorded for *that* group yet, and exactly one of its participants matches the global default name, it's auto-selected and saved as that group's choice — no prompt. Otherwise (no global default yet, or no matching participant), the existing "Active user" picker prompts for that specific group, and the pick is saved per-group.
-3. **Launch jumps straight to the last-used group**, not a group list — preserves today's one-tap-to-expenses flow for the common case of mostly living in one group. A switcher gets you to the full list. **Revised by #12 (see Implementation notes): this is now achieved by pushing the last-used group's screen on top of the group list right after launch, rather than by making the group screen itself the app's root/`home:`.** The one-tap-to-expenses outcome is unchanged; only how it's wired changed.
+3. **Launch jumps straight to the last-used group**, not a group list — preserves today's one-tap-to-expenses flow for the common case of mostly living in one group. A switcher gets you to the full list. **Revised by #12 (see Implementation notes): this is now achieved by pushing the last-used group's screen on top of the group list right after launch, rather than by making the group screen itself the app's root/`home:`.** The one-tap-to-expenses outcome is unchanged; only how it's wired changed. **Revised by [#316](https://github.com/sharneng/spliit2go/issues/316) (2026-10-14): only if the app was left in a group.** If the user had gone back to the list, the app starts on the list.
 
 ## Current state (verified from code, not assumed)
 
@@ -119,6 +119,14 @@ Joining on Android failed with "type 'Null' is not a subtype of type 'Map<String
 - `fetchGroup` throws `GroupNotFoundException` for an explicit `{group: null}`, and Join says "No group with that link was found on <server>".
 - `parseGroupUrl` takes the first `http(s)://` link out of surrounding text (or the word holding `/groups/` when there's no scheme), and ends the id at the first character a Spliit id can't contain (nanoids: letters, digits, `_`, `-`).
 - A missing group is a user error: guidance only, no log or details. Only the explicit `{group: null}` means missing; any other shape is a malformed response. Kenneth's question about seeing full errors on the phone became an app-wide policy: see [error-handling.md](error-handling.md).
+
+## Starting where the app was left (2026-10-14, issue #316)
+
+Launch reopened the last group even when the user had gone back to the list before leaving the app. Kenneth's rule: the list counts as a place the user can be, like a group, so a launch starts on whichever was in front.
+
+- `SettingsService.reopenLastGroup` is on while a group is open and off once the list is back in front. Opening a group sets it: `_Root._openGroup` (launch, app links) and `GroupListScreen._openGroup`. The list's `didPopNext` clears it, so any route popped back to the list counts, including Join and App settings.
+- Launch reads it before `mostRecentlyOpenedGroup`. Unset, as on an install from before #316, it reopens the group as before. If it can't be read, the error is reported and the group reopens.
+- It only matters for a fresh start (after the system ended the app, or a restart). Coming back from the background keeps whatever screen was in front.
 
 ## Offering a copied link on Join (2026-10-13, issue #221)
 
