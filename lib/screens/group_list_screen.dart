@@ -135,6 +135,16 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
   @override
   void didPopNext() {
     _load();
+    // Back on the list: a launch starts here (#316).
+    unawaited(_rememberInGroup(false));
+  }
+
+  Future<void> _rememberInGroup(bool inGroup) async {
+    try {
+      await _settings.setReopenLastGroup(inGroup);
+    } catch (e, st) {
+      ErrorReporter.instance.report(e, st, operation: 'Remembering the last screen');
+    }
   }
 
   Future<void> _load() async {
@@ -159,6 +169,7 @@ class _GroupListScreenState extends State<GroupListScreen> with RouteAware {
     await widget.db.recordGroupOpened(row.id, serverUrl: row.serverUrl);
     final client = widget.clientFactory(row.serverUrl);
     final outbox = Outbox(widget.db, client, groupId: row.id);
+    await _rememberInGroup(true);
     if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
