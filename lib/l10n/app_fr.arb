@@ -17,6 +17,7 @@
   "joinGroupJoinFailed": "Impossible de rejoindre le groupe.",
   "joinGroupUrlLabel": "URL du groupe",
   "joinGroupUrlHelper": "Collez l'URL du groupe, p. ex. https://spliit.app/groups/xxxxx",
+  "joinGroupPasteLink": "Coller le lien",
   "joinGroupSubmitButton": "Rejoindre",
   "joinGroupNotFound": "Aucun groupe trouvé avec ce lien sur {server}. Vérifiez le lien et réessayez.",
   "errorTapForDetails": "Touchez pour les détails",

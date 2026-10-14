@@ -17,6 +17,7 @@
   "joinGroupJoinFailed": "无法加入群组。",
   "joinGroupUrlLabel": "群组链接",
   "joinGroupUrlHelper": "粘贴群组链接，例如 https://spliit.app/groups/xxxxx",
+  "joinGroupPasteLink": "粘贴链接",
   "joinGroupSubmitButton": "加入",
   "joinGroupNotFound": "在 {server} 上找不到此链接对应的群组。请核对链接后重试。",
   "errorTapForDetails": "点击查看详情",

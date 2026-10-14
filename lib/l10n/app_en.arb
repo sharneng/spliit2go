@@ -24,6 +24,10 @@
   "joinGroupJoinFailed": "Couldn't join the group.",
   "joinGroupUrlLabel": "Group URL",
   "joinGroupUrlHelper": "Paste the group's URL, e.g. https://spliit.app/groups/xxxxx",
+  "joinGroupPasteLink": "Paste link",
+  "@joinGroupPasteLink": {
+    "description": "Join screen: the button in the empty URL field that pastes a copied link (Android; iOS shows its own Paste button)."
+  },
   "joinGroupSubmitButton": "Join",
   "joinGroupNotFound": "No group with that link was found on {server}. Check the link and try again.",
   "@joinGroupNotFound": {

@@ -16,6 +16,10 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ReceiptScanChannel") {
       ReceiptScanChannel.register(with: registrar)
     }
+    // The Join screen's paste suggestion (#221).
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PasteLink") {
+      PasteLink.register(with: registrar)
+    }
     // The commit this build is from (#176), from the BuildInfo.plist that
     // ios/scripts/write_build_info.sh writes into the app.
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "BuildInfo") {

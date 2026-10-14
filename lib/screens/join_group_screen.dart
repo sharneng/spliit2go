@@ -12,6 +12,7 @@ import 'group_settings_screen.dart';
 import '../widgets/error_message.dart';
 import '../services/error_reporting.dart';
 import '../widgets/bottom_inset.dart';
+import '../widgets/paste_link_button.dart';
 
 /// Joins a group: paste the group's full URL (the same one you'd get
 /// from the webapp's address bar or a share sheet, e.g.
@@ -46,11 +47,16 @@ class JoinGroupScreen extends StatefulWidget {
   /// known ahead of time.
   final SpliitClient Function(String serverUrl) clientFactory;
 
+  /// Whether the clipboard probably holds a link, to offer pasting it
+  /// (#221); overridable for tests.
+  final Future<bool> Function() clipboardHasLink;
+
   JoinGroupScreen(
       {super.key,
       required this.db,
       this.initialUrl,
-      SpliitClient Function(String)? clientFactory})
+      SpliitClient Function(String)? clientFactory,
+      this.clipboardHasLink = clipboardProbablyHasLink})
       : clientFactory = clientFactory ?? ((url) => SpliitClient(baseUrl: url));
 
   @override
@@ -66,8 +72,42 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
   String? _error;
   String? _errorDiagnostics;
 
+  /// A copied link is offered in the empty field (#221): checked on
+  /// opening, and on coming back to the app, as from copying it in the
+  /// browser.
+  bool _clipboardHasLink = false;
+  late final _lifecycle = AppLifecycleListener(onResume: _checkClipboard);
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle;
+    _checkClipboard();
+    _urlController.addListener(_emptyChanged);
+  }
+
+  late bool _empty = widget.initialUrl?.trim().isEmpty ?? true;
+
+  void _emptyChanged() {
+    final empty = _urlController.text.trim().isEmpty;
+    if (empty == _empty) return;
+    setState(() => _empty = empty);
+    if (empty) _checkClipboard();
+  }
+
+  Future<void> _checkClipboard() async {
+    final hasLink = await widget.clipboardHasLink();
+    if (mounted && hasLink != _clipboardHasLink) setState(() => _clipboardHasLink = hasLink);
+  }
+
+  void _pasted(String text) {
+    _urlController.text = text.trim();
+    setState(() => _error = null);
+  }
+
   @override
   void dispose() {
+    _lifecycle.dispose();
     _urlController.dispose();
     super.dispose();
   }
@@ -158,6 +198,12 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
                 decoration: InputDecoration(
                   labelText: context.l10n.joinGroupUrlLabel,
                   helperText: context.l10n.joinGroupUrlHelper,
+                  suffixIcon: _clipboardHasLink && _empty
+                      ? Padding(
+                          padding: const EdgeInsetsDirectional.only(end: 6),
+                          child: Center(widthFactor: 1, child: PasteLinkButton(onPaste: _pasted)),
+                        )
+                      : null,
                 ),
                 keyboardType: TextInputType.url,
                 validator: (v) => (v == null || v.trim().isEmpty)
