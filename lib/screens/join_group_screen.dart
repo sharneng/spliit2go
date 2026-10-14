@@ -101,6 +101,8 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
   }
 
   void _pasted(String text) {
+    // The paste finishes asynchronously, possibly after Join has closed.
+    if (!mounted) return;
     _urlController.text = text.trim();
     setState(() => _error = null);
   }

@@ -26,13 +26,35 @@ Future<bool> clipboardProbablyHasLink() async {
 /// trusts it, where an app's own button reading the clipboard is asked
 /// "Allow Paste?" every time. On Android it's ours: reading there needs
 /// no permission.
-class PasteLinkButton extends StatelessWidget {
+class PasteLinkButton extends StatefulWidget {
   const PasteLinkButton({super.key, required this.onPaste});
 
   final ValueChanged<String> onPaste;
 
   /// Apple's button draws at this size; Android's is an [IconButton].
   static const size = 36.0;
+
+  @override
+  State<PasteLinkButton> createState() => _PasteLinkButtonState();
+}
+
+class _PasteLinkButtonState extends State<PasteLinkButton> {
+  /// The iOS button's channel. The messenger keeps its handler until it's
+  /// removed, and disposing the view doesn't remove it.
+  MethodChannel? _viewChannel;
+
+  @override
+  void dispose() {
+    _viewChannel?.setMethodCallHandler(null);
+    super.dispose();
+  }
+
+  void _viewCreated(int id) {
+    _viewChannel = MethodChannel('com.sharneng.spliit2go/paste_button_$id')
+      ..setMethodCallHandler((call) async {
+        if (call.method == 'pasted' && call.arguments is String) widget.onPaste(call.arguments as String);
+      });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +64,7 @@ class PasteLinkButton extends StatelessWidget {
         // Apple's button speaks for itself.
         container: true,
         child: SizedBox.square(
-          dimension: size,
+          dimension: PasteLinkButton.size,
           child: UiKitView(
             viewType: 'com.sharneng.spliit2go/paste_button',
             creationParams: {
@@ -50,10 +72,7 @@ class PasteLinkButton extends StatelessWidget {
               'foreground': scheme.onPrimary.toARGB32(),
             },
             creationParamsCodec: const StandardMessageCodec(),
-            onPlatformViewCreated: (id) => MethodChannel('com.sharneng.spliit2go/paste_button_$id')
-                .setMethodCallHandler((call) async {
-              if (call.method == 'pasted' && call.arguments is String) onPaste(call.arguments as String);
-            }),
+            onPlatformViewCreated: _viewCreated,
           ),
         ),
       );
@@ -63,7 +82,7 @@ class PasteLinkButton extends StatelessWidget {
       icon: const Icon(Icons.content_paste),
       onPressed: () async {
         final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
-        if (text != null && text.trim().isNotEmpty) onPaste(text);
+        if (mounted && text != null && text.trim().isNotEmpty) widget.onPaste(text);
       },
     );
   }

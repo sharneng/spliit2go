@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/native.dart';
@@ -448,6 +449,48 @@ void main() {
       await pumpJoin(tester, hasLink: [true]);
       expect(find.byType(UiKitView), findsOneWidget);
       expect(paste, findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('a paste that finishes after Join has closed is ignored', (tester) async {
+      final read = Completer<Object?>();
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.getData') return read.future;
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+      await pumpJoin(tester, hasLink: [true]);
+
+      await tester.tap(paste);
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox.shrink());
+      read.complete({'text': 'https://spliit.app/groups/abc'});
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets("iOS: the button's channel is let go with the button", (tester) async {
+      await pumpJoin(tester, hasLink: [true]);
+      final view = tester.widget<UiKitView>(find.byType(UiKitView));
+      view.onPlatformViewCreated!(7);
+      const name = 'com.sharneng.spliit2go/paste_button_7';
+
+      // Answered while there's a handler; no answer once it's gone.
+      Future<bool> answered() async {
+        ByteData? reply;
+        await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+            name,
+            const StandardMethodCodec().encodeMethodCall(const MethodCall('pasted', 'https://spliit.app/groups/abc')),
+            (data) => reply = data);
+        return reply != null;
+      }
+
+      expect(await answered(), isTrue);
+      await tester.pumpAndSettle();
+      expect(find.text('https://spliit.app/groups/abc'), findsOneWidget);
+      // The field has text, so the button is gone, and its channel with it.
+      expect(find.byType(UiKitView), findsNothing);
+      expect(await answered(), isFalse);
+      await tester.pumpWidget(const SizedBox.shrink());
     }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
   });
 }
