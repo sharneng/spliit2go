@@ -12,7 +12,13 @@ ExpenseScreen now delegates calculations/state to ExpenseFormModel, exchange loo
 
 The new group refresh loop also improves startup/resume/manual-refresh behavior and coalesces overlapping triggers **within one screen instance**. However, several screens and background services still write the same cache independently. That boundary remains the principal source of correctness risk. Cached summary fields and full-detail fields can come from different server revisions, and their local write paths do not enforce a common freshness rule.
 
-Eight actionable findings follow. P1 = address before relying on the affected financial/routing behavior; P2 = normal corrective work. Longer-term restructuring is listed separately, with no framework migration proposed.
+Eight actionable findings follow. P1 = address before relying on the affected financial/routing behavior; P2 = normal corrective work; P3 = lower-exposure corrective work. A6 additionally needs resolution before 1.0.0 ships. Longer-term restructuring is listed separately, with no framework migration proposed.
+
+### Reconciliation with PR #319 discussion
+
+This report incorporates [Juno's feedback](https://github.com/sharneng/spliit2go/pull/319#issuecomment-6182047543) and [Ezra's technical follow-up](https://github.com/sharneng/spliit2go/pull/319#issuecomment-6182068754). A5 is promoted to P1 because timezone changes are ordinary travel behavior; A7 is reduced to P3 because exposure requires a local settings read to finish after a split edit. A6 is a release requirement. A1 remains P1 because silently changing pending work's destination requires protection, even with an uncommon clone/restore trigger; a small conflict guard can contain it before a larger identity migration.
+
+Ship local correctness guards before the shared coordinator refactor. A2 now includes the verified upstream optional client-generated expense ID contract, with deployed-server compatibility and retry races explicitly unresolved. The reviewed application revision and eight reproductions are unchanged; these revisions refine remediation, not claim fixes. [Issue #318](https://github.com/sharneng/spliit2go/issues/318) tracks implementation and should remain open when this report merges.
 
 ## Validation and limits
 
@@ -20,7 +26,7 @@ Eight actionable findings follow. P1 = address before relying on the affected fi
 - `flutter build ios --simulator --debug --flavor dev`: **passed**, producing `build/ios/iphonesimulator/Runner.app`. This checks native compilation and flavor integration; it does not verify camera, clipboard prompts, accessibility or gesture behavior on a physical device.
 - Reviewed SDK: Flutter **3.47.6** stable, Dart **3.13.5**.
 - **Eight focused characterization tests passed**, confirming the defective behavior in A1–A8. The first five are the October 9 reproductions, run again unchanged against this revision; three additional tests cover full-detail writes, delayed defaults and Markdown images.
-- The evidence is [architecture_20261014_reproductions_test.dart](architecture_20261014_reproductions_test.dart). These tests deliberately assert the current defects. They stay outside `test/` so normal CI does not require bugs to remain. They should be converted into tests of correct behavior when fixes are implemented.
+- The evidence is [architecture_20261014_reproductions_test.dart](architecture_20261014_reproductions_test.dart). These tests deliberately assert the current defects. They stay outside `test/` so normal test discovery does not require bugs to remain. They are still analyzed: `analysis_options.yaml` does not exclude `docs/`. Keep them compiling as APIs change, then convert them into tests of correct behavior when fixes are implemented.
 - The stale-response/default tests explicitly arrange completion ordering at the model/database boundary. They establish missing invariants; they do not measure how frequently a race occurs on a device. The Markdown test preloads a pixel into Flutter's image cache to avoid actual HTTP, then verifies that rendering creates a NetworkImage without any tap. Dependency source confirms the network behavior on a cache miss.
 - No production group writes, new Android build, physical-device pass, PR review submission, or scheduled follow-up was performed. Android build configuration and CI were inspected. This report and its reproduction file are the only repository changes from this pass.
 
@@ -40,19 +46,23 @@ Groups and expenses are keyed by remote ID alone. Joining the same group ID from
 
 The reproduction still produces one joined row after joining A and B, and observes an A expense POSTed to B through the production join/outbox paths, with fake HTTP.
 
-**Change:** introduce a local joined-group identity, unique on `(canonical server URL, remote group ID)`. Scope remote expense IDs and local references by that identity. Carry the local key through active participant, default split, receipt language, outbox queues, navigation and downloader status. Preserve pending rows during migration. Categories already use server-scoped keys and provide a useful precedent.
+**First fix:** reject a same-ID/different-server join before any `cacheGroup`, `replaceServerExpenses` or `recordGroupOpened` writes. Preserve the existing group's pending expenses and receipt originals. A move to a restored server must be an explicit user decision with defined pending-work handling; a join must not infer permission to reroute it.
 
-This is a storage invariant, not something the redesigned group rows or a per-screen Outbox constructor can enforce.
+**Later, if both copies must coexist:** introduce a local joined-group identity, unique on `(canonical server URL, remote group ID)`. Scope remote expense IDs and local references by that identity. Carry the local key through active participant, default split, receipt language, outbox queues, navigation and downloader status, with a migration preserving pending work. Categories already use server-scoped keys. This migration is not a prerequisite for the conflict guard; a per-screen Outbox constructor alone cannot enforce the storage invariant.
 
 ### A2 — P1: A committed create with a lost response can be created again
 
 References: [lib/sync/outbox.dart:95](https://github.com/sharneng/spliit2go/blob/bdea603c868f0a46988735fbe787cac050d5bf10/lib/sync/outbox.dart#L95), [lib/sync/outbox.dart:124](https://github.com/sharneng/spliit2go/blob/bdea603c868f0a46988735fbe787cac050d5bf10/lib/sync/outbox.dart#L124), [lib/sync/outbox.dart:156](https://github.com/sharneng/spliit2go/blob/bdea603c868f0a46988735fbe787cac050d5bf10/lib/sync/outbox.dart#L156), [lib/api/spliit_client.dart:491](https://github.com/sharneng/spliit2go/blob/bdea603c868f0a46988735fbe787cac050d5bf10/lib/api/spliit_client.dart#L491). Previous finding: **F3, still present**.
 
-The server allocates a create ID, then the app acknowledges it locally. If the server commits and the response is lost, the row stays pending and the next flush submits another create. An app exit or local write failure between remote commit and acknowledgement has the same uncertainty. Per-group flush serialization prevents simultaneous submission of a pending row; it does not deduplicate retries after an unknown result.
+The current client leaves create ID allocation to the server, then acknowledges it locally. If the server commits and the response is lost, the row stays pending and the next flush submits another create. An app exit or local write failure between remote commit and acknowledgement has the same uncertainty. Per-group flush serialization prevents simultaneous submission of a pending row; it does not deduplicate retries after an unknown result.
 
 The reproduction again records two accepted creates from two flushes after losing the first response. The recent change that preserves retry count for connection failures is sensible for genuinely offline work, but makes distinguishing an unknown create outcome more important: those failures no longer consume the automatic retry limit.
 
-**Change:** persist operation identity and an explicit uncertain-outcome state. Prefer an upstream-supported idempotency key. Without that support, define reconciliation/user verification before automatically repeating an ambiguous create; matching expense contents is insufficient proof, because two identical purchases can be legitimate. Keep definite validation rejection, definitely-unsent work, and unknown remote commit separate. Apply the same reasoning to group creation. Do not describe retry serialization as exactly-once delivery.
+**Change:** persist operation identity before the first send and represent uncertain outcomes explicitly. Upstream commit [`5f75ec8`](https://github.com/spliit-app/spliit/blob/5f75ec84d63669768b2baf85510aacbaa742eac4/src/trpc/routers/groups/expenses/create.procedure.ts) accepts an optional `expenseId` matching `^[A-Za-z0-9_-]{21}$`; [its create implementation](https://github.com/spliit-app/spliit/blob/5f75ec84d63669768b2baf85510aacbaa742eac4/src/lib/api.ts#L35) uses that ID for the inserted expense. On deployments known to honor this contract, mint and persist a compatible ID when queuing, reuse it on every attempt, and reconcile by that ID before retrying an unknown outcome. A matching committed expense can be acknowledged locally. A missing result does not establish that the first request finished: a retry can race it, so reconcile an ID-collision response too.
+
+Verify support per deployment, including spliit.app; source support alone does not establish deployed behavior. Older servers that ignore/strip the field still require an explicit uncertain-outcome fallback, not a claim that passing an ID prevents duplication. Upstream logs activity before inserting the expense: stable IDs can prevent duplicate expense rows on supporting servers, but do not guarantee one activity entry or whole-endpoint idempotency. No production writes were used to check compatibility.
+
+Keep definite validation rejection, definitely-unsent work and unknown remote commit separate. Matching contents is insufficient proof because identical purchases can be legitimate. Apply the same uncertainty reasoning to group creation, whose client-ID contract is not established here. Do not describe retry serialization as exactly-once delivery.
 
 ### A3 — P1: Create acknowledgement does not invalidate older list snapshots
 
@@ -62,7 +72,7 @@ References: [lib/db/app_database.dart:697](https://github.com/sharneng/spliit2go
 
 The database reproduction still accepts an empty pre-create snapshot and removes the acknowledged row. The new GroupScreen sync loop materially reduces the original same-screen interleaving. It does not establish a per-group invariant: BalancesScreen still performs its own flush/list replacement, and separate GroupScreen instances have separate `_syncRun` fields. GroupScreen's snapshot guard cannot protect those other writers.
 
-**Change:** advance the mutation generation on successful create acknowledgement, including the no-parsed-server-ID path. Put list fetching, acknowledgement and snapshot acceptance behind one coordinator per local joined-group key. All entry points, including settlement and deep-link routes, should use it. Keep the existing edit/delete protection and add delayed-create/list interleaving tests. A SQLite watch stream updates presentation; it does not order network results.
+**First fix:** advance the mutation generation on successful create acknowledgement, including the no-parsed-server-ID path, using the pending row's group identity. Keep the existing edit/delete protection and add delayed-create/list interleaving regression tests. This database fix does not require a coordinator refactor. Later, put list fetching, acknowledgement and snapshot acceptance behind one coordinator per local joined-group key, including settlement and deep-link routes. A SQLite watch stream updates presentation; it does not order network results.
 
 ### A4 — P2: Delayed full-detail responses can overwrite newer cached data
 
@@ -74,11 +84,13 @@ The reproduction applies a newer summary with title “Edited” and two receipt
 
 There is a related write gap: `_saveEdit` acknowledges the server and caches documents, but does not write the submitted notes/rate/core values back as one coherent expense. If the subsequent read fails, especially when a favorite retains previously known details, the local copy can keep the previous values despite a successful edit.
 
-**Change:** treat summary/detail reads and mutation acknowledgements as repository operations with explicit freshness/field-presence semantics. Capture a local mutation generation before full reads, reject results invalidated by a local edit/delete, and order competing reads. Store the successful edit's submitted snapshot locally, in one transaction, instead of depending on another network read to repair it. Preserve a distinction between unknown details and known empty notes; a default empty field in a list DTO is not evidence that a note was deleted.
+**First fixes:** capture a local mutation generation before every full-detail read and reject invalidated responses at cache acceptance. Also store the successful edit's submitted snapshot, including notes/rate, locally in one transaction instead of depending on another network read to repair it. These fixes can land before repository restructuring.
+
+Then order competing reads and give summary/detail reads and mutation acknowledgements common freshness/field-presence semantics. A mutation-generation guard alone does not order two reads with no intervening local mutation. Preserve a distinction between unknown details and known empty notes; a default empty field in a list DTO is not evidence that a note was deleted.
 
 Local generations prevent this device's stale writes; they do not provide upstream edit-conflict prevention or an upstream server version that does not exist.
 
-### A5 — P2: Calendar dates still change meaning after a timezone change
+### A5 — P1: Calendar dates still change meaning after a timezone change
 
 References: [lib/db/app_database.dart:38](https://github.com/sharneng/spliit2go/blob/bdea603c868f0a46988735fbe787cac050d5bf10/lib/db/app_database.dart#L38), [lib/db/app_database.dart:1217](https://github.com/sharneng/spliit2go/blob/bdea603c868f0a46988735fbe787cac050d5bf10/lib/db/app_database.dart#L1217), [lib/services/date_only.dart:42](https://github.com/sharneng/spliit2go/blob/bdea603c868f0a46988735fbe787cac050d5bf10/lib/services/date_only.dart#L42), [lib/services/exchange_rates.dart:151](https://github.com/sharneng/spliit2go/blob/bdea603c868f0a46988735fbe787cac050d5bf10/lib/services/exchange_rates.dart#L151). Previous finding: **F4, still present**.
 
@@ -86,7 +98,9 @@ API date-only conversion is correct, but expense dates are then persisted as epo
 
 The reproduction persists the exact epoch of October 9 New York midnight and reads it in a Los Angeles test process; the day is October 8. It simulates the persisted epoch across timezone contexts, rather than changing a live device's timezone.
 
-**Change:** represent an expense's calendar date explicitly, with a timezone-independent SQLite encoding such as `YYYY-MM-DD`. The new exchange-rate cache already uses day strings, a useful local precedent. Keep activity/creation/refreshed timestamps as instants. Plan recovery of existing rows: remote-backed dates can be refreshed, but the old epoch does not preserve the original timezone needed to recover every pending date perfectly.
+**Change:** represent an expense's calendar date with a timezone-independent encoding. Either `YYYY-MM-DD` (as in the rate cache) or a documented UTC-midnight epoch convention can work; a text-column migration is not mandatory. With UTC-midnight storage, centralize decoding across all database read paths: Drift 2.35.0 reconstructs integer dates as local DateTimes, so recover the instant with `.toUtc()` before extracting calendar fields (for example, before `dateOnlyFromUtcMidnight`). Merely writing UTC values does not fix local decoding. Keep activity/creation/refreshed timestamps as instants.
+
+Use a versioned migration to distinguish old local-midnight values from the new convention. Remote-backed dates can be refreshed, but old epochs do not preserve the original timezone needed to recover every pending date perfectly. Current-timezone recovery is a heuristic, not lossless migration; preserve pending originals and document/handle ambiguity. This is P1 because travel is a normal use case and the queued outgoing date can change.
 
 ### A6 — P2: Markdown rendering adds automatic external image requests
 
@@ -96,15 +110,15 @@ NotesText passes group-provided Markdown directly to MarkdownBody without an ima
 
 The widget reproduction confirms construction of an external NetworkImage merely by rendering the note. Its pixel is pre-cached in the test, so no request actually leaves the test process. This behavior bypasses the app's explicit API/receipt/rate services, their cache policies and their error classification. It also introduces an additional network destination beyond the Spliit storage and Frankfurter destinations described by the privacy policy. The marker is controlled by the note's author; it is not reader permission to contact arbitrary hosts.
 
-**Change:** define the supported Markdown subset and an explicit image/URL policy. A small default is to render image alt text or a load/open action and fetch only after the reader requests it. If remote images are intentionally supported automatically, route them through an explicit service with scheme, network, caching and error policies, and update the product/privacy description. Keep the selectable text/link behavior. Audit allowed link schemes separately rather than accepting every URI merely because it has a scheme.
+**Change before 1.0.0 ships:** supply a non-fetching image builder that renders alt text with an optional explicit open action in both note display and preview. Allow only intended link schemes (for example HTTP/HTTPS), preserving selectable text/link behavior. This small containment fix needs no new network service or coordinator. If automatic remote images are later chosen as product behavior, define their network/cache/error policy and update privacy documentation before enabling them. The current privacy description does not disclose these requests.
 
-### A7 — P2: A delayed default split overwrites edits already made in the form
+### A7 — P3: A delayed default split overwrites edits already made in the form
 
 References: [lib/screens/expense_screen.dart:328](https://github.com/sharneng/spliit2go/blob/bdea603c868f0a46988735fbe787cac050d5bf10/lib/screens/expense_screen.dart#L328), [lib/screens/expense_form/expense_form_model.dart:587](https://github.com/sharneng/spliit2go/blob/bdea603c868f0a46988735fbe787cac050d5bf10/lib/screens/expense_form/expense_form_model.dart#L587). **Current async initialization boundary.**
 
 The form is usable before `defaultSplitFor` finishes. Its completion calls `applyDefaultSplit` unconditionally. The model computes `unchanged = !hasChanges`, but only uses it to decide whether to reset the dirty baseline; it still replaces the selected split mode, inclusion and values when the user has already changed them.
 
-The reproduction enters an amount split of 9/1, then completes a remembered “Alice only, evenly” default. The chosen 9/1 split is replaced by a one-person split. Database latency determines exposure; the test arranges completion ordering directly rather than measuring device frequency.
+The reproduction enters an amount split of 9/1, then completes a remembered “Alice only, evenly” default. The chosen 9/1 split is replaced by a one-person split. Exposure requires a local primary-key read to finish after user split edits; ordinary completion is expected to be fast, although device latency was not measured. The deterministic reproduction proves the missing guard, not common incidence. P3 reflects this lower exposure; the cheap guard can accompany the first fixes.
 
 **Change:** capture a split-edit revision before the async read and apply the result only if that revision is unchanged, or pass the default into model construction after loading it. Do not use whole-form dirty state alone: typing a title should not necessarily prevent a default from filling an untouched split, while any split/kind change should. The rate lookup's request/edit counters demonstrate the right pattern already present in this feature.
 
@@ -112,11 +126,11 @@ The reproduction enters an amount split of 9/1, then completes a remembered “A
 
 References: [lib/api/spliit_client.dart:149](https://github.com/sharneng/spliit2go/blob/bdea603c868f0a46988735fbe787cac050d5bf10/lib/api/spliit_client.dart#L149), [lib/api/spliit_client.dart:187](https://github.com/sharneng/spliit2go/blob/bdea603c868f0a46988735fbe787cac050d5bf10/lib/api/spliit_client.dart#L187), [lib/api/spliit_client.dart:544](https://github.com/sharneng/spliit2go/blob/bdea603c868f0a46988735fbe787cac050d5bf10/lib/api/spliit_client.dart#L544), [lib/services/exchange_rates.dart:313](https://github.com/sharneng/spliit2go/blob/bdea603c868f0a46988735fbe787cac050d5bf10/lib/services/exchange_rates.dart#L313). Previous finding: **F6, still present**.
 
-Increasing expense pages to 100 is a useful reduction in round trips. It does not stop a server returning `hasMore: true` with a missing/repeated cursor: the client repeats the first or current page and keeps allocating results. The repeated-cursor reproduction still sends identical requests until the fake server deliberately stops it.
+Increasing expense pages to 100 is a useful reduction in round trips. It does not stop a server returning `hasMore: true` with a missing/repeated cursor: the client repeats the first or current page and keeps allocating results. The repeated-cursor reproduction still sends identical requests until the fake server deliberately stops it. This is a defensive protocol guard; no misbehaving production server was observed.
 
 Most core tRPC operations still lack application deadlines. One hanging create blocks the serialized group outbox and the screen's new `_syncRun`, so further refresh/reconnect triggers cannot recover it. Exchange rates, receipt PUTs and receipt downloads have deadlines already, but the common API transport does not.
 
-**Change:** define bounded transport operations, cancellation ownership and error conversion in one place. Reject missing/visited opaque cursors when more pages are claimed; do not assume every deployment uses numeric cursors. Tie mutation timeout handling to A2's uncertain-outcome state, rather than interpreting timeout as proof no create occurred.
+**Change:** prioritize read deadlines, with bounded transport operations, cancellation ownership and error conversion in one place. Add the small defensive check rejecting missing/visited opaque cursors when more pages are claimed; do not assume every deployment uses numeric cursors. Read bounds and cursor checks can land independently of the coordinator. Tie mutation timeout/retry handling to A2's uncertain-outcome contract, rather than interpreting timeout as proof no create occurred.
 
 ## What changed since the previous review
 
@@ -169,7 +183,7 @@ flowchart TD
   Outbox --> DB
 ```
 
-A per-joined-group repository/session coordinator should own refresh sequencing, local mutation acknowledgement, detail-read acceptance and outbox entry points. Widgets should request operations and observe state. This directly addresses A3/A4 and removes duplicate settlement refresh logic and the no-op Balances RefreshIndicator (`onRefresh: () async {}` at [lib/screens/balances_screen.dart:261](https://github.com/sharneng/spliit2go/blob/bdea603c868f0a46988735fbe787cac050d5bf10/lib/screens/balances_screen.dart#L261)). Keep the agreed foreground/open-group scheduling policy unless the product decision changes.
+A per-joined-group repository/session coordinator should eventually own refresh sequencing, local mutation acknowledgement, detail-read acceptance and outbox entry points. Widgets should request operations and observe state. Land the small A3/A4 correctness fixes first; this refactor is follow-up work, not their prerequisite. It can consolidate those invariants and remove duplicate settlement refresh logic and the no-op Balances RefreshIndicator (`onRefresh: () async {}` at [lib/screens/balances_screen.dart:261](https://github.com/sharneng/spliit2go/blob/bdea603c868f0a46988735fbe787cac050d5bf10/lib/screens/balances_screen.dart#L261)). Keep the agreed foreground/open-group scheduling policy unless the product decision changes.
 
 Separate **summary** and **detail** response mapping, or carry explicit field presence: list DTO defaults currently look like real empty notes/null rates even when those fields were not returned. A stored `detailsFetchedAt` alone cannot establish that details correspond to the current summary. An expense-detail state should distinguish unknown, loading, known empty, known value, stale and failed. In particular, an unexpected full-read failure on a zero-receipt expense can currently leave no Notes error at all: `_maybeFetchDetails` records diagnostic presentation only for unknown documents, while the offline note hint is restricted to connection failures. This is an inspected state-model gap, not one of the eight executed reproductions.
 
@@ -215,9 +229,9 @@ Pin a tested Flutter SDK in CI and document upgrades. Add an iOS compile job for
 
 ## Recommended work sequence
 
-1. **Protect persisted data and create delivery.** Plan scoped group/expense keys (A1), uncertain create outcomes (A2), create invalidation (A3) and calendar-date migration (A5). Use released-schema fixtures and preserve pending originals/expenses.
-2. **Make one coherent expense write/read path.** Introduce the shared group/expense operation owner, then route settlement saves, edit acknowledgement, list refresh and full-detail fills through it (A3/A4). Include failed read/write recovery; preserve the current UI model/cards.
-3. **Fix small independent boundaries.** Guard late defaults by split revision (A7), define Markdown remote-content policy (A6), and add API deadlines/pagination progress checks with A2-aware timeout semantics (A8).
-4. **Follow with structural cleanup.** Explicit service lifetime, the three dependency seams, schema/query separation, list summary projection, accurate receipt budget/usage, and reproducible native checks.
+1. **Land small correctness fixes.** Create acknowledgement invalidation (A3), non-fetching Markdown images before 1.0.0 ships (A6), split-revision default guard (A7), full-detail mutation-generation guard and successful-edit snapshot persistence (A4), and a same-ID/different-server join conflict guard before any cache writes (A1). None requires the coordinator or a scoped-key migration.
+2. **Fix calendar persistence while checking create compatibility.** Implement A5 with released-schema fixtures, consistent read/write conversion and a versioned recovery policy preserving pending originals/expenses. In parallel, establish A2's client-ID support per deployed server, including spliit.app; do not infer support solely from upstream source.
+3. **Implement create reconciliation and remaining API bounds.** Persist stable compatible expense IDs, reconcile unknown outcomes and concurrent ID conflicts, and define fallback for unsupported servers (A2). Read deadlines/cursor checks (A8) can land independently; mutation timeouts need A2-aware semantics.
+4. **Consolidate ownership, then clean up structure.** Introduce the shared group/expense operation owner and competing-read ordering (A3/A4). Add scoped identities if cross-server coexistence is needed (A1). Follow with explicit service lifetimes, the three dependency seams, schema/query separation, list summary projection, local error recovery, accurate receipt budget/usage, and reproducible native checks. Preserve the current UI model/cards and foreground/open-group sync policy.
 
 Each correctness change should replace the corresponding characterization assertion with a regression test of the intended invariant. Keep the October 9 report as history; use this report's commit-pinned references for current follow-up work.
