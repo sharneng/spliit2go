@@ -92,4 +92,46 @@ void main() {
     expect(opened, [Uri.parse('https://example.test/b')]);
     expect(find.text("Couldn't open https://example.test/b."), findsOneWidget);
   });
+
+  testWidgets('a markdown link to another scheme isn\'t opened', (tester) async {
+    final opened = await pump(tester, '$markdownMarker\n[Call](tel:+15551234) or [file](file:///etc/hosts)');
+
+    final body = tester.widget<MarkdownBody>(find.byType(MarkdownBody));
+    body.onTapLink!('Call', 'tel:+15551234', '');
+    await tester.pump();
+    expect(opened, isEmpty);
+    expect(find.text("Couldn't open tel:+15551234."), findsOneWidget);
+  });
+
+  // #325: showing a note mustn't contact the host of an image in it.
+  testWidgets('a markdown image shows its alt text, not the image', (tester) async {
+    final opened = await pump(tester, '$markdownMarker\nReceipt: ![the receipt](https://external.test/r.png)');
+
+    expect(find.byType(Image), findsNothing);
+    expect(find.text('the receipt'), findsOneWidget);
+    expect(opened, isEmpty);
+
+    await tester.tap(find.byTooltip('Open image'));
+    await tester.pump();
+    expect(opened, [Uri.parse('https://external.test/r.png')]);
+  });
+
+  testWidgets('an image without alt text says Image; one that isn\'t on the web has no open button',
+      (tester) async {
+    await pump(tester, '$markdownMarker\n![](https://external.test/a.png)\n\n![local](file:///tmp/b.png)');
+
+    expect(find.byType(Image), findsNothing);
+    expect(find.text('Image'), findsOneWidget);
+    expect(find.text('local'), findsOneWidget);
+    expect(find.byTooltip('Open image'), findsOneWidget);
+  });
+
+  testWidgets('an image inside a link: its text opens the link', (tester) async {
+    final opened = await pump(tester, '$markdownMarker\n[![badge](https://external.test/b.svg)](https://example.test/ci)');
+
+    expect(find.byType(Image), findsNothing);
+    await tester.tap(find.text('badge'));
+    await tester.pump();
+    expect(opened, [Uri.parse('https://example.test/ci')]);
+  });
 }

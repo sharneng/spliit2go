@@ -141,6 +141,8 @@
   "expenseNotesEdit": "编辑",
   "expenseNotesPreview": "预览",
   "expenseNotesPreviewEmpty": "暂无可预览的内容",
+  "expenseNotesImage": "图片",
+  "expenseNotesOpenImage": "打开图片",
   "expenseNotesTooLong": "超出 {count} 个字符",
   "expenseNotesWhenOnline": "联网后可查看",
   "expenseSaveButton": "保存",

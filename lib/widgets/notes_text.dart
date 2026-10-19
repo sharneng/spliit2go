@@ -18,6 +18,12 @@ Future<bool> _openExternally(Uri url) async {
   }
 }
 
+/// The schemes a note's link may open: web addresses, as in a plain note.
+/// A markdown link to tel:, file: or an app's own scheme isn't opened.
+const _linkSchemes = {'http', 'https'};
+
+bool _opensLink(Uri url) => _linkSchemes.contains(url.scheme.toLowerCase());
+
 /// A web address in a plain note: from http(s):// to the next space.
 final _link = RegExp(r'https?://[^\s<>"]+', caseSensitive: false);
 
@@ -42,7 +48,8 @@ String _withoutTrailing(String address) {
 
 /// An expense's notes (#311): markdown when [isMarkdownNote], else as
 /// written, its web addresses tappable either way. Selectable, as notes
-/// were before.
+/// were before. A markdown image is never downloaded (#325): it shows as
+/// its alt text, with a button that opens a web image in the browser.
 class NotesText extends StatefulWidget {
   const NotesText(this.notes, {super.key, this.openLink = _openExternally});
 
@@ -71,11 +78,36 @@ class _NotesTextState extends State<NotesText> {
 
   Future<void> _open(String href) async {
     final url = Uri.tryParse(href);
-    final opened = url != null && url.hasScheme && await widget.openLink(url);
+    final opened = url != null && _opensLink(url) && await widget.openLink(url);
     if (!opened && mounted) {
       ScaffoldMessenger.maybeOf(context)
           ?.showSnackBar(SnackBar(content: Text(context.l10n.aboutLinkFailed(href))));
     }
+  }
+
+  /// [MarkdownBody.imageBuilder]: the image's alt text instead of the
+  /// image, so showing a note contacts no one. Inside a link, a tap on the
+  /// text still opens the link.
+  Widget _image(Uri uri, String? title, String? alt) {
+    final theme = Theme.of(context);
+    final l10n = context.l10n;
+    final secondary = theme.colorScheme.onSurfaceVariant;
+    final label = alt?.trim() ?? '';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.image_outlined, size: 18, color: secondary),
+        const SizedBox(width: 4),
+        Flexible(child: Text(label.isEmpty ? l10n.expenseNotesImage : label)),
+        if (_opensLink(uri))
+          IconButton(
+            icon: const Icon(Icons.open_in_new, size: 18),
+            tooltip: l10n.expenseNotesOpenImage,
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _open(uri.toString()),
+          ),
+      ],
+    );
   }
 
   @override
@@ -89,6 +121,7 @@ class _NotesTextState extends State<NotesText> {
         // Line breaks as written, as in a plain note.
         softLineBreak: true,
         styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(a: linkStyle),
+        imageBuilder: _image,
         onTapLink: (text, href, title) {
           if (href != null) _open(href);
         },
