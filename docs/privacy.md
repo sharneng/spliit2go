@@ -1,6 +1,6 @@
 # Spliit2Go privacy policy
 
-Last updated on October 13, 2026.
+Last updated on October 19, 2026.
 
 Spliit2Go is an unofficial, community-made mobile app for [Spliit](https://spliit.app), the free and open-source app for sharing expenses. It isn't affiliated with or endorsed by the Spliit project. Its source code is public at [github.com/sharneng/spliit2go](https://github.com/sharneng/spliit2go). This policy describes what the app keeps on your phone, what leaves it, and where it goes.
 
@@ -61,7 +61,7 @@ Scan receipt uses Apple's VisionKit and Vision, which are part of iOS and run on
 - **Camera and photos:** only when you take or choose a receipt photo.
 - **Internet:** to talk to your Spliit servers and to Frankfurter.
 
-Sharing a group's link goes through your phone's share sheet, only when you tap Share. Links on the About screen open in your browser.
+Sharing a group's link goes through your phone's share sheet, only when you tap Share. Links on the About screen, and web links and images in expense notes, open in your browser only when you tap them: the app never downloads an image in a note.
 
 ## Keeping and removing your data
 

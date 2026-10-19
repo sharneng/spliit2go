@@ -141,6 +141,8 @@
   "expenseNotesEdit": "Modifier",
   "expenseNotesPreview": "Aperçu",
   "expenseNotesPreviewEmpty": "Rien à afficher pour l’instant",
+  "expenseNotesImage": "Image",
+  "expenseNotesOpenImage": "Ouvrir l’image",
   "expenseNotesTooLong": "{count, plural, =1{1 caractère de trop} other{{count} caractères de trop}}",
   "expenseNotesWhenOnline": "Disponible une fois en ligne",
   "expenseSaveButton": "Enregistrer",

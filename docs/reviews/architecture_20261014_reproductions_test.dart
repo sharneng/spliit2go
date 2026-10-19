@@ -1,11 +1,5 @@
-import 'dart:ui' as ui;
-
-import 'package:flutter/foundation.dart' show SynchronousFuture;
-import 'package:flutter/material.dart';
 import 'package:spliit2go/screens/expense_form/expense_form_model.dart';
 import 'package:spliit2go/models/default_split.dart';
-import 'package:spliit2go/widgets/notes_text.dart';
-import 'package:spliit2go/utils/markdown_note.dart';
 
 import 'dart:convert';
 
@@ -268,34 +262,5 @@ void main() {
     expect(model.paidFor()!.map((s) => s.participantId), ['p1']);
   });
 
-  testWidgets(
-    'opening a Markdown note constructs an external NetworkImage without a tap',
-    (tester) async {
-      const address = 'https://external.test/tracking.png';
-      const provider = NetworkImage(address);
-      // A cached pixel avoids all actual HTTP traffic in this characterization test.
-      final recorder = ui.PictureRecorder();
-      ui.Canvas(recorder)
-          .drawColor(const ui.Color(0xff000000), ui.BlendMode.src);
-      final pixel = recorder.endRecording().toImageSync(1, 1);
-      final cache = PaintingBinding.instance.imageCache;
-      cache.putIfAbsent(
-        provider,
-        () => OneFrameImageStreamCompleter(
-          SynchronousFuture(ImageInfo(image: pixel)),
-        ),
-      );
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: NotesText('$markdownMarker\n![tracking]($address)'),
-          ),
-        ),
-      );
-      final image = tester.widget<Image>(find.byType(Image));
-      expect(image.image, provider);
-      await tester.pumpWidget(const SizedBox.shrink());
-      cache.evict(provider);
-    },
-  );
+  // A6's Markdown image case is now test/widgets/notes_text_test.dart (#325).
 }

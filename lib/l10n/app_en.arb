@@ -188,6 +188,8 @@
   "expenseNotesEdit": "Edit",
   "expenseNotesPreview": "Preview",
   "expenseNotesPreviewEmpty": "Nothing to preview yet",
+  "expenseNotesImage": "Image",
+  "expenseNotesOpenImage": "Open image",
   "expenseNotesTooLong": "{count, plural, =1{1 character too long} other{{count} characters too long}}",
   "@expenseNotesTooLong": {"description": "Under the notes field when the note as saved, the markdown marker line included (#311), is over Spliit's 5,000 characters.", "placeholders": {"count": {"type": "int"}}},
   "expenseNotesWhenOnline": "Available when online",
