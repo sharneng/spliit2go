@@ -134,4 +134,19 @@ void main() {
     await tester.pump();
     expect(opened, [Uri.parse('https://example.test/ci')]);
   });
+
+  // #330: and it looks like one, unlike an image that isn't in a link.
+  testWidgets('an image inside a link has its alt text styled as the link', (tester) async {
+    await pump(tester,
+        '$markdownMarker\n[![badge](https://external.test/b.svg#20x20)](https://example.test/ci)\n\n![plain](https://external.test/b.svg)');
+
+    final primary = Theme.of(tester.element(find.text('badge'))).colorScheme.primary;
+    final badge = tester.widget<Text>(find.text('badge')).style;
+    expect(badge?.decoration, TextDecoration.underline);
+    expect(badge?.color, primary);
+    expect(tester.getSemantics(find.text('badge')), isSemantics(isLink: true, label: 'badge'));
+
+    final plain = tester.widget<Text>(find.text('plain')).style;
+    expect(plain?.decoration, isNot(TextDecoration.underline));
+  });
 }
