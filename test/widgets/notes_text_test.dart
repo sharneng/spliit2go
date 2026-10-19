@@ -135,6 +135,43 @@ void main() {
     expect(opened, [Uri.parse('https://example.test/ci')]);
   });
 
+  /// The alt texts styled as a link, in order.
+  List<bool> linkStyled(WidgetTester tester, String alt) => [
+        for (final text in tester.widgetList<Text>(find.text(alt)))
+          text.style?.decoration == TextDecoration.underline,
+      ];
+
+  // PR #332 review: the same address and alt text in and out of a link.
+  testWidgets('the same image in and out of a link: only the linked one looks like a link', (tester) async {
+    final opened = await pump(tester,
+        '$markdownMarker\n![logo](https://external.test/l.png)\n\n[![logo](https://external.test/l.png)](https://example.test/home)\n\n![logo](https://external.test/l.png)');
+
+    expect(linkStyled(tester, 'logo'), [false, true, false]);
+    await tester.tap(find.text('logo').first);
+    await tester.pump();
+    expect(opened, isEmpty);
+  });
+
+  testWidgets('still in step when the theme changes and the note is parsed again', (tester) async {
+    const notes = '$markdownMarker\n[![logo](https://external.test/l.png)](https://example.test/home)\n\n![logo](https://external.test/l.png)';
+    Widget app(Brightness brightness) => MaterialApp(
+          theme: ThemeData(brightness: brightness),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: NotesText(notes)),
+        );
+    await tester.pumpWidget(app(Brightness.light));
+    expect(linkStyled(tester, 'logo'), [true, false]);
+
+    await tester.pumpWidget(app(Brightness.dark));
+    await tester.pumpAndSettle();
+    expect(linkStyled(tester, 'logo'), [true, false]);
+    await tester.pumpWidget(app(Brightness.light));
+    await tester.pumpAndSettle();
+    expect(linkStyled(tester, 'logo'), [true, false]);
+  });
+
   // #330: and it looks like one, unlike an image that isn't in a link.
   testWidgets('an image inside a link has its alt text styled as the link', (tester) async {
     await pump(tester,

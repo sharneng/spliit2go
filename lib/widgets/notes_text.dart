@@ -49,19 +49,20 @@ String _withoutTrailing(String address) {
   return address.substring(0, end);
 }
 
-/// The images inside a link in [markdown], as their address and alt text,
-/// the way [MarkdownBody.imageBuilder] gets them: its builder isn't told
-/// which are (#330). Parsed as [MarkdownBody] parses, GitHub flavored.
-Set<(String, String)> _linkedImages(String markdown) {
+/// Whether each image in [markdown] is inside a link, in document order
+/// (#330): [MarkdownBody.imageBuilder] isn't told, and an address and alt
+/// text don't identify one (PR #332 review: the same image can be both in
+/// and out of a link). Parsed as [MarkdownBody] parses, GitHub flavored,
+/// and like its builder, skipping an address that doesn't parse: it calls
+/// imageBuilder once for each of the rest, in this order.
+List<bool> _imagesInLinks(String markdown) {
   final nodes = md.Document(extensionSet: md.ExtensionSet.gitHubFlavored, encodeHtml: false)
       .parseLines(const LineSplitter().convert(markdown));
-  final found = <(String, String)>{};
+  final found = <bool>[];
   void visit(md.Node node, bool inLink) {
     if (node is! md.Element) return;
-    if (node.tag == 'img' && inLink) {
-      // The builder drops a #widthxheight suffix before parsing the address.
-      final src = Uri.tryParse(node.attributes['src']!.split('#').first);
-      if (src != null) found.add((src.toString(), node.attributes['alt'] ?? ''));
+    if (node.tag == 'img' && Uri.tryParse(node.attributes['src']!.split('#').first) != null) {
+      found.add(inLink);
     }
     for (final child in node.children ?? const <md.Node>[]) {
       visit(child, inLink || node.tag == 'a');
@@ -146,15 +147,18 @@ class _NotesTextState extends State<NotesText> {
     final linkStyle = TextStyle(color: theme.colorScheme.primary, decoration: TextDecoration.underline);
     if (isMarkdownNote(widget.notes)) {
       final body = noteBody(widget.notes);
-      final linked = _linkedImages(body);
+      final inLinks = _imagesInLinks(body);
+      // MarkdownBody parses again when the theme changes, calling
+      // imageBuilder once more for every image: wrap around to stay in step.
+      var next = 0;
       return MarkdownBody(
         data: body,
         selectable: true,
         // Line breaks as written, as in a plain note.
         softLineBreak: true,
         styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(a: linkStyle),
-        imageBuilder: (uri, title, alt) =>
-            _image(uri, alt, linked: linked.contains((uri.toString(), alt ?? '')), linkStyle: linkStyle),
+        imageBuilder: (uri, title, alt) => _image(uri, alt,
+            linked: inLinks.isNotEmpty && inLinks[next++ % inLinks.length], linkStyle: linkStyle),
         onTapLink: (text, href, title) {
           if (href != null) _open(href);
         },
