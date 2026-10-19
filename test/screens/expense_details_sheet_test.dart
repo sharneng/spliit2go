@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -17,6 +18,7 @@ import 'package:spliit2go/models/group.dart';
 import 'package:spliit2go/screens/expense_details_sheet.dart';
 import 'package:spliit2go/services/receipt_cache.dart';
 import 'package:spliit2go/theme.dart';
+import 'package:spliit2go/utils/markdown_note.dart';
 import 'package:spliit2go/sync/outbox.dart';
 import 'package:spliit2go/widgets/category_icon.dart';
 
@@ -973,6 +975,34 @@ void main() {
       await closeTree(tester);
     });
   }
+
+  // #329: the sheet has its own messenger, so a note's link that can't
+  // be opened says so on the sheet, not behind it.
+  testWidgets('a note link that can\'t be opened says so on the sheet', (tester) async {
+    tallView(tester);
+    final note = Expense(
+      id: 'e1',
+      groupId: 'g1',
+      title: 'Dinner',
+      amountCents: 6000,
+      paidBy: 'bea',
+      paidFor: const [ExpenseShare(participantId: 'alex', shares: 1)],
+      category: 8,
+      notes: '$markdownMarker\n[Call us](tel:+15551234)',
+      date: DateTime(2026, 9, 16),
+      detailsFetchedAt: DateTime(2026, 10, 1),
+    );
+    final db = await cachedDb(note);
+    addTearDown(db.close);
+    await openSheet(tester, db);
+
+    tester.widget<MarkdownBody>(inSheet(find.byType(MarkdownBody))).onTapLink!('Call us', 'tel:+15551234', '');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 750));
+
+    expect(inSheet(find.text("Couldn't open tel:+15551234.")), findsOneWidget);
+    await closeTree(tester);
+  });
 
   // #247: paid for one person, the sentence names them in place of the
   // Paid for list.
