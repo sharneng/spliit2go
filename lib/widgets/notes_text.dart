@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/context_l10n.dart';
@@ -46,10 +49,37 @@ String _withoutTrailing(String address) {
   return address.substring(0, end);
 }
 
+/// Whether each image in [markdown] is inside a link, in document order
+/// (#330): [MarkdownBody.imageBuilder] isn't told, and an address and alt
+/// text don't identify one (PR #332 review: the same image can be both in
+/// and out of a link). Parsed as [MarkdownBody] parses, GitHub flavored,
+/// and like its builder, skipping an address that doesn't parse: it calls
+/// imageBuilder once for each of the rest, in this order.
+List<bool> _imagesInLinks(String markdown) {
+  final nodes = md.Document(extensionSet: md.ExtensionSet.gitHubFlavored, encodeHtml: false)
+      .parseLines(const LineSplitter().convert(markdown));
+  final found = <bool>[];
+  void visit(md.Node node, bool inLink) {
+    if (node is! md.Element) return;
+    if (node.tag == 'img' && Uri.tryParse(node.attributes['src']!.split('#').first) != null) {
+      found.add(inLink);
+    }
+    for (final child in node.children ?? const <md.Node>[]) {
+      visit(child, inLink || node.tag == 'a');
+    }
+  }
+
+  for (final node in nodes) {
+    visit(node, false);
+  }
+  return found;
+}
+
 /// An expense's notes (#311): markdown when [isMarkdownNote], else as
 /// written, its web addresses tappable either way. Selectable, as notes
 /// were before. A markdown image is never downloaded (#325): it shows as
 /// its alt text, with a button that opens a web image in the browser.
+/// Inside a link, the alt text looks like the link it opens (#330).
 class NotesText extends StatefulWidget {
   const NotesText(this.notes, {super.key, this.openLink = _openExternally});
 
@@ -87,18 +117,19 @@ class _NotesTextState extends State<NotesText> {
 
   /// [MarkdownBody.imageBuilder]: the image's alt text instead of the
   /// image, so showing a note contacts no one. Inside a link, a tap on the
-  /// text still opens the link.
-  Widget _image(Uri uri, String? title, String? alt) {
+  /// text still opens the link, and the text is styled as one: [linked].
+  Widget _image(Uri uri, String? alt, {required bool linked, required TextStyle linkStyle}) {
     final theme = Theme.of(context);
     final l10n = context.l10n;
     final secondary = theme.colorScheme.onSurfaceVariant;
     final label = alt?.trim() ?? '';
+    final text = Text(label.isEmpty ? l10n.expenseNotesImage : label, style: linked ? linkStyle : null);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(Icons.image_outlined, size: 18, color: secondary),
         const SizedBox(width: 4),
-        Flexible(child: Text(label.isEmpty ? l10n.expenseNotesImage : label)),
+        Flexible(child: linked ? Semantics(link: true, child: text) : text),
         if (_opensLink(uri))
           IconButton(
             icon: const Icon(Icons.open_in_new, size: 18),
@@ -115,13 +146,19 @@ class _NotesTextState extends State<NotesText> {
     final theme = Theme.of(context);
     final linkStyle = TextStyle(color: theme.colorScheme.primary, decoration: TextDecoration.underline);
     if (isMarkdownNote(widget.notes)) {
+      final body = noteBody(widget.notes);
+      final inLinks = _imagesInLinks(body);
+      // MarkdownBody parses again when the theme changes, calling
+      // imageBuilder once more for every image: wrap around to stay in step.
+      var next = 0;
       return MarkdownBody(
-        data: noteBody(widget.notes),
+        data: body,
         selectable: true,
         // Line breaks as written, as in a plain note.
         softLineBreak: true,
         styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(a: linkStyle),
-        imageBuilder: _image,
+        imageBuilder: (uri, title, alt) => _image(uri, alt,
+            linked: inLinks.isNotEmpty && inLinks[next++ % inLinks.length], linkStyle: linkStyle),
         onTapLink: (text, href, title) {
           if (href != null) _open(href);
         },

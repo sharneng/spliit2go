@@ -38,6 +38,9 @@ dependencies:
   package_info_plus: ^10.2.2
   url_launcher: ^6.3.2
   flutter_markdown_plus: ^1.0.12
+  # Which of a note's images are inside a link (#330), parsed as
+  # flutter_markdown_plus does.
+  markdown: ^7.3.1
 
 dev_dependencies:
   shared_preferences_platform_interface: ^2.4.2
