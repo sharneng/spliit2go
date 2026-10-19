@@ -620,10 +620,18 @@ class _ExpenseDetailsSheetState extends State<_ExpenseDetailsSheet> {
       initialChildSize: 0.6,
       minChildSize: 0.3,
       maxChildSize: 0.95,
-      builder: (context, scrollController) => ListView(
-        controller: scrollController,
-        padding: withBottomInset(context, const EdgeInsets.fromLTRB(20, 0, 20, 24)),
-        children: _content(context),
+      // The sheet's own messenger and Scaffold, so a snack bar from inside
+      // it ("Couldn't open" a note's link) shows on the sheet, not behind
+      // it on the screen below (#329).
+      builder: (context, scrollController) => ScaffoldMessenger(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          body: ListView(
+            controller: scrollController,
+            padding: withBottomInset(context, const EdgeInsets.fromLTRB(20, 0, 20, 24)),
+            children: _content(context),
+          ),
+        ),
       ),
     );
   }
