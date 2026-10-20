@@ -307,12 +307,13 @@ void main() {
       (tester) async {
     tallView(tester);
     final db = await cachedDb(dinner(splitMode: SplitMode.byPercentage));
-    addTearDown(db.close);
     await openSheet(tester, db);
 
     expect(inSheet(find.text('66.67%')), findsOneWidget);
     expect(inSheet(find.text('33.33%')), findsOneWidget);
     await closeTree(tester);
+    // Closed before the next one opens (#333).
+    await db.close();
 
     // The smallest share isn't rounded to nothing (#236 review); every one
     // has two decimals, so they line up.

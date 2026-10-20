@@ -16,6 +16,7 @@ import 'package:spliit2go/services/error_reporting.dart';
 import 'package:spliit2go/services/date_span_calculator.dart';
 
 import '../support/error_log.dart';
+import '../support/test_db.dart';
 
 void main() {
   // SettingsService.defaultActiveUserName() awaits
@@ -391,8 +392,7 @@ void main() {
 
   group('a copied link is offered in the empty field (#221)', () {
     Future<void> pumpJoin(WidgetTester tester, {required List<bool> hasLink, String? initialUrl}) async {
-      final db = AppDatabase(NativeDatabase.memory());
-      addTearDown(db.close);
+      final db = await openTestDb(tester);
       await tester.pumpWidget(MaterialApp(
         locale: const Locale('en'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
