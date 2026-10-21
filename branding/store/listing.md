@@ -18,7 +18,7 @@ Ready to paste into Play Console and App Store Connect (#112). Limits are the st
 Split group expenses with Spliit, even offline. Unofficial community app.
 ```
 
-**Full description** (4000 max, about 1760 used):
+**Full description** (4000 max, about 1760 used; say "no tracking", not "no analytics": Play's Data safety form lists ML Kit's diagnostics under Analytics):
 
 ```
 Spliit2Go is a mobile app for Spliit, the free and open-source way to share expenses with friends, roommates and travel companions. It works with groups on spliit.app or on your own Spliit server.
@@ -50,7 +50,7 @@ ALL YOUR GROUPS
 • Favorite, archive and sort your groups; share a group's link with friends.
 
 PRIVATE BY DESIGN
-• No account, no ads, no analytics.
+• No account, no ads, no tracking.
 • Your group data goes only to the group's Spliit server.
 • Available in English, French and Simplified Chinese.
 
