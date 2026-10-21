@@ -6,7 +6,7 @@ Ready to paste into Play Console and App Store Connect (#112). Limits are the st
 
 - **App name:** Spliit2Go
 - **Category:** Finance
-- **Contact email:** support@sharneng.com
+- **Contact email:** spliit2go-support@sharneng.com. Use this address publicly, not `support@sharneng.com`: it belongs to the app alone, so it can be redirected if the app is ever handed over to the Spliit project.
 - **Support URL / website:** https://github.com/sharneng/spliit2go/issues
 - **Privacy policy URL:** https://github.com/sharneng/spliit2go/blob/main/docs/privacy.md
 
