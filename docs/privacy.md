@@ -1,6 +1,6 @@
 # Spliit2Go privacy policy
 
-Last updated on October 19, 2026.
+Last updated on October 20, 2026.
 
 Spliit2Go is an unofficial, community-made mobile app for [Spliit](https://spliit.app), the free and open-source app for sharing expenses. It isn't affiliated with or endorsed by the Spliit project. Its source code is public at [github.com/sharneng/spliit2go](https://github.com/sharneng/spliit2go). This policy describes what the app keeps on your phone, what leaves it, and where it goes.
 
@@ -81,4 +81,4 @@ Changes to this policy are published at this address, with a new date at the top
 
 ## Contact
 
-Questions about privacy, or anything else: email [support@sharneng.com](mailto:support@sharneng.com), or open an issue at [github.com/sharneng/spliit2go/issues](https://github.com/sharneng/spliit2go/issues).
+Questions about privacy, or anything else: email [spliit2go-support@sharneng.com](mailto:spliit2go-support@sharneng.com), or open an issue at [github.com/sharneng/spliit2go/issues](https://github.com/sharneng/spliit2go/issues).
