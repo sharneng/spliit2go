@@ -4,9 +4,9 @@
 Run from anywhere; needs Pillow (`pip install pillow`). Reads the raw
 captures in branding/store/screenshots/raw/ and writes:
 
-  branding/store/screenshots/play/*.png       1200x2400, Google Play phone
-      screenshots (Play rejects a long side over twice the short one, and
-      the emulator's 1080x2400 is 2.22:1, so each sits on a 2:1 canvas)
+  branding/store/screenshots/play/*.png       1350x2400, Google Play phone
+      screenshots (Play takes only 16:9 or 9:16, and the emulator's
+      1080x2400 is 2.22:1, so each sits on a 9:16 canvas)
   branding/store/screenshots/app-store/*.png  1320x2868, App Store 6.9"
   branding/store/feature-graphic.png          1024x500, Google Play
 
@@ -49,7 +49,7 @@ PLATFORM_CAPTIONS = {
 
 # (raw folder, output folder, canvas size)
 TARGETS = [
-    ('android', 'play', (1200, 2400)),
+    ('android', 'play', (1350, 2400)),
     ('iphone', 'app-store', (1320, 2868)),
 ]
 

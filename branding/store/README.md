@@ -6,11 +6,11 @@ What the store listings need (#112), ready to upload. The listing text is in [li
 |---|---|---|
 | `play-icon-512.png` | Google Play icon | 512×512 |
 | `feature-graphic.png` | Google Play feature graphic | 1024×500 |
-| `screenshots/play/*.png` | Google Play phone screenshots, in order | 1200×2400 |
+| `screenshots/play/*.png` | Google Play phone screenshots, in order | 1350×2400 |
 | `app-store-icon-1024.png` | App Store icon | 1024×1024 |
 | `screenshots/app-store/*.png` | App Store iPhone 6.9" screenshots, in order | 1320×2868 |
 
-The icons come from `scripts/make_icons.py`. The screenshots and the feature graphic come from `scripts/make_store_assets.py`, which frames the raw captures in `screenshots/raw/` with a caption (its `CAPTIONS`) and draws the feature graphic. Play needs the 2:1 canvas: it rejects screenshots whose long side is more than twice the short one, and a 1080×2400 phone screen is 2.22:1.
+The icons come from `scripts/make_icons.py`. The screenshots and the feature graphic come from `scripts/make_store_assets.py`, which frames the raw captures in `screenshots/raw/` with a caption (its `CAPTIONS`) and draws the feature graphic. Play needs the 9:16 canvas: it takes only 16:9 or 9:16 phone screenshots (it took up to 2:1 until late 2026), and a 1080×2400 phone screen is 2.22:1.
 
 ## Taking the raw captures
 
