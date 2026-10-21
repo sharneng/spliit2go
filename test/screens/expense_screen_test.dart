@@ -29,6 +29,7 @@ import 'package:spliit2go/widgets/category_icon.dart';
 
 import '../support/error_log.dart';
 import '../support/haptics.dart';
+import '../support/test_db.dart';
 
 void main() {
   // The rate's order is remembered per pair (#261).
@@ -716,8 +717,7 @@ void main() {
       _FakeRates Function(AppDatabase db)? rates,
       MockClient? server,
       SettingsService? settings}) async {
-    final db = AppDatabase(NativeDatabase.memory());
-    addTearDown(db.close);
+    final db = await openTestDb(tester);
     ExchangeRates.use(rates?.call(db) ?? _FakeRates(db));
     final client = SpliitClient(
       baseUrl: 'https://example.test',

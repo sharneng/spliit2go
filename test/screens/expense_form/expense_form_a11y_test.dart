@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show SemanticsData;
 import 'package:flutter/services.dart';
@@ -9,7 +8,6 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spliit2go/api/spliit_client.dart';
-import 'package:spliit2go/db/app_database.dart';
 import 'package:spliit2go/main.dart';
 import 'package:spliit2go/widgets/group_monogram.dart';
 import 'package:spliit2go/l10n/app_localizations.dart';
@@ -24,6 +22,7 @@ import 'package:spliit2go/theme.dart';
 import 'package:spliit2go/widgets/app_switch.dart';
 import 'package:spliit2go/widgets/grouped_section.dart';
 import 'package:spliit2go/widgets/segmented_pill.dart';
+import '../../support/test_db.dart';
 
 // #263: the form passes Flutter's tap-target and label guidelines, for an
 // expense, a converted expense and a settlement.
@@ -44,8 +43,7 @@ void main() {
   late _FakeRates rates;
 
   Future<void> open(WidgetTester tester, TargetPlatform platform) async {
-    final db = AppDatabase(NativeDatabase.memory());
-    addTearDown(db.close);
+    final db = await openTestDb(tester);
     ExchangeRates.use(rates = _FakeRates(db));
     final client = SpliitClient(
       baseUrl: 'https://example.test',

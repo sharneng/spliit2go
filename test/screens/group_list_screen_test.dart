@@ -19,6 +19,7 @@ import 'package:spliit2go/widgets/grouped_section.dart';
 import '../support/haptics.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:spliit2go/services/group_list_order.dart';
+import '../support/test_db.dart';
 
 void main() {
   // Opening a group navigates into GroupScreen, whose
@@ -361,8 +362,7 @@ void main() {
   group('accessibility (#209)', () {
     Future<AppDatabase> oneGroup(WidgetTester tester,
         {GroupListSort sort = GroupListSort.lastOpened, double scale = 1}) async {
-      final db = AppDatabase(NativeDatabase.memory());
-      addTearDown(db.close);
+      final db = await openTestDb(tester);
       await db.cacheGroup(const Group(id: 'gA', name: 'Banff Trip', currency: '\$', participants: [
         Participant(id: 'a', name: 'A'),
         Participant(id: 'b', name: 'B'),
